@@ -39,6 +39,17 @@ ERROR:  cannot use column "c" for both ordering and segmenting
 HINT:  Use separate columns for the timescaledb.compress_orderby and timescaledb.compress_segmentby options.
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
+-- this is acceptable: having previously set the default value for orderby
+-- and skipping orderby on a subsequent alter command 
+create table default_skipped (a integer not null, b integer, c integer, d integer);
+select create_hypertable('default_skipped', 'a', chunk_time_interval=> 10);
+      create_hypertable       
+------------------------------
+ (6,public,default_skipped,t)
+(1 row)
+
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
 create table with_rls (a integer, b integer);
 ALTER TABLE with_rls ENABLE ROW LEVEL SECURITY;
 select table_name from create_hypertable('with_rls', 'a', chunk_time_interval=> 10);
@@ -56,10 +67,14 @@ select * from _timescaledb_catalog.hypertable_compression order by attname;
  hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
              1 | a        |                        4 |                        |                    2 | f           | t
+             6 | a        |                        4 |                        |                    1 | f           | t
+             6 | b        |                        4 |                        |                      |             | 
              1 | bacB toD |                        0 |                      1 |                      |             | 
              1 | c        |                        0 |                      2 |                      |             | 
+             6 | c        |                        0 |                      1 |                      |             | 
              1 | d        |                        4 |                        |                    1 | t           | f
-(4 rows)
+             6 | d        |                        4 |                        |                      |             | 
+(8 rows)
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d DeSc NullS lAsT');
 --shold allow alter since segment by was empty
@@ -68,6 +83,10 @@ ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d Asc 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c', timescaledb.compress_orderby = 'd DeSc NullS lAsT');
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
+ERROR:  must specify a column to order by
+DETAIL:  The timescaledb.compress_orderby option was previously set and must also be specified in the updated configuration.
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_orderby = 'a asc', timescaledb.compress_segmentby = 'c');
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
 ERROR:  must specify a column to order by
 DETAIL:  The timescaledb.compress_orderby option was previously set and must also be specified in the updated configuration.
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
@@ -201,24 +220,24 @@ CREATE INDEX foo_idx ON foo ( a, c );
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            11 | a       |                        4 |                        |                    1 | t           | f
-            11 | b       |                        4 |                        |                    2 | t           | f
-            11 | c       |                        4 |                        |                      |             | 
-            11 | p       |                        1 |                        |                      |             | 
-            11 | t       |                        2 |                        |                      |             | 
+            15 | a       |                        4 |                        |                    1 | t           | f
+            15 | b       |                        4 |                        |                    2 | t           | f
+            15 | c       |                        4 |                        |                      |             | 
+            15 | p       |                        1 |                        |                      |             | 
+            15 | t       |                        2 |                        |                      |             | 
 (5 rows)
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1;
-ERROR:  chunk "_hyper_11_2_chunk" is not compressed
+ERROR:  chunk "_hyper_15_2_chunk" is not compressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1 \gset
 select decompress_chunk(:'CHUNK_NAME');
-ERROR:  chunk "_hyper_11_2_chunk" is not compressed
+ERROR:  chunk "_hyper_15_2_chunk" is not compressed
 select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
-NOTICE:  chunk "_hyper_11_2_chunk" is not compressed
+NOTICE:  chunk "_hyper_15_2_chunk" is not compressed
  decompress_chunk 
 ------------------
  
@@ -228,16 +247,16 @@ NOTICE:  chunk "_hyper_11_2_chunk" is not compressed
 select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_11_2_chunk
+ _timescaledb_internal._hyper_15_2_chunk
 (1 row)
 
 select compress_chunk(:'CHUNK_NAME');
-ERROR:  chunk "_hyper_11_2_chunk" is already compressed
+ERROR:  chunk "_hyper_15_2_chunk" is already compressed
 select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
-NOTICE:  chunk "_hyper_11_2_chunk" is already compressed
+NOTICE:  chunk "_hyper_15_2_chunk" is already compressed
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_11_2_chunk
+ _timescaledb_internal._hyper_15_2_chunk
 (1 row)
 
 select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
@@ -261,7 +280,7 @@ select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' and ch1.compressed_chunk_id IS NOT NULL;
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_11_2_chunk
+ _timescaledb_internal._hyper_15_2_chunk
 (1 row)
 
 --should succeed
@@ -269,11 +288,11 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', t
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            11 | a       |                        4 |                        |                    1 | t           | f
-            11 | b       |                        0 |                      1 |                      |             | 
-            11 | c       |                        4 |                        |                      |             | 
-            11 | p       |                        1 |                        |                      |             | 
-            11 | t       |                        2 |                        |                      |             | 
+            15 | a       |                        4 |                        |                    1 | t           | f
+            15 | b       |                        0 |                      1 |                      |             | 
+            15 | c       |                        4 |                        |                      |             | 
+            15 | p       |                        1 |                        |                      |             | 
+            15 | t       |                        2 |                        |                      |             | 
 (5 rows)
 
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
@@ -281,7 +300,7 @@ FROM _timescaledb_catalog.hypertable comp_hyper
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
 select add_retention_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
-ERROR:  cannot add retention policy to compressed hypertable "_compressed_hypertable_14"
+ERROR:  cannot add retention policy to compressed hypertable "_compressed_hypertable_18"
 HINT:  Please add the policy to the corresponding uncompressed hypertable instead.
 --Constraint checking for compression
 create table fortable(col integer primary key);
@@ -353,7 +372,7 @@ CREATE TABLE table_fk (
 SELECT create_hypertable('table_fk', 'time');
    create_hypertable    
 ------------------------
- (17,public,table_fk,t)
+ (21,public,table_fk,t)
 (1 row)
 
 ALTER TABLE table_fk DROP COLUMN id1;
@@ -372,7 +391,7 @@ ORDER BY ch1.id limit 1 \gset
 select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_15_7_chunk
+ _timescaledb_internal._hyper_19_7_chunk
 (1 row)
 
 SELECT  total_chunks , number_compressed_chunks
@@ -409,7 +428,7 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
 SELECT compress_chunk(:'CHUNK_NAME');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_23_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
@@ -419,7 +438,7 @@ DETAIL:  There are compressed chunks that prevent changing the existing compress
 SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_23_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
@@ -431,7 +450,7 @@ NOTICE:  adding not-null constraint to column "time"
 DETAIL:  Time dimensions cannot have NULL values.
       create_hypertable       
 ------------------------------
- (21,public,test_table_int,t)
+ (25,public,test_table_int,t)
 (1 row)
 
 CREATE OR REPLACE function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
@@ -452,7 +471,7 @@ WHERE id = :compressjob_id;
 SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
         config         
 -----------------------
- {"hypertable_id": 21}
+ {"hypertable_id": 25}
 (1 row)
 
 --should fail
@@ -499,7 +518,7 @@ CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4
 SELECT create_hypertable('metric', 'time', 'dev_id', 10);
   create_hypertable   
 ----------------------
- (23,public,metric,t)
+ (27,public,metric,t)
 (1 row)
 
 ALTER TABLE metric SET (                                      
@@ -514,7 +533,7 @@ FROM generate_series('2021-08-17 00:00:00'::timestamp,
 SELECT compress_chunk(show_chunks('metric'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_23_17_chunk
+ _timescaledb_internal._hyper_27_17_chunk
 (1 row)
 
 -- column does not exist the first time
