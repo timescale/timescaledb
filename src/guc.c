@@ -19,22 +19,32 @@
 typedef enum TelemetryLevel
 {
 	TELEMETRY_OFF,
+	TELEMETRY_NO_FUNCTIONS,
 	TELEMETRY_BASIC,
 } TelemetryLevel;
 
 /* Define which level means on. We use this object to have at least one object
  * of type TelemetryLevel in the code, otherwise pgindent won't work for the
  * type */
-static const TelemetryLevel on_level = TELEMETRY_BASIC;
+static const TelemetryLevel on_level = TELEMETRY_NO_FUNCTIONS;
 
 bool
 ts_telemetry_on()
 {
-	return ts_guc_telemetry_level == on_level;
+	return ts_guc_telemetry_level >= on_level;
+}
+
+bool
+ts_function_telemetry_on()
+{
+	return ts_guc_telemetry_level > TELEMETRY_NO_FUNCTIONS;
 }
 
 static const struct config_enum_entry telemetry_level_options[] = {
-	{ "off", TELEMETRY_OFF, false }, { "basic", TELEMETRY_BASIC, false }, { NULL, 0, false }
+	{ "off", TELEMETRY_OFF, false },
+	{ "no_functions", TELEMETRY_NO_FUNCTIONS, false },
+	{ "basic", TELEMETRY_BASIC, false },
+	{ NULL, 0, false }
 };
 #endif
 

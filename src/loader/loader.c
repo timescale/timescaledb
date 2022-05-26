@@ -30,6 +30,7 @@
 #include "extension_constants.h"
 
 #include "loader/loader.h"
+#include "loader/function_telemetry.h"
 #include "loader/bgw_counter.h"
 #include "loader/bgw_interface.h"
 #include "loader/bgw_launcher.h"
@@ -606,6 +607,7 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
+	ts_function_telemetry_shmem_startup();
 }
 
 static void
@@ -634,6 +636,7 @@ _PG_init(void)
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
 	ts_seclabel_init();
+	ts_function_telemetry_shmem_alloc();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME,

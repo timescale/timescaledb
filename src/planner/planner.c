@@ -67,6 +67,10 @@
 #include <utils/hashutils.h>
 #endif
 
+#ifdef USE_TELEMETRY
+#include "telemetry/functions.h"
+#endif
+
 /* define parameters necessary to generate the baserel info hash table interface */
 typedef struct BaserelInfoEntry
 {
@@ -430,6 +434,9 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 		if (ts_extension_is_loaded())
 		{
+#ifdef USE_TELEMETRY
+			ts_telemetry_function_info_gather(parse);
+#endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
