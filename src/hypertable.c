@@ -1053,57 +1053,47 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 	return cached_chunk;
 }
 
-static inline Chunk *
-hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not_exists,
-					 bool lock_chunk_slices)
+/*
+ * Create a chunk for the point, given that it does not exist yet.
+ */
+Chunk *
+ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point)
+{
+	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
+
+	Chunk *chunk = ts_chunk_create_for_point(h,
+											 point,
+											 NameStr(h->fd.associated_schema_name),
+											 NameStr(h->fd.associated_table_prefix));
+
+	/* Also add the chunk to the hypertable's chunk store */
+	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
+	return cached_chunk;
+}
+
+/*
+ * Find the chunk containing the given point, locking all its dimension slices
+ * for share. NULL if not found.
+ * Also uses hypertable chunk cache.
+ */
+Chunk *
+ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point)
 {
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
-
 	if (chunk != NULL)
 	{
 		return chunk;
 	}
 
-	/*
-	 * ts_chunk_find() must execute on a per-tuple memory context since it
-	 * allocates a lot of transient data. We don't want this allocated on
-	 * the cache's memory context.
-	 */
-	chunk = ts_chunk_find(h, point, lock_chunk_slices);
-
-	if (NULL == chunk)
+	chunk = ts_chunk_find_for_point(h, point);
+	if (chunk == NULL)
 	{
-		if (!create_if_not_exists)
-			return NULL;
-
-		chunk = ts_chunk_create_from_point(h,
-										   point,
-										   NameStr(h->fd.associated_schema_name),
-										   NameStr(h->fd.associated_table_prefix));
+		return NULL;
 	}
-
-	Assert(chunk != NULL);
 
 	/* Also add the chunk to the hypertable's chunk store */
 	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
-
 	return cached_chunk;
-}
-
-/* finds the chunk for a given point, returning NULL if none exists */
-Chunk *
-ts_hypertable_find_chunk_if_exists(const Hypertable *h, const Point *point)
-{
-	return hypertable_get_chunk(h, point, false, false);
-}
-
-/* gets the chunk for a given point, creating it if it does not exist. If an
- * existing chunk exists, all its dimension slices will be locked in FOR KEY
- * SHARE mode. */
-Chunk *
-ts_hypertable_get_or_create_chunk(const Hypertable *h, const Point *point)
-{
-	return hypertable_get_chunk(h, point, true, true);
 }
 
 bool

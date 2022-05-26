@@ -129,9 +129,19 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 	if (NULL == cis)
 	{
-		Chunk *new_chunk;
-
-		new_chunk = ts_hypertable_get_or_create_chunk(dispatch->hypertable, point);
+		/*
+		 * Normally, for every row of the chunk except the first one, we expect
+		 * the chunk to exist already. The "create" function would take a lock
+		 * on the hypertable to serialize the concurrent chunk creation. Here we
+		 * first use the "find" function to try to find the chunk without
+		 * locking the hypertable. This serves as a fast path for the usual case
+		 * where the chunk already exists.
+		 */
+		Chunk *new_chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
+		if (new_chunk == NULL)
+		{
+			new_chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point);
+		}
 
 		if (NULL == new_chunk)
 			elog(ERROR, "no chunk found or created");
