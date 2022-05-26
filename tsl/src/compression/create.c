@@ -846,8 +846,13 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 	return conlist;
 }
 
+/*
+ * Fills the passed in list with the attribute names of the orderby columns
+ * orderby_cols is a list of compressedparsedcol
+ */
 static void
-check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_options)
+check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_options,
+								 List *parsed_orderby_cols)
 {
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	bool compressed_chunks_exist;
@@ -867,6 +872,7 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 	 * empty list. */
 	if (compress_enable && compression_already_enabled)
 	{
+		List *current_orderby_cols = NIL;
 		List *info = ts_hypertable_compression_get(ht->fd.id);
 		ListCell *lc;
 		bool segment_by_set = false;
@@ -878,16 +884,46 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 			if (fd->segmentby_column_index > 0)
 				segment_by_set = true;
 			if (fd->orderby_column_index > 0)
+			{
 				order_by_set = true;
+				current_orderby_cols = lappend(current_orderby_cols, fd);
+			}
 		}
 		if (with_clause_options[CompressOrderBy].is_default && order_by_set)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("must specify a column to order by"),
-					 errdetail("The timescaledb.compress_orderby option was"
-							   " previously set and must also be specified"
-							   " in the updated configuration.")));
+		{
+			/* If the orderby that's already set is only the time column DESC (which is the
+			 default), and we pass the default again, then no need to give this error */
+			if (list_length(parsed_orderby_cols) != 1)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("must specify a column to order by"),
+						 errdetail("The timescaledb.compress_orderby option was"
+								   " previously set and must also be specified"
+								   " in the updated configuration.")));
+			else
+			{
+				// this is okay only if the orderby that's already set is only the time column
+				// check for the same attribute name and same order (desc)
+				ListCell *elem1 = list_nth_cell(current_orderby_cols, 0);
+				FormData_hypertable_compression *fd_elem1 = lfirst(elem1);
+				NameData colname1 = fd_elem1->attname;
+				ListCell *elem2 = list_nth_cell(parsed_orderby_cols, 0);
+				CompressedParsedCol *cpc_elem2 = lfirst(elem2);
+				NameData colname2 = cpc_elem2->colname;
+				bool orderby_time_default_matches = (fd_elem1->orderby_asc == cpc_elem2->asc);
 
+				if (!(list_length(current_orderby_cols) == 1 &&
+					  list_length(parsed_orderby_cols) == 1 &&
+					  (namestrcmp(&colname1, NameStr(colname2)) == 0) &&
+					  orderby_time_default_matches))
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("must specify a column to order by"),
+							 errdetail("The timescaledb.compress_orderby option was"
+									   " previously set and must also be specified"
+									   " in the updated configuration.")));
+			}
+		}
 		if (with_clause_options[CompressSegmentBy].is_default && segment_by_set)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -933,7 +969,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 		/* compression is not enabled, so just return */
 		return false;
 	/* compression is enabled. can we turn it off? */
-	check_modify_compression_options(ht, with_clause_options);
+	check_modify_compression_options(ht, with_clause_options, NIL);
 
 	/* distributed hypertables do not have compression table on the access node */
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1031,13 +1067,18 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	{
 		return disable_compression(ht, with_clause_options);
 	}
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		check_modify_compression_options(ht, with_clause_options);
-
 	ownerid = ts_rel_get_owner(ht->main_table_relid);
 	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		// check_modify will return us the list of orderbys to check if we should require the args
+		// or not
+		check_modify_compression_options(ht, with_clause_options, orderby_cols);
+
+	// now compare the orderby cols with the existing orderby cols, if there's a mismatch
+	// then error, otherwise we're good
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
 	/* check if we can create a compressed hypertable with existing constraints */
 	constraint_list = validate_existing_constraints(ht, &compress_cols);
