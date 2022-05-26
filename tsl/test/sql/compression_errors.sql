@@ -21,6 +21,13 @@ ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"b
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
 
+-- this is acceptable: having previously set the default value for orderby
+-- and skipping orderby on a subsequent alter command 
+create table default_skipped (a integer not null, b integer, c integer, d integer);
+select create_hypertable('default_skipped', 'a', chunk_time_interval=> 10);
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
+
 create table with_rls (a integer, b integer);
 ALTER TABLE with_rls ENABLE ROW LEVEL SECURITY;
 select table_name from create_hypertable('with_rls', 'a', chunk_time_interval=> 10);
@@ -39,6 +46,8 @@ ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"b
 
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
 
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_orderby = 'a asc', timescaledb.compress_segmentby = 'c');
+alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
 
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
