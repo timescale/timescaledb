@@ -418,8 +418,8 @@ flush_data_nodes(const CopyConnectionState *state)
 
 		/*
 		 * The possible results are:
-		 * 1) Timeout. Just retry the flush, it will cause errors.
-		 * 2) We have successfully waited for something, we don't care,
+		 * `0` --  Timeout. Just retry the flush, it will cause errors.
+		 * `1` -- We have successfully waited for something, we don't care,
 		 * just continue to flush the entire list.
 		 */
 		Assert(wait_result == 0 || wait_result == 1);
