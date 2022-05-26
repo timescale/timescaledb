@@ -424,8 +424,7 @@ flush_data_nodes(const CopyConnectionState *state)
 		 */
 		Assert(wait_result == 0 || wait_result == 1);
 
-		fprintf(stderr, "wait result %d nodes left %d\n", wait_result,
-			list_length(to_flush));
+		fprintf(stderr, "wait result %d nodes left %d\n", wait_result, list_length(to_flush));
 
 		FreeWaitEventSet(set);
 	}
