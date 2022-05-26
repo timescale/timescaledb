@@ -131,10 +131,10 @@ extern TSDLLEXPORT void ts_hypertable_check_partitioning(const Hypertable *ht,
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
-extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_if_exists(const Hypertable *h,
+extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_for_point(const Hypertable *h,
 															 const Point *point);
-extern TSDLLEXPORT Chunk *ts_hypertable_get_or_create_chunk(const Hypertable *h,
-															const Point *point);
+extern TSDLLEXPORT Chunk *ts_hypertable_create_chunk_for_point(const Hypertable *h,
+															   const Point *point);
 extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(const Hypertable *ht, Oid tspc_oid);

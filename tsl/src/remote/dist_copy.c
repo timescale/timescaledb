@@ -763,16 +763,18 @@ reset_copy_connection_state(CopyConnectionState *state)
 static Chunk *
 get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 {
-	Chunk *chunk = ts_hypertable_find_chunk_if_exists(ht, p);
+	Chunk *chunk = ts_hypertable_find_chunk_for_point(ht, p);
 
 	if (chunk == NULL)
 	{
-		/* Here we need to create a new chunk.  However, any in-progress copy operations
-		 * will be tying up the connection we need to create the chunk on a data node.  Since
-		 * the data nodes for the new chunk aren't yet known, just close all in progress COPYs
-		 * before creating the chunk. */
+		/*
+		 * Here we might need to create a new chunk. However, any in-progress
+		 * copy operations will be tying up the connection we need to create the
+		 * chunk on a data node.  Since the data nodes for the new chunk aren't
+		 * yet known, just close all in progress COPYs before creating the chunk.
+		 */
 		reset_copy_connection_state(state);
-		chunk = ts_hypertable_get_or_create_chunk(ht, p);
+		chunk = ts_hypertable_create_chunk_for_point(ht, p);
 	}
 
 	return chunk;

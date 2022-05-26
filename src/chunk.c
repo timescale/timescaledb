@@ -126,13 +126,14 @@ static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_fu
 											 uint16 limit);
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
-static Chunk *chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slices);
+static int chunk_point_find_chunk_id(const Hypertable *ht, const Point *p);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
 											  const char *table_name);
 static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht);
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
+static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 
 /*
  * The chunk status field values are persisted in the database and must never be changed.
@@ -1435,15 +1436,31 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 }
 
 /*
+ * Find the chunk containing the given point, locking all its dimension slices
+ * for share. NULL if not found.
+ */
+Chunk *
+ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
+{
+	int chunk_id = chunk_point_find_chunk_id(ht, p);
+	if (chunk_id == 0)
+	{
+		return NULL;
+	}
+
+	/* The chunk might be dropped, so we don't fail if we haven't found it. */
+	return ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
+}
+
+/*
  * Create a chunk through insertion of a tuple at a given point.
  */
 Chunk *
-ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
-						   const char *prefix)
+ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
+						  const char *prefix)
 {
-	Chunk *chunk;
-
 	/*
+	 * We're going to have to resurrect or create the chunk.
 	 * Serialize chunk creation around a lock on the "main table" to avoid
 	 * multiple processes trying to create the same chunk. We use a
 	 * ShareUpdateExclusiveLock, which is the weakest lock possible that
@@ -1451,26 +1468,46 @@ ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *sch
 	 */
 	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
 
-	/* Recheck if someone else created the chunk before we got the table
+	/*
+	 * Recheck if someone else created the chunk before we got the table
 	 * lock. The returned chunk will have all slices locked so that they
-	 * aren't removed. */
-	chunk = chunk_find(ht, p, true, true);
-
-	if (NULL == chunk)
+	 * aren't removed.
+	 */
+	int chunk_id = chunk_point_find_chunk_id(ht, p);
+	if (chunk_id != 0)
 	{
-		if (hypertable_is_distributed_member(ht))
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
-					 errmsg("distributed hypertable member cannot create chunk on its own"),
-					 errhint("Chunk creation should only happen through an access node.")));
+		/* The chunk might be dropped, so we don't fail if we haven't found it. */
+		Chunk *chunk = ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
+		if (chunk != NULL)
+		{
+			/*
+			 * Chunk was not created by us but by someone else, so we can
+			 * release the lock early.
+			 */
+			UnlockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
+			return chunk;
+		}
 
-		chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
+		/*
+		 * If we managed to find some medatada for the chunk (chunk_id != 0),
+		 * but it is marked as dropped, try to resurrect it.
+		 * Not sure if this ever worked for distributed hypertables.
+		 */
+		chunk = chunk_resurrect(ht, chunk_id);
+		if (chunk != NULL)
+		{
+			return chunk;
+		}
 	}
-	else
-	{
-		/* Chunk was not created, so we can release the lock early */
-		UnlockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-	}
+
+	/* Create the chunk normally. */
+	if (hypertable_is_distributed_member(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("distributed hypertable member cannot create chunk on its own"),
+				 errhint("Chunk creation should only happen through an access node.")));
+
+	Chunk *chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
 
 	ASSERT_IS_VALID_CHUNK(chunk);
 
@@ -1717,40 +1754,6 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, const Dimension
 }
 
 /*
- * Scan for the chunk that encloses the given point.
- *
- * In each dimension there can be one or more slices that match the point's
- * coordinate in that dimension. Slices are collected in the scan context's hash
- * table according to the chunk IDs they are associated with. A slice might
- * represent the dimensional bound of multiple chunks, and thus is added to all
- * the hash table slots of those chunks. At the end of the scan there will be at
- * most one chunk that has a complete set of slices, since a point cannot belong
- * to two chunks.
- */
-static void
-chunk_point_scan(ChunkScanCtx *scanctx, const Point *p, bool lock_slices)
-{
-	int i;
-
-	/* Scan all dimensions for slices enclosing the point */
-	for (i = 0; i < scanctx->space->num_dimensions; i++)
-	{
-		DimensionVec *vec;
-		ScanTupLock tuplock = {
-			.lockmode = LockTupleKeyShare,
-			.waitpolicy = LockWaitBlock,
-		};
-
-		vec = ts_dimension_slice_scan_limit(scanctx->space->dimensions[i].fd.id,
-											p->coordinates[i],
-											0,
-											lock_slices ? &tuplock : NULL);
-
-		dimension_slice_and_chunk_constraint_join(scanctx, vec);
-	}
-}
-
-/*
  * Scan for chunks that collide with the given hypercube.
  *
  * Collisions are determined using axis-aligned bounding box collision detection
@@ -1831,21 +1834,6 @@ chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk
 	return ctx->num_processed;
 }
 
-static ChunkResult
-set_complete_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
-{
-	if (chunk_stub_is_complete(stub, scanctx->space))
-	{
-		scanctx->data = stub;
-#ifdef USE_ASSERT_CHECKING
-		return CHUNK_PROCESSED;
-#else
-		return CHUNK_DONE;
-#endif
-	}
-	return CHUNK_IGNORED;
-}
-
 typedef struct ChunkScanCtxAddChunkData
 {
 	Chunk *chunks;
@@ -1873,27 +1861,6 @@ chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 	return CHUNK_PROCESSED;
 }
 
-/* Finds the first chunk that has a complete set of constraints. There should be
- * only one such chunk in the scan context when scanning for the chunk that
- * holds a particular tuple/point. */
-static ChunkStub *
-chunk_scan_ctx_get_chunk_stub(ChunkScanCtx *ctx)
-{
-	ctx->data = NULL;
-
-#ifdef USE_ASSERT_CHECKING
-	{
-		int n = chunk_scan_ctx_foreach_chunk_stub(ctx, set_complete_chunk, 0);
-
-		Assert(n == 0 || n == 1);
-	}
-#else
-	chunk_scan_ctx_foreach_chunk_stub(ctx, set_complete_chunk, 1);
-#endif
-
-	return ctx->data;
-}
-
 /*
  * Resurrect a chunk from a tombstone.
  *
@@ -1904,17 +1871,16 @@ chunk_scan_ctx_get_chunk_stub(ChunkScanCtx *ctx)
  * including recreating the table and related objects.
  */
 static Chunk *
-chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
+chunk_resurrect(const Hypertable *ht, int chunk_id)
 {
 	ScanIterator iterator;
 	Chunk *chunk = NULL;
 	int count = 0;
 
-	Assert(NULL != stub->constraints);
-	Assert(NULL != stub->cube);
+	Assert(chunk_id != 0);
 
 	iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
-	ts_chunk_scan_iterator_set_chunk_id(&iterator, stub->id);
+	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -1922,7 +1888,9 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 		HeapTuple new_tuple;
 
 		Assert(count == 0 && chunk == NULL);
-		chunk = ts_chunk_build_from_tuple_and_stub(NULL, ti, stub);
+		chunk = ts_chunk_build_from_tuple_and_stub(/* chunkptr = */ NULL,
+												   ti,
+												   /* stub = */ NULL);
 		Assert(chunk->fd.dropped);
 
 		/* Create data table and related objects */
@@ -1960,7 +1928,15 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 }
 
 /*
- * Find a chunk matching a point in a hypertable's N-dimensional hyperspace.
+ * Scan for the chunk that encloses the given point.
+ *
+ * In each dimension there can be one or more slices that match the point's
+ * coordinate in that dimension. Slices are collected in the scan context's hash
+ * table according to the chunk IDs they are associated with. A slice might
+ * represent the dimensional bound of multiple chunks, and thus is added to all
+ * the hash table slots of those chunks. At the end of the scan there will be at
+ * most one chunk that has a complete set of slices, since a point cannot belong
+ * to two chunks.
  *
  * This involves:
  *
@@ -1980,57 +1956,82 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
  * context. The returned chunk needs to be copied into another memory context in
  * case it needs to live beyond the lifetime of the other data.
  */
-static Chunk *
-chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slices)
+static int
+chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 {
-	ChunkStub *stub;
-	Chunk *chunk = NULL;
-	ChunkScanCtx ctx;
+	int matching_chunk_id = 0;
 
 	/* The scan context will keep the state accumulated during the scan */
+	ChunkScanCtx ctx;
 	chunk_scan_ctx_init(&ctx, ht->space, p);
 
-	/* Abort the scan when the chunk is found */
-	ctx.early_abort = true;
-
-	/* Scan for the chunk matching the point */
-	chunk_point_scan(&ctx, p, lock_slices);
-
-	/* Find the stub that has N matching dimension constraints */
-	stub = chunk_scan_ctx_get_chunk_stub(&ctx);
-
-	chunk_scan_ctx_destroy(&ctx);
-
-	if (NULL != stub)
+	/* Scan all dimensions for slices enclosing the point */
+	List *all_slices = NIL;
+	for (int dimension_index = 0; dimension_index < ctx.space->num_dimensions; dimension_index++)
 	{
-		ChunkStubScanCtx stubctx = {
-			.stub = stub,
-		};
+		ts_dimension_slice_scan_list(ctx.space->dimensions[dimension_index].fd.id,
+									 p->coordinates[dimension_index],
+									 &all_slices);
+	}
 
-		/* Fill in the rest of the chunk's data from the chunk table, unless
-		 * the chunk is marked as dropped. */
-		chunk = chunk_create_from_stub(&stubctx);
+	/* Find constraints matching dimension slices. */
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, CurrentMemoryContext);
 
-		/* Check if the found metadata is a tombstone (dropped=true) */
-		if (stubctx.is_dropped)
+	ListCell *lc;
+	foreach (lc, all_slices)
+	{
+		DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
+		ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
+
+		ts_scanner_foreach(&iterator)
 		{
-			Assert(chunk == NULL);
+			TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+			bool PG_USED_FOR_ASSERTS_ONLY isnull = true;
+			Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
+			Assert(!isnull);
+			int32 current_chunk_id = DatumGetInt32(datum);
+			Assert(current_chunk_id != 0);
 
-			/* Resurrect the chunk if requested by the caller */
-			if (resurrect)
-				chunk = chunk_resurrect(ht, stub);
+			bool found = false;
+			ChunkScanEntry *entry = hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
+			if (!found)
+			{
+				entry->stub = NULL;
+				entry->num_dimension_constraints = 0;
+			}
+
+			/*
+			 * We have only the dimension constraints here, because we're searching
+			 * by dimension slice id.
+			 */
+			Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
+								   Anum_chunk_constraint_dimension_slice_id));
+			entry->num_dimension_constraints++;
+
+			/*
+			 * A chunk is complete when we've found slices for all its dimensions,
+			 * i.e., a complete hypercube. Only one chunk matches a given hyperspace
+			 * point, so we can stop early.
+			 */
+			if (entry->num_dimension_constraints == ctx.space->num_dimensions)
+			{
+				matching_chunk_id = entry->chunk_id;
+				break;
+			}
+		}
+
+		if (matching_chunk_id != 0)
+		{
+			break;
 		}
 	}
 
-	ASSERT_IS_NULL_OR_VALID_CHUNK(chunk);
+	ts_scan_iterator_close(&iterator);
 
-	return chunk;
-}
+	chunk_scan_ctx_destroy(&ctx);
 
-Chunk *
-ts_chunk_find(const Hypertable *ht, const Point *p, bool lock_slices)
-{
-	return chunk_find(ht, p, false, lock_slices);
+	return matching_chunk_id;
 }
 
 /*

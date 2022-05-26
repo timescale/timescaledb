@@ -149,6 +149,37 @@ lock_result_ok_or_abort(TupleInfo *ti)
 }
 
 static ScanTupleResult
+dimension_vec_tuple_found_list(TupleInfo *ti, void *data)
+{
+	List **slices = data;
+	DimensionSlice *slice;
+	MemoryContext old;
+
+	switch (ti->lockresult)
+	{
+		case TM_SelfModified:
+		case TM_Ok:
+			break;
+		case TM_Deleted:
+		case TM_Updated:
+			/* Treat as not found */
+			return SCAN_CONTINUE;
+		default:
+			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
+			pg_unreachable();
+			break;
+	}
+
+	old = MemoryContextSwitchTo(ti->mctx);
+	slice = dimension_slice_from_slot(ti->slot);
+	Assert(NULL != slice);
+	*slices = lappend(*slices, slice);
+	MemoryContextSwitchTo(old);
+
+	return SCAN_CONTINUE;
+}
+
+static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionVec **slices = data;
@@ -209,13 +240,21 @@ dimension_slice_scan_limit_internal(int indexid, ScanKeyData *scankey, int nkeys
 									LOCKMODE lockmode, const ScanTupLock *tuplock,
 									MemoryContext mctx)
 {
+	/*
+	 * We have =, <=, > ops for index columns, so backwards scan direction is
+	 * more appropriate. Forward direction wouldn't be able to use the second
+	 * column to find a starting point for the scan. Unfortunately we can't do
+	 * anything about the third column, we'll be checking for it with a
+	 * sequential scan over index pages. Ideally we need some other index type
+	 * than btree for this.
+	 */
 	return dimension_slice_scan_limit_direction_internal(indexid,
 														 scankey,
 														 nkeys,
 														 on_tuple_found,
 														 scandata,
 														 limit,
-														 ForwardScanDirection,
+														 BackwardScanDirection,
 														 lockmode,
 														 tuplock,
 														 mctx);
@@ -266,6 +305,48 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 										CurrentMemoryContext);
 
 	return ts_dimension_vec_sort(&slices);
+}
+
+void
+ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matching_dimension_slices)
+{
+	coordinate = REMAP_LAST_COORDINATE(coordinate);
+
+	/*
+	 * Perform an index scan for slices matching the dimension's ID and which
+	 * enclose the coordinate.
+	 */
+	ScanKeyData scankey[3];
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+	ScanKeyInit(&scankey[1],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+				BTLessEqualStrategyNumber,
+				F_INT8LE,
+				Int64GetDatum(coordinate));
+	ScanKeyInit(&scankey[2],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+				BTGreaterStrategyNumber,
+				F_INT8GT,
+				Int64GetDatum(coordinate));
+
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleKeyShare,
+		.waitpolicy = LockWaitBlock,
+	};
+
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										3,
+										dimension_vec_tuple_found_list,
+										matching_dimension_slices,
+										/* limit = */ 0,
+										AccessShareLock,
+										&tuplock,
+										CurrentMemoryContext);
 }
 
 int
