@@ -94,22 +94,22 @@
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
 	do                                                                                             \
 	{                                                                                              \
-		if (schemaname &&                                                                          \
+		if ((schemaname) &&                                                                        \
 			strncmp(schemaname, INTERNAL_SCHEMA_NAME, strlen(INTERNAL_SCHEMA_NAME)) == 0)          \
-			newuid = ts_catalog_database_info_get()->owner_uid;                                    \
+			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
 		else                                                                                       \
-			newuid = InvalidOid;                                                                   \
-		if (newuid != InvalidOid)                                                                  \
+			(newuid) = InvalidOid;                                                                 \
+		if ((newuid) != InvalidOid)                                                                \
 		{                                                                                          \
-			GetUserIdAndSecContext(&saved_uid, &saved_secctx);                                     \
-			SetUserIdAndSecContext(uid, saved_secctx | SECURITY_LOCAL_USERID_CHANGE);              \
+			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
+			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
 		}                                                                                          \
 	} while (0)
 
 #define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
 	do                                                                                             \
 	{                                                                                              \
-		if (newuid != InvalidOid)                                                                  \
+		if ((newuid) != InvalidOid)                                                                \
 			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
 	} while (0);
 
@@ -139,15 +139,15 @@
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
 	{                                                                                              \
-		selquery = makeNode(Query);                                                                \
-		selquery->commandType = CMD_SELECT;                                                        \
-		selquery->querySource = srcquery->querySource;                                             \
-		selquery->queryId = srcquery->queryId;                                                     \
-		selquery->canSetTag = srcquery->canSetTag;                                                 \
-		selquery->utilityStmt = copyObject(srcquery->utilityStmt);                                 \
-		selquery->resultRelation = 0;                                                              \
-		selquery->hasAggs = true;                                                                  \
-		selquery->hasRowSecurity = false;                                                          \
+		(selquery) = makeNode(Query);                                                              \
+		(selquery)->commandType = CMD_SELECT;                                                      \
+		(selquery)->querySource = (srcquery)->querySource;                                         \
+		(selquery)->queryId = (srcquery)->queryId;                                                 \
+		(selquery)->canSetTag = (srcquery)->canSetTag;                                             \
+		(selquery)->utilityStmt = copyObject((srcquery)->utilityStmt);                             \
+		(selquery)->resultRelation = 0;                                                            \
+		(selquery)->hasAggs = true;                                                                \
+		(selquery)->hasRowSecurity = false;                                                        \
 	} while (0);
 
 typedef struct MatTableColumnInfo
@@ -2329,8 +2329,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
 	cagg_add_trigger_hypertable(origquery_ht->htoid, origquery_ht->htid);
-
-	return;
 }
 
 DDLResult
