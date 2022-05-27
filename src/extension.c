@@ -183,7 +183,8 @@ extension_set_state(enum ExtensionState newstate)
 }
 
 #ifdef _MSC_VER
-static void SignalHandler(int signal)
+static void
+SignalHandler(int signal)
 {
 	(void) signal;
 
@@ -204,12 +205,10 @@ static void SignalHandler(int signal)
 		res = SymFromAddr(GetCurrentProcess(), (DWORD64) addrs[i], NULL, &info);
 		if (!res)
 		{
-			fprintf(stderr, "SymFromAddr fails with error %d for %p\n",
-				GetLastError(), addrs[i]);
+			fprintf(stderr, "SymFromAddr fails with error %d for %p\n", GetLastError(), addrs[i]);
 		}
 		fprintf(stderr, "%s\n", info.Name);
 	}
-
 
 	abort();
 }
@@ -260,7 +259,6 @@ extension_update_state()
 		(void) signal(SIGSEGV, SignalHandler);
 		SetUnhandledExceptionFilter(exceptionHandler);
 #endif
-
 	}
 	else
 	{
