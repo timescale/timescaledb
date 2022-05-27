@@ -5,8 +5,6 @@
  */
 #include <postgres.h>
 
-#define WIN32_LEAN_AND_MEAN
-
 /*
  * Some versions of the MS SDK contain "typedef enum { ... } ;" which the MS
  * compiler quite sanely complains about. Well done, Microsoft.
@@ -15,11 +13,10 @@
  * versions of MSVC.
  */
 #ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
 #pragma warning(push)
 #pragma warning(disable : 4091)
-#endif
 #include <dbghelp.h>
-#ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 
