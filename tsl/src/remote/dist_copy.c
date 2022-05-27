@@ -339,7 +339,7 @@ flush_data_nodes(const CopyConnectionState *state)
 
 	/*
 	 * Flush all connections simultaneously instead of doing this one-by-one in
-	 * remote_connection_end_copy(). Should switch to using poll().
+	 * remote_connection_end_copy().
 	 */
 	for (;;)
 	{
@@ -381,22 +381,17 @@ flush_data_nodes(const CopyConnectionState *state)
 
 		if (list_length(to_flush_next) == 0)
 		{
+			/* Flushed everything. */
 			break;
 		}
-
-		List *tmp = to_flush_next;
-		to_flush_next = to_flush;
-		to_flush = tmp;
-
-		to_flush_next = list_truncate(to_flush_next, 0);
 
 		/*
 		 * Postgres API doesn't allow to remove a socket from the wait event,
 		 * and it's level-triggered, so we have to recreate the set each time.
 		 */
-		WaitEventSet *set = CreateWaitEventSet(CurrentMemoryContext, list_length(to_flush));
+		WaitEventSet *set = CreateWaitEventSet(CurrentMemoryContext, list_length(to_flush_next));
 		ListCell *set_cell;
-		foreach (set_cell, to_flush)
+		foreach (set_cell, to_flush_next)
 		{
 			TSConnection *conn = lfirst(set_cell);
 			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
@@ -424,9 +419,15 @@ flush_data_nodes(const CopyConnectionState *state)
 		 */
 		Assert(wait_result == 0 || wait_result == 1);
 
-		fprintf(stderr, "wait result %d nodes left %d\n", wait_result, list_length(to_flush));
+		fprintf(stderr, "wait result %d nodes left %d\n", wait_result, list_length(to_flush_next));
 
 		FreeWaitEventSet(set);
+
+		List *tmp = to_flush_next;
+		to_flush_next = to_flush;
+		to_flush = tmp;
+
+		to_flush_next = list_truncate(to_flush_next, 0);
 	}
 
 	list_free(to_flush);
