@@ -201,7 +201,7 @@ static void SignalHandler(int signal)
 	for (int i = 0; i < naddrs; i++)
 	{
 		SYMBOL_INFO info;
-		res = SymFromAddr(GetCurrentProcess(), addrs[i], NULL, &info);
+		res = SymFromAddr(GetCurrentProcess(), (DWORD64) addrs[i], NULL, &info);
 		if (!res)
 		{
 			fprintf(stderr, "SymFromAddr fails with error %d for %p\n",
