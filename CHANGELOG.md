@@ -9,6 +9,7 @@ accidentally triggering the load of a previous DB version.**
 **Features**
 * #4374 Remove constified now() constraints from plan
 * #4393 Support intervals with day component when constifying now()
+* #4397 Support intervals with month component when constifying now()
 
 ## 2.7.0 (2022-05-24)
 

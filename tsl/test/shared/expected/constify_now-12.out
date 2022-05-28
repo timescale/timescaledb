@@ -78,6 +78,12 @@ QUERY PLAN
    Index Cond: ("time" > (now() - '@ 7 days'::interval))
 (2 rows)
 
+:PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+(2 rows)
+
 -- test bitmapheapscan
 SET enable_indexscan TO false;
 :PREFIX SELECT FROM const_now WHERE time > now();
@@ -111,16 +117,6 @@ QUERY PLAN
 (2 rows)
 
 -- variants we don't optimize
--- we do not allow interval with month components
-:PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
-(5 rows)
-
 :PREFIX SELECT FROM const_now WHERE time > now()::date;
 QUERY PLAN
  Append
@@ -411,5 +407,48 @@ QUERY PLAN
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 1 day'::interval))
 (5 rows)
+
+TRUNCATE const_now_dst;
+SELECT set_chunk_time_interval('const_now_dst','1 day'::interval, 'time');
+ set_chunk_time_interval 
+ 
+(1 row)
+
+-- test month calculation safety buffer
+SET timescaledb.current_timestamp_mock TO '2001-03-1 0:30:00+00';
+INSERT INTO const_now_dst SELECT generate_series('2001-01-28'::timestamptz, '2001-02-01', '1day'::interval);
+set timezone to 'utc+1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+(11 rows)
+
+set timezone to 'utc-1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+(11 rows)
 
 DROP TABLE const_now_dst;
