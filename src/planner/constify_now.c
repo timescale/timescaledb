@@ -33,8 +33,7 @@
  * - Var >= now() - Interval
  * - Var >= now() + Interval
  *
- * Additionally Interval needs to be Const and not contain a month
- * component.
+ * Interval needs to be Const in those expressions.
  */
 static const Dimension *
 get_hypertable_dimension(Oid relid)
@@ -93,15 +92,6 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	if (c->constisnull || c->consttype != INTERVALOID)
 		return false;
 
-	Interval *offset = DatumGetIntervalP(c->constvalue);
-	/*
-	 * We don't consider month intervals safe here as
-	 * they are affected by timezones and therefore not
-	 * safe to evaluate during planning.
-	 */
-	if (offset->month != 0)
-		return false;
-
 	return true;
 }
 
@@ -152,7 +142,8 @@ constify_now_expr(PlannerInfo *root, OpExpr *op)
 		 * end here if it isn't since this is checked in is_valid_now_expr.
 		 */
 		Assert(linitial_node(FuncExpr, op_inner->args)->funcid == F_NOW);
-		linitial(op_inner->args) = make_now_const();
+		Const *now = make_now_const();
+		linitial(op_inner->args) = now;
 
 		/*
 		 * If the interval has a day component then the calculation needs
@@ -163,13 +154,25 @@ constify_now_expr(PlannerInfo *root, OpExpr *op)
 		 * will be repeated with exact values during execution.
 		 * Since dst switches seem to range between -1 and 2 hours we set
 		 * the safety buffer to 4 hours.
+		 * When dealing with Intervals with month component timezone changes
+		 * can result in multiple day differences in the outcome of these
+		 * calculations due to different month lengths. When dealing with
+		 * months we add a 7 day safety buffer.
+		 * For all these calculations it is fine if we exclude less chunks
+		 * than strictly required for the operation, additional exclusion
+		 * with exact values will happen in the executor. But under no
+		 * circumstances must we exclude too much cause there would be
+		 * no way for the executor to get those chunks back.
 		 */
-		if (offset->day != 0)
+		if (offset->day != 0 || offset->month != 0)
 		{
-			Const *now = linitial_node(Const, op_inner->args);
-			int64 now_value = DatumGetInt64(now->constvalue);
-			now_value -= 4 * USECS_PER_HOUR;
-			now->constvalue = Int64GetDatum(now_value);
+			TimestampTz now_value = DatumGetTimestampTz(now->constvalue);
+			if (offset->month != 0)
+				now_value -= 7 * USECS_PER_DAY;
+			if (offset->day != 0)
+				now_value -= 4 * USECS_PER_HOUR;
+
+			now->constvalue = TimestampTzGetDatum(now_value);
 		}
 
 		/*

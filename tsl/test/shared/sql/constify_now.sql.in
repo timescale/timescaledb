@@ -32,6 +32,7 @@ INSERT INTO const_now SELECT '3000-01-01','3000-01-01',2,0.5;
 :PREFIX SELECT FROM const_now WHERE time > now() - '2d'::interval;
 :PREFIX SELECT FROM const_now WHERE time > now() + '3d'::interval;
 :PREFIX SELECT FROM const_now WHERE time > now() - '1week'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
 
 -- test bitmapheapscan
 SET enable_indexscan TO false;
@@ -44,8 +45,6 @@ RESET enable_indexscan;
 :PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
 
 -- variants we don't optimize
--- we do not allow interval with month components
-:PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
 :PREFIX SELECT FROM const_now WHERE time > now()::date;
 :PREFIX SELECT FROM const_now WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
 
@@ -142,6 +141,19 @@ SET timescaledb.current_timestamp_mock TO '2022-03-28 1:15+0';
 
 -- must have 2 chunks in plan
 :PREFIX SELECT FROM const_now_dst WHERE time > now() - '1day'::interval;
+
+TRUNCATE const_now_dst;
+SELECT set_chunk_time_interval('const_now_dst','1 day'::interval, 'time');
+
+-- test month calculation safety buffer
+SET timescaledb.current_timestamp_mock TO '2001-03-1 0:30:00+00';
+INSERT INTO const_now_dst SELECT generate_series('2001-01-28'::timestamptz, '2001-02-01', '1day'::interval);
+set timezone to 'utc+1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+set timezone to 'utc-1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
 
 DROP TABLE const_now_dst;
 
