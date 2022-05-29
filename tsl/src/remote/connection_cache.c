@@ -293,7 +293,7 @@ is_local_connection(const PGconn *conn)
 		return true;
 
 	/* A TCP connection must match both the port and localhost address */
-	port = pg_atoi(PQport(conn), sizeof(int32), '\0');
+	port = pg_strtoint32(PQport(conn));
 
 	return (port == PostPortNumber) && is_loopback_host_or_addr(host);
 }
@@ -418,7 +418,7 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_show_conn_user_name)] = NameGetDatum(&conn_user_name);
 	values[AttrNumberGetAttrOffset(Anum_show_conn_host)] = CStringGetTextDatum(PQhost(pgconn));
 	values[AttrNumberGetAttrOffset(Anum_show_conn_port)] =
-		Int32GetDatum(pg_atoi(PQport(pgconn), sizeof(int32), '\0'));
+		Int32GetDatum(pg_strtoint32(PQport(pgconn)));
 	values[AttrNumberGetAttrOffset(Anum_show_conn_db)] = NameGetDatum(&conn_db);
 	values[AttrNumberGetAttrOffset(Anum_show_conn_backend_pid)] =
 		Int32GetDatum(PQbackendPID(pgconn));

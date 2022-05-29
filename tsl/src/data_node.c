@@ -655,7 +655,7 @@ get_server_port()
 {
 	const char *const portstr =
 		GetConfigOption("port", /* missing_ok= */ false, /* restrict_privileged= */ false);
-	return pg_atoi(portstr, sizeof(int32), 0);
+	return pg_strtoint32(portstr);
 }
 
 /* set_distid may need to be false for some otherwise invalid configurations
