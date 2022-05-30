@@ -10,6 +10,8 @@
 #include <nodes/execnodes.h>
 #include <nodes/parsenodes.h>
 
+#include "export.h"
+
 typedef struct ChunkDispatch ChunkDispatch;
 typedef struct Cache Cache;
 
@@ -35,7 +37,7 @@ typedef struct ChunkDispatchState
 	ResultRelInfo *rri;
 } ChunkDispatchState;
 
-extern bool ts_is_chunk_dispatch_state(PlanState *state);
+extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
 extern ChunkDispatchState *ts_chunk_dispatch_state_create(Oid hypertable_oid, Plan *plan);
 extern void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
 

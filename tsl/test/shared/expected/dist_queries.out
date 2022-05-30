@@ -17,3 +17,63 @@ ORDER BY id;
   4
 (4 rows)
 
+-- Test query that inserts a Result node between ChunkDispatch and
+-- DataNodeDispatch/DataNodeCopy. Fix for bug
+-- https://github.com/timescale/timescaledb/issues/4339
+SET timescaledb.enable_distributed_insert_with_copy=false;
+BEGIN;
+WITH upsert AS (
+  UPDATE matches
+  SET day = day - 1
+  WHERE location = 'old trafford'
+  RETURNING *
+) INSERT INTO matches (day, location, team1, team2)
+SELECT 9, 'old trafford', 'MNU', 'MNC'
+WHERE NOT EXISTS (SELECT 1 FROM upsert);
+SELECT * FROM matches ORDER BY 1,2,3,4;
+ day |   location   | team1 | team2 
+-----+--------------+-------+-------
+   1 | camp nou     | BAR   | RMD
+   6 | anfield      | LIV   | ARS
+   9 | old trafford | MNU   | MNC
+(3 rows)
+
+ROLLBACK;
+SET timescaledb.enable_distributed_insert_with_copy=true;
+BEGIN;
+WITH upsert AS (
+  UPDATE matches
+  SET day = day - 1
+  WHERE location = 'old trafford'
+  RETURNING *
+) INSERT INTO matches (day, location, team1, team2)
+SELECT 9, 'old trafford', 'MNU', 'MNC'
+WHERE NOT EXISTS (SELECT 1 FROM upsert);
+SELECT * FROM matches ORDER BY 1,2,3,4;
+ day |   location   | team1 | team2 
+-----+--------------+-------+-------
+   1 | camp nou     | BAR   | RMD
+   6 | anfield      | LIV   | ARS
+   9 | old trafford | MNU   | MNC
+(3 rows)
+
+ROLLBACK;
+-- Reference. The two queries above should be like this one:
+BEGIN;
+WITH upsert AS (
+  UPDATE matches_reference
+  SET day = day - 1
+  WHERE location = 'old trafford'
+  RETURNING *
+) INSERT INTO matches_reference (day, location, team1, team2)
+SELECT 9, 'old trafford', 'MNU', 'MNC'
+WHERE NOT EXISTS (SELECT 1 FROM upsert);
+SELECT * FROM matches_reference ORDER BY 1,2,3,4;
+ day |   location   | team1 | team2 
+-----+--------------+-------+-------
+   1 | camp nou     | BAR   | RMD
+   6 | anfield      | LIV   | ARS
+   9 | old trafford | MNU   | MNC
+(3 rows)
+
+ROLLBACK;
