@@ -7,7 +7,6 @@
 
 #include <access/htup_details.h>
 #include <access/xact.h>
-//#include <catalog.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_database.h>
 #include <catalog/pg_foreign_server.h>
@@ -30,6 +29,7 @@
 #include <utils/inval.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "config.h"
 #include "extension.h"
 #include "fdw/fdw.h"
@@ -57,8 +57,8 @@ typedef struct DbInfo
 {
 	NameData name;
 	int32 encoding;
-	NameData chartype;
-	NameData collation;
+	const char *chartype;
+	const char *collation;
 } DbInfo;
 
 /* A list of databases we try to connect to when bootstrapping a data node */
@@ -86,8 +86,27 @@ get_database_info(Oid dbid, DbInfo *database)
 	dbrecord = (Form_pg_database) GETSTRUCT(dbtuple);
 
 	database->encoding = dbrecord->encoding;
-	database->collation = dbrecord->datcollate;
-	database->chartype = dbrecord->datctype;
+
+#if PG15_LT
+	database->collation = NameStr(dbrecord->datcollate);
+	database->chartype = NameStr(dbrecord->datctype);
+#else
+	/*
+	 * Since datcollate and datctype are varlen fields in PG15+ we cannot rely
+	 * on GETSTRUCT filling them in as GETSTRUCT only works for fixed-length
+	 * non-NULLABLE columns.
+	 */
+	Datum datum;
+	bool isnull;
+
+	datum = SysCacheGetAttr(DATABASEOID, dbtuple, Anum_pg_database_datcollate, &isnull);
+	Assert(!isnull);
+	database->collation = TextDatumGetCString(datum);
+
+	datum = SysCacheGetAttr(DATABASEOID, dbtuple, Anum_pg_database_datctype, &isnull);
+	Assert(!isnull);
+	database->chartype = TextDatumGetCString(datum);
+#endif
 
 	ReleaseSysCache(dbtuple);
 	return true;
@@ -354,8 +373,8 @@ data_node_bootstrap_database(TSConnection *conn, const DbInfo *database)
 								"TEMPLATE template0 OWNER %s",
 								quote_identifier(NameStr(database->name)),
 								quote_identifier(pg_encoding_to_char(database->encoding)),
-								quote_literal_cstr(NameStr(database->collation)),
-								quote_literal_cstr(NameStr(database->chartype)),
+								quote_literal_cstr(database->collation),
+								quote_literal_cstr(database->chartype),
 								quote_identifier(username));
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 		remote_result_elog(res, ERROR);
@@ -406,22 +425,22 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 
 	actual_collation = PQgetvalue(res, 0, 1);
 	Assert(actual_collation != NULL);
-	if (strcmp(actual_collation, NameStr(database->collation)) != 0)
+	if (strcmp(actual_collation, database->collation) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong collation"),
 				 errdetail("Expected collation \"%s\" but it was \"%s\".",
-						   NameStr(database->collation),
+						   database->collation,
 						   actual_collation)));
 
 	actual_chartype = PQgetvalue(res, 0, 2);
 	Assert(actual_chartype != NULL);
-	if (strcmp(actual_chartype, NameStr(database->chartype)) != 0)
+	if (strcmp(actual_chartype, database->chartype) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong LC_CTYPE"),
 				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\".",
-						   NameStr(database->chartype),
+						   database->chartype,
 						   actual_chartype)));
 	return true;
 }
