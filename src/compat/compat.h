@@ -475,9 +475,10 @@ get_reindex_options(ReindexStmt *stmt)
 /* find_em_expr_for_rel was in postgres_fdw in PG12 but got
  * moved out of contrib in PG13. So we map to our own function
  * for PG12 only and use postgres implementation when it is
- * available.
+ * available. PG15 removed the function again from postgres
+ * core code so for PG15+ we fall back to our own implementation.
  */
-#if PG12
+#if PG12 || PG15_GE
 #define find_em_expr_for_rel ts_find_em_expr_for_rel
 #endif
 
