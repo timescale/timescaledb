@@ -324,13 +324,12 @@ INSERT INTO hyper_copy_large
 SELECT time,
 random() AS value
 FROM
-generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 day',
-  INTERVAL '1 hour') AS g1(time)
+generate_series('2022-01-01', '2022-01-31', INTERVAL '1 hour') AS g1(time)
 ORDER BY time;
 SELECT COUNT(*) FROM hyper_copy_large;
  count 
 -------
-   697
+   721
 (1 row)
 
 -- Migrate data to chunks by using copy
@@ -345,7 +344,7 @@ NOTICE:  migrating data to chunks
 SELECT COUNT(*) FROM hyper_copy_large;
  count 
 -------
-   697
+   721
 (1 row)
 
 ----------------------------------------------------------------
