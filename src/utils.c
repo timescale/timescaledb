@@ -720,7 +720,7 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	return NULL;
 }
 
-#if PG12
+#if PG12 || PG15_GE
 /*
  * Find an equivalence class member expression, all of whose Vars, come from
  * the indicated relation.
@@ -729,6 +729,8 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
  * contrib/postgres_fdw/postgres_fdw.c in postgres source.
  * This function was moved to postgres main in PG13 so we only need this
  * backport for PG12 in later versions we will use the postgres implementation.
+ * PG15 removes the function again from postgres code, so we use our own
+ * implementation for PG15+ again.
  */
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
