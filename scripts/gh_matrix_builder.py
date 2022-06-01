@@ -50,7 +50,7 @@ def build_debug_config(overrides):
     "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON",
     "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
-    "extra_packages": "clang-9 llvm-9 llvm-9-dev llvm-9-tools",
+    "extra_packages": "clang-9 llvm-9 llvm-9-dev llvm-9-tools clang-tidy-9",
     "llvm_config": "llvm-config-9",
     "clang": "clang-9",
     "os": "ubuntu-20.04",
