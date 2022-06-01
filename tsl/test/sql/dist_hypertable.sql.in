@@ -424,7 +424,17 @@ $$);
 INSERT INTO disttable
 VALUES ('2017-09-02 06:09', 6)
 ON CONFLICT(time,device) DO NOTHING;
+
+INSERT INTO disttable
+VALUES ('2017-09-02 06:09', 6)
+ON CONFLICT(time,device,"Color") DO NOTHING;
+
+INSERT INTO disttable
+VALUES ('2017-09-02 06:09', 6)
+ON CONFLICT ON CONSTRAINT disttable_color_unique DO NOTHING;
 \set VERBOSITY terse
+
+SELECT * FROM disttable ORDER BY disttable;
 
 -- ON CONFLICT only works with DO NOTHING for now
 INSERT INTO disttable (time, device, "Color", temp)

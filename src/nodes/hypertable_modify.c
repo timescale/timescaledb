@@ -617,13 +617,6 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 
 	Index rti = mtpath->nominalRelation;
 
-	if (root->parse->onConflict && OidIsValid(root->parse->onConflict->constraint))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support ON CONFLICT statements that reference "
-						"constraints"),
-				 errhint("Use column names to infer indexes instead.")));
-
 	if (mtpath->operation == CMD_INSERT)
 	{
 		if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
