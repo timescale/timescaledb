@@ -525,6 +525,7 @@ if(LINTER)
 
   if(CLANG_TIDY)
     message(STATUS "Linter support (clang-tidy) enabled")
+    execute_process(COMMAND ${CLANG_TIDY} --version)
     if(LINTER_STRICT)
       set(CMAKE_C_CLANG_TIDY
           "${CLANG_TIDY};--checks=clang-diagnostic-*,clang-analyzer-*,-*,clang-analyzer-core.*,clang-diagnostic-*,readability-redundant-control-flow,bugprone-argument-comment,bugprone-macro-parentheses;--warnings-as-errors=*"
