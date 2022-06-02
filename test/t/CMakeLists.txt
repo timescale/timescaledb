@@ -1,6 +1,7 @@
 set(PROVE_DEBUG_TEST_FILES)
 if(${PG_VERSION_MAJOR} GREATER "12")
-  list(APPEND PROVE_DEBUG_TEST_FILES 001_extension.pl)
+  list(APPEND PROVE_DEBUG_TEST_FILES 001_extension.pl
+       002_replication_telemetry.pl)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)

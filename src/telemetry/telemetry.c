@@ -31,6 +31,7 @@
 #include "ts_catalog/compression_chunk_size.h"
 #include "stats.h"
 #include "functions.h"
+#include "replication.h"
 
 #include "cross_module_fn.h"
 
@@ -71,6 +72,9 @@
 #define REQ_TS_LAST_TUNE_VERSION "last_tuned_version"
 #define REQ_INSTANCE_METADATA "instance_metadata"
 #define REQ_TS_TELEMETRY_CLOUD "cloud"
+
+#define REQ_NUM_WAL_SENDERS "num_wal_senders"
+#define REQ_IS_WAL_RECEIVER "is_wal_receiver"
 
 #define PG_PROMETHEUS "pg_prometheus"
 #define PROMSCALE "promscale"
@@ -445,6 +449,17 @@ add_function_call_telemetry(JsonbParseState *state)
 	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 }
 
+static void
+add_replication_telemetry(JsonbParseState *state)
+{
+	ReplicationInfo info = ts_telemetry_replication_info_gather();
+	if (info.got_num_wal_senders)
+		ts_jsonb_add_int32(state, REQ_NUM_WAL_SENDERS, info.num_wal_senders);
+
+	if (info.got_is_wal_receiver)
+		ts_jsonb_add_bool(state, REQ_IS_WAL_RECEIVER, info.is_wal_receiver);
+}
+
 #define REQ_RELS "relations"
 #define REQ_RELS_TABLES "tables"
 #define REQ_RELS_PARTITIONED_TABLES "partitioned_tables"
@@ -455,6 +470,7 @@ add_function_call_telemetry(JsonbParseState *state)
 #define REQ_RELS_DISTRIBUTED_HYPERTABLES_DN "distributed_hypertables_data_node"
 #define REQ_RELS_CONTINUOUS_AGGS "continuous_aggregates"
 #define REQ_FUNCTIONS_USED "functions_used"
+#define REQ_REPLICATION "replication"
 
 static Jsonb *
 build_telemetry_report()
@@ -630,6 +646,16 @@ build_telemetry_report()
 	key.val.string.len = strlen(REQ_FUNCTIONS_USED);
 	pushJsonbValue(&parse_state, WJB_KEY, &key);
 	add_function_call_telemetry(parse_state);
+
+	/* Add replication object */
+	key.type = jbvString;
+	key.val.string.val = REQ_REPLICATION;
+	key.val.string.len = strlen(REQ_REPLICATION);
+	pushJsonbValue(&parse_state, WJB_KEY, &key);
+
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	add_replication_telemetry(parse_state);
+	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* end of telemetry object */
 	result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);

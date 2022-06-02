@@ -374,6 +374,7 @@ WHERE key != 'os_name_pretty';
  os_version
  data_volume
  db_metadata
+ replication
  build_os_name
  functions_used
  install_method
@@ -394,7 +395,7 @@ WHERE key != 'os_name_pretty';
  num_user_defined_actions
  build_architecture_bit_size
  num_continuous_aggs_policies
-(28 rows)
+(29 rows)
 
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT t FROM get_telemetry_report() t;
