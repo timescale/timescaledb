@@ -12,6 +12,7 @@
 /* User-facing API functions */
 extern Datum policy_retention_add(PG_FUNCTION_ARGS);
 extern Datum policy_retention_proc(PG_FUNCTION_ARGS);
+extern Datum policy_retention_check(PG_FUNCTION_ARGS);
 extern Datum policy_retention_remove(PG_FUNCTION_ARGS);
 
 int32 policy_retention_get_hypertable_id(const Jsonb *config);

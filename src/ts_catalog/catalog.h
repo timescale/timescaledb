@@ -704,6 +704,8 @@ enum Anum_bgw_job
 	Anum_bgw_job_scheduled,
 	Anum_bgw_job_hypertable_id,
 	Anum_bgw_job_config,
+	Anum_bgw_job_check_schema,
+	Anum_bgw_job_check_name,
 	_Anum_bgw_job_max,
 };
 
@@ -723,6 +725,8 @@ typedef struct FormData_bgw_job
 	bool scheduled;
 	int32 hypertable_id;
 	Jsonb *config;
+	NameData check_schema;
+	NameData check_name;
 } FormData_bgw_job;
 
 typedef FormData_bgw_job *Form_bgw_job;

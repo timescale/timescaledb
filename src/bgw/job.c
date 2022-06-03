@@ -8,6 +8,8 @@
 #include <pgstat.h>
 #include <access/xact.h>
 #include <catalog/pg_authid.h>
+#include <nodes/makefuncs.h>
+#include <parser/parse_func.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <tcop/tcopprot.h>
@@ -22,6 +24,7 @@
 #include <utils/acl.h>
 #include <utils/elog.h>
 #include <utils/jsonb.h>
+#include <utils/snapmgr.h>
 
 #include "job.h"
 #include "config.h"
@@ -67,15 +70,121 @@ ts_bgw_job_start(BgwJob *job, Oid user_oid)
 	return ts_bgw_start_worker(NameStr(job->fd.application_name), &bgw_params);
 }
 
+static void
+job_execute_function(FuncExpr *funcexpr)
+{
+	bool isnull;
+
+	EState *estate = CreateExecutorState();
+	ExprContext *econtext = CreateExprContext(estate);
+
+	ExprState *es = ExecPrepareExpr((Expr *) funcexpr, estate);
+	ExecEvalExpr(es, econtext, &isnull);
+	FreeExprContext(econtext, true);
+	FreeExecutorState(estate);
+}
+
+/* This is copied from tsl/src/job.c */
+static void
+job_execute_procedure(FuncExpr *funcexpr)
+{
+	CallStmt *call = makeNode(CallStmt);
+	call->funcexpr = funcexpr;
+	DestReceiver *dest = CreateDestReceiver(DestNone);
+	/* we don't need to create proper param list cause we pass in all arguments as Const */
+#ifdef PG11
+	ParamListInfo params = palloc0(offsetof(ParamListInfoData, params));
+#else
+	ParamListInfo params = makeParamList(0);
+#endif
+	ExecuteCallStmt(call, params, false, dest);
+}
+
+/**
+ * Run configuration check validation function.
+ *
+ * This will run the configuration check validation function registered for
+ * the job. If a new job is added, the job_id is going to be zero.
+ */
+void
+ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
+{
+	List *args =
+		list_make2(makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(job_id), false, true),
+				   makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(config), false, false));
+	FuncExpr *funcexpr =
+		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+
+	/* Nothing to check if there is no check function provided */
+	if (!OidIsValid(check))
+		return;
+
+	switch (get_func_prokind(check))
+	{
+		case PROKIND_FUNCTION:
+			job_execute_function(funcexpr);
+			break;
+		case PROKIND_PROCEDURE:
+			job_execute_procedure(funcexpr);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")));
+			break;
+	}
+}
+
+/* Run the check function on a configuration. It will generate errors if there
+ * is anything wrong with the configuration, otherwise just return. If the
+ * check function does not exist, no checking will be done.*/
+static void
+job_config_check(BgwJob *job, Jsonb *config)
+{
+	const Oid proc_args[] = { INT4OID, JSONBOID };
+	List *name;
+	Oid proc;
+	bool started = false;
+
+	/* Both should either be empty or contain a schema and name */
+	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
+		   (strlen(NameStr(job->fd.check_schema)) == 0));
+
+	/* If there is no function, just return */
+	if (strlen(NameStr(job->fd.check_name)) == 0)
+		return;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+		/* executing sql functions requires snapshot */
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
+
+	/* We are using LookupFuncName here, which will find functions but not
+	 * procedures. We could use LookupFuncWithArgs here instead. */
+	name = list_make2(makeString(NameStr(job->fd.check_schema)),
+					  makeString(NameStr(job->fd.check_name)));
+	proc = LookupFuncName(name, 2, proc_args, false);
+	ts_bgw_job_run_config_check(proc, job->fd.id, config);
+	if (started)
+	{
+		/* if job does its own transaction handling it might not have set a snapshot */
+		if (ActiveSnapshotSet())
+			PopActiveSnapshot();
+		CommitTransactionCommand();
+	}
+}
+
 static BgwJob *
 bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 {
 	BgwJob *job;
 	bool should_free;
 	HeapTuple tuple;
-	bool isnull;
 	MemoryContext old_ctx;
-	Datum value;
+	Datum values[Natts_bgw_job] = { 0 };
+	bool nulls[Natts_bgw_job] = { false };
 
 	/*
 	 * allow for embedding with arbitrary alloc_size, which means we can't use
@@ -84,22 +193,72 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 	Assert(alloc_size >= sizeof(BgwJob));
 	job = MemoryContextAllocZero(ti->mctx, alloc_size);
 	tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
-
-	if (should_free)
-		heap_freetuple(tuple);
 
 	/*
-	 * GETSTRUCT does not work with variable length types and NULLs so we have
-	 * to do special handling for hypertable_id and the jsonb column
+	 * Using heap_deform_tuple instead of GETSTRUCT since the tuple can
+	 * contain NULL values. Some of these cannot really be null, but we check
+	 * anyway since it is cheap and will avoid problems in the future. Note
+	 * that the job structure is zeroed, so we only need to update the field
+	 * if it is non-NULL.
 	 */
-	value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
-	job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
-	value = slot_getattr(ti->slot, Anum_bgw_job_config, &isnull);
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_id)])
+		job->fd.id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_id)]);
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)])
+		namestrcpy(&job->fd.application_name,
+				   NameStr(*DatumGetName(
+					   values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)])));
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)])
+		job->fd.schedule_interval =
+			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)]);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)])
+		job->fd.max_runtime =
+			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)]);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)])
+		job->fd.max_retries =
+			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)]);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
+		job->fd.retry_period =
+			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)]);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)])
+		namestrcpy(&job->fd.proc_schema,
+				   NameStr(
+					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)])));
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)])
+		namestrcpy(&job->fd.proc_name,
+				   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)])));
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)])
+		namestrcpy(&job->fd.check_schema,
+				   NameStr(
+					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)])));
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])
+		namestrcpy(&job->fd.check_name,
+				   NameStr(
+					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])));
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])
+		namestrcpy(&job->fd.owner,
+				   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])));
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)])
+		job->fd.scheduled = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)]);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)])
+		job->fd.hypertable_id =
+			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)]);
+
 	old_ctx = MemoryContextSwitchTo(ti->mctx);
-	job->fd.config = isnull ? NULL : DatumGetJsonbP(value);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)])
+		job->fd.config = DatumGetJsonbP(values[AttrNumberGetAttrOffset(Anum_bgw_job_config)]);
+
 	MemoryContextSwitchTo(old_ctx);
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return job;
 }
@@ -180,11 +339,10 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
 		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
 
-		/* skip config since the scheduler doesnt need it this saves us
-		 * from detoasting and simplifies freeing job lists in the
-		 * scheduler as otherwise the config field would have to be
-		 * freed separately when freeing a job
-		 */
+		/* We skip config, check_name, and check_schema since the scheduler
+		 * doesn't need these, it saves us from detoasting, and simplifies
+		 * freeing job lists in the scheduler as otherwise the config field
+		 * would have to be freed separately when freeing a job. */
 		job->fd.config = NULL;
 
 		old_ctx = MemoryContextSwitchTo(mctx);
@@ -626,9 +784,7 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 	if (updated_job->fd.config)
 	{
-		ts_cm_functions->job_config_check(&updated_job->fd.proc_schema,
-										  &updated_job->fd.proc_name,
-										  updated_job->fd.config);
+		job_config_check(bgw_job_from_tupleinfo(ti, sizeof(BgwJob)), updated_job->fd.config);
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] =
 			JsonbPGetDatum(updated_job->fd.config);
 	}
@@ -1000,13 +1156,13 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
-						   Name proc_schema, Name proc_name, Name owner, bool scheduled,
-						   int32 hypertable_id, Jsonb *config)
+						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
+						   Name owner, bool scheduled, int32 hypertable_id, Jsonb *config)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 	TupleDesc desc;
-	Datum values[Natts_bgw_job];
+	Datum values[Natts_bgw_job] = { 0 };
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
@@ -1023,6 +1179,17 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)] = NameGetDatum(proc_schema);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)] = NameGetDatum(proc_name);
+
+	if (strlen(NameStr(*check_schema)) > 0)
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = NameGetDatum(check_schema);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+
+	if (strlen(NameStr(*check_schema)) > 0)
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = NameGetDatum(check_name);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
 	if (hypertable_id == 0)

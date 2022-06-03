@@ -265,9 +265,9 @@ SELECT insert_job('test_job_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '10
 (1 row)
 
 select * from _timescaledb_config.bgw_job;
-  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | hypertable_id | config 
-------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+---------------+--------
- 1000 | test_job_1       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_1 | super_user | t         |               | 
+  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | hypertable_id | config | check_schema | check_name 
+------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+---------------+--------+--------------+------------
+ 1000 | test_job_1       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_1 | super_user | t         |               |        |              | 
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -1172,9 +1172,9 @@ SELECT insert_job('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '10
 (1 row)
 
 select * from _timescaledb_config.bgw_job;
-  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | hypertable_id | config 
-------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+---------------+--------
- 1014 | test_job_4       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_4 | super_user | t         |               | 
+  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | hypertable_id | config | check_schema | check_name 
+------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+---------------+--------+--------------+------------
+ 1014 | test_job_4       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_4 | super_user | t         |               |        |              | 
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
