@@ -14,8 +14,8 @@ AS :TSL_MODULE_PATHNAME, 'ts_test_continuous_agg_find_by_view_name' LANGUAGE C;
 DELETE FROM _timescaledb_config.bgw_job;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config | check_schema | check_name 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------+--------------+------------
 (0 rows)
 
 --TEST1 ---
@@ -53,9 +53,9 @@ group by time_bucket(1, a), a WITH NO DATA;
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval) AS job_id
 \gset
 SELECT * FROM _timescaledb_config.bgw_job;
-  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                             config                              
-------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+-----------------------------------------------------------------
- 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_offset": 2, "start_offset": null, "mat_hypertable_id": 2}
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                             config                              |     check_schema      |                check_name                 
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+-----------------------------------------------------------------+-----------------------+-------------------------------------------
+ 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_offset": 2, "start_offset": null, "mat_hypertable_id": 2} | _timescaledb_internal | policy_refresh_continuous_aggregate_check
 (1 row)
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
@@ -104,8 +104,8 @@ SHOW enable_partitionwise_aggregate;
 
 SET enable_partitionwise_aggregate = on;
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config | check_schema | check_name 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------+--------------+------------
 (0 rows)
 
 CREATE TABLE conditions (
@@ -815,8 +815,8 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config | check_schema | check_name 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------+--------------+------------
 (0 rows)
 
 --mat table, user_view, and partial view all gone

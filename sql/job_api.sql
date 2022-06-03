@@ -7,7 +7,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_job(
   schedule_interval INTERVAL,
   config JSONB DEFAULT NULL,
   initial_start TIMESTAMPTZ DEFAULT NULL,
-  scheduled BOOL DEFAULT true
+  scheduled BOOL DEFAULT true,
+  check_config REGPROC DEFAULT NULL
 ) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.delete_job(job_id INTEGER) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_job_delete' LANGUAGE C VOLATILE STRICT;

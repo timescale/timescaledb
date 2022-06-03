@@ -14,6 +14,7 @@
 
 extern Datum policy_refresh_cagg_add(PG_FUNCTION_ARGS);
 extern Datum policy_refresh_cagg_proc(PG_FUNCTION_ARGS);
+extern Datum policy_refresh_cagg_check(PG_FUNCTION_ARGS);
 extern Datum policy_refresh_cagg_remove(PG_FUNCTION_ARGS);
 
 int32 policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config);

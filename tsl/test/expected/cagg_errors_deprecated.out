@@ -543,18 +543,21 @@ GROUP BY 1 WITH NO DATA;
 SELECT add_job(
        '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
        '1 hour'::interval,
+       check_config => '_timescaledb_internal.policy_refresh_continuous_aggregate_check'::regproc,
        config => '{"end_offset": null, "start_offset": null}');
 ERROR:  could not find "mat_hypertable_id" in config for job
 -- ... this one because it has a bad value for start_offset
 SELECT add_job(
        '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
        '1 hour'::interval,
+       check_config => '_timescaledb_internal.policy_refresh_continuous_aggregate_check'::regproc,
        config => '{"end_offset": null, "start_offset": "1 fortnight", "mat_hypertable_id": 11}');
 ERROR:  invalid input syntax for type interval: "1 fortnight"
 -- ... this one because it has a bad value for end_offset
 SELECT add_job(
        '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
        '1 hour'::interval,
+       check_config => '_timescaledb_internal.policy_refresh_continuous_aggregate_check'::regproc,
        config => '{"end_offset": "chicken", "start_offset": null, "mat_hypertable_id": 11}');
 ERROR:  invalid input syntax for type interval: "chicken"
 \set ON_ERROR_STOP 1
@@ -575,6 +578,8 @@ owner             | default_perm_user
 scheduled         | t
 hypertable_id     | 11
 config            | {"end_offset": null, "start_offset": null, "mat_hypertable_id": 11}
+check_schema      | _timescaledb_internal
+check_name        | policy_refresh_continuous_aggregate_check
 
 \x off
 -- These are all weird values for the parameters for the continuous
