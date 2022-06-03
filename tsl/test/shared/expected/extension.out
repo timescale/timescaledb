@@ -146,7 +146,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  decompress_chunk(regclass,boolean)
  delete_data_node(name,boolean,boolean,boolean,boolean)
  delete_job(integer)
- detach_data_node(name,regclass,boolean,boolean,boolean)
+ detach_data_node(name,regclass,boolean,boolean,boolean,boolean)
  detach_tablespace(name,regclass,boolean)
  detach_tablespaces(regclass)
  distributed_exec(text,name[],boolean)

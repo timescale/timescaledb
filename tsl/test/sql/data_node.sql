@@ -585,8 +585,30 @@ SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_4', 'disttabl
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_4', 'disttable_3');
 \set ON_ERROR_STOP 1
 
--- detach table(s) where user has permissions, otherwise show NOTICE
-SELECT * FROM detach_data_node('data_node_4');
+-- detach table(s) where user has permissions, otherwise show
+-- NOTICE. Drop hypertables on data nodes in the process. Drop a
+-- hypertable on a data node manually to ensure the command can handle
+-- non-existing hypertables.
+CREATE TABLE disttable_5(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable_5', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5" }');
+SELECT * FROM test.remote_exec('{ data_node_4 }', $$ SELECT hypertable_name, owner FROM timescaledb_information.hypertables; $$);
+CALL distributed_exec($$ DROP TABLE disttable_4 $$, '{ data_node_4 }');
+RESET ROLE;
+CALL distributed_exec(format('ALTER TABLE disttable_5 OWNER TO %s', :'ROLE_CLUSTER_SUPERUSER'), '{ data_node_4 }');
+SET ROLE :ROLE_1;
+-- test first detach without permission to drop the remote data
+\set ON_ERROR_STOP 0
+SELECT * FROM detach_data_node('data_node_4', drop_remote_data => true);
+\set ON_ERROR_STOP 1
+
+-- detach should work with permissions
+RESET ROLE;
+CALL distributed_exec(format('ALTER TABLE disttable_5 OWNER TO %s', :'ROLE_1'), '{ data_node_4 }');
+SET ROLE :ROLE_1;
+SELECT * FROM detach_data_node('data_node_4', drop_remote_data => true);
+
+-- Hypertables user had permissions for should be dropped on data nodes
+SELECT * FROM test.remote_exec('{ data_node_4 }', $$ SELECT hypertable_name, owner FROM timescaledb_information.hypertables; $$);
 
 -- Cleanup
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
