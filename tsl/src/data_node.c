@@ -36,6 +36,7 @@
 #include "remote/async.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"
+#include "remote/dist_commands.h"
 #include "data_node.h"
 #include "remote/utils.h"
 #include "hypertable_cache.h"
@@ -1046,7 +1047,8 @@ data_node_detach_or_delete_validate(const char *node_name, Hypertable *ht, bool 
 static int
 data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
 									   bool all_hypertables, OperationType op_type,
-									   bool block_chunks, bool force, bool repartition)
+									   bool block_chunks, bool force, bool repartition,
+									   bool drop_remote_data)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -1123,6 +1125,17 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 								 "space partitions was set to match the number of data nodes.")));
 				}
 			}
+
+			if (op_type == OP_DETACH && drop_remote_data)
+			{
+				/* Drop the hypertable on the data node */
+				ts_dist_cmd_run_on_data_nodes(
+					psprintf("DROP TABLE IF EXISTS %s",
+							 quote_qualified_identifier(NameStr(ht->fd.schema_name),
+														NameStr(ht->fd.table_name))),
+					list_make1(NameStr(node->fd.node_name)),
+					true);
+			}
 		}
 		else
 		{
@@ -1159,13 +1172,14 @@ data_node_block_hypertable_data_nodes(const char *node_name, List *hypertable_da
 												  OP_BLOCK,
 												  block_chunks,
 												  force,
+												  false,
 												  false);
 }
 
 static int
 data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
 									   bool all_hypertables, bool force, bool repartition,
-									   OperationType op_type)
+									   bool drop_remote_data, OperationType op_type)
 {
 	return data_node_modify_hypertable_data_nodes(node_name,
 												  hypertable_data_nodes,
@@ -1173,7 +1187,8 @@ data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_d
 												  op_type,
 												  false,
 												  force,
-												  repartition);
+												  repartition,
+												  drop_remote_data);
 }
 
 HypertableDataNode *
@@ -1300,6 +1315,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 	bool if_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool force = PG_ARGISNULL(3) ? InvalidOid : PG_GETARG_OID(3);
 	bool repartition = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	bool drop_remote_data = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
 	ForeignServer *server;
@@ -1334,6 +1350,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 													 all_hypertables,
 													 force,
 													 repartition,
+													 drop_remote_data,
 													 OP_DETACH);
 
 	PG_RETURN_INT32(removed);
@@ -1518,6 +1535,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 										   true,
 										   force,
 										   repartition,
+										   false,
 										   OP_DELETE);
 
 	/* clean up persistent transaction records */

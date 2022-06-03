@@ -183,7 +183,8 @@ CREATE OR REPLACE FUNCTION @extschema@.detach_data_node(
     hypertable             REGCLASS = NULL,
     if_attached            BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE,
-    repartition            BOOLEAN = TRUE
+    repartition            BOOLEAN = TRUE,
+	drop_remote_data       BOOLEAN = FALSE
 ) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 

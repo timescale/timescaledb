@@ -38,7 +38,7 @@ function(git_versioned_get)
     RESULT_VARIABLE _version_missing)
   if(_version_missing)
     message(
-      FATAL_ERROR "Version ${_git_get_VERSION} do not exist in repository.")
+      FATAL_ERROR "Version ${_git_get_VERSION} does not exist in repository.")
   endif()
 
   set(_result_files)
