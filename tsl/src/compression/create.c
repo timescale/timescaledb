@@ -424,67 +424,42 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 		.name = COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
 	};
 	int i;
-	NameData index_name;
-	ObjectAddress index_addr;
-	HeapTuple index_tuple;
-	List *indexcols = NIL;
-
-	StringInfo buf = makeStringInfo();
-
 	for (i = 0; i < compress_cols->numcols; i++)
 	{
+		NameData index_name;
+		ObjectAddress index_addr;
+		HeapTuple index_tuple;
 		FormData_hypertable_compression *col = &compress_cols->col_meta[i];
-
-		IndexElem *segment_elem = makeNode(IndexElem);
+		IndexElem segment_elem = { .type = T_IndexElem, .name = NameStr(col->attname) };
 
 		if (col->segmentby_column_index <= 0)
 			continue;
 
-		segment_elem->name = pstrdup(NameStr(col->attname));
+		stmt.indexParams = list_make2(&segment_elem, &sequence_num_elem);
+		index_addr = DefineIndex(ht->main_table_relid,
+								 &stmt,
+								 InvalidOid, /* IndexRelationId */
+								 InvalidOid, /* parentIndexId */
+								 InvalidOid, /* parentConstraintId */
+								 false,		 /* is_alter_table */
+								 false,		 /* check_rights */
+								 false,		 /* check_not_in_use */
+								 false,		 /* skip_build */
+								 false);	 /* quiet */
+		index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
 
-		/* if this isn't the first element, add a ',' before appending it */
-		if (list_length(indexcols) > 0)
-			appendStringInfoString(buf, ", ");
-		appendStringInfoString(buf, segment_elem->name);
-
-		indexcols = lappend(indexcols, segment_elem);
+		if (!HeapTupleIsValid(index_tuple))
+			elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
+		index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
+		elog(DEBUG1,
+			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
+			 NameStr(index_name),
+			 NameStr(ht->fd.schema_name),
+			 NameStr(ht->fd.table_name),
+			 NameStr(col->attname),
+			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+		ReleaseSysCache(index_tuple);
 	}
-
-	if (list_length(indexcols) == 0)
-	{
-		ts_cache_release(hcache);
-		return;
-	}
-
-	appendStringInfoString(buf, ", ");
-	appendStringInfoString(buf, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-	indexcols = lappend(indexcols, &sequence_num_elem);
-
-	stmt.indexParams = indexcols;
-	index_addr = DefineIndex(ht->main_table_relid,
-							 &stmt,
-							 InvalidOid, /* IndexRelationId */
-							 InvalidOid, /* parentIndexId */
-							 InvalidOid, /* parentConstraintId */
-							 false,		 /* is_alter_table */
-							 false,		 /* check_rights */
-							 false,		 /* check_not_in_use */
-							 false,		 /* skip_build */
-							 false);	 /* quiet */
-	index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
-
-	if (!HeapTupleIsValid(index_tuple))
-		elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
-	index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
-
-	elog(DEBUG1,
-		 "adding index %s ON %s.%s USING BTREE(%s)",
-		 NameStr(index_name),
-		 NameStr(ht->fd.schema_name),
-		 NameStr(ht->fd.table_name),
-		 buf->data);
-
-	ReleaseSysCache(index_tuple);
 
 	ts_cache_release(hcache);
 }

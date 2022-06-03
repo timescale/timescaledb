@@ -710,6 +710,10 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 										  RelationGetDescr(rel),
 										  gettext_noop("could not convert row type"));
 
+	// relinfo->ri_RootToPartitionMap = state->hyper_to_chunk_map;
+	// relinfo->ri_PartitionTupleSlot = table_slot_create(relinfo->ri_RelationDesc,
+	// &state->estate->es_tupleTable);
+
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
 	if (has_compressed_chunk)

@@ -287,21 +287,3 @@ INSERT INTO disttable_with_ct VALUES
     ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
     ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
 
--- Createt table to test fix for https://github.com/timescale/timescaledb/issues/4339
-CREATE TABLE matches (
-  day INT NOT NULL,
-  location TEXT NOT NULL,
-  team1 TEXT NOT NULL,
-  team2 TEXT NOT NULL
-);
-
-SELECT create_distributed_hypertable('matches', 'day', 'location', chunk_time_interval => 5);
-INSERT INTO matches
-VALUES
-  (1, 'camp nou', 'BAR', 'RMD'),
-  (6, 'anfield', 'LIV', 'ARS');
-
--- Create a reference table (non hypertable) to compare results
-CREATE TABLE matches_reference (LIKE matches);
-INSERT INTO matches_reference SELECT * FROM matches;
-

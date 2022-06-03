@@ -80,11 +80,10 @@ jobs:
       shell: bash
       run: |
         if compgen -G "/tmp/core*" > /dev/null; then
-          PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-          apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
+          apt-get install postgresql-${{ matrix.pg_major }}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
+            gdb /usr/lib/postgresql/${{ matrix.pg_major }}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
           done
           echo "::set-output name=coredumps::true"
           exit 1

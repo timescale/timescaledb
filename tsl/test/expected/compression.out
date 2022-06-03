@@ -109,9 +109,9 @@ before_compression_index_bytes | 32768
 before_compression_toast_bytes | 0
 before_compression_total_bytes | 40960
 after_compression_table_bytes  | 8192
-after_compression_index_bytes  | 16384
+after_compression_index_bytes  | 32768
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 32768
+after_compression_total_bytes  | 49152
 node_name                      | 
 
 \x
@@ -132,7 +132,7 @@ uncompressed_toast_size  | 0
 uncompressed_index_size  | 32768
 compressed_heap_size     | 8192
 compressed_toast_size    | 8192
-compressed_index_size    | 16384
+compressed_index_size    | 32768
 numrows_pre_compression  | 1
 numrows_post_compression | 1
 -[ RECORD 2 ]------------+------
@@ -143,7 +143,7 @@ uncompressed_toast_size  | 0
 uncompressed_index_size  | 32768
 compressed_heap_size     | 8192
 compressed_toast_size    | 8192
-compressed_index_size    | 16384
+compressed_index_size    | 32768
 numrows_pre_compression  | 1
 numrows_post_compression | 1
 
@@ -411,9 +411,9 @@ before_compression_index_bytes | 32768
 before_compression_toast_bytes | 0
 before_compression_total_bytes | 40960
 after_compression_table_bytes  | 8192
-after_compression_index_bytes  | 16384
+after_compression_index_bytes  | 32768
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 32768
+after_compression_total_bytes  | 49152
 node_name                      | 
 
 select * from hypertable_compression_stats('conditions');
@@ -440,9 +440,9 @@ pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('foo');
 -[ RECORD 1 ]--+-----------
 pg_size_pretty | 32 kB
-pg_size_pretty | 144 kB
+pg_size_pretty | 160 kB
 pg_size_pretty | 8192 bytes
-pg_size_pretty | 184 kB
+pg_size_pretty | 200 kB
 
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
 pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)

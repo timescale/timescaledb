@@ -35,21 +35,12 @@ typedef struct DataNodeCopyPath
 	ModifyTablePath *mtpath;
 	Index hypertable_rti; /* range table index of Hypertable */
 	int subplan_index;
-	Path *chunk_dispatch; /* The planner can inject, e.g., Result nodes
-						   * inbetween the chunk_dispatch path and the
-						   * DataNodeCopyPath, so keep a pointer directly to
-						   * the ChunkDispatchPath. */
 } DataNodeCopyPath;
 
 /*
- * DataNodeCopy turns a client's INSERT on the access node into a COPY between
- * the access node and data nodes. This is more efficient than the regular
- * text or binary PG protocol which typically requires setting up a prepared
- * statement. Note that DataNodeCopy cannot be used for all INSERTs, e.g., it
- * doesn't support ON CONFLICT statements or RETURNING clauses if there are
- * triggers that could modify the inserted tuples when returned by data
- * nodes. The DataNodeCopy node inserts itself below a ModifyTable node in the
- * plan and subsequent execution tree, like so:
+ * DataNodeCopy dispatches tuples to data nodes using batching. It inserts
+ * itself below a ModifyTable node in the plan and subsequent execution tree,
+ * like so:
  *
  *          --------------------   Set "direct modify plans" to
  *          | HypertableInsert |   signal ModifyTable to only
@@ -83,7 +74,6 @@ typedef struct DataNodeCopyState
 	Cache *hcache;
 	Hypertable *ht;
 	RemoteCopyContext *copy_ctx;
-	ChunkDispatchState *cds;
 } DataNodeCopyState;
 
 /*
@@ -141,7 +131,6 @@ data_node_copy_begin(CustomScanState *node, EState *estate, int eflags)
 		.options = NIL,
 	};
 
-	dncs->cds = NULL;
 	dncs->ht = ts_hypertable_cache_get_cache_and_entry(rel->rd_id, CACHE_FLAG_NONE, &dncs->hcache);
 	Assert(hypertable_is_distributed(dncs->ht));
 
@@ -149,30 +138,6 @@ data_node_copy_begin(CustomScanState *node, EState *estate, int eflags)
 		use_binary_encoding = false;
 
 	ps = ExecInitNode(subplan, estate, eflags);
-
-	switch (nodeTag(ps))
-	{
-		case T_ResultState:
-		{
-			/* The planner injected a Result node so we need to get the
-			 * ChunkDispatchState from the Result's child */
-			const ResultState *result = castNode(ResultState, ps);
-			PlanState *child = result->ps.lefttree;
-
-			if (child != NULL && ts_is_chunk_dispatch_state(child))
-				dncs->cds = (ChunkDispatchState *) child;
-			break;
-		}
-		case T_CustomScanState:
-			if (ts_is_chunk_dispatch_state(ps))
-				dncs->cds = (ChunkDispatchState *) ps;
-			break;
-		default:
-			break;
-	}
-
-	if (NULL == dncs->cds)
-		elog(ERROR, "unexpected child plan node %d for DataNodeCopy", nodeTag(ps));
 
 	node->custom_ps = list_make1(ps);
 	dncs->rel = rel;
@@ -185,22 +150,20 @@ data_node_copy_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 /*
- * Execute the INSERT using remote COPY.
+ * Execute the remote INSERT.
  *
  * This is called every time the parent asks for a new tuple. Read the child
- * scan node and send the resulting tuple on the data node connection in
- * COPY_IN state.
- *
- * Note that a tuple is only returned to the parent node in case RETURNING is
- * specified. Otherwise, process all tuples and return an empty slot to the
- * parent ModifyTableState.
+ * scan node and buffer until there's a full batch, then flush by sending to
+ * data node(s). If there's a returning statement, we return the flushed tuples
+ * one-by-one, or continue reading more tuples from the child until there's a
+ * NULL tuple.
  */
 static TupleTableSlot *
 data_node_copy_exec(CustomScanState *node)
 {
 	DataNodeCopyState *dncs = (DataNodeCopyState *) node;
 	PlanState *substate = linitial(dncs->cstate.custom_ps);
-	ChunkDispatchState *cds = dncs->cds;
+	ChunkDispatchState *cds = (ChunkDispatchState *) substate;
 	EState *estate = node->ss.ps.state;
 #if PG14_LT
 	ResultRelInfo *rri_saved = estate->es_result_relation_info;
@@ -208,7 +171,7 @@ data_node_copy_exec(CustomScanState *node)
 	ResultRelInfo *rri_saved = linitial_node(ResultRelInfo, estate->es_opened_result_relations);
 #endif
 	TupleTableSlot *slot;
-	bool has_returning = castNode(ModifyTable, cds->mtstate->ps.plan)->returningLists != NIL;
+	bool has_returning = rri_saved->ri_projectReturning != NULL;
 
 #if PG14_LT
 	/* Initially, the result relation should always match the hypertable.  */
@@ -268,8 +231,6 @@ data_node_copy_exec(CustomScanState *node)
 	Assert(node->ss.ps.state->es_result_relation_info->ri_RelationDesc->rd_id == dncs->rel->rd_id);
 	Assert(node->ss.ps.state->es_result_relation_info->ri_usesFdwDirectModify);
 #endif
-
-	Assert(TupIsNull(slot) || has_returning);
 
 	return slot;
 }
@@ -435,7 +396,6 @@ data_node_copy_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath
 	Assert(list_length(custom_plans) == 1);
 
 	subplan = linitial(custom_plans);
-
 	cscan->methods = &data_node_copy_plan_methods;
 	cscan->custom_plans = custom_plans;
 	cscan->scan.scanrelid = 0;
@@ -468,7 +428,6 @@ data_node_copy_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hyp
 	sdpath->mtpath = mtpath;
 	sdpath->hypertable_rti = hypertable_rti;
 	sdpath->subplan_index = subplan_index;
-	sdpath->chunk_dispatch = subpath;
 
 	return &sdpath->cpath.path;
 }

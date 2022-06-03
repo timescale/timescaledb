@@ -114,9 +114,6 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
-#if PG15_GE
-static shmem_request_hook_type prev_shmem_request_hook;
-#endif
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
@@ -612,25 +609,6 @@ timescaledb_shmem_startup_hook(void)
 	ts_function_telemetry_shmem_startup();
 }
 
-/*
- * PG15 requires all shared memory requests to be requested in a dedicated
- * hook. We group all our shared memory requests in this function and use
- * it as a normal function for PG < 14 and as a hook for PG 15+.
- */
-static void
-timescaledb_shmem_request_hook(void)
-{
-#if PG15_GE
-	if (prev_shmem_request_hook)
-		prev_shmem_request_hook();
-#endif
-
-	ts_bgw_counter_shmem_alloc();
-	ts_bgw_message_queue_alloc();
-	ts_lwlocks_shmem_alloc();
-	ts_function_telemetry_shmem_alloc();
-}
-
 static void
 extension_mark_loader_present()
 {
@@ -650,14 +628,14 @@ _PG_init(void)
 
 	elog(INFO, "timescaledb loaded");
 
-#if PG15_LT
-	timescaledb_shmem_request_hook();
-#endif
-
+	ts_bgw_counter_shmem_alloc();
+	ts_bgw_message_queue_alloc();
+	ts_lwlocks_shmem_alloc();
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
 	ts_seclabel_init();
+	ts_function_telemetry_shmem_alloc();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME,
@@ -697,11 +675,6 @@ _PG_init(void)
 
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescaledb_shmem_startup_hook;
-
-#if PG15_GE
-	prev_shmem_request_hook = shmem_request_hook;
-	shmem_request_hook = timescaledb_shmem_request_hook;
-#endif
 
 	/* register utility hook to handle a distributed database drop */
 	prev_ProcessUtility_hook = ProcessUtility_hook;

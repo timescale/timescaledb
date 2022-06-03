@@ -11,9 +11,6 @@ accidentally triggering the load of a previous DB version.**
 * #4393 Support intervals with day component when constifying now()
 * #4397 Support intervals with month component when constifying now()
 
-**Thanks**
-@nikugogoi for reporting a bug with CTEs and upserts on distributed hypertables
-
 ## 2.7.0 (2022-05-24)
 
 This release adds major new features since the 2.6.1 release.

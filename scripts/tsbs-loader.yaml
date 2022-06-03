@@ -1,0 +1,45 @@
+data-source:
+  file:
+    location: /tmp/timescaledb-data
+  type: FILE
+loader:
+  db-specific:
+    admin-db-name: postgres
+    chunk-time: 12h0m0s
+    create-metrics-table: true
+    field-index: VALUE-TIME
+    field-index-count: 0
+    force-text-format: false
+    host: localhost
+    in-table-partition-tag: false
+    log-batches: false
+    partition-index: true
+    partitions: 0
+    pass: "postgres"
+    port: "5432"
+    postgres: sslmode=disable
+    replication-factor: 0
+    time-index: true
+    time-partition-index: false
+    use-hypertable: true
+    use-insert: false
+    use-jsonb-tags: false
+    user: postgres
+    write-profile: ""
+    write-replication-stats: ""
+  runner:
+    batch-size: "10000"
+    channel-capacity: "0"
+    db-name: benchmark
+    do-abort-on-exist: false
+    do-create-db: true
+    do-load: true
+    flow-control: false
+    hash-workers: false
+    insert-intervals: ""
+    limit: "0"
+    reporting-period: 10s
+    seed: 0
+    workers: "1"
+  target: timescaledb
+
