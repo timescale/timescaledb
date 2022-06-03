@@ -26,6 +26,7 @@
 #include "time_utils.h"
 
 #define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
+#define POLICY_REFRESH_CAGG_CHECK_NAME "policy_refresh_continuous_aggregate_check"
 #define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
 #define CONFIG_KEY_START_OFFSET "start_offset"
 #define CONFIG_KEY_END_OFFSET "end_offset"
@@ -215,6 +216,17 @@ policy_refresh_cagg_proc(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	policy_refresh_cagg_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
+
+	PG_RETURN_VOID();
+}
+
+Datum
+policy_refresh_cagg_check(PG_FUNCTION_ARGS)
+{
+	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+		PG_RETURN_VOID();
+
+	policy_refresh_cagg_read_and_validate_config(PG_GETARG_JSONB_P(1), NULL);
 
 	PG_RETURN_VOID();
 }
@@ -529,7 +541,7 @@ Datum
 policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name, proc_schema, check_name, check_schema, owner;
 	ContinuousAgg *cagg;
 	CaggPolicyConfig policyconf;
 	int32 job_id;
@@ -612,6 +624,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	namestrcpy(&application_name, "Refresh Continuous Aggregate Policy");
 	namestrcpy(&proc_name, POLICY_REFRESH_CAGG_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_name, POLICY_REFRESH_CAGG_CHECK_NAME);
+	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
@@ -641,6 +655,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 										&refresh_interval,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner,
 										true,
 										cagg->data.mat_hypertable_id,

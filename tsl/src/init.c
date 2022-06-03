@@ -96,14 +96,18 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_compression_add = policy_compression_add,
 	.policy_compression_remove = policy_compression_remove,
 	.policy_recompression_proc = policy_recompression_proc,
+	.policy_compression_check = policy_compression_check,
 	.policy_refresh_cagg_add = policy_refresh_cagg_add,
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
+	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
+	.policy_reorder_check = policy_reorder_check,
 	.policy_reorder_remove = policy_reorder_remove,
 	.policy_retention_add = policy_retention_add,
 	.policy_retention_proc = policy_retention_proc,
+	.policy_retention_check = policy_retention_check,
 	.policy_retention_remove = policy_retention_remove,
 
 	.job_add = job_add,
@@ -112,7 +116,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.job_delete = job_delete,
 	.job_run = job_run,
 	.job_execute = job_execute,
-	.job_config_check = job_config_check,
 
 	/* gapfill */
 	.gapfill_marker = gapfill_marker,

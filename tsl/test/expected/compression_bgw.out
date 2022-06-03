@@ -32,9 +32,9 @@ select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 \gset
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
-  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                       config                        
-------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-----------------------------------------------------
- 1000 | Compression Policy [1000] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days"}
+  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                       config                        |     check_schema      |        check_name        
+------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-----------------------------------------------------+-----------------------+--------------------------
+ 1000 | Compression Policy [1000] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
@@ -52,9 +52,9 @@ SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
 (1 row)
 
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                                     config                                      
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+---------------------------------------------------------------------------------
- 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days", "maxchunks_to_compress": 1}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                                     config                                      |     check_schema      |        check_name        
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+---------------------------------------------------------------------------------+-----------------------+--------------------------
+ 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days", "maxchunks_to_compress": 1} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 insert into conditions
@@ -157,9 +157,9 @@ ERROR:  unsupported compress_after argument type, expected type : smallint
 \set ON_ERROR_STOP 1
 SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------
- 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             3 | {"hypertable_id": 3, "compress_after": 2}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   |     check_schema      |        check_name        
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------+-----------------------+--------------------------
+ 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             3 | {"hypertable_id": 3, "compress_after": 2} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 --will compress all chunks that need compression
@@ -194,9 +194,9 @@ INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_integer SET (timescaledb.compress);
 SELECT add_compression_policy('test_table_integer', 2::INTEGER) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------
- 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             5 | {"hypertable_id": 5, "compress_after": 2}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   |     check_schema      |        check_name        
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------+-----------------------+--------------------------
+ 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             5 | {"hypertable_id": 5, "compress_after": 2} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 --will compress all chunks that need compression
@@ -231,9 +231,9 @@ INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_bigint SET (timescaledb.compress);
 SELECT add_compression_policy('test_table_bigint', 2::BIGINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------
- 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             7 | {"hypertable_id": 7, "compress_after": 2}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   |     check_schema      |        check_name        
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------+-----------------------+--------------------------
+ 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             7 | {"hypertable_id": 7, "compress_after": 2} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 --will compress all chunks that need compression

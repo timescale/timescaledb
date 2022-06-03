@@ -54,8 +54,8 @@ SELECT ts_bgw_params_create();
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config | check_schema | check_name 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------+--------------+------------
 (0 rows)
 
 SELECT * FROM timescaledb_information.job_stats;

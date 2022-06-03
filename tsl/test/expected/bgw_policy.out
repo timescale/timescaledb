@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 -- by starting with oldest chunks
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 select * from _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
-  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                          config                           
-------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-----------------------------------------------------------
- 1000 | Reorder Policy [1000] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1}
+  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                          config                           |     check_schema      |      check_name      
+------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-----------------------------------------------------------+-----------------------+----------------------
+ 1000 | Reorder Policy [1000] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1} | _timescaledb_internal | policy_reorder_check
 (1 row)
 
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
@@ -712,10 +712,10 @@ select create_hypertable('test_missing_schedint_integer', 'time', chunk_time_int
 alter table test_missing_schedint_integer set (timescaledb.compress);
 select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
 select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
-  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |        owner        | scheduled | hypertable_id |                       config                        
-------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+---------------------+-----------+---------------+-----------------------------------------------------
- 1008 | Retention Policy [1008]   | @ 1 day            | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention   | default_perm_user_2 | t         |             8 | {"drop_after": "@ 14 days", "hypertable_id": 8}
- 1009 | Compression Policy [1009] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"}
- 1010 | Compression Policy [1010] | @ 1 day            | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |            10 | {"hypertable_id": 10, "compress_after": 600000}
+  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |        owner        | scheduled | hypertable_id |                       config                        |     check_schema      |        check_name        
+------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+---------------------+-----------+---------------+-----------------------------------------------------+-----------------------+--------------------------
+ 1008 | Retention Policy [1008]   | @ 1 day            | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention   | default_perm_user_2 | t         |             8 | {"drop_after": "@ 14 days", "hypertable_id": 8}     | _timescaledb_internal | policy_retention_check
+ 1009 | Compression Policy [1009] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check
+ 1010 | Compression Policy [1010] | @ 1 day            | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |            10 | {"hypertable_id": 10, "compress_after": 600000}     | _timescaledb_internal | policy_compression_check
 (3 rows)
 
