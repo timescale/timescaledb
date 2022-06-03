@@ -40,6 +40,19 @@ policy_retention_proc(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+Datum
+policy_retention_check(PG_FUNCTION_ARGS)
+{
+	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+		PG_RETURN_VOID();
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(1), NULL);
+
+	PG_RETURN_VOID();
+}
+
 int32
 policy_retention_get_hypertable_id(const Jsonb *config)
 {
@@ -254,9 +267,11 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Retention Policy");
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name, proc_schema, check_schema, check_name, owner;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_name, POLICY_RETENTION_CHECK_NAME);
+	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
@@ -266,6 +281,8 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										&default_retry_period,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner,
 										true,
 										hypertable->fd.id,

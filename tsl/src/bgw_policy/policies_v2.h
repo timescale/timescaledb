@@ -13,11 +13,13 @@
 #include <bgw_policy/retention_api.h>
 
 #define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
+#define POLICY_REFRESH_CAGG_CHECK_NAME "policy_refresh_continuous_aggregate_check"
 #define POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
 #define POL_REFRESH_CONF_KEY_START_OFFSET "start_offset"
 #define POL_REFRESH_CONF_KEY_END_OFFSET "end_offset"
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
+#define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"
 #define POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID "hypertable_id"
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER "compress_after"
 #define POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
@@ -26,6 +28,7 @@
 #define POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER "recompress_after"
 
 #define POLICY_RETENTION_PROC_NAME "policy_retention"
+#define POLICY_RETENTION_CHECK_NAME "policy_retention_check"
 #define POL_RETENTION_CONF_KEY_HYPERTABLE_ID "hypertable_id"
 #define POL_RETENTION_CONF_KEY_DROP_AFTER "drop_after"
 
