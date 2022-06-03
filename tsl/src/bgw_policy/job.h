@@ -62,6 +62,5 @@ extern void policy_compression_read_and_validate_config(Jsonb *config,
 extern void policy_recompression_read_and_validate_config(Jsonb *config,
 														  PolicyCompressionData *policy_data);
 extern bool job_execute(BgwJob *job);
-extern void job_config_check(Name proc_schema, Name proc_name, Jsonb *config);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_JOB_H */

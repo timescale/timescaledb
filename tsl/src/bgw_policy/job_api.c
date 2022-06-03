@@ -34,6 +34,7 @@
  * 2 config JSONB DEFAULT NULL,
  * 3 initial_start TIMESTAMPTZ DEFAULT NULL,
  * 4 scheduled BOOL DEFAULT true
+ * 5 check_config REGPROC DEFAULT NULL
  * ) RETURNS INTEGER
  */
 Datum
@@ -43,16 +44,20 @@ job_add(PG_FUNCTION_ARGS)
 	NameData proc_name;
 	NameData proc_schema;
 	NameData owner_name;
+	NameData check_name = { 0 };
+	NameData check_schema = { 0 };
 	Interval max_runtime = { .time = DEFAULT_MAX_RUNTIME };
 	Interval retry_period = { .time = DEFAULT_RETRY_PERIOD };
 	int32 job_id;
 	char *func_name = NULL;
+	char *check_name_str = NULL;
 
 	Oid owner = GetUserId();
 	Oid proc = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Interval *schedule_interval = PG_ARGISNULL(1) ? NULL : PG_GETARG_INTERVAL_P(1);
 	Jsonb *config = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
+	Oid check = PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -78,6 +83,24 @@ job_add(PG_FUNCTION_ARGS)
 				 errmsg("permission denied for function \"%s\"", func_name),
 				 errhint("Job owner must have EXECUTE privilege on the function.")));
 
+	if (OidIsValid(check))
+	{
+		check_name_str = get_func_name(check);
+		if (check_name_str == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("function with OID %d does not exist", check)));
+
+		if (pg_proc_aclcheck(check, owner, ACL_EXECUTE) != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for function \"%s\"", check_name_str),
+					 errhint("Job owner must have EXECUTE privilege on the function.")));
+
+		namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
+		namestrcpy(&check_name, check_name_str);
+	}
+
 	/* Verify that the owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner);
 
@@ -88,7 +111,7 @@ job_add(PG_FUNCTION_ARGS)
 	namestrcpy(&owner_name, GetUserNameFromId(owner, false));
 
 	if (config)
-		job_config_check(&proc_schema, &proc_name, config);
+		ts_bgw_job_run_config_check(check, 0, config);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										schedule_interval,
@@ -97,11 +120,12 @@ job_add(PG_FUNCTION_ARGS)
 										&retry_period,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner_name,
 										scheduled,
 										0,
 										config);
-
 	if (!PG_ARGISNULL(3))
 	{
 		TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(3);
