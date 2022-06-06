@@ -25,14 +25,22 @@ jobs:
           fetch-depth: 0
       - name: Check CHANGELOG.md updated by pull request
         shell: bash --norc --noprofile {0}
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
         run: |
-          cat << "EOF" | egrep -qsi '^disable-check:.*\<changelog-update\>'
-          ${{ github.event.pull_request.body }}
-          EOF
-          if [[ $? -ne 0 ]]; then
-            updated=`git diff --name-status main | grep CHANGELOG.md`
-            if [[ $updated == '' ]]; then
-              echo "CHANGELOG not updated by pull request"
+          diff=$(git diff --name-status origin/main | grep "CHANGELOG.md")
+          # echo "diff is ${diff}"
+          # cat << "EOF" | egrep -qsi '^disable-check:.*\<commit-count\>'
+          # ${{ github.event.pull_request.body }}
+          # EOF
+          # if [[ $? -ne 0 ]]; then
+            # changelog=$(gh pr view $PULL_REQUEST_NUMBER --json files --jq '.files.[].path' | select(contains("CHANGELOG.md")))
+            # echo "changelog is ${changelog}"
+            if [[ $diff == '' ]]; then
+              echo "CHANGELOG.md not updated by pull request"
               echo
               echo "To disable changelog update check, add this trailer to pull request message:"
               echo
@@ -43,38 +51,31 @@ jobs:
               echo "both the field name and the field body."
               exit 1
             fi
-          fi
-      # - name: Look for CHANGELOG.md in list of changed files
-      #   env: 
-      #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #       OWNER: ${{ github.repository_owner }}
-      #       REPO: ${{ github.event.repository.name }}
-      #       PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
+          # fi
+
+# - name: Checkout source
+      #   uses: actions/checkout@v2
+      #   with:
+      #     ref: ${{ github.event.pull_request.head.sha }}
+      #     fetch-depth: 0
+      # - name: Check CHANGELOG.md updated by pull request
+      #   shell: bash --norc --noprofile {0}
       #   run: |
-      #     # get a list of changed files containing "CHANGELOG.md" in their name
-      #     changelog="$(gh api graphql -f org=$OWNER -f repo=$REPO -F pr_number=$PULL_REQUEST_NUMBER -f query='
-      #       query list_changed_files($org: String!, $repo: String!, $pr_number: Int!){
-      #         organization(login:$org){
-      #           repository(name: $repo)
-      #           {
-      #             pullRequest(number: $pr_number)
-      #             {
-      #               changedFiles
-      #               files(first: 100) {
-      #                 edges{
-      #                   node{
-      #                     path
-      #                   }
-      #                 }
-      #               }
-      #             }
-      #           }
-      #         }
-      #       }' --jq '.data.organization.repository.pullRequest.files.edges[] .node | select(.path == "CHANGELOG.md")')"
-          
-      #     if [[ $changelog == '' ]]
-      #     then
-      #     ## changelog not modified by this PR, warn and fail
-      #       echo "CHANGELOG.md not updated. Make sure to update it before merging if required!"
-      #       exit 1
+      #     cat << "EOF" | egrep -qsi '^disable-check:.*\<changelog-update\>'
+      #     ${{ github.event.pull_request.body }}
+      #     EOF
+      #     if [[ $? -ne 0 ]]; then
+      #       updated=`git diff --name-status main | grep CHANGELOG.md`
+      #       if [[ $updated == '' ]]; then
+      #         echo "CHANGELOG not updated by pull request"
+      #         echo
+      #         echo "To disable changelog update check, add this trailer to pull request message:"
+      #         echo
+      #         echo "Disable-check: changelog-update"
+      #         echo
+      #         echo "Trailers follow RFC2822 conventions, so no whitespace"
+      #         echo "before field name and the check is case-insensitive for"
+      #         echo "both the field name and the field body."
+      #         exit 1
+      #       fi
       #     fi
