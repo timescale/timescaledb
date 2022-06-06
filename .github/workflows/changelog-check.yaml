@@ -6,7 +6,7 @@ jobs:
   # disabled by adding a trailer line of the following form to the
   # pull request message:
   #
-  #    Disable-Check: changelog-update
+  #    Disable-Check: force-changelog-changed
   #
   # The check is case-insensitive and ignores other contents on the
   # line as well, so it is possible to add several different checks if
@@ -25,26 +25,24 @@ jobs:
           fetch-depth: 0
       - name: Check CHANGELOG.md updated by pull request
         shell: bash --norc --noprofile {0}
-        env: 
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
-          PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
+        # env: 
+        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        #   OWNER: ${{ github.repository_owner }}
+        #   REPO: ${{ github.event.repository.name }}
+        #   PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
         run: |
           diff=$(git diff --name-status origin/main | grep "CHANGELOG.md")
-          # echo "diff is ${diff}"
-          cat << "EOF" | egrep -qsi '^disable-check:.*\<commit-count\>'
+          cat << "EOF" | egrep -qsi '^disable-check:.*\<force-changelog-changed\>'
           ${{ github.event.pull_request.body }}
           EOF
           if [[ $? -ne 0 ]]; then
-            # changelog=$(gh pr view $PULL_REQUEST_NUMBER --json files --jq '.files.[].path' | select(contains("CHANGELOG.md")))
-            # echo "changelog is ${changelog}"
             if [[ $diff == '' ]]; then
+              echo
               echo "CHANGELOG.md not updated by pull request"
               echo
               echo "To disable changelog update check, add this trailer to pull request message:"
               echo
-              echo "Disable-check: changelog-update"
+              echo "Disable-check: force-changelog-changed"
               echo
               echo "Trailers follow RFC2822 conventions, so no whitespace"
               echo "before field name and the check is case-insensitive for"
@@ -52,30 +50,3 @@ jobs:
               exit 1
             fi
           fi
-
-# - name: Checkout source
-      #   uses: actions/checkout@v2
-      #   with:
-      #     ref: ${{ github.event.pull_request.head.sha }}
-      #     fetch-depth: 0
-      # - name: Check CHANGELOG.md updated by pull request
-      #   shell: bash --norc --noprofile {0}
-      #   run: |
-      #     cat << "EOF" | egrep -qsi '^disable-check:.*\<changelog-update\>'
-      #     ${{ github.event.pull_request.body }}
-      #     EOF
-      #     if [[ $? -ne 0 ]]; then
-      #       updated=`git diff --name-status main | grep CHANGELOG.md`
-      #       if [[ $updated == '' ]]; then
-      #         echo "CHANGELOG not updated by pull request"
-      #         echo
-      #         echo "To disable changelog update check, add this trailer to pull request message:"
-      #         echo
-      #         echo "Disable-check: changelog-update"
-      #         echo
-      #         echo "Trailers follow RFC2822 conventions, so no whitespace"
-      #         echo "before field name and the check is case-insensitive for"
-      #         echo "both the field name and the field body."
-      #         exit 1
-      #       fi
-      #     fi
