@@ -254,7 +254,7 @@ QUERY PLAN
    Update on const_now
    Update on _hyper_X_X_chunk const_now_1
    ->  Seq Scan on const_now
-         Filter: (("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone) AND ("time" > now()))
+         Filter: ("time" > now())
    ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
          Index Cond: ("time" > now())
 (7 rows)
@@ -266,7 +266,7 @@ QUERY PLAN
    Delete on const_now
    Delete on _hyper_X_X_chunk const_now_1
    ->  Seq Scan on const_now
-         Filter: (("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone) AND ("time" > now()))
+         Filter: ("time" > now())
    ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
          Index Cond: ("time" > now())
 (7 rows)
