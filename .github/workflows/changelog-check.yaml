@@ -33,10 +33,10 @@ jobs:
         run: |
           diff=$(git diff --name-status origin/main | grep "CHANGELOG.md")
           # echo "diff is ${diff}"
-          # cat << "EOF" | egrep -qsi '^disable-check:.*\<commit-count\>'
-          # ${{ github.event.pull_request.body }}
-          # EOF
-          # if [[ $? -ne 0 ]]; then
+          cat << "EOF" | egrep -qsi '^disable-check:.*\<commit-count\>'
+          ${{ github.event.pull_request.body }}
+          EOF
+          if [[ $? -ne 0 ]]; then
             # changelog=$(gh pr view $PULL_REQUEST_NUMBER --json files --jq '.files.[].path' | select(contains("CHANGELOG.md")))
             # echo "changelog is ${changelog}"
             if [[ $diff == '' ]]; then
@@ -51,7 +51,7 @@ jobs:
               echo "both the field name and the field body."
               exit 1
             fi
-          # fi
+          fi
 
 # - name: Checkout source
       #   uses: actions/checkout@v2
