@@ -48,7 +48,7 @@ actual data. This single-table view, which we call a
 is comprised of many chunks, which are created by partitioning
 the hypertable's data in either one or two dimensions: by a time
 interval, and by an (optional) "partition key" such as
-device id, location, user id, etc. ([Architecture discussion](https://tsdb.co/GitHubTimescaleArchitecture))
+device id, location, user id, etc. ([Architecture discussion](https://docs.timescale.com/timescaledb/latest/overview/core-concepts/))
 
 Virtually all user interactions with TimescaleDB are with
 hypertables. Creating tables and indexes, altering tables, inserting
