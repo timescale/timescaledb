@@ -337,7 +337,7 @@ group by time_bucket('1week', timec), test_stablefunc(humidity::int) WITH NO DAT
 ERROR:  only immutable functions supported in continuous aggregate view
 HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
 -- Should use CREATE MATERIALIZED VIEW to create continuous aggregates
-CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous) AS
+CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous, timescaledb.finalized = false) AS
 SELECT time_bucket('1 week', timec)
   FROM conditions
 GROUP BY time_bucket('1 week', timec);
@@ -386,7 +386,7 @@ select table_name from create_hypertable( 'conditions', 'timec');
 (1 row)
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -435,14 +435,14 @@ SELECT set_integer_now_func('conditions', 'integer_now_test_s');
 
 \set ON_ERROR_STOP 0
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
 ERROR:  time bucket function must reference a hypertable dimension column
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -450,7 +450,7 @@ group by time_bucket(100, timec) WITH NO DATA;
 ERROR:  time bucket function must reference a hypertable dimension column
 ALTER TABLE conditions ALTER timec type int;
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -481,7 +481,7 @@ SELECT set_integer_now_func('conditions', 'integer_now_test_b');
 (1 row)
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -501,7 +501,7 @@ NOTICE:  adding not-null constraint to column "time"
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW text_view
-    WITH (timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.finalized = false)
     AS SELECT time_bucket('5', text_part_func(time)), COUNT(time)
         FROM text_time
         GROUP BY 1 WITH NO DATA;
@@ -530,7 +530,7 @@ SELECT create_hypertable('measurements', 'time');
 INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
 -- Add a continuous aggregate on the measurements table and a policy
 -- to be able to test error cases for the add_job function.
-CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous, timescaledb.finalized = false) AS
 SELECT time_bucket('1 day', time), COUNT(time)
   FROM measurements
 GROUP BY 1 WITH NO DATA;
@@ -602,18 +602,18 @@ select create_hypertable('i2980','time');
  (12,public,i2980,t)
 (1 row)
 
-create materialized view i2980_cagg with (timescaledb.continuous) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
+create materialized view i2980_cagg with (timescaledb.continuous, timescaledb.finalized = false) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
 NOTICE:  continuous aggregate "i2980_cagg" is already up-to-date
 select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \gset
 \set ON_ERROR_STOP 0
 select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
 ERROR:  configuration materialization hypertable id 1000 not found
 --test creating continuous aggregate with compression enabled --
-CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.compress)
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.compress, timescaledb.finalized = false)
 AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
 ERROR:  cannot enable compression while creating a continuous aggregate
 --this one succeeds
-CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous)
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.finalized = false)
 AS SELECT time_bucket('1h',time) as bucket, avg(7) FROM i2980 GROUP BY 1;
 NOTICE:  continuous aggregate "i2980_cagg2" is already up-to-date
 --now enable compression with invalid parameters
@@ -692,5 +692,5 @@ FROM
   _timescaledb_catalog.hypertable ht
   INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
       AND uncompress.table_name = 'comp_ht_test') \gset
-CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.finalized = false) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
 ERROR:  hypertable is an internal compressed hypertable
