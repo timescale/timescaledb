@@ -316,7 +316,7 @@ from conditions
 group by time_bucket('1week', timec), test_stablefunc(humidity::int) WITH NO DATA;
 
 -- Should use CREATE MATERIALIZED VIEW to create continuous aggregates
-CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous) AS
+CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous, timescaledb.finalized = false) AS
 SELECT time_bucket('1 week', timec)
   FROM conditions
 GROUP BY time_bucket('1 week', timec);
@@ -351,7 +351,7 @@ CREATE TABLE conditions (
 select table_name from create_hypertable( 'conditions', 'timec');
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -392,14 +392,14 @@ SELECT set_integer_now_func('conditions', 'integer_now_test_s');
 
 \set ON_ERROR_STOP 0
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -408,7 +408,7 @@ group by time_bucket(100, timec) WITH NO DATA;
 ALTER TABLE conditions ALTER timec type int;
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -432,7 +432,7 @@ CREATE OR REPLACE FUNCTION integer_now_test_b() returns bigint LANGUAGE SQL STAB
 SELECT set_integer_now_func('conditions', 'integer_now_test_b');
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -449,7 +449,7 @@ CREATE TABLE text_time(time TEXT);
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW text_view
-    WITH (timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.finalized = false)
     AS SELECT time_bucket('5', text_part_func(time)), COUNT(time)
         FROM text_time
         GROUP BY 1 WITH NO DATA;
@@ -476,7 +476,7 @@ INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
 
 -- Add a continuous aggregate on the measurements table and a policy
 -- to be able to test error cases for the add_job function.
-CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous, timescaledb.finalized = false) AS
 SELECT time_bucket('1 day', time), COUNT(time)
   FROM measurements
 GROUP BY 1 WITH NO DATA;
@@ -527,17 +527,17 @@ DROP TABLE conditions CASCADE;
 -- test handling of invalid mat_hypertable_id
 create table i2980(time timestamptz not null);
 select create_hypertable('i2980','time');
-create materialized view i2980_cagg with (timescaledb.continuous) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
+create materialized view i2980_cagg with (timescaledb.continuous, timescaledb.finalized = false) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
 select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \gset
 \set ON_ERROR_STOP 0
 select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
 
 --test creating continuous aggregate with compression enabled --
-CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.compress)
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.compress, timescaledb.finalized = false)
 AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
 
 --this one succeeds
-CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous)
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.finalized = false)
 AS SELECT time_bucket('1h',time) as bucket, avg(7) FROM i2980 GROUP BY 1;
 
 --now enable compression with invalid parameters
@@ -591,5 +591,5 @@ FROM
   INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
       AND uncompress.table_name = 'comp_ht_test') \gset
 
-CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.finalized = false) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
 
