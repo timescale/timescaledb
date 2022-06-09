@@ -1053,21 +1053,29 @@ SELECT location,
 GROUP BY location, bucket
 WITH NO DATA;
 
+SELECT format('%I.%I', '_timescaledb_internal', h.table_name) AS "MAT_TABLE_NAME",
+       format('%I.%I', '_timescaledb_internal', partial_view_name) AS "PART_VIEW_NAME",
+       format('%I.%I', '_timescaledb_internal', direct_view_name) AS "DIRECT_VIEW_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'conditions_daily'
+\gset
+
 -- Show both the columns and the view definitions to see that
 -- references are correct in the view as well.
 SELECT * FROM test.show_columns('conditions_daily');
-SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
-SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
-SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
+SELECT * FROM test.show_columns(:'PART_VIEW_NAME');
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
 
 ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN bucket to "time";
 
 -- Show both the columns and the view definitions to see that
 -- references are correct in the view as well.
 SELECT * FROM test.show_columns(' conditions_daily');
-SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
-SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
-SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
+SELECT * FROM test.show_columns(:'PART_VIEW_NAME');
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
 
 -- This will rebuild the materialized view and should succeed.
 ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false);
@@ -1077,6 +1085,24 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 \set VERBOSITY verbose
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
+
+--
+-- Indexes on continuous aggregate
+--
+\set ON_ERROR_STOP 0
+-- unique indexes are not supported
+CREATE UNIQUE INDEX index_unique_error ON conditions_daily ("time", location);
+-- concurrently index creation not supported
+CREATE INDEX CONCURRENTLY index_concurrently_avg ON conditions_daily (avg);
+\set ON_ERROR_STOP 1
+
+CREATE INDEX index_avg ON conditions_daily (avg);
+CREATE INDEX index_avg_only ON ONLY conditions_daily (avg);
+CREATE INDEX index_avg_include ON conditions_daily (avg) INCLUDE (location);
+CREATE INDEX index_avg_expr ON conditions_daily ((avg + 1));
+CREATE INDEX index_avg_location_sfo ON conditions_daily (avg) WHERE location = 'SFO';
+CREATE INDEX index_avg_expr_location_sfo ON conditions_daily ((avg + 2)) WHERE location = 'SFO';
+SELECT * FROM test.show_indexespred(:'MAT_TABLE_NAME');
 
 -- #3696 assertion failure when referencing columns not present in result
 CREATE TABLE i3696(time timestamptz NOT NULL, search_query text, cnt integer, cnt2 integer);

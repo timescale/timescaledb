@@ -82,6 +82,29 @@ $BODY$
     ORDER BY c.relname;
 $BODY$;
 
+CREATE OR REPLACE FUNCTION test.show_indexespred(rel regclass)
+RETURNS TABLE("Index" regclass,
+              "Columns" name[],
+              "Expr" text,
+              "Pred" text,
+              "Unique" boolean,
+              "Primary" boolean,
+              "Exclusion" boolean,
+              "Tablespace" name) LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT c.oid::regclass,
+    array(SELECT "Column" FROM test.show_columns(i.indexrelid)),
+    pg_get_expr(i.indexprs, i.indrelid, true),
+    pg_get_expr(i.indpred, i.indrelid, true),
+    i.indisunique,
+    i.indisprimary,
+    i.indisexclusion,
+    (SELECT t.spcname FROM pg_tablespace t WHERE t.oid = c.reltablespace)
+    FROM pg_class c, pg_index i
+    WHERE c.oid = i.indexrelid AND i.indrelid = rel
+    ORDER BY c.relname;
+$BODY$;
+
 -- this function is duplicated in test/isolation/specs/multi_transaction_indexing.spec
 -- if it changes, that copy may need to change as well
 CREATE OR REPLACE FUNCTION test.show_indexesp(pattern text)
