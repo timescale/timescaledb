@@ -1489,6 +1489,13 @@ SELECT location,
   FROM conditions
 GROUP BY location, bucket
 WITH NO DATA;
+SELECT format('%I.%I', '_timescaledb_internal', h.table_name) AS "MAT_TABLE_NAME",
+       format('%I.%I', '_timescaledb_internal', partial_view_name) AS "PART_VIEW_NAME",
+       format('%I.%I', '_timescaledb_internal', direct_view_name) AS "DIRECT_VIEW_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'conditions_daily'
+\gset
 -- Show both the columns and the view definitions to see that
 -- references are correct in the view as well.
 SELECT * FROM test.show_columns('conditions_daily');
@@ -1499,7 +1506,7 @@ SELECT * FROM test.show_columns('conditions_daily');
  avg      | double precision         | f
 (3 rows)
 
-SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
   Column  |           Type           | NotNull 
 ----------+--------------------------+---------
  location | text                     | f
@@ -1507,7 +1514,7 @@ SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
  avg      | double precision         | f
 (3 rows)
 
-SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
+SELECT * FROM test.show_columns(:'PART_VIEW_NAME');
   Column  |           Type           | NotNull 
 ----------+--------------------------+---------
  location | text                     | f
@@ -1515,7 +1522,7 @@ SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
  avg      | double precision         | f
 (3 rows)
 
-SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
   Column  |           Type           | NotNull 
 ----------+--------------------------+---------
  location | text                     | f
@@ -1534,7 +1541,7 @@ SELECT * FROM test.show_columns(' conditions_daily');
  avg      | double precision         | f
 (3 rows)
 
-SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
   Column  |           Type           | NotNull 
 ----------+--------------------------+---------
  location | text                     | f
@@ -1542,7 +1549,7 @@ SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
  avg      | double precision         | f
 (3 rows)
 
-SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
+SELECT * FROM test.show_columns(:'PART_VIEW_NAME');
   Column  |           Type           | NotNull 
 ----------+--------------------------+---------
  location | text                     | f
@@ -1550,7 +1557,7 @@ SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
  avg      | double precision         | f
 (3 rows)
 
-SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
   Column  |           Type           | NotNull 
 ----------+--------------------------+---------
  location | text                     | f
@@ -1565,6 +1572,36 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 \set VERBOSITY verbose
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
+--
+-- Indexes on continuous aggregate
+--
+\set ON_ERROR_STOP 0
+-- unique indexes are not supported
+CREATE UNIQUE INDEX index_unique_error ON conditions_daily ("time", location);
+psql:include/cagg_ddl_common.sql:1094: ERROR:  continuous aggregates do not support UNIQUE indexes
+-- concurrently index creation not supported
+CREATE INDEX CONCURRENTLY index_concurrently_avg ON conditions_daily (avg);
+psql:include/cagg_ddl_common.sql:1096: ERROR:  hypertables do not support concurrent index creation
+\set ON_ERROR_STOP 1
+CREATE INDEX index_avg ON conditions_daily (avg);
+CREATE INDEX index_avg_only ON ONLY conditions_daily (avg);
+CREATE INDEX index_avg_include ON conditions_daily (avg) INCLUDE (location);
+CREATE INDEX index_avg_expr ON conditions_daily ((avg + 1));
+CREATE INDEX index_avg_location_sfo ON conditions_daily (avg) WHERE location = 'SFO';
+CREATE INDEX index_avg_expr_location_sfo ON conditions_daily ((avg + 2)) WHERE location = 'SFO';
+SELECT * FROM test.show_indexespred(:'MAT_TABLE_NAME');
+                                 Index                                 |      Columns      |           Expr            |          Pred          | Unique | Primary | Exclusion | Tablespace 
+-----------------------------------------------------------------------+-------------------+---------------------------+------------------------+--------+---------+-----------+------------
+ _timescaledb_internal._materialized_hypertable_35_bucket_idx          | {bucket}          |                           |                        | f      | f       | f         | 
+ _timescaledb_internal._materialized_hypertable_35_location_bucket_idx | {location,bucket} |                           |                        | f      | f       | f         | 
+ _timescaledb_internal.index_avg                                       | {avg}             |                           |                        | f      | f       | f         | 
+ _timescaledb_internal.index_avg_expr                                  | {expr}            | avg + 1::double precision |                        | f      | f       | f         | 
+ _timescaledb_internal.index_avg_expr_location_sfo                     | {expr}            | avg + 2::double precision | location = 'SFO'::text | f      | f       | f         | 
+ _timescaledb_internal.index_avg_include                               | {avg,location}    |                           |                        | f      | f       | f         | 
+ _timescaledb_internal.index_avg_location_sfo                          | {avg}             |                           | location = 'SFO'::text | f      | f       | f         | 
+ _timescaledb_internal.index_avg_only                                  | {avg}             |                           |                        | f      | f       | f         | 
+(8 rows)
+
 -- #3696 assertion failure when referencing columns not present in result
 CREATE TABLE i3696(time timestamptz NOT NULL, search_query text, cnt integer, cnt2 integer);
 \if :IS_DISTRIBUTED
@@ -1581,14 +1618,14 @@ CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt +cnt2 , bucket, search_query;
-psql:include/cagg_ddl_common.sql:1092: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
+psql:include/cagg_ddl_common.sql:1118: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg1 SET (timescaledb.materialized_only = 'true');
 CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt + cnt2, bucket, search_query
  HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
-psql:include/cagg_ddl_common.sql:1100: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
+psql:include/cagg_ddl_common.sql:1126: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true');
 --TEST test with multiple settings on continuous aggregates --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
@@ -1605,7 +1642,7 @@ SELECT create_hypertable('test_setting', 'time');
 \endif
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-psql:include/cagg_ddl_common.sql:1114: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
+psql:include/cagg_ddl_common.sql:1140: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
 INSERT INTO test_setting
 SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
@@ -1687,10 +1724,10 @@ DELETE FROM test_setting WHERE val = 20;
 --TEST test with multiple settings on continuous aggregates with real time aggregates turned off initially --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
 DROP MATERIALIZED VIEW test_setting_cagg;
-psql:include/cagg_ddl_common.sql:1158: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
+psql:include/cagg_ddl_common.sql:1184: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only = true)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-psql:include/cagg_ddl_common.sql:1161: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
+psql:include/cagg_ddl_common.sql:1187: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
 SELECT count(*) from test_setting_cagg ORDER BY 1;
  count 
@@ -1818,7 +1855,7 @@ SELECT time_bucket ('1 day', time) AS bucket,
   amount + sum(fiat_value)
 FROM transactions
 GROUP BY bucket, amount;
-psql:include/cagg_ddl_common.sql:1251: NOTICE:  refreshing continuous aggregate "cashflows"
+psql:include/cagg_ddl_common.sql:1277: NOTICE:  refreshing continuous aggregate "cashflows"
 SELECT h.table_name AS "MAT_TABLE_NAME",
        partial_view_name AS "PART_VIEW_NAME",
        direct_view_name AS "DIRECT_VIEW_NAME"

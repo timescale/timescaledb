@@ -1353,3 +1353,8 @@ WHERE user_view_name = 'cashflows'
 \d+ 'cashflows'
 
 SELECT * FROM cashflows;
+
+-- Indexes on not finalized caggs are not allowed
+\set ON_ERROR_STOP 0
+CREATE INDEX index_on_not_finalized_cagg ON cashflows(cashflow);
+\set ON_ERROR_STOP 1
