@@ -74,7 +74,7 @@ CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 
-/* continous aggregate */
+/* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);

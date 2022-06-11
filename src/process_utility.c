@@ -2353,7 +2353,7 @@ typedef struct HypertableIndexOptions
 	Oid barrier_table;
 
 	/*
-	 * if max_chunks >= 0 we'll create indicies on at most max_chunks, and
+	 * if max_chunks >= 0 we'll create indices on at most max_chunks, and
 	 * leave the table marked as Invalid when the command ends.
 	 */
 	int32 max_chunks;
