@@ -1371,7 +1371,7 @@ SELECT
 FROM (VALUES (1,1),(2,2)) v(time,device_id)
 GROUP BY 1,device_id;
 
---test interpolation with big diifferences in values (test overflows in calculations)
+--test interpolation with big differences in values (test overflows in calculations)
 --we use the biggest possible difference in time(x) and the value(y).
 --For bigints we also test values of smaller than bigintmax/min to avoid
 --the symmetry where x=y (which catches more errors)

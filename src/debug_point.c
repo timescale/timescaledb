@@ -38,7 +38,7 @@ TS_FUNCTION_INFO_V1(ts_debug_point_id);
  * lock, this will block all waiters. Once the exclusive lock is released, all
  * waiters will be able to proceed.
  *
- * (2) is similair to (1), but, instead of waiting for the debug point to be
+ * (2) is similar to (1), but, instead of waiting for the debug point to be
  * released, it will generate an error immediately.
  *
  */
