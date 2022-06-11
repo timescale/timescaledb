@@ -3010,7 +3010,7 @@ GROUP BY 1,device_id;
     4 | Device 2
 (10 rows)
 
---test interpolation with big diifferences in values (test overflows in calculations)
+--test interpolation with big differences in values (test overflows in calculations)
 --we use the biggest possible difference in time(x) and the value(y).
 --For bigints we also test values of smaller than bigintmax/min to avoid
 --the symmetry where x=y (which catches more errors)

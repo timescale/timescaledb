@@ -115,7 +115,7 @@ get_database_info(Oid dbid, DbInfo *database)
 /*
  * Verify that server is TimescaleDB data node and perform optional ACL check.
  *
- * The function returns true iif the server is valid TimescaleDB data node and
+ * The function returns true if the server is valid TimescaleDB data node and
  * the ACL check succeeds. Otherwise, false is returned, or, an error is thrown
  * if fail_on_aclcheck is set to true.
  */

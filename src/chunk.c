@@ -2823,7 +2823,7 @@ typedef enum ChunkDeleteResult
  * When chunk rows are preserved, the rows need to be updated to set the
  * 'dropped' flag to TRUE. But since this produces a new tuple into the
  * metadata table we will process also the new tuple in the same loop, which
- * is not only inefficent but could also lead to bugs. For now, we just ignore
+ * is not only inefficient but could also lead to bugs. For now, we just ignore
  * those tuples (the CHUNK_ALREADY_MARKED_DROPPED case), but ideally we
  * shouldn't scan the updated tuples at all since it means double the number
  * of tuples to process.
@@ -4246,7 +4246,7 @@ ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status
 {
 	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))
 	{
-		/* Data modification is not premitted on a frozen chunk */
+		/* Data modification is not permitted on a frozen chunk */
 		switch (cmd)
 		{
 			case CHUNK_INSERT:

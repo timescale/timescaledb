@@ -656,7 +656,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->tuple_fraction = 1.0;
 	subroot->limit_tuples = 1.0;
 
-	/* min/max optimizations ususally happen before
+	/* min/max optimizations usually happen before
 	 * inheritance-relations are expanded, and thus query_planner will
 	 * try to expand our hypertables if they are marked as
 	 * inheritance-relations. Since we do not want this, we must mark

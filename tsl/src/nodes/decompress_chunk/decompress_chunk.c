@@ -760,7 +760,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 
 /* translate chunk_rel->joininfo for compressed_rel
  * this is necessary for create_index_path which gets join clauses from
- * rel->joininfo and sets up paramaterized paths (in rel->ppilist).
+ * rel->joininfo and sets up parameterized paths (in rel->ppilist).
  * ppi_clauses is finally used to add any additional filters on the
  * indexpath when creating a plan in create_indexscan_plan.
  * Otherwise we miss additional filters that need to be applied after
