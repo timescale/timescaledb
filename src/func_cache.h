@@ -28,7 +28,7 @@ typedef enum
 	 */
 	ORIGIN_TIMESCALE = 1,
 	/*
-	 * Fuction is provided by TimescaleDB and is experimental.
+	 * Function is provided by TimescaleDB and is experimental.
 	 * It should be looked for in the experimental schema.
 	 */
 	ORIGIN_TIMESCALE_EXPERIMENTAL = 2,

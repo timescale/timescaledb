@@ -107,7 +107,7 @@ cache_invalidate_relcache_callback(Datum arg, Oid relid)
  * Cache entries get invalidated when either the foreign server entry or the
  * role entry in the PostgreSQL catalog changes.
  *
- * When the foreign server entry changes, connection paramaters might have
+ * When the foreign server entry changes, connection parameters might have
  * changed. When the role entry changes, the certificate used for client
  * authentication with backend data nodes might no longer be valid.
  */
