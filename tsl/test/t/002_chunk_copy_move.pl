@@ -109,6 +109,10 @@ for my $node ($an, $dn1, $dn2)
 	$node->safe_psql('postgres', "ALTER ROLE testrole REPLICATION;");
 }
 
+#Check that the function does not segfault on NULL arguments
+($ret, $stdout, $stderr) = $an->psql('postgres',
+	"SELECT timescaledb_experimental.subscription_exec(NULL)");
+
 #Check that function errors out if any non SUBSCRIPTON command is passed to it
 ($ret, $stdout, $stderr) = $an->psql('postgres',
 	"SET ROLE testrole; SELECT timescaledb_experimental.subscription_exec('DROP ROLE testrole')"
