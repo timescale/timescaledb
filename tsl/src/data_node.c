@@ -108,6 +108,9 @@ get_database_info(Oid dbid, DbInfo *database)
 	database->chartype = TextDatumGetCString(datum);
 #endif
 
+	database->collation = pstrdup(database->collation);
+	database->chartype = pstrdup(database->chartype);
+
 	ReleaseSysCache(dbtuple);
 	return true;
 }
