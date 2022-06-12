@@ -276,6 +276,9 @@ tsl_subscription_exec(PG_FUNCTION_ARGS)
 	List *parsetree_list;
 	ListCell *parsetree_item;
 
+	if (!subscription_cmd)
+		PG_RETURN_VOID();
+
 	/*
 	 * Subscription command needs a superuser
 	 * so switch to that context. But first check that the passed in user has atleast
