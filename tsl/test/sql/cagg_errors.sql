@@ -162,14 +162,6 @@ from conditions
  group by time_bucket('1week', timec) , location
 offset 10 WITH NO DATA;
 
---using ORDER BY in view defintion
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select sum(humidity), avg(temperature::int4)
-from conditions
- group by time_bucket('1week', timec) , location
-ORDER BY 1 WITH NO DATA;
-
 --using FETCH
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS

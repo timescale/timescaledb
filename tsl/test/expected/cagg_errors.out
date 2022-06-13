@@ -174,16 +174,6 @@ offset 10 WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates.
 HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
---using ORDER BY in view defintion
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select sum(humidity), avg(temperature::int4)
-from conditions
- group by time_bucket('1week', timec) , location
-ORDER BY 1 WITH NO DATA;
-ERROR:  invalid continuous aggregate query
-DETAIL:  ORDER BY is not supported in queries defining continuous aggregates.
-HINT:  Use ORDER BY clauses in SELECTS from the continuous aggregate view instead.
 --using FETCH
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
