@@ -1000,7 +1000,7 @@ cagg_agg_validate(Node *node, void *context)
  *   added.
  */
 static bool
-cagg_query_supported(Query *query, StringInfo hint, StringInfo detail)
+cagg_query_supported(Query *query, StringInfo hint, StringInfo detail, const bool finalized)
 {
 	if (query->commandType != CMD_SELECT)
 	{
@@ -1034,7 +1034,7 @@ cagg_query_supported(Query *query, StringInfo hint, StringInfo detail)
 		return false;
 	}
 
-	if (query->sortClause)
+	if (query->sortClause && !finalized)
 	{
 		appendStringInfoString(detail,
 							   "ORDER BY is not supported in queries defining continuous "
@@ -1113,7 +1113,7 @@ cagg_validate_query(Query *query, bool finalized)
 	StringInfo hint = makeStringInfo();
 	StringInfo detail = makeStringInfo();
 
-	if (!cagg_query_supported(query, hint, detail))
+	if (!cagg_query_supported(query, hint, detail, finalized))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -2896,6 +2896,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	List *col_typmods = NIL;
 	List *col_collations = NIL;
 	List *tlist = NIL;
+	List *sortClause = NIL;
 	int varno;
 	Node *q2_quals = NULL;
 
@@ -2903,6 +2904,9 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 
 	q1 = copyObject(q1);
 	q2 = copyObject(q2);
+
+	if (q1->sortClause)
+		sortClause = copyObject(q1->sortClause);
 
 	TypeCacheEntry *tce = lookup_type_cache(tbinfo->htpartcoltype, TYPECACHE_LT_OPR);
 
@@ -2962,11 +2966,19 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 										false);
 			tle_union->resorigtbl = expr->varno;
 			tle_union->resorigcol = expr->varattno;
+			tle_union->ressortgroupref = tle->ressortgroupref;
+
 			tlist = lappend(tlist, tle_union);
 		}
 	}
 
 	query->targetList = tlist;
+
+	if (sortClause)
+	{
+		query->sortClause = sortClause;
+		query->jointree = makeFromExpr(NIL, NULL);
+	}
 
 	setop->colTypes = col_types;
 	setop->colTypmods = col_typmods;

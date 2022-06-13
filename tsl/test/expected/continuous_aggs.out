@@ -1955,6 +1955,217 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
  100 |   100
 (5 rows)
 
+-- ORDER BY in the view definition
+DROP MATERIALIZED VIEW mat_m1;
+NOTICE:  drop cascades to 2 other objects
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+AS
+SELECT
+  time_bucket('1week', timec),
+  COUNT(location),
+  SUM(temperature)
+FROM conditions
+GROUP BY time_bucket('1week', timec)
+ORDER BY sum DESC;
+NOTICE:  refreshing continuous aggregate "mat_m1"
+-- CAgg definition for realtime
+SELECT pg_get_viewdef('mat_m1',true);
+                                                                                 pg_get_viewdef                                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ ( SELECT _materialized_hypertable_59.time_bucket,                                                                                                                              +
+     _materialized_hypertable_59.count,                                                                                                                                         +
+     _materialized_hypertable_59.sum                                                                                                                                            +
+    FROM _timescaledb_internal._materialized_hypertable_59                                                                                                                      +
+   WHERE _materialized_hypertable_59.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)+
+   ORDER BY _materialized_hypertable_59.sum DESC)                                                                                                                               +
+ UNION ALL                                                                                                                                                                      +
+ ( SELECT time_bucket('@ 7 days'::interval, conditions.timec) AS time_bucket,                                                                                                   +
+     count(conditions.location) AS count,                                                                                                                                       +
+     sum(conditions.temperature) AS sum                                                                                                                                         +
+    FROM conditions                                                                                                                                                             +
+   WHERE conditions.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)                      +
+   GROUP BY (time_bucket('@ 7 days'::interval, conditions.timec))                                                                                                               +
+   ORDER BY (sum(conditions.temperature)) DESC)                                                                                                                                 +
+   ORDER BY 3 DESC;
+(1 row)
+
+-- Ordered result
+SELECT * FROM mat_m1;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Dec 27 16:00:00 2009 PST |     5 | 330
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+(3 rows)
+
+-- Insert new data and query again to make sure we produce ordered data
+INSERT INTO conditions VALUES ('2018-11-10 09:00:00-08', 'SFO', 10, 10);
+SELECT * FROM mat_m1;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Dec 27 16:00:00 2009 PST |     5 | 330
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+ Sun Nov 04 16:00:00 2018 PST |     1 |  10
+(4 rows)
+
+-- This new row will change the order again
+INSERT INTO conditions VALUES ('2018-11-11 09:00:00-08', 'SFO', 400, 400);
+SELECT * FROM mat_m1;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Nov 04 16:00:00 2018 PST |     2 | 410
+ Sun Dec 27 16:00:00 2009 PST |     5 | 330
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+(4 rows)
+
+-- Merge Append
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append
+   Sort Key: _materialized_hypertable_59.sum DESC
+   ->  Custom Scan (ConstraintAwareAppend)
+         Hypertable: _materialized_hypertable_59
+         Chunks excluded during startup: 0
+         ->  Merge Append
+               Sort Key: _hyper_59_123_chunk.sum DESC
+               ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
+                     Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+               ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+                     Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+   ->  Sort
+         Sort Key: (sum(conditions.temperature)) DESC
+         ->  HashAggregate
+               Group Key: time_bucket('@ 7 days'::interval, conditions.timec)
+               ->  Custom Scan (ChunkAppend) on conditions
+                     Chunks excluded during startup: 1
+                     ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                           Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
+                           Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+(21 rows)
+
+-- Ordering by another column
+SELECT * FROM mat_m1 ORDER BY count;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+ Sun Nov 04 16:00:00 2018 PST |     2 | 410
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Dec 27 16:00:00 2009 PST |     5 | 330
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
+                                                                                      QUERY PLAN                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _materialized_hypertable_59.count
+   ->  Merge Append
+         Sort Key: _materialized_hypertable_59.sum DESC
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: _materialized_hypertable_59
+               Chunks excluded during startup: 0
+               ->  Merge Append
+                     Sort Key: _hyper_59_123_chunk.sum DESC
+                     ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
+                           Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+                           Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+         ->  Sort
+               Sort Key: (sum(conditions.temperature)) DESC
+               ->  HashAggregate
+                     Group Key: time_bucket('@ 7 days'::interval, conditions.timec)
+                     ->  Custom Scan (ChunkAppend) on conditions
+                           Chunks excluded during startup: 1
+                           ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                                 Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                           ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
+                                 Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+(23 rows)
+
+-- Change the type of cagg
+ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
+-- CAgg definition for materialized only
+SELECT pg_get_viewdef('mat_m1',true);
+                      pg_get_viewdef                       
+-----------------------------------------------------------
+  SELECT _materialized_hypertable_59.time_bucket,         +
+     _materialized_hypertable_59.count,                   +
+     _materialized_hypertable_59.sum                      +
+    FROM _timescaledb_internal._materialized_hypertable_59+
+   ORDER BY _materialized_hypertable_59.sum DESC;
+(1 row)
+
+-- Now the query will show only the materialized data, without last two
+-- records inserted into the original hypertable (last two insers above)
+SELECT * FROM mat_m1;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Dec 27 16:00:00 2009 PST |     5 | 330
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+(3 rows)
+
+-- Merge Append
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Merge Append
+   Sort Key: _hyper_59_123_chunk.sum DESC
+   ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
+   ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+(4 rows)
+
+-- Ordering by another column
+SELECT * FROM mat_m1 ORDER BY count;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Dec 27 16:00:00 2009 PST |     5 | 330
+(3 rows)
+
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_59_123_chunk.count
+   ->  Merge Append
+         Sort Key: _hyper_59_123_chunk.sum DESC
+         ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
+         ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+(6 rows)
+
+SELECT h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+-- Invalidate old region and refresh again
+DELETE FROM conditions WHERE timec < '2010-01-05 09:00:00-08';
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
+-- Querying the cagg produce ordered records as expected
+SELECT * FROM mat_m1;
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Nov 04 16:00:00 2018 PST |     2 | 410
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+(3 rows)
+
+-- Querying direct the materialization hypertable doesn't
+-- produce ordered records
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
+         time_bucket          | count | sum 
+------------------------------+-------+-----
+ Sun Jan 03 16:00:00 2010 PST |     1 |  75
+ Sun Oct 28 17:00:00 2018 PDT |     3 | 115
+ Sun Nov 04 16:00:00 2018 PST |     2 | 410
+(3 rows)
+
 --
 -- Testing the coexistence of both types of supported CAggs
 -- over the same raw hypertable.
@@ -1963,7 +2174,7 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
 --  . finalized = false: with chunk_id and partials
 --
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
   timec       TIMESTAMPTZ       NOT NULL,
@@ -2009,7 +2220,7 @@ view_owner                        | default_perm_user
 materialized_only                 | t
 compression_enabled               | f
 materialization_hypertable_schema | _timescaledb_internal
-materialization_hypertable_name   | _materialized_hypertable_60
+materialization_hypertable_name   | _materialized_hypertable_61
 view_definition                   |  SELECT time_bucket('@ 1 day'::interval, conditions.timec) AS timec,+
                                   |     min(conditions.location) AS minl,                               +
                                   |     sum(conditions.temperature) AS sumt,                            +
@@ -2026,7 +2237,7 @@ view_owner                        | default_perm_user
 materialized_only                 | t
 compression_enabled               | f
 materialization_hypertable_schema | _timescaledb_internal
-materialization_hypertable_name   | _materialized_hypertable_61
+materialization_hypertable_name   | _materialized_hypertable_62
 view_definition                   |  SELECT time_bucket('@ 1 day'::interval, conditions.timec) AS timec,+
                                   |     min(conditions.location) AS minl,                               +
                                   |     sum(conditions.temperature) AS sumt,                            +

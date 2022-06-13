@@ -1393,6 +1393,70 @@ GROUP BY time_bucket('1week', timec), location;
 
 SELECT * FROM mat_m1 ORDER BY 1, 2;
 
+-- ORDER BY in the view definition
+DROP MATERIALIZED VIEW mat_m1;
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+AS
+SELECT
+  time_bucket('1week', timec),
+  COUNT(location),
+  SUM(temperature)
+FROM conditions
+GROUP BY time_bucket('1week', timec)
+ORDER BY sum DESC;
+
+-- CAgg definition for realtime
+SELECT pg_get_viewdef('mat_m1',true);
+
+-- Ordered result
+SELECT * FROM mat_m1;
+
+-- Insert new data and query again to make sure we produce ordered data
+INSERT INTO conditions VALUES ('2018-11-10 09:00:00-08', 'SFO', 10, 10);
+SELECT * FROM mat_m1;
+-- This new row will change the order again
+INSERT INTO conditions VALUES ('2018-11-11 09:00:00-08', 'SFO', 400, 400);
+SELECT * FROM mat_m1;
+-- Merge Append
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
+
+-- Ordering by another column
+SELECT * FROM mat_m1 ORDER BY count;
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
+
+-- Change the type of cagg
+ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
+
+-- CAgg definition for materialized only
+SELECT pg_get_viewdef('mat_m1',true);
+
+-- Now the query will show only the materialized data, without last two
+-- records inserted into the original hypertable (last two insers above)
+SELECT * FROM mat_m1;
+
+-- Merge Append
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
+
+-- Ordering by another column
+SELECT * FROM mat_m1 ORDER BY count;
+EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
+
+SELECT h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+
+-- Invalidate old region and refresh again
+DELETE FROM conditions WHERE timec < '2010-01-05 09:00:00-08';
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
+-- Querying the cagg produce ordered records as expected
+SELECT * FROM mat_m1;
+-- Querying direct the materialization hypertable doesn't
+-- produce ordered records
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
+
 --
 -- Testing the coexistence of both types of supported CAggs
 -- over the same raw hypertable.
@@ -1400,7 +1464,6 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
 --  . finalized = true:  without chunk_id and partials
 --  . finalized = false: with chunk_id and partials
 --
-
 DROP TABLE conditions CASCADE;
 
 CREATE TABLE conditions (
