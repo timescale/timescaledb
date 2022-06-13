@@ -117,11 +117,11 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 }
 
 static FuncExpr *
-make_partfunc_call(PartitioningFunc partfunc, List *args, Oid inputcollid)
+make_partfunc_call(Oid funcid, Oid rettype, List *args, Oid inputcollid)
 {
 	/* build FuncExpr to use in eval_const_expressions */
-	return makeFuncExpr(partfunc.func_fmgr.fn_oid /* funcid */,
-						partfunc.rettype /* rettype */,
+	return makeFuncExpr(funcid /* funcid */,
+						rettype /* rettype */,
 						args /* args */,
 						InvalidOid /* funccollid */,
 						inputcollid /* inputcollid */,
@@ -141,11 +141,14 @@ transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
 	Const *part_value;
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
-	PartitioningFunc partfunc = dim->partitioning->partfunc;
-	TypeCacheEntry *tce = lookup_type_cache(partfunc.rettype, TYPECACHE_EQ_OPR);
+	Oid rettype = dim->partitioning->partfunc.rettype;
+	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
 
 	/* build FuncExpr to use in eval_const_expressions */
-	FuncExpr *partcall = make_partfunc_call(partfunc, list_make1(value), var->varcollid);
+	FuncExpr *partcall = make_partfunc_call(dim->partitioning->partfunc.func_fmgr.fn_oid,
+											rettype,
+											list_make1(value),
+											var->varcollid);
 
 	/*
 	 * We should always be able to constify here
@@ -178,13 +181,16 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 	Var *var = linitial_node(Var, op->args);
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
-	PartitioningFunc partfunc = dim->partitioning->partfunc;
-	TypeCacheEntry *tce = lookup_type_cache(partfunc.rettype, TYPECACHE_EQ_OPR);
+	Oid rettype = dim->partitioning->partfunc.rettype;
+	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
 	List *part_values = NIL;
 	ListCell *lc;
 
 	/* build FuncExpr to use in eval_const_expressions */
-	FuncExpr *partcall = make_partfunc_call(partfunc, NIL, var->varcollid);
+	FuncExpr *partcall = make_partfunc_call(dim->partitioning->partfunc.func_fmgr.fn_oid,
+											rettype,
+											NIL,
+											var->varcollid);
 
 	foreach (lc, lsecond_node(ArrayExpr, op->args)->elements)
 	{
@@ -206,8 +212,8 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 
 	ArrayExpr *arr2 = makeNode(ArrayExpr);
 	arr2->array_collid = InvalidOid;
-	arr2->array_typeid = get_array_type(partfunc.rettype);
-	arr2->element_typeid = partfunc.rettype;
+	arr2->array_typeid = get_array_type(rettype);
+	arr2->element_typeid = rettype;
 	arr2->multidims = false;
 	arr2->location = -1;
 	arr2->elements = part_values;
