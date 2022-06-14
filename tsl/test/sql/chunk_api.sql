@@ -43,9 +43,6 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": ["1514419
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices json
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
--- Valid chunk, but no permissions
-SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
 \set ON_ERROR_STOP 1
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -72,9 +69,6 @@ SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Bad slices json
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Valid chunk, but no permissions
-SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 \set ON_ERROR_STOP 1
 
 -- Test that granting insert on tables allow create_chunk to be

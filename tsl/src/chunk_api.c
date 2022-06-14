@@ -1665,6 +1665,8 @@ chunk_create_empty_table(PG_FUNCTION_ARGS)
 	Cache *const hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
 	Hypercube *hc;
+	Oid uid, saved_uid;
+	int sec_ctx;
 
 	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
 	GETARG_NOTNULL_NULLABLE(slices, 1, "slices", JSONB_P);
@@ -1673,12 +1675,36 @@ chunk_create_empty_table(PG_FUNCTION_ARGS)
 
 	ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Assert(ht != NULL);
-	check_privileges_for_creating_chunk(hypertable_relid);
+
+	/*
+	 * If the chunk is created in the internal schema, become the catalog
+	 * owner, otherwise become the hypertable owner
+	 */
+	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
+		uid = ts_catalog_database_info_get()->owner_uid;
+	else
+	{
+		Relation rel;
+
+		rel = table_open(ht->main_table_relid, AccessShareLock);
+		uid = rel->rd_rel->relowner;
+		table_close(rel, AccessShareLock);
+	}
+
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+
 	hc = get_hypercube_from_slices(slices, ht);
 	Assert(NULL != hc);
 	ts_chunk_create_only_table(ht, hc, schema_name, table_name);
 
 	ts_cache_release(hcache);
+
+	/* Need to restore security context */
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 	PG_RETURN_BOOL(true);
 }
