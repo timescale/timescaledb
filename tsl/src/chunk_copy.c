@@ -300,18 +300,20 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 												 CACHE_FLAG_NONE,
 												 &hcache);
 
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
-
+	/*
+	 * We have already checked above for superuser or replication perms. There's no
+	 * need to check if the user has "ownership" on the hypertable now.
+	 */
 	if (!hypertable_is_distributed(ht))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertable \"%s\" is not distributed",
 						get_rel_name(ht->main_table_relid))));
 
-	cc->src_server = data_node_get_foreign_server(src_node, ACL_USAGE, true, false);
+	cc->src_server = data_node_get_foreign_server(src_node, ACL_NO_CHECK, false, false);
 	Assert(NULL != cc->src_server);
 
-	cc->dst_server = data_node_get_foreign_server(dst_node, ACL_USAGE, true, false);
+	cc->dst_server = data_node_get_foreign_server(dst_node, ACL_NO_CHECK, false, false);
 	Assert(NULL != cc->dst_server);
 
 	/* Ensure that source and destination data nodes are not the same */
@@ -354,8 +356,10 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 	ts_cache_release(hcache);
 	MemoryContextSwitchTo(old);
 
-	/* Commit to get out of starting transaction. This will also pop active
-	 * snapshots. */
+	/*
+	 * Commit to get out of starting transaction. This will also pop active
+	 * snapshots.
+	 */
 	SPI_commit();
 }
 
@@ -1045,7 +1049,26 @@ chunk_copy_execute(ChunkCopy *cc)
 	 */
 	for (stage = &chunk_copy_stages[0]; stage->name != NULL; stage++)
 	{
+		int sec_ctx;
+		Oid saved_uid;
+
+		/*
+		 * A chunk copy/move operation involves a lot of stages. Many of these
+		 * stages need different user permissions.
+		 *
+		 * PUBLICATION/SUBSCRIPTION needs CREATE privileges on the database
+		 * Replication slots management needs superuser or REPLICATION privs
+		 * The new chunk needs to be created with original hypertable privs
+		 *
+		 * The move_chunk/copy_chunk functions can only be invoked by superuser
+		 * or REPLICATION users. To keep things manageable, we switch to the
+		 * bootstrap superuser for each stage of the execution. Care is taken to
+		 * create the chunks with original hypertable ownership.
+		 */
 		SPI_start_transaction();
+		GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+			SetUserIdAndSecContext(BOOTSTRAP_SUPERUSERID, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
 		cc->stage = stage;
 
@@ -1057,6 +1080,8 @@ chunk_copy_execute(ChunkCopy *cc)
 
 		DEBUG_ERROR_INJECTION(stage->name);
 
+		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+			SetUserIdAndSecContext(saved_uid, sec_ctx);
 		SPI_commit();
 	}
 }
@@ -1167,13 +1192,15 @@ chunk_copy_operation_get(const char *operation_id)
 		/* No other sanity checks need to be performed since they were done earlier */
 
 		/* Setup the src_node */
-		cc->src_server =
-			data_node_get_foreign_server(NameStr(cc->fd.source_node_name), ACL_USAGE, true, false);
+		cc->src_server = data_node_get_foreign_server(NameStr(cc->fd.source_node_name),
+													  ACL_NO_CHECK,
+													  true,
+													  false);
 		Assert(NULL != cc->src_server);
 
 		/* Setup the dst_node */
 		cc->dst_server =
-			data_node_get_foreign_server(NameStr(cc->fd.dest_node_name), ACL_USAGE, true, false);
+			data_node_get_foreign_server(NameStr(cc->fd.dest_node_name), ACL_NO_CHECK, true, false);
 		Assert(NULL != cc->dst_server);
 	}
 
@@ -1194,7 +1221,24 @@ chunk_copy_cleanup_internal(ChunkCopy *cc, int stage_idx)
 	/* Cleanup each copy stage in a separate transaction */
 	do
 	{
+		int sec_ctx;
+		Oid saved_uid;
+
+		/*
+		 * A chunk copy/move cleanup operation involves a lot of stages. Many of these
+		 * stages need different user permissions.
+		 *
+		 * PUBLICATION/SUBSCRIPTION needs CREATE privileges on the database
+		 * Replication slots management needs superuser or REPLICATION privs
+		 *
+		 * The cleanup function can only be invoked by superuser
+		 * or REPLICATION users. To keep things manageable, we switch to the
+		 * bootstrap superuser for each stage of the execution.
+		 */
 		SPI_start_transaction();
+		GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+			SetUserIdAndSecContext(BOOTSTRAP_SUPERUSERID, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
 		cc->stage = &chunk_copy_stages[stage_idx];
 		if (cc->stage->function_cleanup)
@@ -1206,6 +1250,8 @@ chunk_copy_cleanup_internal(ChunkCopy *cc, int stage_idx)
 		else
 			first = false;
 
+		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+			SetUserIdAndSecContext(saved_uid, sec_ctx);
 		SPI_commit();
 	} while (--stage_idx >= 0);
 }

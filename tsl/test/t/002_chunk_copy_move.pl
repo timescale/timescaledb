@@ -8,7 +8,7 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 283;
+use Test::More tests => 286;
 
 #Initialize all the multi-node instances
 my $an  = AccessNode->create('an');
@@ -18,13 +18,16 @@ my $dn2 = DataNode->create('dn2', allows_streaming => 'logical');
 $an->add_data_node($dn1);
 $an->add_data_node($dn2);
 
-#Create a distributed hypertable and insert a few rows
+#Create few distributed hypertables with default and specified schema names and insert a few rows
 $an->safe_psql(
 	'postgres',
 	qq[
     CREATE TABLE test(time timestamp NOT NULL, device int, temp float);
     SELECT create_distributed_hypertable('test', 'time', 'device', 3);
     INSERT INTO test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+    CREATE TABLE measurements(time TIMESTAMP NOT NULL, device INTEGER, temperature FLOAT);
+    SELECT * FROM create_distributed_hypertable('public.measurements', 'time', 'device', 3, associated_schema_name => 'public');
+    INSERT INTO measurements SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') AS t;
     ]);
 
 #Check that chunks are shown appropriately on all nodes of the multi-node setup
@@ -123,12 +126,10 @@ like(
 	qr/this function only accepts SUBSCRIPTION commands/,
 	'Expected failure due to wrong command to function');
 
-#Also grant it ownership of the table and related permissions
-$an->safe_psql('postgres',
-	"ALTER TABLE test OWNER TO testrole; GRANT ALL PRIVILEGES ON DATABASE postgres TO testrole; GRANT USAGE, SELECT ON SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq TO testrole; GRANT USAGE ON FOREIGN SERVER dn1, dn2 TO testrole;"
-);
-
 #Move chunk _timescaledb_internal._dist_hyper_1_1_chunk to DN2 from AN
+#The move_chunk function when called with a REPLICATION user should work without
+#granting any additional perms to it. This is because this function will internally
+#assume superuser privileges to carry out the actual move operation.
 $an->safe_psql('postgres',
 	"SET ROLE testrole; CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2')"
 );
@@ -142,8 +143,9 @@ $an->psql_is(
 
 #Run cleanup on this operstion. It should just delete the catalog entry since the
 #activity has completed successfully. Rest of the checks below should succeed
+#Try this cleanup as the REPLICATION user
 $an->safe_psql('postgres',
-	"CALL timescaledb_experimental.cleanup_copy_chunk_operation(operation_id=>'ts_copy_1_1');"
+	"SET ROLE testrole; CALL timescaledb_experimental.cleanup_copy_chunk_operation(operation_id=>'ts_copy_1_1');"
 );
 $an->psql_is(
 	'postgres', "SELECT * from _timescaledb_catalog.chunk_copy_operation",
@@ -202,6 +204,16 @@ $dn2->psql_is(
 	$query,
 	"_timescaledb_internal._dist_hyper_1_2_chunk\n_timescaledb_internal._dist_hyper_1_1_chunk",
 	'DN2 shows correct set of chunks after the copy');
+
+#Test move chunk of non-default associated_schema_name.
+$an->safe_psql('postgres',
+	"SET ROLE testrole; CALL timescaledb_experimental.move_chunk(chunk=>'public._dist_hyper_2_5_chunk', source_node=> 'dn1', destination_node => 'dn2')"
+);
+
+#Check contents on the chunk on DN2, after the move
+$dn2->psql_is(
+	'postgres', "SELECT count(device) FROM public._dist_hyper_2_5_chunk",
+	qq[58],     "DN2 has correct contents after the move in the chunk");
 
 done_testing();
 
