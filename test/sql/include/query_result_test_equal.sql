@@ -3,6 +3,8 @@
 -- LICENSE-APACHE for a copy of the license.
 
 --expects QUERY1 and QUERY2 to be set, expects data can be compared
+set enable_hashjoin = off;
+set enable_mergejoin = on;
 with query1 AS (
   SELECT row_number() OVER(ORDER BY q.*) row_number, * FROM (:QUERY1) as q
 ),
@@ -12,3 +14,5 @@ query2 AS (
 SELECT count(*) FILTER (WHERE query1.row_number IS DISTINCT FROM query2.row_number OR query1.show_chunks IS DISTINCT FROM query2.drop_chunks) AS "Different Rows",
 coalesce(max(query1.row_number), 0) AS "Total Rows from Query 1", coalesce(max(query2.row_number), 0) AS "Total Rows from Query 2"
 FROM query1 FULL OUTER JOIN query2 ON (query1.row_number = query2.row_number);
+reset enable_hashjoin;
+reset enable_mergejoin;

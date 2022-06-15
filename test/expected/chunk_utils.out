@@ -669,7 +669,7 @@ ORDER BY c.id;
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', newer_than=>5)::NAME'
 \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test1\', newer_than=>5, verbose => true)::NAME'
 \set ECHO errors
-psql:include/query_result_test_equal.sql:14: INFO:  dropping chunk _timescaledb_internal._hyper_1_5_chunk
+psql:include/query_result_test_equal.sql:16: INFO:  dropping chunk _timescaledb_internal._hyper_1_5_chunk
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
