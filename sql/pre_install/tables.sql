@@ -40,27 +40,32 @@
 CREATE SEQUENCE _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.hypertable (
-  id INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'),
-  schema_name name NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
+  id INTEGER NOT NULL DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'),
+  schema_name name NOT NULL,
   table_name name NOT NULL,
   associated_schema_name name NOT NULL,
   associated_table_prefix name NOT NULL,
   num_dimensions smallint NOT NULL,
   chunk_sizing_func_schema name NOT NULL,
   chunk_sizing_func_name name NOT NULL,
-  chunk_target_size bigint NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
+  chunk_target_size bigint NOT NULL, -- size in bytes
   compression_state smallint NOT NULL DEFAULT 0,
-  compressed_hypertable_id integer REFERENCES _timescaledb_catalog.hypertable (id),
+  compressed_hypertable_id integer,
   replication_factor smallint NULL,
-  UNIQUE (associated_schema_name, associated_table_prefix),
+  -- table constraints
+  CONSTRAINT hypertable_pkey PRIMARY KEY (id),
+  CONSTRAINT hypertable_associated_schema_name_associated_table_prefix_key UNIQUE (associated_schema_name, associated_table_prefix),
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
+  CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
   -- internal compressed hypertables have compression state = 2
   CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
+  CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0),
   CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL)),
   -- replication_factor NULL: regular hypertable
   -- replication_factor > 0: distributed hypertable on access node
   -- replication_factor -1: distributed hypertable on data node, which is part of a larger table
-  CONSTRAINT hypertable_replication_factor_check CHECK (replication_factor > 0 OR replication_factor = -1)
+  CONSTRAINT hypertable_replication_factor_check CHECK (replication_factor > 0 OR replication_factor = -1),
+  CONSTRAINT hypertable_compressed_hypertable_id_fkey FOREIGN KEY (compressed_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 );
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
@@ -68,12 +73,14 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_s
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 
 CREATE TABLE _timescaledb_catalog.hypertable_data_node (
-  hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
+  hypertable_id integer NOT NULL,
   node_hypertable_id integer NULL,
   node_name name NOT NULL,
   block_chunks boolean NOT NULL,
-  UNIQUE (node_hypertable_id, node_name),
-  UNIQUE (hypertable_id, node_name)
+  -- table constraints
+  CONSTRAINT hypertable_data_node_hypertable_id_node_name_key UNIQUE (hypertable_id, node_name),
+  CONSTRAINT hypertable_data_node_node_hypertable_id_node_name_key UNIQUE (node_hypertable_id, node_name),
+  CONSTRAINT hypertable_data_node_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data_node', '');
@@ -81,18 +88,21 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data
 -- The tablespace table maps tablespaces to hypertables.
 -- This allows spreading a hypertable's chunks across multiple disks.
 CREATE TABLE _timescaledb_catalog.tablespace (
-  id serial PRIMARY KEY,
-  hypertable_id int NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  id serial NOT NULL,
+  hypertable_id int NOT NULL,
   tablespace_name name NOT NULL,
-  UNIQUE (hypertable_id, tablespace_name)
+  -- table constraints
+  CONSTRAINT tablespace_pkey PRIMARY KEY (id),
+  CONSTRAINT tablespace_hypertable_id_tablespace_name_key UNIQUE (hypertable_id, tablespace_name),
+  CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.tablespace', '');
 
 -- A dimension represents an axis along which data is partitioned.
 CREATE TABLE _timescaledb_catalog.dimension (
-  id serial NOT NULL PRIMARY KEY,
-  hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  id serial NOT NULL ,
+  hypertable_id integer NOT NULL,
   column_name name NOT NULL,
   column_type REGTYPE NOT NULL,
   aligned boolean NOT NULL,
@@ -101,13 +111,17 @@ CREATE TABLE _timescaledb_catalog.dimension (
   partitioning_func_schema name NULL,
   partitioning_func name NULL,
   -- open dimensions (e.g., time)
-  interval_length bigint NULL CHECK (interval_length IS NULL OR interval_length > 0),
+  interval_length bigint NULL,
   integer_now_func_schema name NULL,
   integer_now_func name NULL,
-  CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)),
-  CHECK ((num_slices IS NULL AND interval_length IS NOT NULL) OR (num_slices IS NOT NULL AND interval_length IS NULL)),
-  CHECK ((integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)),
-  UNIQUE (hypertable_id, column_name)
+  -- table constraints
+  CONSTRAINT dimension_pkey PRIMARY KEY (id),
+  CONSTRAINT dimension_hypertable_id_column_name_key UNIQUE (hypertable_id, column_name),
+  CONSTRAINT dimension_check CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)),
+  CONSTRAINT dimension_check1 CHECK ((num_slices IS NULL AND interval_length IS NOT NULL) OR (num_slices IS NOT NULL AND interval_length IS NULL)),
+  CONSTRAINT dimension_check2 CHECK ((integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)),
+  CONSTRAINT dimension_interval_length_check CHECK (interval_length IS NULL OR interval_length > 0),
+  CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
@@ -116,12 +130,15 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 
 -- A dimension slice defines a keyspace range along a dimension axis.
 CREATE TABLE _timescaledb_catalog.dimension_slice (
-  id serial NOT NULL PRIMARY KEY,
-  dimension_id integer NOT NULL REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE,
+  id serial NOT NULL,
+  dimension_id integer NOT NULL,
   range_start bigint NOT NULL,
   range_end bigint NOT NULL,
-  CHECK (range_start <= range_end),
-  UNIQUE (dimension_id, range_start, range_end)
+  -- table constraints
+  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
+  CONSTRAINT dimension_slice_dimension_id_range_start_range_end_key UNIQUE (dimension_id, range_start, range_end),
+  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
+  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
@@ -136,14 +153,18 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.chunk (
-  id integer PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
-  hypertable_id int NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
+  id integer NOT NULL DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
+  hypertable_id int NOT NULL,
   schema_name name NOT NULL,
   table_name name NOT NULL,
-  compressed_chunk_id integer REFERENCES _timescaledb_catalog.chunk (id),
+  compressed_chunk_id integer ,
   dropped boolean NOT NULL DEFAULT FALSE,
   status integer NOT NULL DEFAULT 0,
-  UNIQUE (schema_name, table_name)
+  -- table constraints
+  CONSTRAINT chunk_pkey PRIMARY KEY (id),
+  CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),
+  CONSTRAINT chunk_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id),
+  CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 );
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
@@ -158,11 +179,14 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', 
 -- constraint associated with a chunk will also be a table constraint
 -- on the chunk's data table.
 CREATE TABLE _timescaledb_catalog.chunk_constraint (
-  chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id),
-  dimension_slice_id integer NULL REFERENCES _timescaledb_catalog.dimension_slice (id),
+  chunk_id integer NOT NULL,
+  dimension_slice_id integer NULL,
   constraint_name name NOT NULL,
   hypertable_constraint_name name NULL,
-  UNIQUE (chunk_id, constraint_name)
+  -- table constraints
+  CONSTRAINT chunk_constraint_chunk_id_constraint_name_key UNIQUE (chunk_id, constraint_name),
+  CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id),
+  CONSTRAINT chunk_constraint_dimension_slice_id_fkey FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id)
 );
 
 CREATE INDEX chunk_constraint_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (dimension_slice_id);
@@ -173,11 +197,14 @@ CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
 
 CREATE TABLE _timescaledb_catalog.chunk_index (
-  chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  chunk_id integer NOT NULL,
   index_name name NOT NULL,
-  hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  hypertable_id integer NOT NULL,
   hypertable_index_name name NOT NULL,
-  UNIQUE (chunk_id, index_name)
+  -- table constraints
+  CONSTRAINT chunk_index_chunk_id_index_name_key UNIQUE (chunk_id, index_name),
+  CONSTRAINT chunk_index_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT chunk_index_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb_catalog.chunk_index (hypertable_id, hypertable_index_name);
@@ -185,11 +212,13 @@ CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
 CREATE TABLE _timescaledb_catalog.chunk_data_node (
-  chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id),
+  chunk_id integer NOT NULL,
   node_chunk_id integer NOT NULL,
   node_name name NOT NULL,
-  UNIQUE (node_chunk_id, node_name),
-  UNIQUE (chunk_id, node_name)
+  -- table constraints
+  CONSTRAINT chunk_data_node_chunk_id_node_name_key UNIQUE (chunk_id, node_name),
+  CONSTRAINT chunk_data_node_node_chunk_id_node_name_key UNIQUE (node_chunk_id, node_name),
+  CONSTRAINT chunk_data_node_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node', '');
@@ -203,7 +232,7 @@ MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
 
 CREATE TABLE _timescaledb_config.bgw_job (
-  id integer PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
+  id integer NOT NULL DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
   application_name name NOT NULL,
   schedule_interval interval NOT NULL,
   max_runtime interval NOT NULL,
@@ -213,8 +242,11 @@ CREATE TABLE _timescaledb_config.bgw_job (
   proc_name name NOT NULL,
   owner name NOT NULL DEFAULT CURRENT_ROLE,
   scheduled bool NOT NULL DEFAULT TRUE,
-  hypertable_id integer REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
-  config jsonb
+  hypertable_id integer,
+  config jsonb,
+  -- table constraints
+  CONSTRAINT bgw_job_pkey PRIMARY KEY (id),
+  CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
@@ -224,7 +256,7 @@ CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job (proc
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
 
 CREATE TABLE _timescaledb_internal.bgw_job_stat (
-  job_id integer PRIMARY KEY REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE,
+  job_id integer NOT NULL,
   last_start timestamptz NOT NULL DEFAULT NOW(),
   last_finish timestamptz NOT NULL,
   next_start timestamptz NOT NULL,
@@ -236,7 +268,10 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   total_failures bigint NOT NULL,
   total_crashes bigint NOT NULL,
   consecutive_failures int NOT NULL,
-  consecutive_crashes int NOT NULL
+  consecutive_crashes int NOT NULL,
+  -- table constraints
+  CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
+  CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
 );
 
 --The job_stat table is not dumped by pg_dump on purpose because
@@ -244,25 +279,30 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
 -- to determine whether to run a specific job on a specific chunk.
 CREATE TABLE _timescaledb_internal.bgw_policy_chunk_stats (
-  job_id integer NOT NULL REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE,
-  chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  job_id integer NOT NULL,
+  chunk_id integer NOT NULL,
   num_times_job_run integer,
   last_time_job_run timestamptz,
-  UNIQUE (job_id, chunk_id)
+  -- table constraints
+  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key UNIQUE (job_id, chunk_id),
+  CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
 );
 
 CREATE TABLE _timescaledb_catalog.metadata (
-  key NAME NOT NULL PRIMARY KEY,
+  key NAME NOT NULL,
   value text NOT NULL,
-  include_in_telemetry boolean NOT NULL
+  include_in_telemetry boolean NOT NULL,
+  -- table constraints
+  CONSTRAINT metadata_pkey PRIMARY KEY (key)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$
   WHERE KEY = 'exported_uuid' $$);
 
 CREATE TABLE _timescaledb_catalog.continuous_agg (
-  mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
-  raw_hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  mat_hypertable_id integer NOT NULL,
+  raw_hypertable_id integer NOT NULL,
   user_view_schema name NOT NULL,
   user_view_name name NOT NULL,
   partial_view_schema name NOT NULL,
@@ -272,8 +312,12 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
   finalized bool NOT NULL DEFAULT TRUE,
-  UNIQUE (user_view_schema, user_view_name),
-  UNIQUE (partial_view_schema, partial_view_name)
+  -- table constraints
+  CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
+  CONSTRAINT continuous_agg_user_view_schema_user_view_name_key UNIQUE (user_view_schema, user_view_name),
+  CONSTRAINT continuous_agg_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_raw_hypertable_id_fkey FOREIGN KEY (raw_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 CREATE INDEX continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.continuous_agg (raw_hypertable_id);
@@ -281,8 +325,8 @@ CREATE INDEX continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.contin
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 
 -- See the comments for ContinuousAggsBucketFunction structure.
-CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function(
-  mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
+  mat_hypertable_id integer NOT NULL,
   -- The schema of the function. Equals TRUE for "timescaledb_experimental", FALSE otherwise.
   experimental bool NOT NULL,
   -- Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng"
@@ -292,14 +336,20 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function(
   -- `origin` argument of the function provided by the user
   origin text NOT NULL,
   -- `timezone` argument of the function provided by the user
-  timezone text NOT NULL
+  timezone text NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_bucket_function_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
 
 CREATE TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold (
-  hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
-  watermark bigint NOT NULL
+  hypertable_id integer NOT NULL,
+  watermark bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_invalidation_threshold_pkey PRIMARY KEY (hypertable_id),
+  CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_invalidation_threshold', '');
@@ -318,9 +368,11 @@ CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx ON _timescaledb_cat
 
 -- per cagg copy of invalidation log
 CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (
-  materialization_id integer REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE,
+  materialization_id integer,
   lowest_modified_value bigint NOT NULL,
-  greatest_modified_value bigint NOT NULL
+  greatest_modified_value bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_invalidation_log', '');
@@ -332,30 +384,35 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx ON _timescaled
  *  the algorithms. This table is NOT dumped.
  */
 CREATE TABLE _timescaledb_catalog.compression_algorithm (
-  id smallint PRIMARY KEY,
+  id smallint NOT NULL,
   version smallint NOT NULL,
   name name NOT NULL,
-  description text
+  description text,
+  -- table constraints
+  CONSTRAINT compression_algorithm_pkey PRIMARY KEY (id)
 );
 
 CREATE TABLE _timescaledb_catalog.hypertable_compression (
-  hypertable_id integer REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  hypertable_id integer NOT NULL,
   attname name NOT NULL,
-  compression_algorithm_id smallint REFERENCES _timescaledb_catalog.compression_algorithm (id),
+  compression_algorithm_id smallint,
   segmentby_column_index smallint,
   orderby_column_index smallint,
   orderby_asc boolean,
   orderby_nullsfirst boolean,
-  PRIMARY KEY (hypertable_id, attname),
-  UNIQUE (hypertable_id, segmentby_column_index),
-  UNIQUE (hypertable_id, orderby_column_index)
+  -- table constraints
+  CONSTRAINT hypertable_compression_pkey PRIMARY KEY (hypertable_id, attname),
+  CONSTRAINT hypertable_compression_hypertable_id_orderby_column_index_key UNIQUE (hypertable_id, orderby_column_index),
+  CONSTRAINT hypertable_compression_hypertable_id_segmentby_column_index_key UNIQUE (hypertable_id, segmentby_column_index),
+  CONSTRAINT hypertable_compression_compression_algorithm_id_fkey FOREIGN KEY (compression_algorithm_id) REFERENCES _timescaledb_catalog.compression_algorithm (id),
+  CONSTRAINT hypertable_compression_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_compression', '');
 
 CREATE TABLE _timescaledb_catalog.compression_chunk_size (
-  chunk_id integer REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
-  compressed_chunk_id integer REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  chunk_id integer NOT NULL,
+  compressed_chunk_id integer NOT NULL,
   uncompressed_heap_size bigint NOT NULL,
   uncompressed_toast_size bigint NOT NULL,
   uncompressed_index_size bigint NOT NULL,
@@ -364,7 +421,10 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   compressed_index_size bigint NOT NULL,
   numrows_pre_compression bigint,
   numrows_post_compression bigint,
-  PRIMARY KEY (chunk_id, compressed_chunk_id)
+  -- table constraints
+  CONSTRAINT compression_chunk_size_pkey PRIMARY KEY (chunk_id, compressed_chunk_id),
+  CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
@@ -376,8 +436,10 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chu
 --each datanode will have a unique remote_transaction_id.
 CREATE TABLE _timescaledb_catalog.remote_txn (
   data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
-  remote_transaction_id text CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL),
-  PRIMARY KEY (remote_transaction_id)
+  remote_transaction_id text NOT NULL,
+  -- table constraints
+  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id),
+  CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL)
 );
 
 CREATE INDEX remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);
@@ -405,15 +467,18 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', ''
 CREATE SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
-  operation_id name PRIMARY KEY, -- the publisher/subscriber identifier used
+  operation_id name NOT NULL, -- the publisher/subscriber identifier used
   backend_pid integer NOT NULL, -- the pid of the backend running this activity
   completed_stage name NOT NULL, -- the completed stage/step
   time_start timestamptz NOT NULL DEFAULT NOW(), -- start time of the activity
-  chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  chunk_id integer NOT NULL,
   compress_chunk_name name NOT NULL,
   source_node_name name NOT NULL,
   dest_node_name name NOT NULL,
-  delete_on_source_node bool NOT NULL -- is a move or copy activity
+  delete_on_source_node bool NOT NULL, -- is a move or copy activity
+  -- table constraints
+  CONSTRAINT chunk_copy_operation_pkey PRIMARY KEY (operation_id),
+  CONSTRAINT chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
 
 -- Set table permissions
