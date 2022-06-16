@@ -849,6 +849,9 @@ data_node_attach(PG_FUNCTION_ARGS)
 	List *result;
 	int num_nodes;
 	ListCell *lc;
+	Oid uid, saved_uid;
+	int sec_ctx;
+	Relation rel;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -899,6 +902,24 @@ data_node_attach(PG_FUNCTION_ARGS)
 		}
 	}
 
+	/*
+	 * Change to the hypertable owner so that the same permissions will be set up on the
+	 * datanode being attached to as well. We need to do this explicitly because the
+	 * caller of this function could be a superuser and we definitely don't want to create
+	 * this hypertable with superuser ownership on the datanode being attached to!
+	 *
+	 * We retain the lock on the hypertable till the end of the traction to avoid any
+	 * possibility of a concurrent "ALTER TABLE OWNER TO" changing the owner underneath
+	 * us.
+	 */
+	rel = table_open(ht->main_table_relid, AccessShareLock);
+	uid = rel->rd_rel->relowner;
+	table_close(rel, NoLock);
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+
 	result = hypertable_assign_data_nodes(ht->fd.id, list_make1((char *) node_name));
 	Assert(result->length == 1);
 
@@ -947,6 +968,10 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 	node = linitial(result);
 	ts_cache_release(hcache);
+
+	/* Need to restore security context */
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 	PG_RETURN_DATUM(create_hypertable_data_node_datum(fcinfo, node));
 }
