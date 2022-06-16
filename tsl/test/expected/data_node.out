@@ -700,11 +700,38 @@ SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => :'DN
  data_node_4 | localhost | 55432 | db_data_node_4 | t            | t                | t
 (1 row)
 
+-- Now let ROLE_1 use data_node_4 since it owns this "disttable"
+GRANT USAGE
+   ON FOREIGN SERVER data_node_4
+   TO :ROLE_1;
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
 NOTICE:  the number of partitions in dimension "device" was increased to 2
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
              3 |                  1 | data_node_4
+(1 row)
+
+-- Recheck that ownership on data_node_4 is proper
+SELECT * FROM test.remote_exec(NULL, $$ SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'; $$);
+NOTICE:  [data_node_1]:  SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'
+NOTICE:  [data_node_1]:
+tablename|tableowner 
+---------+-----------
+disttable|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_4]:  SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'
+NOTICE:  [data_node_4]:
+tablename|tableowner 
+---------+-----------
+disttable|test_role_1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
 (1 row)
 
 -- Show updated number of slices in 'device' dimension.
