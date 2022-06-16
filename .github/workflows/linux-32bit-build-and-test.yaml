@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: ["12.11","13.7","14.3"]
+        pg: ["12.11","13.7","14.4"]
         build_type: [ Debug ]
 
     steps:
