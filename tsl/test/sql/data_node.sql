@@ -368,7 +368,13 @@ AND column_name = 'device';
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4',
                             if_not_exists => true);
+-- Now let ROLE_1 use data_node_4 since it owns this "disttable"
+GRANT USAGE
+   ON FOREIGN SERVER data_node_4
+   TO :ROLE_1;
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
+-- Recheck that ownership on data_node_4 is proper
+SELECT * FROM test.remote_exec(NULL, $$ SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'; $$);
 
 -- Show updated number of slices in 'device' dimension.
 SELECT column_name, num_slices
