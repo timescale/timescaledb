@@ -26,7 +26,7 @@ PG12_LATEST = "12.11"
 PG13_EARLIEST = "13.2"
 PG13_LATEST = "13.7"
 PG14_EARLIEST = "14.0"
-PG14_LATEST = "14.3"
+PG14_LATEST = "14.4"
 
 m = {"include": [],}
 
