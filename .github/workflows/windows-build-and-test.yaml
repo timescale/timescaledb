@@ -21,7 +21,7 @@ jobs:
           - pg: 13
             pkg_version: 13.7.1
           - pg: 14
-            pkg_version: 14.3.1
+            pkg_version: 14.4.1
             build_args: -DUSE_OPENSSL=OFF
     env:
       # PostgreSQL configuration
