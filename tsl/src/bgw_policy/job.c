@@ -34,7 +34,7 @@
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "compat/compat.h"
-#include "compression/compress_utils.h"
+#include "compression/api.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
 #include "ts_catalog/continuous_agg.h"
