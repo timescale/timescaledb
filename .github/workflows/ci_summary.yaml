@@ -13,7 +13,9 @@ jobs:
 
     - name: "Build message"
       env:
-        SLACK_CHANNEL: "CEKV5LMK3"
+        # SLACK_CHANNEL: "CEKV5LMK3"
+        # channel: help-eng-database
+        SLACK_CHANNEL: "C03LGU37WU8"
       run: python scripts/gh_ci_summary.py > message.json
 
     - name: "Notify Slack"
