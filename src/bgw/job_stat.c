@@ -49,6 +49,7 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found
 		.index = catalog_get_index(catalog, BGW_JOB_STAT, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
+		.flags = SCANNER_F_KEEPLOCK,
 		.tuple_found = tuple_found,
 		.filter = tuple_filter,
 		.data = data,
@@ -104,7 +105,11 @@ bgw_job_stat_tuple_delete(TupleInfo *ti, void *const data)
 void
 ts_bgw_job_stat_delete(int32 bgw_job_id)
 {
-	bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_delete, NULL, NULL, RowExclusiveLock);
+	bgw_job_stat_scan_job_id(bgw_job_id,
+							 bgw_job_stat_tuple_delete,
+							 NULL,
+							 NULL,
+							 ShareRowExclusiveLock);
 }
 
 /* Mark the start of a job. This should be done in a separate transaction by the scheduler
@@ -441,25 +446,21 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 void
 ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
-	/* Use double-check locking */
+	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
+	 * job races and adds a job when we insert the relation as well since that
+	 * can trigger a failure when inserting a row for the job. We use the
+	 * RowExclusiveLock in the scan since we cannot use NoLock (relation_open
+	 * requires a lock that it not NoLock). */
+	Relation rel =
+		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_mark_start,
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
-	{
-		Relation rel =
-			table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-		/* Recheck while having a self-exclusive lock */
-		if (!bgw_job_stat_scan_job_id(bgw_job_id,
-									  bgw_job_stat_tuple_mark_start,
-									  NULL,
-									  NULL,
-									  RowExclusiveLock))
-			bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
-		table_close(rel, ShareRowExclusiveLock);
-		pgstat_report_activity(STATE_IDLE, NULL);
-	}
+		bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
+	table_close(rel, NoLock);
+	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
 void
@@ -474,7 +475,7 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  bgw_job_stat_tuple_mark_end,
 								  NULL,
 								  &res,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
@@ -496,7 +497,7 @@ ts_bgw_job_stat_set_next_start(int32 job_id, TimestampTz next_start)
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job_id);
 }
 
@@ -513,7 +514,7 @@ ts_bgw_job_stat_update_next_start(int32 job_id, TimestampTz next_start, bool all
 									 bgw_job_stat_tuple_set_next_start,
 									 NULL,
 									 &next_start,
-									 RowExclusiveLock);
+									 ShareRowExclusiveLock);
 	return found;
 }
 
@@ -524,24 +525,20 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 	if (next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
-	/* Use double-check locking */
+	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
+	 * job races and adds a job when we insert the relation as well since that
+	 * can trigger a failure when inserting a row for the job. We use the
+	 * RowExclusiveLock in the scan since we cannot use NoLock (relation_open
+	 * requires a lock that it not NoLock). */
+	Relation rel =
+		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
 								  RowExclusiveLock))
-	{
-		Relation rel =
-			table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-		/* Recheck while having a self-exclusive lock */
-		if (!bgw_job_stat_scan_job_id(bgw_job_id,
-									  bgw_job_stat_tuple_set_next_start,
-									  NULL,
-									  &next_start,
-									  RowExclusiveLock))
-			bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
-		table_close(rel, ShareRowExclusiveLock);
-	}
+		bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
+	table_close(rel, NoLock);
 }
 
 bool
