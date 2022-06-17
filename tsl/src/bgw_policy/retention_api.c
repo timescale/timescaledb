@@ -29,10 +29,6 @@
 
 #define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
 #define CONFIG_KEY_DROP_AFTER "drop_after"
-#define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	{                                                                                              \
-		.day = 1                                                                                   \
-	}
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -137,20 +133,11 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 }
 
 Datum
-policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum, bool if_not_exists)
+policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
+							  Interval default_schedule_interval, bool if_not_exists)
 {
-	/* behave like a strict function */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
-		PG_RETURN_NULL();
-
 	NameData application_name;
 	int32 job_id;
-	Oid ht_oid = PG_GETARG_OID(0);
-	Datum window_datum = PG_GETARG_DATUM(1);
-	bool if_not_exists = PG_GETARG_BOOL(2);
-	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
-	Interval default_schedule_interval =
-		PG_ARGISNULL(3) ? (Interval) DEFAULT_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
 	Hypertable *hypertable;
 	Cache *hcache;
 
@@ -288,14 +275,21 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum, b
 Datum
 policy_retention_add(PG_FUNCTION_ARGS)
 {
+	/* behave like a strict function */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
 	Oid ht_oid = PG_GETARG_OID(0);
 	Datum window_datum = PG_GETARG_DATUM(1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Interval default_schedule_interval =
+		PG_ARGISNULL(3) ? (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	return policy_retention_add_internal(ht_oid, window_type, window_datum, if_not_exists);
+	return policy_retention_add_internal(ht_oid, window_type, window_datum, default_schedule_interval,
+										if_not_exists);
 }
 
 Datum

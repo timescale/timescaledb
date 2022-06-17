@@ -55,6 +55,7 @@ typedef struct CrossModuleFunctions
 
 	PGFunction policies_add;
 	PGFunction policies_remove;
+	PGFunction policies_remove_all;
 	PGFunction policies_alter;
 	PGFunction policies_show;
 

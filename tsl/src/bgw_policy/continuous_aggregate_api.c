@@ -28,7 +28,7 @@
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
-	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
+       DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 
 /* infinite number of retries for continuous aggregate jobs */
 #define DEFAULT_MAX_RETRIES (-1)

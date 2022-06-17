@@ -68,7 +68,6 @@ CREATE OR REPLACE FUNCTION @extschema@.add_policies(
     if_not_exists BOOL = false,
     refresh_start_offset "any" = NULL,
     refresh_end_offset "any" = NULL,
-    refresh_schedule_interval INTERVAL = NULL,
     compress_after "any" = NULL,
     drop_after "any" = NULL)
 RETURNS BOOL
@@ -90,7 +89,6 @@ CREATE OR REPLACE FUNCTION @extschema@.alter_policies(
     if_exists BOOL = false,
     refresh_start_offset "any" = NULL,
     refresh_end_offset "any" = NULL,
-    refresh_schedule_interval INTERVAL = NULL,
     compress_after "any" = NULL,
     drop_after "any" = NULL)
 RETURNS BOOL
