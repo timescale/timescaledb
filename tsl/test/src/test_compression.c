@@ -28,7 +28,7 @@
 #include "compression/dictionary.h"
 #include "compression/gorilla.h"
 #include "compression/deltadelta.h"
-#include "compression/utils.h"
+#include "compression/float_utils.h"
 #include "compression/segment_meta.h"
 
 #define VEC_PREFIX compression_info
