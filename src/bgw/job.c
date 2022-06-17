@@ -591,7 +591,6 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 		elog(ERROR, "job %d not found", bgw_job_id);
 
 	return job;
-	;
 }
 
 static void
@@ -1210,6 +1209,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 
-	table_close(rel, RowExclusiveLock);
+	table_close(rel, NoLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
 }

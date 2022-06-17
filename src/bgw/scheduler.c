@@ -133,7 +133,10 @@ ts_bgw_start_worker(const char *name, const BgwParams *bgw_params)
 	/* handle needs to be allocated in long-lived memory context */
 	MemoryContextSwitchTo(scheduler_mctx);
 	if (!RegisterDynamicBackgroundWorker(&worker, &handle))
+	{
+		elog(NOTICE, "unable to register background worker");
 		handle = NULL;
+	}
 	MemoryContextSwitchTo(scratch_mctx);
 
 	return handle;
