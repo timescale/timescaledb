@@ -69,8 +69,8 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	memcpy(&bgw_params, MyBgworkerEntry->bgw_extra, sizeof(bgw_params));
 
-	elog(WARNING, "scheduler user id %u", bgw_params.user_oid);
-	elog(WARNING, "running a test in the background: db=%u ttl=%d", db_oid, bgw_params.ttl);
+	elog(NOTICE, "scheduler user id %u", bgw_params.user_oid);
+	elog(NOTICE, "running a test in the background: db=%u ttl=%d", db_oid, bgw_params.ttl);
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, bgw_params.user_oid, 0);
 
