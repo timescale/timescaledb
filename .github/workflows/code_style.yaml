@@ -49,8 +49,7 @@ jobs:
     - name: Check git commit hooks
       if: always()
       run: |
-        python2 ./scripts/githooks/commit_msg_tests.py
-        python3 ./scripts/githooks/commit_msg_tests.py
+        ./scripts/githooks/commit_msg_tests.py
     - name: Check for unreferenced test files
       if: always()
       run: ./scripts/check_unreferenced_files.sh
