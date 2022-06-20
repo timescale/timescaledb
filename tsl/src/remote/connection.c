@@ -1846,6 +1846,20 @@ remote_connection_drain(TSConnection *conn, TimestampTz endtime, PGresult **resu
 				connresult = CONN_OK;
 				break;
 			}
+			else if (PQresultStatus(res) == PGRES_COPY_OUT)
+			{
+				/*
+				 * We are inside the COPY subprotocol, need to sychronize with
+				 * the server.
+				 */
+				int end_res = PQendcopy(pg_conn);
+				if (end_res != 0)
+				{
+					TSConnectionError err;
+					remote_connection_get_error(conn, &err);
+					remote_connection_error_elog(&err, WARNING);
+				}
+			}
 
 			PQclear(last_res);
 			last_res = res;
