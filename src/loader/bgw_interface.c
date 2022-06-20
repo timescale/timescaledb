@@ -7,6 +7,7 @@
 
 #include <miscadmin.h>
 #include <fmgr.h>
+#include <utils/acl.h>
 
 #include "bgw_interface.h"
 #include "../compat/compat.h"
@@ -69,13 +70,17 @@ ts_bgw_db_workers_start(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(START, MyDatabaseId));
 }
 
+/*
+ * allow superusers OR database owners to stop and restart background workers
+ * database owners must be allowed to do this in order to do pg_dump/restore
+ */
 Datum
 ts_bgw_db_workers_stop(PG_FUNCTION_ARGS)
 {
-	if (!superuser())
+	if (!pg_database_ownercheck(MyDatabaseId, GetUserId()))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to stop background workers"))));
+				 (errmsg("must be superuser or database owner to stop background workers"))));
 
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(STOP, MyDatabaseId));
 }
@@ -83,10 +88,10 @@ ts_bgw_db_workers_stop(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_db_workers_restart(PG_FUNCTION_ARGS)
 {
-	if (!superuser())
+	if (!pg_database_ownercheck(MyDatabaseId, GetUserId()))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to restart background workers"))));
+				 (errmsg("must be superuser or database owner to restart background workers"))));
 
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(RESTART, MyDatabaseId));
 }

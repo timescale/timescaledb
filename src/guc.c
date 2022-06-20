@@ -121,7 +121,7 @@ _guc_init(void)
 							 "Used for running pg_restore",
 							 &ts_guc_restoring,
 							 false,
-							 PGC_SUSET,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,

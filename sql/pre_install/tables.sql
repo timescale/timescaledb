@@ -497,3 +497,21 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
+
+-- find the database owner and grant them the required privileges to access 
+-- table _timescaledb_catalog.metadata to do the dump/restore operations
+DO 
+$$
+DECLARE
+    db_owner TEXT;
+BEGIN
+    SELECT pg_catalog.pg_get_userbyid(d.datdba) AS db_owner
+    FROM pg_catalog.pg_database d
+    WHERE d.datname = current_database()
+    ORDER BY db_owner
+    INTO db_owner;
+    IF FOUND THEN
+      EXECUTE format('GRANT SELECT, UPDATE, INSERT, DELETE ON _timescaledb_catalog.metadata TO %I', db_owner);
+    END IF;
+END
+$$ LANGUAGE plpgsql;
