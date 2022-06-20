@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 include(CheckCCompilerFlag)
+include(CheckSymbolExists)
 include(GitCommands)
 include(GenerateScripts)
 include(CMakeDependentOption)
@@ -565,16 +566,11 @@ else()
   message(STATUS "Assertion checks are OFF")
 endif()
 
-# Check if PostgreSQL has OpenSSL enabled by inspecting pg_config --configure.
-# Right now, a Postgres header will redefine an OpenSSL function if Postgres is
-# not installed --with-openssl, so in order for TimescaleDB to compile correctly
+# Check if PostgreSQL has OpenSSL enabled by inspecting pg_config.h. Right now,
+# a Postgres header will redefine an OpenSSL function if Postgres is not
+# installed --with-openssl, so in order for TimescaleDB to compile correctly
 # with OpenSSL, Postgres must also have OpenSSL enabled.
-execute_process(
-  COMMAND ${PG_CONFIG} --configure
-  OUTPUT_VARIABLE PG_CONFIGURE_FLAGS
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-string(REGEX MATCH "--with-(ssl=)?openssl" PG_USE_OPENSSL
-             "${PG_CONFIGURE_FLAGS}")
+check_symbol_exists(USE_OPENSSL ${PG_INCLUDEDIR}/pg_config.h PG_USE_OPENSSL)
 
 if(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
   message(
