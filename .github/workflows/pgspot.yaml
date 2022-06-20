@@ -32,7 +32,7 @@ jobs:
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.3.0
+        python -m pip install pgspot==0.3.2
 
     - name: Build timescaledb sqlfiles
       run: |
