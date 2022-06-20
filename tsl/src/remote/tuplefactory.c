@@ -401,3 +401,21 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 
 	return tuple;
 }
+
+struct AttConvInMetadata *
+tuplefactory_get_attconv(TupleFactory *tf)
+{
+	return tf->attconv;
+}
+
+TupleDesc
+tuplefactory_get_tupdesc(TupleFactory *tf)
+{
+	return tf->tupdesc;
+}
+
+List *
+tuplefactory_get_retrieved_attrs(TupleFactory *tf)
+{
+	return tf->retrieved_attrs;
+}

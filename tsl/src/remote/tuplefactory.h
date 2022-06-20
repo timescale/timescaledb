@@ -16,6 +16,7 @@
 #include "data_format.h"
 
 typedef struct TupleFactory TupleFactory;
+typedef struct TupleDescData *TupleDesc;
 
 extern TupleFactory *tuplefactory_create_for_tupdesc(TupleDesc tupdesc, bool force_text);
 extern TupleFactory *tuplefactory_create_for_rel(Relation rel, List *retrieved_attrs);
@@ -26,6 +27,9 @@ extern ItemPointer tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *r
 extern bool tuplefactory_is_binary(TupleFactory *tf);
 extern void tuplefactory_set_per_tuple_mctx_reset(TupleFactory *tf, bool reset);
 extern void tuplefactory_reset_mctx(TupleFactory *tf);
+extern struct AttConvInMetadata *tuplefactory_get_attconv(TupleFactory *tf);
+extern TupleDesc tuplefactory_get_tupdesc(TupleFactory *tf);
+extern List *tuplefactory_get_retrieved_attrs(TupleFactory *tf);
 extern int tuplefactory_get_nattrs(TupleFactory *tf);
 
 #endif /* TIMESCALEDB_TSL_REMOTE_TUPLEFACTORY_H */
