@@ -60,7 +60,7 @@ class GitCommitMessage:
 
     def check_subject_limit(self):
         'Rule 2: Limit the subject line to 50 characters'
-        return len(self.subject) <= 50
+        return len(self.subject.rstrip("\n")) <= 50
 
     def check_subject_capitalized(self):
         'Rule 3: Capitalize the subject line'
@@ -115,7 +115,7 @@ class GitCommitMessage:
             return True
 
         for line in self.body_lines:
-            if len(line) > 72:
+            if len(line.rstrip("\n")) > 72:
                 return False
 
         return True

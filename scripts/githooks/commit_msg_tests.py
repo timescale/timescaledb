@@ -44,6 +44,8 @@ class TestCommitMsg(unittest.TestCase):
         self.assertTrue(m.check_subject_limit())
         m = GitCommitMessage().parse_lines(['This is a very long subject line that will obviously exceed the limit'])
         self.assertFalse(m.check_subject_limit())
+        m = GitCommitMessage().parse_lines(['This 50-character subject line ends with an LF EOL\n'])
+        self.assertTrue(m.check_subject_limit())
 
     def testSubjectCapitalized(self):
         m = GitCommitMessage().parse_lines(['This subject line is capitalized'])
@@ -62,6 +64,8 @@ class TestCommitMsg(unittest.TestCase):
         self.assertTrue(m.check_body_limit())
         m = GitCommitMessage().parse_lines(['This is a subject line', ' ', 'A very long body line which certainly exceeds the 72 char recommended limit'])
         self.assertFalse(m.check_body_limit())
+        m = GitCommitMessage().parse_lines(['This is a subject line', ' ', 'A body line with exactly 72 characters, followed by an EOL (Unix-style).\n'])
+        self.assertTrue(m.check_body_limit())
 
     def testCheckAllRules(self):
         m = GitCommitMessage().parse_lines(['This is a subject line', '', 'A short body line'])
