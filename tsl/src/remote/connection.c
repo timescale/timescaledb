@@ -2130,9 +2130,6 @@ bool
 remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binary,
 							 TSConnectionError *err)
 {
-	//	fprintf(stderr, "begin copy on connection %p\n", conn);
-	//	mybt();
-
 	PGconn *pg_conn = remote_connection_get_pg_conn(conn);
 	PGresult *volatile res = NULL;
 
@@ -2215,9 +2212,6 @@ send_end_binary_copy_data(const TSConnection *conn, TSConnectionError *err)
 bool
 remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 {
-	//	fprintf(stderr, "end copy on connection %p\n", conn);
-	//	mybt();
-
 	PGresult *res;
 	bool success;
 
@@ -2235,16 +2229,12 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 
 		if (flush_result == 1)
 		{
-			/* FIXME */
-			fprintf(stderr, "wait for flush\n");
-
+			/* The socket is busy, wait for it to become writable. */
 			const int wait_result = WaitLatchOrSocket(MyLatch,
 													  PQsocket(conn->pg_conn),
 													  WL_TIMEOUT | WL_SOCKET_WRITEABLE,
 													  /* timeout = */ 1000,
-													  /* wait_even_info = */ 0);
-
-			fprintf(stderr, "wait result %d\n", wait_result);
+													  /* wait_event_info = */ 0);
 
 			if (wait_result == 1)
 			{
@@ -2272,6 +2262,7 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		}
 		else
 		{
+			/* Error. */
 			return fill_simple_error(err,
 									 ERRCODE_CONNECTION_EXCEPTION,
 									 "failed to flush the COPY connection",

@@ -77,8 +77,6 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 														const char *hypertable_constraint_name);
 extern ChunkConstraint *ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs,
 															const TupleInfo *ti);
-extern ChunkConstraint *
-ts_chunk_constraints_add_from_values(ChunkConstraints *ccs, const Datum *values, const bool *nulls);
 
 extern ScanIterator ts_chunk_constraint_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id);
