@@ -5,448 +5,305 @@ SET timescaledb.enable_chunk_append TO false;
 SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
 \set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
--- test valid variants we are optimizing
--- all of these should have a constified value as filter
--- none of these initial tests will actually exclude chunks
--- because we want to see the constified now expression in
--- EXPLAIN output
-:PREFIX SELECT FROM metrics WHERE time > now();
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time >= now();
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= now())
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time > now() - '24h'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 24 hours'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 24 hours'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 24 hours'::interval))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time > now() + '10m'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() + '@ 10 mins'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() + '@ 10 mins'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() + '@ 10 mins'::interval))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time >= now() - '10m'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
-(7 rows)
-
--- test bitmapheapscan
-SET enable_indexscan TO false;
-:PREFIX SELECT FROM metrics WHERE time > now();
-QUERY PLAN
- Append
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: ("time" > now())
-         ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-               Index Cond: ("time" > now())
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: ("time" > now())
-         ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-               Index Cond: ("time" > now())
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: ("time" > now())
-         ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-               Index Cond: ("time" > now())
-(13 rows)
-
-RESET enable_indexscan;
--- test multiple constraints
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND device_id = 2;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
-         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
-         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
-         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
-QUERY PLAN
- Append
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
-         Filter: ((device_id = 2) OR (device_id = 3))
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
-         Filter: ((device_id = 2) OR (device_id = 3))
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
-         Filter: ((device_id = 2) OR (device_id = 3))
-(10 rows)
-
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
-(7 rows)
-
--- variants we don't optimize
--- we do not allow interval with day or month components
-:PREFIX SELECT FROM metrics WHERE time > now() - '1d'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time > now() - '1week'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 7 days'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 7 days'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 7 days'::interval))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time > now() - '1month'::interval;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE time > now()::date;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now())::date)
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now())::date)
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now())::date)
-(7 rows)
-
-:PREFIX SELECT FROM metrics WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
-QUERY PLAN
- Append
-   ->  Result
-         One-Time Filter: (round(date_part('epoch'::text, now())) > '0.5'::double precision)
-         ->  Seq Scan on _hyper_X_X_chunk
-   ->  Result
-         One-Time Filter: (round(date_part('epoch'::text, now())) > '0.5'::double precision)
-         ->  Seq Scan on _hyper_X_X_chunk
-   ->  Result
-         One-Time Filter: (round(date_part('epoch'::text, now())) > '0.5'::double precision)
-         ->  Seq Scan on _hyper_X_X_chunk
-(10 rows)
-
--- we only modify top-level ANDed now() expressions
-:PREFIX SELECT FROM metrics WHERE time > now() - '1m'::interval OR time > now() + '1m'::interval;
-QUERY PLAN
- Append
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
-         ->  BitmapOr
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
-         ->  BitmapOr
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
-         ->  BitmapOr
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
-(22 rows)
-
-:PREFIX SELECT FROM metrics WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
-QUERY PLAN
- Append
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
-         ->  BitmapOr
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_device_id_time_idx
-                     Index Cond: (device_id = 2)
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval)))
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
-         ->  BitmapOr
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_device_id_time_idx
-                     Index Cond: (device_id = 2)
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval)))
-   ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
-         ->  BitmapOr
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_device_id_time_idx
-                     Index Cond: (device_id = 2)
-               ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
-                     Index Cond: (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval)))
-(22 rows)
-
--- CTE
-:PREFIX WITH q1 AS (
-  SELECT * FROM metrics WHERE time > now()
-) SELECT FROM q1;
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-(7 rows)
-
-:PREFIX WITH q1 AS (
-  SELECT * FROM metrics
-) SELECT FROM q1 WHERE time > now();
-QUERY PLAN
- Append
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
-(7 rows)
-
--- JOIN
-:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now();
-QUERY PLAN
- Nested Loop
-   ->  Append
-         ->  Seq Scan on _hyper_X_X_chunk m2_1
-         ->  Seq Scan on _hyper_X_X_chunk m2_2
-         ->  Seq Scan on _hyper_X_X_chunk m2_3
-   ->  Materialize
-         ->  Append
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3
-                     Index Cond: ("time" > now())
-(13 rows)
-
-:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m2.time > now();
-QUERY PLAN
- Nested Loop
-   ->  Append
-         ->  Seq Scan on _hyper_X_X_chunk m1_1
-         ->  Seq Scan on _hyper_X_X_chunk m1_2
-         ->  Seq Scan on _hyper_X_X_chunk m1_3
-   ->  Materialize
-         ->  Append
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: ("time" > now())
-(13 rows)
-
-:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now() AND m2.time > now();
-QUERY PLAN
- Nested Loop
-   ->  Append
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1
-               Index Cond: ("time" > now())
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2
-               Index Cond: ("time" > now())
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3
-               Index Cond: ("time" > now())
-   ->  Materialize
-         ->  Append
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: ("time" > now())
-(16 rows)
-
--- only top-level constraints in WHERE clause are constified
-:PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now());
-QUERY PLAN
- Nested Loop
-   ->  Append
-         ->  Seq Scan on _hyper_X_X_chunk m2_1
-         ->  Seq Scan on _hyper_X_X_chunk m2_2
-         ->  Seq Scan on _hyper_X_X_chunk m2_3
-   ->  Materialize
-         ->  Append
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3
-                     Index Cond: ("time" > now())
-(13 rows)
-
-:PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now()) WHERE m2.time > now();
-QUERY PLAN
- Nested Loop
-   ->  Append
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1
-               Index Cond: ("time" > now())
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2
-               Index Cond: ("time" > now())
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3
-               Index Cond: ("time" > now())
-   ->  Materialize
-         ->  Append
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: ("time" > now())
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: ("time" > now())
-(16 rows)
-
--- test UPDATE
-:PREFIX UPDATE metrics SET v0 = 0.1, v1 = EXTRACT(EPOCH FROM now()) WHERE time > now();
-QUERY PLAN
- Update on metrics
-   Update on metrics
-   Update on _hyper_X_X_chunk metrics_1
-   Update on _hyper_X_X_chunk metrics_2
-   Update on _hyper_X_X_chunk metrics_3
-   ->  Seq Scan on metrics
-         Filter: (("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone) AND ("time" > now()))
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_1
-         Index Cond: ("time" > now())
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_2
-         Index Cond: ("time" > now())
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_3
-         Index Cond: ("time" > now())
-(13 rows)
-
--- test DELETE
-:PREFIX DELETE FROM metrics WHERE time > now();
-QUERY PLAN
- Delete on metrics
-   Delete on metrics
-   Delete on _hyper_X_X_chunk metrics_1
-   Delete on _hyper_X_X_chunk metrics_2
-   Delete on _hyper_X_X_chunk metrics_3
-   ->  Seq Scan on metrics
-         Filter: (("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone) AND ("time" > now()))
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_1
-         Index Cond: ("time" > now())
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_2
-         Index Cond: ("time" > now())
-   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_3
-         Index Cond: ("time" > now())
-(13 rows)
-
--- test chunks actually get excluded
--- should exclude all
-SET timescaledb.current_timestamp_mock TO '2010-01-01';
-:PREFIX SELECT FROM metrics WHERE time > now();
-QUERY PLAN
- Result
-   One-Time Filter: false
-(2 rows)
-
--- should exclude all but 1 chunk
-SET timescaledb.current_timestamp_mock TO '2000-01-14';
-:PREFIX SELECT FROM metrics WHERE time > now();
-QUERY PLAN
- Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > now())
-(2 rows)
-
-CREATE TABLE const_now(time timestamptz, time2 timestamptz, value float);
--- does not apply to non-hypertables
-:PREFIX SELECT FROM const_now WHERE time > now();
-QUERY PLAN
- Seq Scan on const_now
-   Filter: ("time" > now())
-(2 rows)
-
+-- create a test table
+-- any query with successful now_constify will have 1 chunk while
+-- others will have 2 chunks in plan
+CREATE TABLE const_now(time timestamptz, time2 timestamptz, device_id int, value float);
 SELECT table_name FROM create_hypertable('const_now','time');
 NOTICE:  adding not-null constraint to column "time"
  table_name 
  const_now
 (1 row)
 
-INSERT INTO const_now SELECT '2000-01-01','2000-01-01',0.5;
+INSERT INTO const_now SELECT '1000-01-01','1000-01-01',1,0.5;
+INSERT INTO const_now SELECT '1000-01-01','1000-01-01',2,0.5;
+INSERT INTO const_now SELECT '3000-01-01','3000-01-01',1,0.5;
+INSERT INTO const_now SELECT '3000-01-01','3000-01-01',2,0.5;
+-- test valid variants we are optimizing
+-- all of these should have a constified value as filter
+-- none of these initial tests will actually exclude chunks
+-- because we want to see the constified now expression in
+-- EXPLAIN output
+:PREFIX SELECT FROM const_now WHERE time > now();
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > now())
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= now();
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" >= now())
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > now() - '24h'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() - '@ 24 hours'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > now() + '10m'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() + '@ 10 mins'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= now() - '10m'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > now() - '2d'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() - '@ 2 days'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > now() + '3d'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() + '@ 3 days'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > now() - '1week'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() - '@ 7 days'::interval))
+(2 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+(2 rows)
+
+-- test bitmapheapscan
+SET enable_indexscan TO false;
+:PREFIX SELECT FROM const_now WHERE time > now();
+QUERY PLAN
+ Bitmap Heap Scan on _hyper_X_X_chunk
+   Recheck Cond: ("time" > now())
+   ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
+         Index Cond: ("time" > now())
+(4 rows)
+
+RESET enable_indexscan;
+-- test multiple constraints
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND device_id = 2;
+QUERY PLAN
+ Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
+   Filter: (device_id = 2)
+(3 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
+QUERY PLAN
+ Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
+   Filter: ((device_id = 2) OR (device_id = 3))
+(3 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
+(2 rows)
+
+-- variants we don't optimize
+:PREFIX SELECT FROM const_now WHERE time > now()::date;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now())::date)
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now())::date)
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
+QUERY PLAN
+ Append
+   ->  Result
+         One-Time Filter: (round(date_part('epoch'::text, now())) > '0.5'::double precision)
+         ->  Seq Scan on _hyper_X_X_chunk
+   ->  Result
+         One-Time Filter: (round(date_part('epoch'::text, now())) > '0.5'::double precision)
+         ->  Seq Scan on _hyper_X_X_chunk
+(7 rows)
+
+-- we only modify top-level ANDed now() expressions
+:PREFIX SELECT FROM const_now WHERE time > now() - '1m'::interval OR time > now() + '1m'::interval;
+QUERY PLAN
+ Append
+   ->  Bitmap Heap Scan on _hyper_X_X_chunk
+         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
+         ->  BitmapOr
+               ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
+                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
+               ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
+                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
+   ->  Bitmap Heap Scan on _hyper_X_X_chunk
+         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
+         ->  BitmapOr
+               ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
+                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
+               ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
+                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
+(15 rows)
+
+:PREFIX SELECT FROM const_now WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
+QUERY PLAN
+ Append
+   ->  Seq Scan on _hyper_X_X_chunk
+         Filter: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
+   ->  Seq Scan on _hyper_X_X_chunk
+         Filter: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
+(5 rows)
+
+-- CTE
+:PREFIX WITH q1 AS (
+  SELECT * FROM const_now WHERE time > now()
+) SELECT FROM q1;
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > now())
+(2 rows)
+
+:PREFIX WITH q1 AS (
+  SELECT * FROM const_now
+) SELECT FROM q1 WHERE time > now();
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > now())
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > now())
+(5 rows)
+
+-- JOIN
+:PREFIX SELECT FROM const_now m1, const_now m2 WHERE m1.time > now();
+QUERY PLAN
+ Nested Loop
+   ->  Append
+         ->  Seq Scan on _hyper_X_X_chunk m2_1
+         ->  Seq Scan on _hyper_X_X_chunk m2_2
+   ->  Materialize
+         ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1
+               Index Cond: ("time" > now())
+(7 rows)
+
+:PREFIX SELECT FROM const_now m1, const_now m2 WHERE m2.time > now();
+QUERY PLAN
+ Nested Loop
+   ->  Append
+         ->  Seq Scan on _hyper_X_X_chunk m1_1
+         ->  Seq Scan on _hyper_X_X_chunk m1_2
+   ->  Materialize
+         ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m2
+               Index Cond: ("time" > now())
+(7 rows)
+
+:PREFIX SELECT FROM const_now m1, const_now m2 WHERE m1.time > now() AND m2.time > now();
+QUERY PLAN
+ Nested Loop
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1
+         Index Cond: ("time" > now())
+   ->  Materialize
+         ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m2
+               Index Cond: ("time" > now())
+(6 rows)
+
+-- only top-level constraints in WHERE clause are constified
+:PREFIX SELECT FROM const_now m1 INNER JOIN const_now m2 ON (m1.time > now());
+QUERY PLAN
+ Nested Loop
+   ->  Append
+         ->  Seq Scan on _hyper_X_X_chunk m2_1
+         ->  Seq Scan on _hyper_X_X_chunk m2_2
+   ->  Materialize
+         ->  Append
+               ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1_1
+                     Index Cond: ("time" > now())
+               ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1_2
+                     Index Cond: ("time" > now())
+(10 rows)
+
+:PREFIX SELECT FROM const_now m1 INNER JOIN const_now m2 ON (m1.time > now()) WHERE m2.time > now();
+QUERY PLAN
+ Nested Loop
+   ->  Append
+         ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1_1
+               Index Cond: ("time" > now())
+         ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1_2
+               Index Cond: ("time" > now())
+   ->  Materialize
+         ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m2
+               Index Cond: ("time" > now())
+(9 rows)
+
+-- test UPDATE
+:PREFIX UPDATE const_now SET value = EXTRACT(EPOCH FROM now()) WHERE time > now();
+QUERY PLAN
+ Update on const_now
+   Update on const_now
+   Update on _hyper_X_X_chunk const_now_1
+   ->  Seq Scan on const_now
+         Filter: ("time" > now())
+   ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
+         Index Cond: ("time" > now())
+(7 rows)
+
+-- test DELETE
+:PREFIX DELETE FROM const_now WHERE time > now();
+QUERY PLAN
+ Delete on const_now
+   Delete on const_now
+   Delete on _hyper_X_X_chunk const_now_1
+   ->  Seq Scan on const_now
+         Filter: ("time" > now())
+   ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
+         Index Cond: ("time" > now())
+(7 rows)
+
+-- test chunks actually get excluded
+-- should exclude all
+SET timescaledb.current_timestamp_mock TO '2010-01-01';
+:PREFIX SELECT FROM const_now WHERE time > now();
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > now())
+(2 rows)
+
+-- should exclude all but 1 chunk
+SET timescaledb.current_timestamp_mock TO '2000-01-14';
+:PREFIX SELECT FROM const_now WHERE time > now();
+QUERY PLAN
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > now())
+(2 rows)
+
 -- should have one time filter false
 :PREFIX SELECT FROM const_now WHERE time > now();
 QUERY PLAN
- Result
-   One-Time Filter: false
+ Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+   Index Cond: ("time" > now())
 (2 rows)
 
 -- no constification because it's not partitioning column
 :PREFIX SELECT FROM const_now WHERE time2 > now();
 QUERY PLAN
- Seq Scan on _hyper_X_X_chunk
-   Filter: (time2 > now())
-(2 rows)
+ Append
+   ->  Seq Scan on _hyper_X_X_chunk
+         Filter: (time2 > now())
+   ->  Seq Scan on _hyper_X_X_chunk
+         Filter: (time2 > now())
+(5 rows)
 
 DROP TABLE const_now;
 -- test prepared statements
@@ -507,3 +364,91 @@ QUERY PLAN
                      ->  Seq Scan on _hyper_X_X_chunk m3
 (8 rows)
 
+-- test dst interaction with day intervals
+SET timezone TO 'Europe/Berlin';
+CREATE TABLE const_now_dst(time timestamptz not null);
+SELECT table_name FROM create_hypertable('const_now_dst','time',chunk_time_interval:='30minutes'::interval);
+  table_name   
+ const_now_dst
+(1 row)
+
+-- create 2 chunks
+INSERT INTO const_now_dst SELECT '2022-03-27 03:15:00+02';
+INSERT INTO const_now_dst SELECT '2022-03-27 03:45:00+02';
+SELECT * FROM const_now_dst WHERE time >= '2022-03-28 0:45+0'::timestamptz - '1d'::interval;
+             time              
+ Sun Mar 27 03:45:00 2022 CEST
+(1 row)
+
+SELECT * FROM const_now_dst WHERE time >= '2022-03-28 1:15+0'::timestamptz - '1d'::interval;
+             time              
+ Sun Mar 27 03:15:00 2022 CEST
+ Sun Mar 27 03:45:00 2022 CEST
+(2 rows)
+
+SET timescaledb.current_timestamp_mock TO '2022-03-28 0:45+0';
+-- must have 2 chunks in plan
+:PREFIX SELECT FROM const_now_dst WHERE time > now() - '1day'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+(5 rows)
+
+SET timescaledb.current_timestamp_mock TO '2022-03-28 1:15+0';
+-- must have 2 chunks in plan
+:PREFIX SELECT FROM const_now_dst WHERE time > now() - '1day'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+(5 rows)
+
+TRUNCATE const_now_dst;
+SELECT set_chunk_time_interval('const_now_dst','1 day'::interval, 'time');
+ set_chunk_time_interval 
+ 
+(1 row)
+
+-- test month calculation safety buffer
+SET timescaledb.current_timestamp_mock TO '2001-03-1 0:30:00+00';
+INSERT INTO const_now_dst SELECT generate_series('2001-01-28'::timestamptz, '2001-02-01', '1day'::interval);
+set timezone to 'utc+1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+(11 rows)
+
+set timezone to 'utc-1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+(11 rows)
+
+DROP TABLE const_now_dst;

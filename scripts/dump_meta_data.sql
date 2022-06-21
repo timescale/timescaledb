@@ -56,6 +56,7 @@ SELECT hypertable,
               AND pns.oid = pgc.relnamespace
               AND pns.nspname = h.schema_name
               AND relkind = 'r'
+              AND c.dropped is false
               GROUP BY pgc.oid
               ) sub1
        ) sub2;
@@ -102,6 +103,7 @@ SELECT *,
              AND c.id = cc.chunk_id
              AND cc.dimension_slice_id = ds.id
              AND ds.dimension_id = d.id
+             AND c.dropped is false
        GROUP BY c.id, pgc.reltoastrelid, pgc.oid ORDER BY c.id
        ) sub1
 ) sub2;

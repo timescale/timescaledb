@@ -1,8 +1,10 @@
 /continuous_aggs_compression-*.sql
 /constify_now-*.sql
 /dist_remote_error-*.sql
+/dist_remote_error.text
 /gapfill-*.sql
 /generated_columns-*.sql
 /ordered_append-*.sql
 /ordered_append_join-*.sql
+/space_constraint-*.sql
 /transparent_decompress_chunk-*.sql

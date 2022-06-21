@@ -15,7 +15,7 @@
 #include <utils/memutils.h>
 
 #include "compression/gorilla.h"
-#include "utils.h"
+#include "float_utils.h"
 #include "adts/bit_array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"

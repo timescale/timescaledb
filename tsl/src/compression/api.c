@@ -36,7 +36,7 @@
 #include "ts_catalog/hypertable_compression.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "create.h"
-#include "compress_utils.h"
+#include "api.h"
 #include "compression.h"
 #include "compat/compat.h"
 #include "scanner.h"

@@ -337,3 +337,30 @@ CALL run_job(:drop_chunks_tsntz_job_id);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
 
 SELECT * FROM sorted_bgw_log;
+
+-- test the schedule_interval parameter for policies
+CREATE TABLE test_schedint(time timestamptz, a int, b int);
+select create_hypertable('test_schedint', 'time');
+insert into test_schedint values (now(), 1, 2), (now() + interval '2 seconds', 2, 3);
+
+-- test the retention policy
+select add_retention_policy('test_schedint', interval '2 months', schedule_interval => '30 seconds') as polret_schedint \gset
+-- wait for a bit more than "schedule_interval" seconds, then verify the policy has run twice
+select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
+select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polret_schedint;
+select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(30000);
+select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polret_schedint;
+-- if we wait another 30s, we should see 3 runs of the job
+select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(30000);
+select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polret_schedint;
+
+-- test the compression policy
+alter table test_schedint set (timescaledb.compress);
+select add_compression_policy('test_schedint', interval '3 weeks', schedule_interval => '40 seconds') as polcomp_schedint \gset
+select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
+select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polcomp_schedint;
+select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(40000);
+select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polcomp_schedint;
+-- if we wait another 40s, we should see 3 runs of the job
+select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(40000);
+select total_runs, total_successes, total_failures from timescaledb_information.job_stats where job_id = :polcomp_schedint;

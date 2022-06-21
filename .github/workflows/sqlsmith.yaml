@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         os: ["ubuntu-20.04"]
-        pg: ["14.3"]
+        pg: ["14.4"]
         cc: ["gcc"]
         build_type: ["Debug"]
       fail-fast: false

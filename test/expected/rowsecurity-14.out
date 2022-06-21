@@ -4896,12 +4896,10 @@ ERROR:  new row violates row-level security policy for table "r1"
 INSERT INTO r1 VALUES (10)
     ON CONFLICT (a) DO UPDATE SET a = 30;
 ERROR:  new row violates row-level security policy for table "r1"
---will error out because of constraint names not supported on hypertables.
---leaving this in since we still want this to error when/if this gets fixed for hypertables.
+-- ON CONFLICT ON CONSTRAINT
 INSERT INTO r1 VALUES (10)
     ON CONFLICT ON CONSTRAINT r1_pkey DO UPDATE SET a = 30;
-ERROR:  hypertables do not support ON CONFLICT statements that reference constraints
-HINT:  Use column names to infer indexes instead.
+ERROR:  new row violates row-level security policy for table "r1"
 DROP TABLE r1;
 -- Check dependency handling
 RESET SESSION AUTHORIZATION;

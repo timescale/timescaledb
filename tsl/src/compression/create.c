@@ -424,42 +424,67 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 		.name = COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
 	};
 	int i;
+	NameData index_name;
+	ObjectAddress index_addr;
+	HeapTuple index_tuple;
+	List *indexcols = NIL;
+
+	StringInfo buf = makeStringInfo();
+
 	for (i = 0; i < compress_cols->numcols; i++)
 	{
-		NameData index_name;
-		ObjectAddress index_addr;
-		HeapTuple index_tuple;
 		FormData_hypertable_compression *col = &compress_cols->col_meta[i];
-		IndexElem segment_elem = { .type = T_IndexElem, .name = NameStr(col->attname) };
+
+		IndexElem *segment_elem = makeNode(IndexElem);
 
 		if (col->segmentby_column_index <= 0)
 			continue;
 
-		stmt.indexParams = list_make2(&segment_elem, &sequence_num_elem);
-		index_addr = DefineIndex(ht->main_table_relid,
-								 &stmt,
-								 InvalidOid, /* IndexRelationId */
-								 InvalidOid, /* parentIndexId */
-								 InvalidOid, /* parentConstraintId */
-								 false,		 /* is_alter_table */
-								 false,		 /* check_rights */
-								 false,		 /* check_not_in_use */
-								 false,		 /* skip_build */
-								 false);	 /* quiet */
-		index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
+		segment_elem->name = pstrdup(NameStr(col->attname));
 
-		if (!HeapTupleIsValid(index_tuple))
-			elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
-		index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
-		elog(DEBUG1,
-			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
-			 NameStr(index_name),
-			 NameStr(ht->fd.schema_name),
-			 NameStr(ht->fd.table_name),
-			 NameStr(col->attname),
-			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-		ReleaseSysCache(index_tuple);
+		/* if this isn't the first element, add a ',' before appending it */
+		if (list_length(indexcols) > 0)
+			appendStringInfoString(buf, ", ");
+		appendStringInfoString(buf, segment_elem->name);
+
+		indexcols = lappend(indexcols, segment_elem);
 	}
+
+	if (list_length(indexcols) == 0)
+	{
+		ts_cache_release(hcache);
+		return;
+	}
+
+	appendStringInfoString(buf, ", ");
+	appendStringInfoString(buf, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+	indexcols = lappend(indexcols, &sequence_num_elem);
+
+	stmt.indexParams = indexcols;
+	index_addr = DefineIndex(ht->main_table_relid,
+							 &stmt,
+							 InvalidOid, /* IndexRelationId */
+							 InvalidOid, /* parentIndexId */
+							 InvalidOid, /* parentConstraintId */
+							 false,		 /* is_alter_table */
+							 false,		 /* check_rights */
+							 false,		 /* check_not_in_use */
+							 false,		 /* skip_build */
+							 false);	 /* quiet */
+	index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
+
+	if (!HeapTupleIsValid(index_tuple))
+		elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
+	index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
+
+	elog(DEBUG1,
+		 "adding index %s ON %s.%s USING BTREE(%s)",
+		 NameStr(index_name),
+		 NameStr(ht->fd.schema_name),
+		 NameStr(ht->fd.table_name),
+		 buf->data);
+
+	ReleaseSysCache(index_tuple);
 
 	ts_cache_release(hcache);
 }
@@ -847,7 +872,8 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 }
 
 static void
-check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_options)
+check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_options,
+								 List *parsed_orderby_cols)
 {
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	bool compressed_chunks_exist;
@@ -864,9 +890,13 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 
 	/* Require both order by and segment by when altering if they were previously set because
 	 * otherwise it's not clear what the default value means: does it mean leave as-is or is it an
-	 * empty list. */
+	 * empty list.
+	 * In the case where orderby is already set to the default value (time DESC),
+	 * both interpretations should lead to orderby being set to the default value,
+	 * so we allow skipping orderby if the default is the already set value. */
 	if (compress_enable && compression_already_enabled)
 	{
+		List *current_orderby_cols = NIL;
 		List *info = ts_hypertable_compression_get(ht->fd.id);
 		ListCell *lc;
 		bool segment_by_set = false;
@@ -878,16 +908,42 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 			if (fd->segmentby_column_index > 0)
 				segment_by_set = true;
 			if (fd->orderby_column_index > 0)
+			{
 				order_by_set = true;
+				current_orderby_cols = lappend(current_orderby_cols, fd);
+			}
 		}
 		if (with_clause_options[CompressOrderBy].is_default && order_by_set)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("must specify a column to order by"),
-					 errdetail("The timescaledb.compress_orderby option was"
-							   " previously set and must also be specified"
-							   " in the updated configuration.")));
+		{
+			bool orderby_time_default_matches = false;
+			ListCell *elem1, *elem2;
+			FormData_hypertable_compression *fd_elem1;
+			NameData colname1 = { { 0 } }, colname2 = { { 0 } };
+			CompressedParsedCol *cpc_elem2;
+			/* If the orderby that's already set is only the time column DESC (which is the
+			 default), and we pass the default again, then no need to give an error */
+			if (list_length(parsed_orderby_cols) == 1)
+			{
+				elem1 = list_nth_cell(current_orderby_cols, 0);
+				fd_elem1 = lfirst(elem1);
+				colname1 = fd_elem1->attname;
+				elem2 = list_nth_cell(parsed_orderby_cols, 0);
+				cpc_elem2 = lfirst(elem2);
+				colname2 = cpc_elem2->colname;
+				orderby_time_default_matches = (fd_elem1->orderby_asc == cpc_elem2->asc);
+			}
 
+			// this is okay only if the orderby that's already set is only the time column
+			// check for the same attribute name and same order (desc)
+			if (!(list_length(current_orderby_cols) == 1 && list_length(parsed_orderby_cols) == 1 &&
+				  (namestrcmp(&colname1, NameStr(colname2)) == 0) && orderby_time_default_matches))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("must specify a column to order by"),
+						 errdetail("The timescaledb.compress_orderby option was"
+								   " previously set and must also be specified"
+								   " in the updated configuration.")));
+		}
 		if (with_clause_options[CompressSegmentBy].is_default && segment_by_set)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -933,7 +989,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 		/* compression is not enabled, so just return */
 		return false;
 	/* compression is enabled. can we turn it off? */
-	check_modify_compression_options(ht, with_clause_options);
+	check_modify_compression_options(ht, with_clause_options, NIL);
 
 	/* distributed hypertables do not have compression table on the access node */
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1031,13 +1087,14 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	{
 		return disable_compression(ht, with_clause_options);
 	}
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		check_modify_compression_options(ht, with_clause_options);
-
 	ownerid = ts_rel_get_owner(ht->main_table_relid);
 	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		check_modify_compression_options(ht, with_clause_options, orderby_cols);
+
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
 	/* check if we can create a compressed hypertable with existing constraints */
 	constraint_list = validate_existing_constraints(ht, &compress_cols);

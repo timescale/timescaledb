@@ -175,6 +175,7 @@ typedef struct DataNodeDispatchState
 								 * standard ScanSlot in the ScanState because
 								 * CustomNode sets it up to be a
 								 * VirtualTuple. */
+	ChunkDispatchState *cds;
 } DataNodeDispatchState;
 
 /*
@@ -325,6 +326,30 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	Assert(NIL != available_nodes);
 
 	ps = ExecInitNode(subplan, estate, eflags);
+
+	switch (nodeTag(ps))
+	{
+		case T_ResultState:
+		{
+			/* The planner injected a Result node so we need to get the
+			 * ChunkDispatchState from the Result's child */
+			const ResultState *result = castNode(ResultState, ps);
+			PlanState *child = result->ps.lefttree;
+
+			if (child != NULL && ts_is_chunk_dispatch_state(child))
+				sds->cds = (ChunkDispatchState *) child;
+			break;
+		}
+		case T_CustomScanState:
+			if (ts_is_chunk_dispatch_state(ps))
+				sds->cds = (ChunkDispatchState *) ps;
+			break;
+		default:
+			break;
+	}
+
+	if (NULL == sds->cds)
+		elog(ERROR, "unexpected child plan node %d for DataNodeDispatch", nodeTag(ps));
 
 	node->custom_ps = list_make1(ps);
 	sds->state = SD_READ;
@@ -681,7 +706,7 @@ static int64
 handle_read(DataNodeDispatchState *sds)
 {
 	PlanState *substate = linitial(sds->cstate.custom_ps);
-	ChunkDispatchState *cds = (ChunkDispatchState *) substate;
+	ChunkDispatchState *cds = sds->cds;
 	EState *estate = sds->cstate.ss.ps.state;
 #if PG14_LT
 	ResultRelInfo *rri_saved = estate->es_result_relation_info;
@@ -725,7 +750,7 @@ handle_read(DataNodeDispatchState *sds)
 
 			/* While we could potentially support triggers on frontend nodes,
 			 * the triggers should exists also on the remote node and will be
-			 * executed there. For new, the safest bet is to avoid triggers on
+			 * executed there. For now, the safest bet is to avoid triggers on
 			 * the frontend. */
 			if (trigdesc && (trigdesc->trig_insert_after_row || trigdesc->trig_insert_before_row))
 				elog(ERROR, "cannot insert into remote chunk with row triggers");
@@ -808,8 +833,7 @@ handle_flush(DataNodeDispatchState *sds)
 static TupleTableSlot *
 get_returning_tuple(DataNodeDispatchState *sds)
 {
-	ChunkDispatchState *cds = (ChunkDispatchState *) linitial(sds->cstate.custom_ps);
-	ResultRelInfo *rri = cds->rri;
+	ResultRelInfo *rri = sds->cds->rri;
 	TupleTableSlot *res_slot = sds->batch_slot;
 	TupleTableSlot *slot = sds->cstate.ss.ss_ScanTupleSlot;
 	ExprContext *econtext;
@@ -893,8 +917,7 @@ static TupleTableSlot *
 handle_returning(DataNodeDispatchState *sds)
 {
 	EState *estate = sds->cstate.ss.ps.state;
-	ChunkDispatchState *cds = (ChunkDispatchState *) linitial(sds->cstate.custom_ps);
-	ResultRelInfo *rri = cds->rri;
+	ResultRelInfo *rri = sds->cds->rri;
 	TupleTableSlot *slot = sds->cstate.ss.ss_ScanTupleSlot;
 	bool done = false;
 	MemoryContext oldcontext;

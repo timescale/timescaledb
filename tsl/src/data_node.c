@@ -7,7 +7,6 @@
 
 #include <access/htup_details.h>
 #include <access/xact.h>
-//#include <catalog.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_database.h>
 #include <catalog/pg_foreign_server.h>
@@ -30,12 +29,14 @@
 #include <utils/inval.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "config.h"
 #include "extension.h"
 #include "fdw/fdw.h"
 #include "remote/async.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"
+#include "remote/dist_commands.h"
 #include "data_node.h"
 #include "remote/utils.h"
 #include "hypertable_cache.h"
@@ -57,8 +58,8 @@ typedef struct DbInfo
 {
 	NameData name;
 	int32 encoding;
-	NameData chartype;
-	NameData collation;
+	const char *chartype;
+	const char *collation;
 } DbInfo;
 
 /* A list of databases we try to connect to when bootstrapping a data node */
@@ -86,8 +87,27 @@ get_database_info(Oid dbid, DbInfo *database)
 	dbrecord = (Form_pg_database) GETSTRUCT(dbtuple);
 
 	database->encoding = dbrecord->encoding;
-	database->collation = dbrecord->datcollate;
-	database->chartype = dbrecord->datctype;
+
+#if PG15_LT
+	database->collation = NameStr(dbrecord->datcollate);
+	database->chartype = NameStr(dbrecord->datctype);
+#else
+	/*
+	 * Since datcollate and datctype are varlen fields in PG15+ we cannot rely
+	 * on GETSTRUCT filling them in as GETSTRUCT only works for fixed-length
+	 * non-NULLABLE columns.
+	 */
+	Datum datum;
+	bool isnull;
+
+	datum = SysCacheGetAttr(DATABASEOID, dbtuple, Anum_pg_database_datcollate, &isnull);
+	Assert(!isnull);
+	database->collation = TextDatumGetCString(datum);
+
+	datum = SysCacheGetAttr(DATABASEOID, dbtuple, Anum_pg_database_datctype, &isnull);
+	Assert(!isnull);
+	database->chartype = TextDatumGetCString(datum);
+#endif
 
 	ReleaseSysCache(dbtuple);
 	return true;
@@ -96,7 +116,7 @@ get_database_info(Oid dbid, DbInfo *database)
 /*
  * Verify that server is TimescaleDB data node and perform optional ACL check.
  *
- * The function returns true iif the server is valid TimescaleDB data node and
+ * The function returns true if the server is valid TimescaleDB data node and
  * the ACL check succeeds. Otherwise, false is returned, or, an error is thrown
  * if fail_on_aclcheck is set to true.
  */
@@ -354,8 +374,8 @@ data_node_bootstrap_database(TSConnection *conn, const DbInfo *database)
 								"TEMPLATE template0 OWNER %s",
 								quote_identifier(NameStr(database->name)),
 								quote_identifier(pg_encoding_to_char(database->encoding)),
-								quote_literal_cstr(NameStr(database->collation)),
-								quote_literal_cstr(NameStr(database->chartype)),
+								quote_literal_cstr(database->collation),
+								quote_literal_cstr(database->chartype),
 								quote_identifier(username));
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 		remote_result_elog(res, ERROR);
@@ -406,22 +426,22 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 
 	actual_collation = PQgetvalue(res, 0, 1);
 	Assert(actual_collation != NULL);
-	if (strcmp(actual_collation, NameStr(database->collation)) != 0)
+	if (strcmp(actual_collation, database->collation) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong collation"),
 				 errdetail("Expected collation \"%s\" but it was \"%s\".",
-						   NameStr(database->collation),
+						   database->collation,
 						   actual_collation)));
 
 	actual_chartype = PQgetvalue(res, 0, 2);
 	Assert(actual_chartype != NULL);
-	if (strcmp(actual_chartype, NameStr(database->chartype)) != 0)
+	if (strcmp(actual_chartype, database->chartype) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong LC_CTYPE"),
 				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\".",
-						   NameStr(database->chartype),
+						   database->chartype,
 						   actual_chartype)));
 	return true;
 }
@@ -655,7 +675,7 @@ get_server_port()
 {
 	const char *const portstr =
 		GetConfigOption("port", /* missing_ok= */ false, /* restrict_privileged= */ false);
-	return pg_atoi(portstr, sizeof(int32), 0);
+	return pg_strtoint32(portstr);
 }
 
 /* set_distid may need to be false for some otherwise invalid configurations
@@ -829,6 +849,9 @@ data_node_attach(PG_FUNCTION_ARGS)
 	List *result;
 	int num_nodes;
 	ListCell *lc;
+	Oid uid, saved_uid;
+	int sec_ctx;
+	Relation rel;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -879,6 +902,24 @@ data_node_attach(PG_FUNCTION_ARGS)
 		}
 	}
 
+	/*
+	 * Change to the hypertable owner so that the same permissions will be set up on the
+	 * datanode being attached to as well. We need to do this explicitly because the
+	 * caller of this function could be a superuser and we definitely don't want to create
+	 * this hypertable with superuser ownership on the datanode being attached to!
+	 *
+	 * We retain the lock on the hypertable till the end of the traction to avoid any
+	 * possibility of a concurrent "ALTER TABLE OWNER TO" changing the owner underneath
+	 * us.
+	 */
+	rel = table_open(ht->main_table_relid, AccessShareLock);
+	uid = rel->rd_rel->relowner;
+	table_close(rel, NoLock);
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+
 	result = hypertable_assign_data_nodes(ht->fd.id, list_make1((char *) node_name));
 	Assert(result->length == 1);
 
@@ -927,6 +968,10 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 	node = linitial(result);
 	ts_cache_release(hcache);
+
+	/* Need to restore security context */
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 	PG_RETURN_DATUM(create_hypertable_data_node_datum(fcinfo, node));
 }
@@ -1027,7 +1072,8 @@ data_node_detach_or_delete_validate(const char *node_name, Hypertable *ht, bool 
 static int
 data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
 									   bool all_hypertables, OperationType op_type,
-									   bool block_chunks, bool force, bool repartition)
+									   bool block_chunks, bool force, bool repartition,
+									   bool drop_remote_data)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -1104,6 +1150,17 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 								 "space partitions was set to match the number of data nodes.")));
 				}
 			}
+
+			if (op_type == OP_DETACH && drop_remote_data)
+			{
+				/* Drop the hypertable on the data node */
+				ts_dist_cmd_run_on_data_nodes(
+					psprintf("DROP TABLE IF EXISTS %s",
+							 quote_qualified_identifier(NameStr(ht->fd.schema_name),
+														NameStr(ht->fd.table_name))),
+					list_make1(NameStr(node->fd.node_name)),
+					true);
+			}
 		}
 		else
 		{
@@ -1140,13 +1197,14 @@ data_node_block_hypertable_data_nodes(const char *node_name, List *hypertable_da
 												  OP_BLOCK,
 												  block_chunks,
 												  force,
+												  false,
 												  false);
 }
 
 static int
 data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
 									   bool all_hypertables, bool force, bool repartition,
-									   OperationType op_type)
+									   bool drop_remote_data, OperationType op_type)
 {
 	return data_node_modify_hypertable_data_nodes(node_name,
 												  hypertable_data_nodes,
@@ -1154,7 +1212,8 @@ data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_d
 												  op_type,
 												  false,
 												  force,
-												  repartition);
+												  repartition,
+												  drop_remote_data);
 }
 
 HypertableDataNode *
@@ -1281,6 +1340,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 	bool if_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool force = PG_ARGISNULL(3) ? InvalidOid : PG_GETARG_OID(3);
 	bool repartition = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	bool drop_remote_data = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
 	ForeignServer *server;
@@ -1315,6 +1375,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 													 all_hypertables,
 													 force,
 													 repartition,
+													 drop_remote_data,
 													 OP_DETACH);
 
 	PG_RETURN_INT32(removed);
@@ -1499,6 +1560,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 										   true,
 										   force,
 										   repartition,
+										   false,
 										   OP_DELETE);
 
 	/* clean up persistent transaction records */

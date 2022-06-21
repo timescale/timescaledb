@@ -297,13 +297,27 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, FromExpr) && ts_guc_enable_optimizations && ts_guc_enable_now_constify)
+	if (IsA(node, FromExpr) && ts_guc_enable_optimizations)
 	{
 		FromExpr *from = castNode(FromExpr, node);
 		if (from->quals)
 		{
-			from->quals =
-				ts_constify_now(context->root, context->current_query->rtable, from->quals);
+			if (ts_guc_enable_now_constify)
+			{
+				from->quals =
+					ts_constify_now(context->root, context->current_query->rtable, from->quals);
+			}
+			/*
+			 * We only amend space constraints for UPDATE/DELETE as for SELECT
+			 * we use our own hypertable expansion which can handle constraints on
+			 * space dimensions without further help.
+			 */
+			if (context->current_query->commandType != CMD_SELECT)
+			{
+				from->quals = ts_add_space_constraints(context->root,
+													   context->current_query->rtable,
+													   from->quals);
+			}
 		}
 	}
 
@@ -1101,6 +1115,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
 		reenable_inheritance(root, rel, rti, rte);
 
+	if (ts_guc_enable_optimizations)
+		ts_planner_constraint_cleanup(root, rel);
+
 	/* Call other extensions. Do it after table expansion. */
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
@@ -1111,11 +1128,12 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
+			if (ts_guc_enable_optimizations && IS_UPDL_CMD(root->parse))
+				ts_planner_constraint_cleanup(root, rel);
+
 			break;
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
-			if (ts_guc_enable_optimizations)
-				ts_planner_constraint_cleanup(root, rel);
 
 			if (IS_UPDL_CMD(root->parse))
 			{

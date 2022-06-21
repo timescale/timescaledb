@@ -41,7 +41,7 @@ enum ExtensionState
 	 * This state is never saved since there is no real way to get out of it
 	 * since we cannot signal via the proxy table as its relid is not known
 	 * post installation without a full lookup, which is not allowed in the
-	 * relcache calllback.
+	 * relcache callback.
 	 */
 	EXTENSION_STATE_NOT_INSTALLED,
 

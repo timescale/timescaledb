@@ -28,7 +28,7 @@
 #include "compression/dictionary.h"
 #include "compression/gorilla.h"
 #include "compression/deltadelta.h"
-#include "compression/utils.h"
+#include "compression/float_utils.h"
 #include "compression/segment_meta.h"
 
 #define VEC_PREFIX compression_info
@@ -566,13 +566,13 @@ TS_FUNCTION_INFO_V1(ts_compression_custom_type_in);
 TS_FUNCTION_INFO_V1(ts_compression_custom_type_out);
 TS_FUNCTION_INFO_V1(ts_compression_custom_type_eq);
 
-/* basically int2in but returns by refrence */
+/* basically int2in but returns by reference */
 Datum
 ts_compression_custom_type_in(PG_FUNCTION_ARGS)
 {
 	char *num = PG_GETARG_CSTRING(0);
 	int16 *val = palloc(sizeof(*val));
-	*val = pg_atoi(num, sizeof(int16), '\0');
+	*val = pg_strtoint16(num);
 
 	PG_RETURN_POINTER(val);
 }

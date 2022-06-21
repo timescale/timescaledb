@@ -2353,7 +2353,7 @@ typedef struct HypertableIndexOptions
 	Oid barrier_table;
 
 	/*
-	 * if max_chunks >= 0 we'll create indicies on at most max_chunks, and
+	 * if max_chunks >= 0 we'll create indices on at most max_chunks, and
 	 * leave the table marked as Invalid when the command ends.
 	 */
 	int32 max_chunks;
@@ -2568,8 +2568,38 @@ process_index_start(ProcessUtilityArgs *args)
 
 	if (NULL == ht)
 	{
-		ts_cache_release(hcache);
-		return DDL_CONTINUE;
+		/* Check if the relation is a Continuous Aggregate */
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_rv(stmt->relation);
+
+		if (cagg)
+		{
+			/* If the relation is a CAgg and it is finalized */
+			if (ContinuousAggIsFinalized(cagg))
+				ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+			else
+			{
+				ts_cache_release(hcache);
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on continuous aggreates that are not "
+								"finalized"),
+						 errhint("Recreate the continuous aggregate to allow index creation.")));
+			}
+		}
+
+		if (NULL == ht)
+		{
+			ts_cache_release(hcache);
+			return DDL_CONTINUE;
+		}
+
+		if (stmt->unique)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("continuous aggregates do not support UNIQUE indexes")));
+
+		/* Make the RangeVar for the underlying materialization hypertable */
+		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
 	}
 	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{

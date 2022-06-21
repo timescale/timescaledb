@@ -8,80 +8,82 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 \set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
 
+-- create a test table
+-- any query with successful now_constify will have 1 chunk while
+-- others will have 2 chunks in plan
+CREATE TABLE const_now(time timestamptz, time2 timestamptz, device_id int, value float);
+SELECT table_name FROM create_hypertable('const_now','time');
+INSERT INTO const_now SELECT '1000-01-01','1000-01-01',1,0.5;
+INSERT INTO const_now SELECT '1000-01-01','1000-01-01',2,0.5;
+INSERT INTO const_now SELECT '3000-01-01','3000-01-01',1,0.5;
+INSERT INTO const_now SELECT '3000-01-01','3000-01-01',2,0.5;
+
 -- test valid variants we are optimizing
 -- all of these should have a constified value as filter
 -- none of these initial tests will actually exclude chunks
 -- because we want to see the constified now expression in
 -- EXPLAIN output
-:PREFIX SELECT FROM metrics WHERE time > now();
-:PREFIX SELECT FROM metrics WHERE time >= now();
-:PREFIX SELECT FROM metrics WHERE time > now() - '24h'::interval;
-:PREFIX SELECT FROM metrics WHERE time > now() + '10m'::interval;
-:PREFIX SELECT FROM metrics WHERE time >= now() - '10m'::interval;
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now();
+:PREFIX SELECT FROM const_now WHERE time >= now();
+:PREFIX SELECT FROM const_now WHERE time > now() - '24h'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now() + '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time >= now() - '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now() - '2d'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now() + '3d'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now() - '1week'::interval;
+:PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
 
 -- test bitmapheapscan
 SET enable_indexscan TO false;
-:PREFIX SELECT FROM metrics WHERE time > now();
+:PREFIX SELECT FROM const_now WHERE time > now();
 RESET enable_indexscan;
 
 -- test multiple constraints
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND device_id = 2;
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
-:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND device_id = 2;
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
+:PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
 
 -- variants we don't optimize
--- we do not allow interval with day or month components
-:PREFIX SELECT FROM metrics WHERE time > now() - '1d'::interval;
-:PREFIX SELECT FROM metrics WHERE time > now() - '1week'::interval;
-:PREFIX SELECT FROM metrics WHERE time > now() - '1month'::interval;
-:PREFIX SELECT FROM metrics WHERE time > now()::date;
-:PREFIX SELECT FROM metrics WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
+:PREFIX SELECT FROM const_now WHERE time > now()::date;
+:PREFIX SELECT FROM const_now WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
 
 -- we only modify top-level ANDed now() expressions
-:PREFIX SELECT FROM metrics WHERE time > now() - '1m'::interval OR time > now() + '1m'::interval;
-:PREFIX SELECT FROM metrics WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
+:PREFIX SELECT FROM const_now WHERE time > now() - '1m'::interval OR time > now() + '1m'::interval;
+:PREFIX SELECT FROM const_now WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
 
 -- CTE
 :PREFIX WITH q1 AS (
-  SELECT * FROM metrics WHERE time > now()
+  SELECT * FROM const_now WHERE time > now()
 ) SELECT FROM q1;
 
 :PREFIX WITH q1 AS (
-  SELECT * FROM metrics
+  SELECT * FROM const_now
 ) SELECT FROM q1 WHERE time > now();
 
 -- JOIN
-:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now();
-:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m2.time > now();
-:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now() AND m2.time > now();
+:PREFIX SELECT FROM const_now m1, const_now m2 WHERE m1.time > now();
+:PREFIX SELECT FROM const_now m1, const_now m2 WHERE m2.time > now();
+:PREFIX SELECT FROM const_now m1, const_now m2 WHERE m1.time > now() AND m2.time > now();
 
 -- only top-level constraints in WHERE clause are constified
-:PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now());
-:PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now()) WHERE m2.time > now();
+:PREFIX SELECT FROM const_now m1 INNER JOIN const_now m2 ON (m1.time > now());
+:PREFIX SELECT FROM const_now m1 INNER JOIN const_now m2 ON (m1.time > now()) WHERE m2.time > now();
 
 -- test UPDATE
-:PREFIX UPDATE metrics SET v0 = 0.1, v1 = EXTRACT(EPOCH FROM now()) WHERE time > now();
+:PREFIX UPDATE const_now SET value = EXTRACT(EPOCH FROM now()) WHERE time > now();
 
 -- test DELETE
-:PREFIX DELETE FROM metrics WHERE time > now();
+:PREFIX DELETE FROM const_now WHERE time > now();
 
 -- test chunks actually get excluded
 -- should exclude all
 SET timescaledb.current_timestamp_mock TO '2010-01-01';
-:PREFIX SELECT FROM metrics WHERE time > now();
+:PREFIX SELECT FROM const_now WHERE time > now();
 
 -- should exclude all but 1 chunk
 SET timescaledb.current_timestamp_mock TO '2000-01-14';
-:PREFIX SELECT FROM metrics WHERE time > now();
-
-CREATE TABLE const_now(time timestamptz, time2 timestamptz, value float);
-
--- does not apply to non-hypertables
 :PREFIX SELECT FROM const_now WHERE time > now();
-
-SELECT table_name FROM create_hypertable('const_now','time');
-INSERT INTO const_now SELECT '2000-01-01','2000-01-01',0.5;
 
 -- should have one time filter false
 :PREFIX SELECT FROM const_now WHERE time > now();
@@ -117,4 +119,41 @@ DROP TABLE prep_const_now;
   INNER JOIN metrics_tstz as m2 on (true)
 WHERE
   EXISTS (SELECT * FROM metrics_tstz AS m3 WHERE m2.time > now());
+
+-- test dst interaction with day intervals
+SET timezone TO 'Europe/Berlin';
+CREATE TABLE const_now_dst(time timestamptz not null);
+SELECT table_name FROM create_hypertable('const_now_dst','time',chunk_time_interval:='30minutes'::interval);
+
+-- create 2 chunks
+INSERT INTO const_now_dst SELECT '2022-03-27 03:15:00+02';
+INSERT INTO const_now_dst SELECT '2022-03-27 03:45:00+02';
+
+SELECT * FROM const_now_dst WHERE time >= '2022-03-28 0:45+0'::timestamptz - '1d'::interval;
+SELECT * FROM const_now_dst WHERE time >= '2022-03-28 1:15+0'::timestamptz - '1d'::interval;
+
+SET timescaledb.current_timestamp_mock TO '2022-03-28 0:45+0';
+
+-- must have 2 chunks in plan
+:PREFIX SELECT FROM const_now_dst WHERE time > now() - '1day'::interval;
+
+SET timescaledb.current_timestamp_mock TO '2022-03-28 1:15+0';
+
+-- must have 2 chunks in plan
+:PREFIX SELECT FROM const_now_dst WHERE time > now() - '1day'::interval;
+
+TRUNCATE const_now_dst;
+SELECT set_chunk_time_interval('const_now_dst','1 day'::interval, 'time');
+
+-- test month calculation safety buffer
+SET timescaledb.current_timestamp_mock TO '2001-03-1 0:30:00+00';
+INSERT INTO const_now_dst SELECT generate_series('2001-01-28'::timestamptz, '2001-02-01', '1day'::interval);
+set timezone to 'utc+1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+set timezone to 'utc-1';
+-- must have 5 chunks in plan
+:PREFIX SELECT * FROM const_now_dst WHERE time > now() - '1 month'::interval;
+
+DROP TABLE const_now_dst;
 

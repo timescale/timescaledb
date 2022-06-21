@@ -308,7 +308,7 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 }
 
 void
-ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **dest)
+ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matching_dimension_slices)
 {
 	coordinate = REMAP_LAST_COORDINATE(coordinate);
 
@@ -342,7 +342,7 @@ ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **dest)
 										scankey,
 										3,
 										dimension_vec_tuple_found_list,
-										dest,
+										matching_dimension_slices,
 										/* limit = */ 0,
 										AccessShareLock,
 										&tuplock,
