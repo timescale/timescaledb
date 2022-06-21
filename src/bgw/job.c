@@ -635,6 +635,15 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	else
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
+	if (updated_job->fd.hypertable_id != 0)
+	{
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] =
+			Int32GetDatum(updated_job->fd.hypertable_id);
+		repl[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+	}
+	else
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+
 	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, repl);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
