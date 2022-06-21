@@ -1079,7 +1079,11 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		const int index = indices[k];
 		Point *point = context->all_points[index];
 
-		Chunk *chunk = ts_hypertable_get_or_create_chunk(ht, point);
+		Chunk *chunk = ts_hypertable_find_chunk_for_point(ht, point);
+		if (chunk == NULL)
+		{
+			chunk = ts_hypertable_create_chunk_for_point(ht, point);
+		}
 		// connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes,
 		// GetUserId());
 
