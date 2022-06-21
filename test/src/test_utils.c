@@ -97,7 +97,7 @@ throw_after_n_rows(int max_rows, int severity)
 	if (max_rows <= rows_seen)
 	{
 		ereport(severity,
-				(errmsg("debug point: requested to error out every %d rows, %d rows seen",
+				(errmsg("debug point: requested to error out after %d rows, %d rows seen",
 						max_rows,
 						rows_seen)));
 	}
@@ -115,6 +115,33 @@ Datum
 ts_debug_shippable_fatal_after_n_rows(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_INT32(throw_after_n_rows(PG_GETARG_INT32(0), FATAL));
+}
+
+/*
+ * Broken send/receive functions for int4 that throw after an (arbitrarily
+ * chosen prime) number of rows.
+ * Use ERROR, not FATAL, because PG versions < 14 are unable to report a FATAL
+ * error to the access node before closing the connection, so the test results
+ * would be different.
+ */
+#define ARBITRARY_PRIME_NUMBER 7103
+
+TS_FUNCTION_INFO_V1(ts_debug_broken_int4recv);
+
+Datum
+ts_debug_broken_int4recv(PG_FUNCTION_ARGS)
+{
+	(void) throw_after_n_rows(ARBITRARY_PRIME_NUMBER, ERROR);
+	return int4recv(fcinfo);
+}
+
+TS_FUNCTION_INFO_V1(ts_debug_broken_int4send);
+
+Datum
+ts_debug_broken_int4send(PG_FUNCTION_ARGS)
+{
+	(void) throw_after_n_rows(ARBITRARY_PRIME_NUMBER, ERROR);
+	return int4send(fcinfo);
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_wait);

@@ -723,27 +723,49 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 
 		CHECK_FOR_INTERRUPTS();
 
+		if (event.events & ~(WL_SOCKET_READABLE | WL_LATCH_SET))
+		{
+			/*
+			 * Sanity check on the wait result: we haven't requested anything
+			 * other than my latch or the socket becoming readable.
+			 */
+			result = async_response_error_create(
+				psprintf("Unexpected event 0x%X while waiting for async request result",
+						 event.events));
+			break;
+		}
+
 		if (event.events & WL_LATCH_SET)
+		{
 			ResetLatch(MyLatch);
-		else if (event.events & WL_SOCKET_READABLE)
+		}
+
+		if (event.events & WL_SOCKET_READABLE)
 		{
 			wait_req = event.user_data;
 			Assert(wait_req != NULL);
+			PGconn *pg_conn = remote_connection_get_pg_conn(wait_req->conn);
 
-			if (0 == PQconsumeInput(remote_connection_get_pg_conn(wait_req->conn)))
+			if (0 == PQconsumeInput(pg_conn))
 			{
-				/* remove connection from set */
+				/* An error has occurred, remove connection from set. */
 				set->requests = list_delete_ptr(set->requests, wait_req);
 				result = &async_response_communication_error_create(wait_req)->base;
 				break;
 			}
-			result = NULL;
-			break;
-		}
-		else
-		{
-			result = async_response_error_create("unexpected event");
-			break;
+
+			/*
+			 * From postgres docs on PQConsumeInput():
+			 * Note that the result does not say whether any input data was
+			 * actually collected. After calling PQconsumeInput, the
+			 * application can check PQisBusy and/or PQnotifies to see if their
+			 * state has changed.
+			 */
+			if (PQisBusy(pg_conn) == 0)
+			{
+				result = NULL;
+				break;
+			}
 		}
 	}
 
