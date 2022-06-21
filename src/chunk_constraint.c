@@ -444,54 +444,6 @@ typedef struct ChunkConstraintScanData
 	DimensionSlice *slice;
 } ChunkConstraintScanData;
 
-int
-ts_chunk_constraint_scan_by_dimension_slice_chunk_id(const DimensionSlice *slice, ChunkScanCtx *ctx,
-													 MemoryContext mctx)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		ChunkScanEntry *entry;
-		bool found;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &found);
-		int32 chunk_id = DatumGetInt32(datum);
-
-		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
-						   Anum_chunk_constraint_dimension_slice_id))
-			continue;
-
-		Assert(!slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id));
-
-		entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
-
-		if (!found)
-		{
-			entry->stub = NULL;
-			entry->num_dimension_constraints = 0;
-		}
-
-		/*
-		 * We have only the dimension constraints here, because we're searching
-		 * by dimension slice id. See the assert above.
-		 */
-		entry->num_dimension_constraints++;
-
-		/* A stub is complete when we've added slices for all its dimensions,
-		 * i.e., a complete hypercube */
-		if (entry->num_dimension_constraints == ctx->space->num_dimensions)
-		{
-			ts_scan_iterator_close(&iterator);
-			return entry->chunk_id;
-		}
-	}
-
-	ts_scan_iterator_close(&iterator);
-
-	return 0;
-}
 /*
  * Scan for all chunk constraints that match the given slice ID. The chunk
  * constraints are saved in the chunk scan context.
