@@ -1092,13 +1092,13 @@ dist_ddl_enable_distributed_ddl(void)
 static bool
 dist_ddl_process_database_object(ProcessUtilityArgs *args)
 {
-	if (dist_ddl_enable_distributed_ddl())
-		return true;
-
 	/* disable this functionality while any extension being
 	 * created or upgraded */
 	if (creating_extension)
 		return false;
+
+	if (dist_ddl_enable_distributed_ddl())
+		return true;
 
 	switch (nodeTag(args->parsetree))
 	{
