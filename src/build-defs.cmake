@@ -46,7 +46,7 @@ endif()
 
 if(WIN32)
   set(CMAKE_MODULE_LINKER_FLAGS
-      "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib dbghelp.lib kernel32.lib ws2_32.lib Version.lib"
+      "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib ws2_32.lib Version.lib"
   )
   set(CMAKE_C_FLAGS "-D_CRT_SECURE_NO_WARNINGS")
   include_directories(SYSTEM ${PG_INCLUDEDIR_SERVER}/port/win32)

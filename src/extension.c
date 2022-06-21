@@ -4,22 +4,6 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-
-/*
- * Some versions of the MS SDK contain "typedef enum { ... } ;" which the MS
- * compiler quite sanely complains about. Well done, Microsoft.
- * This pragma disables the warning just while we include the header.
- * The pragma is known to work with all (as at the time of writing) supported
- * versions of MSVC.
- */
-#ifdef _MSC_VER
-#define WIN32_LEAN_AND_MEAN
-#pragma warning(push)
-#pragma warning(disable : 4091)
-#include <dbghelp.h>
-#pragma warning(pop)
-#endif
-
 #include <access/xact.h>
 #include <access/transam.h>
 #include <commands/event_trigger.h>
@@ -182,46 +166,6 @@ extension_set_state(enum ExtensionState newstate)
 	return true;
 }
 
-#ifdef _MSC_VER
-static void
-SignalHandler(int signal)
-{
-	(void) signal;
-
-	void *addrs[32];
-	int naddrs = CaptureStackBackTrace(0, 32, addrs, NULL);
-	fprintf(stderr, "%d addresses in backtrace\n", naddrs);
-
-	int res = SymInitialize(GetCurrentProcess(), NULL, 0);
-	if (!res)
-	{
-		fprintf(stderr, "SymInitialize fails with error %d\n", GetLastError());
-		abort();
-	}
-
-	for (int i = 0; i < naddrs; i++)
-	{
-		SYMBOL_INFO info;
-		res = SymFromAddr(GetCurrentProcess(), (DWORD64) addrs[i], NULL, &info);
-		if (!res)
-		{
-			fprintf(stderr, "SymFromAddr fails with error %d for %p\n", GetLastError(), addrs[i]);
-		}
-		fprintf(stderr, "%s\n", info.Name);
-	}
-
-	abort();
-}
-
-static LONG WINAPI
-exceptionHandler(struct _EXCEPTION_POINTERS *pExceptionInfo)
-{
-	(void) pExceptionInfo;
-	SignalHandler(SIGSEGV);
-	return 0;
-}
-#endif
-
 /* Updates the state based on the current state, returning whether there had been a change. */
 static void
 extension_update_state()
@@ -254,11 +198,6 @@ extension_update_state()
 	{
 		ts_extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
 		Assert(ts_extension_oid != InvalidOid);
-
-#ifdef _MSC_VER
-		(void) signal(SIGSEGV, SignalHandler);
-		SetUnhandledExceptionFilter(exceptionHandler);
-#endif
 	}
 	else
 	{
