@@ -55,6 +55,7 @@ typedef struct CrossModuleFunctions
 
 	PGFunction job_add;
 	PGFunction job_alter;
+	PGFunction job_alter_set_hypertable_id;
 	PGFunction job_delete;
 	PGFunction job_run;
 

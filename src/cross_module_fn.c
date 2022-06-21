@@ -42,6 +42,7 @@ CROSSMODULE_WRAPPER(job_add);
 CROSSMODULE_WRAPPER(job_delete);
 CROSSMODULE_WRAPPER(job_run);
 CROSSMODULE_WRAPPER(job_alter);
+CROSSMODULE_WRAPPER(job_alter_set_hypertable_id);
 
 CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
@@ -390,6 +391,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.job_add = error_no_default_fn_pg_community,
 	.job_alter = error_no_default_fn_pg_community,
+	.job_alter_set_hypertable_id = error_no_default_fn_pg_community,
 	.job_delete = error_no_default_fn_pg_community,
 	.job_run = error_no_default_fn_pg_community,
 	.job_execute = job_execute_default_fn,

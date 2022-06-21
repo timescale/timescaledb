@@ -108,6 +108,7 @@ CrossModuleFunctions tsl_cm_functions = {
 
 	.job_add = job_add,
 	.job_alter = job_alter,
+	.job_alter_set_hypertable_id = job_alter_set_hypertable_id,
 	.job_delete = job_delete,
 	.job_run = job_run,
 	.job_execute = job_execute,
