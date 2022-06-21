@@ -1222,6 +1222,18 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 	if (!ssl_enabled || strcmp(ssl_enabled, "on") != 0)
 		return;
 
+#ifndef NDEBUG
+	ssl_enabled = GetConfigOption("timescaledb.debug_enable_ssl", true, false);
+	if (ssl_enabled && strcmp(ssl_enabled, "on") != 0)
+	{
+		keywords[option_pos] = "sslmode";
+		values[option_pos] = "disable";
+		option_pos++;
+		*option_start = option_pos;
+		return;
+	}
+#endif
+
 	/* If SSL is enabled on AN then we assume it is also should be used for DN
 	 * connections as well, otherwise we need to introduce some other way to
 	 * control it */

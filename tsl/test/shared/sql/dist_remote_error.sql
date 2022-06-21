@@ -2,27 +2,36 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+-- Import setup file to data nodes.
+\unset ECHO
+\c data_node_1 :ROLE_SUPERUSER
+set client_min_messages to error;
+\ir include/dist_remote_error_setup.sql
+
+\c data_node_2 :ROLE_SUPERUSER
+set client_min_messages to error;
+\ir include/dist_remote_error_setup.sql
+
+\c data_node_3 :ROLE_SUPERUSER
+set client_min_messages to error;
+\ir include/dist_remote_error_setup.sql
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+set client_min_messages to error;
+\ir include/dist_remote_error_setup.sql
+\set ECHO all
+
+-- Disable SSL to get stable error output across versions. SSL adds some output
+-- that changed in PG 14.
+\c -reuse-previous=on sslmode=disable
+set timescaledb.debug_enable_ssl to off;
+set client_min_messages to error;
 
 -- A relatively big table on one data node
-CREATE TABLE metrics_dist_remote_error(LIKE metrics_dist);
-SELECT table_name FROM create_distributed_hypertable('metrics_dist_remote_error', 'time', 'device_id',
+create table metrics_dist_remote_error(like metrics_dist);
+select table_name from create_distributed_hypertable('metrics_dist_remote_error', 'time', 'device_id',
     data_nodes => '{"data_node_1"}');
-INSERT INTO metrics_dist_remote_error SELECT * FROM metrics_dist ORDER BY random() LIMIT 20000;
-
--- Create a function that raises an error every nth row.
--- It's stable, takes a second argument and returns current number of rows,
--- so that it is shipped to data nodes and not optimized out.
--- It's written in one line because I don't know how to make \set accept
--- several lines.
-\set error_function 'CREATE OR REPLACE FUNCTION ts_debug_shippable_error_after_n_rows(integer, anyelement) RETURNS integer AS ':MODULE_PATHNAME', ''ts_debug_shippable_error_after_n_rows'' LANGUAGE C STABLE STRICT; '
--- Same as above, but fatal.
-\set fatal_function 'CREATE OR REPLACE FUNCTION ts_debug_shippable_fatal_after_n_rows(integer, anyelement) RETURNS integer AS ':MODULE_PATHNAME', ''ts_debug_shippable_error_after_n_rows'' LANGUAGE C STABLE STRICT; '
-
-:error_function
-call distributed_exec(:'error_function');
-:fatal_function
-call distributed_exec(:'fatal_function');
+insert into metrics_dist_remote_error select * from metrics_dist order by metrics_dist limit 20000;
 
 -- The error messages vary wildly between the Postgres versions, dependent on
 -- the particular behavior of libqp in this or that case. The purpose of this
@@ -36,27 +45,44 @@ set client_min_messages to ERROR;
 set timescaledb.remote_data_fetcher = 'rowbyrow';
 
 explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(2, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(701, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(16384, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
 
-explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
+-- We don't test fatal errors here, because PG versions before 14 are unable to
+-- report them properly to the access node, so we get different errors in these
+-- versions.
 
-explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
-
-explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
-
+-- Now test the same with the cursor fetcher.
 set timescaledb.remote_data_fetcher = 'cursor';
 
 explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(2, device_id)::int != 0;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(701, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
@@ -64,14 +90,44 @@ select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_r
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
 
-explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
+-- Table with broken send for a data type.
+
+create table metrics_dist_bs(like metrics_dist);
+
+alter table metrics_dist_bs alter column v0 type bs;
+
+select table_name from create_distributed_hypertable('metrics_dist_bs',
+    'time', 'device_id');
+
+set timescaledb.enable_connection_binary_data to off;
+insert into metrics_dist_bs
+    select * from metrics_dist_remote_error;
+set timescaledb.enable_connection_binary_data to on;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
+select * from metrics_dist_bs;
 
-explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
+drop table metrics_dist_bs;
 
-DROP TABLE metrics_dist_remote_error;
+-- Table with broken receive for a data type.
+create table metrics_dist_br(like metrics_dist);
 
+alter table metrics_dist_br alter column v0 type br;
+
+select table_name from create_distributed_hypertable('metrics_dist_br',
+    'time', 'device_id');
+
+-- Test that the insert fails on data nodes.
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+
+-- Also test that the COPY fails on data nodes. Note that we use the text format
+-- for the insert, so that the access node doesn't call `recv` and fail by itself.
+-- It's going to use binary format for transferring COPY data to data nodes
+-- regardless of the input format.
+\copy (select * from metrics_dist_remote_error) to 'dist_remote_error.text' with (format text);
+
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+
+drop table metrics_dist_br;
+
+drop table metrics_dist_remote_error;
