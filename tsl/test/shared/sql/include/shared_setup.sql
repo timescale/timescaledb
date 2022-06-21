@@ -287,6 +287,12 @@ INSERT INTO disttable_with_ct VALUES
     ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
     ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
 
+-- Distributed table with bytea type and insert "empty" and "NULL" values in it
+CREATE TABLE disttable_with_bytea(time bigint NOT NULL, bdata bytea);
+SELECT create_distributed_hypertable('disttable_with_bytea', 'time', chunk_time_interval => 1000000);
+INSERT INTO disttable_with_bytea(time, bdata) VALUES (1001, E'\\x');
+INSERT INTO disttable_with_bytea(time, bdata) VALUES (1001, NULL);
+
 -- Createt table to test fix for https://github.com/timescale/timescaledb/issues/4339
 CREATE TABLE matches (
   day INT NOT NULL,
