@@ -272,8 +272,8 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 		char *valstr = NULL;
 
 		const int len = PQgetlength(res, row, j);
-		/* we assume that value is NULL is length is 0 */
-		if (len == 0)
+		/* check via PGgetisnull to see if the attr is null */
+		if (PQgetisnull(res, row, j))
 			valstr = NULL;
 		else
 		{
