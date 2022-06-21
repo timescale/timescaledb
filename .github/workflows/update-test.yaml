@@ -13,7 +13,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
-        pg: ["12.11", "13.7", "14.3"]
+        pg: ["12.11", "13.7", "14.4"]
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -44,7 +44,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
-        pg: ["12.11", "13.7", "14.3"]
+        pg: ["12.11", "13.7", "14.4"]
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
