@@ -23,10 +23,7 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => '
 -- Ensure database and extensions are installed and have the correct
 -- encoding, ctype and collation.
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
-SELECT extname, nspname
-FROM pg_extension e, pg_namespace n
-WHERE e.extnamespace = n.oid
-AND e.extname = 'timescaledb';
+SELECT extname, extnamespace::regnamespace FROM pg_extension e WHERE extname = 'timescaledb';
 SELECT PG_ENCODING_TO_CHAR(encoding) = :enc
      , datcollate = :coll
      , datctype = :ctype
@@ -41,10 +38,7 @@ SELECT * FROM show_data_nodes();
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 
-SELECT extname, nspname
-FROM pg_extension e, pg_namespace n
-WHERE e.extnamespace = n.oid
-AND e.extname = 'timescaledb';
+SELECT extname, extnamespace::regnamespace FROM pg_extension e WHERE extname = 'timescaledb';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
