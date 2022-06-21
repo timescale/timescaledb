@@ -28,3 +28,9 @@ CREATE OR REPLACE FUNCTION @extschema@.alter_job(
 RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ)
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.alter_job_set_hypertable_id(
+    job_id INTEGER,
+    hypertable REGCLASS )
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_alter_set_hypertable_id'
+LANGUAGE C VOLATILE;
