@@ -3,12 +3,13 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include "dist_copy.h"
+
 #include <postgres.h>
 #include <access/tupdesc.h>
 #include <catalog/namespace.h>
 #include <executor/executor.h>
 #include <libpq-fe.h>
-
 #include <miscadmin.h>
 #include <parser/parse_type.h>
 #include <port/pg_bswap.h>
@@ -21,7 +22,6 @@
 #include "data_node.h"
 #include "dimension.h"
 #include "dimension_slice.h"
-#include "dist_copy.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
@@ -335,22 +335,23 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 	return result;
 }
 
+/*
+ * Flush all active data node connections simultaneously, instead of doing this
+ * one-by-one in remote_connection_end_copy().
+ */
 static void
-flush_data_nodes(const CopyConnectionState *state)
+flush_active_connections(const CopyConnectionState *state)
 {
-	ListCell *lc;
 	List *to_flush = list_copy(state->connections_in_use);
 	List *to_flush_next = NIL;
-
-	/*
-	 * Flush all connections simultaneously instead of doing this one-by-one in
-	 * remote_connection_end_copy().
-	 */
 	for (;;)
 	{
-		foreach (lc, to_flush)
+		CHECK_FOR_INTERRUPTS();
+
+		ListCell *to_flush_cell;
+		foreach (to_flush_cell, to_flush)
 		{
-			TSConnection *conn = lfirst(lc);
+			TSConnection *conn = lfirst(to_flush_cell);
 
 			TSConnectionStatus status = remote_connection_get_status(conn);
 			if (status != CONN_COPY_IN)
@@ -406,8 +407,6 @@ flush_data_nodes(const CopyConnectionState *state)
 									 /* latch = */ NULL,
 									 /* user_data = */ NULL);
 		}
-
-		CHECK_FOR_INTERRUPTS();
 
 		WaitEvent occurred[1];
 		int wait_result PG_USED_FOR_ASSERTS_ONLY = WaitEventSetWait(set,
@@ -1027,7 +1026,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	 * node connections have to be flushed before this. They might have
 	 * outstanding copy from the previous batch.
 	 */
-	flush_data_nodes(&context->connection_state);
+	flush_active_connections(&context->connection_state);
 	for (int k = 0; k < n; k++)
 	{
 		const int row_in_batch = indices[k];
@@ -1217,7 +1216,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 void
 remote_copy_end(RemoteCopyContext *context)
 {
-	flush_data_nodes(&context->connection_state);
+	flush_active_connections(&context->connection_state);
 	end_copy_on_data_nodes(&context->connection_state);
 	MemoryContextDelete(context->mctx);
 }

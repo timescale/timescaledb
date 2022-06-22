@@ -2221,6 +2221,9 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 								 "connection not in COPY_IN state when ending COPY",
 								 conn);
 
+	/*
+	 * We have to flush the connection before we can switch it into blocking mode.
+	 */
 	for (;;)
 	{
 		CHECK_FOR_INTERRUPTS();
@@ -2270,6 +2273,7 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		}
 	}
 
+	/* Switch the connection into blocking mode. */
 	if (PQsetnonblocking(conn->pg_conn, 0))
 	{
 		return fill_simple_error(err,
