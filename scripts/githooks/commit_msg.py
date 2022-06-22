@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Check a Git commit message according to the seven rules of a good commit message:
 # https://chris.beams.io/posts/git-commit/
@@ -60,7 +60,7 @@ class GitCommitMessage:
 
     def check_subject_limit(self):
         'Rule 2: Limit the subject line to 50 characters'
-        return len(self.subject) <= 50
+        return len(self.subject.rstrip("\n")) <= 50
 
     def check_subject_capitalized(self):
         'Rule 3: Capitalize the subject line'
@@ -115,7 +115,7 @@ class GitCommitMessage:
             return True
 
         for line in self.body_lines:
-            if len(line) > 72:
+            if len(line.rstrip("\n")) > 72:
                 return False
 
         return True
@@ -148,37 +148,37 @@ class GitCommitMessage:
                 num_violations += 1
 
         if num_violations > 0:
-            print
+            print()
             print("**** WARNING ****")
-            print
+            print()
             print("The commit message does not seem to comply with the project's guidelines.")
             print("Please try to follow the \"Seven rules of a great commit message\":")
             print("https://chris.beams.io/posts/git-commit/")
-            print
+            print()
             print("The following rules are violated:\n")
 
             for i in range(len(self.rule_funcs)):
                 if not self.valid_rules[i]:
-                    print("\t* Rule %d: \"%s\"" % (i+1, self.rules[i]))
+                    print(f"\t* Rule {i+1}: \"{self.rules[i]}\"")
 
         # Extra sanity checks beyond the seven rules
         if len(self.body_lines) == 0:
-            print
+            print()
             print("NOTE: the commit message has no body.")
             print("It is recommended to add a body with a description of your")
             print("changes, even if they are small. Explain what and why instead of how:")
             print("https://chris.beams.io/posts/git-commit/#why-not-how")
 
         if len(self.subject_words) < 3:
-            print
+            print()
             print("Warning: the subject line has less than three words.")
             print("Consider using a more explanatory subject line.")
 
         if num_violations > 0:
-            print
+            print()
             print("Run 'git commit --amend' to change the commit message")
 
-        print
+        print()
 
         return num_violations
 
