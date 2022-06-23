@@ -497,7 +497,6 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 		IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
 	config->offset_start.name = CONFIG_KEY_START_OFFSET;
 	config->offset_end.name = CONFIG_KEY_END_OFFSET;
-
 	parse_offset_arg(cagg, start_offset_type, start_offset, &config->offset_start);
 	parse_offset_arg(cagg, end_offset_type, end_offset, &config->offset_end);
 
@@ -599,7 +598,6 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_start.value);
 	else
 		ts_jsonb_add_null(parse_state, CONFIG_KEY_START_OFFSET);
-
 	if (!policyconf.offset_end.isnull)
 		json_add_dim_interval_value(parse_state,
 									CONFIG_KEY_END_OFFSET,

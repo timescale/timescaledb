@@ -204,6 +204,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		}
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
+
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
 														CONFIG_KEY_COMPRESS_AFTER,
 														partitioning_type,
@@ -228,7 +229,6 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 			PG_RETURN_INT32(-1);
 		}
 	}
-
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
 	{
@@ -276,7 +276,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 							CONFIG_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
 	}
-	/* If this is a compression policy for a cagg, verify that
+	/*
+	 * If this is a compression policy for a cagg, verify that
 	 * compress_after > refresh_start of cagg policy. We do not want
 	 * to compress regions that can be refreshed by the cagg policy.
 	 */
@@ -307,7 +308,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										config);
 
 	ts_cache_release(hcache);
-
+	ereport(LOG, errmsg("compress step 7"));
 	PG_RETURN_INT32(job_id);
 }
 

@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <miscadmin.h>
 #include <utils/builtins.h>
+#include <parser/parse_coerce.h>
 
 #include "compression_api.h"
 #include "errors.h"
@@ -152,10 +153,18 @@ static
 bool
 ts_time_is_infinity_from_arg(Datum arg, Oid argtype, Oid timetype)
 {
+	int64 ret;
+	/*
+	 * If no explicit cast was done by the user, try to convert
+	 * the argument to the time type used by the
+	 * continuous aggregate.
+	 */
 	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
-	argtype = timetype;
-	int64 ret = ts_time_value_to_internal(arg, argtype);
-	return (ret == PG_INT64_MIN || PG_INT64_MAX == ret);
+	if (argtype == INTERVALOID)
+		ret = ts_interval_value_to_internal(arg, argtype);
+	else
+		ret = ts_time_value_to_internal(arg, argtype);
+	return (ret == PG_INT64_MIN || ret == PG_INT64_MAX);
 }
 
 Datum
@@ -176,113 +185,115 @@ policies_alter(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(rel_oid))));
 
-	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
+	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3))
+	{
+		jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
 														INTERNAL_SCHEMA_NAME,
 														cagg->data.mat_hypertable_id);
-	/* refresh_interval must either exist in policy config or be given by the user */
-	if ((NIL == jobs))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("no jobs found")));
 
-	BgwJob *job = (NIL == jobs) ? NULL : linitial(jobs);
+		if ((NIL == jobs))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("no jobs found")));
 
-	refresh_interval = job->fd.schedule_interval;
+		BgwJob *job = (NIL == jobs) ? NULL : linitial(jobs);
 
-	policy_refresh_cagg_remove_internal(rel_oid, if_exists);
+		refresh_interval = job->fd.schedule_interval;
 
-	if (job && PG_ARGISNULL(2))
-	{
-		/* providing NULL value means there is no change to the parameter value */
-		if (IS_INTEGER_TYPE(cagg->partition_type))
+		policy_refresh_cagg_remove_internal(rel_oid, if_exists);
+
+		if (job && PG_ARGISNULL(2))
 		{
-			int64 value =
-				ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_START_OFFSET, &found);
-		   /*
-			* If there is job then start_offset has to be there because policy is
-			* not created without it. However if found it to be NULL, then we
-			* want to keep it to NULL in this alter command also.
-			*/
-			start_offset.isnull = !found;
-			start_offset_type = cagg->partition_type;
-			switch (start_offset_type)
+			/* providing NULL value means there is no change to the parameter value */
+			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
-				case INT2OID:
-					start_offset.value = Int16GetDatum((int16) value);
-					break;
-				case INT4OID:
-					start_offset.value = Int32GetDatum((int32) value);
-					break;
-				case INT8OID:
-					start_offset.value = Int64GetDatum(value);
-					break;
-				default:
-					Assert(0);
+				int64 value =
+					ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_START_OFFSET, &found);
+			/*
+				* If there is job then start_offset has to be there because policy is
+				* not created without it. However if found it to be NULL, then we
+				* want to keep it to NULL in this alter command also.
+				*/
+				start_offset.isnull = !found;
+				start_offset_type = cagg->partition_type;
+				switch (start_offset_type)
+				{
+					case INT2OID:
+						start_offset.value = Int16GetDatum((int16) value);
+						break;
+					case INT4OID:
+						start_offset.value = Int32GetDatum((int32) value);
+						break;
+					case INT8OID:
+						start_offset.value = Int64GetDatum(value);
+						break;
+					default:
+						Assert(0);
+				}
+			}
+			else
+			{
+				start_offset.value = IntervalPGetDatum(
+					ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_START_OFFSET));
+				start_offset.isnull = (DatumGetIntervalP(start_offset.value) == NULL);
+				start_offset_type = INTERVALOID;
 			}
 		}
 		else
 		{
-			start_offset.value = IntervalPGetDatum(
-				ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_START_OFFSET));
-			start_offset.isnull = (DatumGetIntervalP(start_offset.value) == NULL);
-			start_offset_type = INTERVALOID;
+			/* Check if user has provided -infinity to make this open ended */
+			start_offset.value = PG_GETARG_DATUM(2);
+			start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
+			start_offset.isnull = ts_time_is_infinity_from_arg(start_offset.value, start_offset_type, cagg->partition_type);
 		}
-	}
-	else
-	{
-		/* Check if user has provided -infinity to make this open ended */
-		start_offset.value = PG_GETARG_DATUM(2);
-		start_offset.isnull = PG_ARGISNULL(2);
-		start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
-		start_offset.isnull = ts_time_is_infinity_from_arg(start_offset.value, start_offset_type, cagg->partition_type);
-	}
-	if (job && PG_ARGISNULL(3))
-	{
-		if (IS_INTEGER_TYPE(cagg->partition_type))
+		if (job && PG_ARGISNULL(3))
 		{
-			int64 value =
-				ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_END_OFFSET, &found);
-			end_offset.isnull = !found;
-			end_offset_type = cagg->partition_type;
-			switch (end_offset_type)
+			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
-				case INT2OID:
-					end_offset.value = Int16GetDatum((int16) value);
-					break;
-				case INT4OID:
-					end_offset.value = Int32GetDatum((int32) value);
-					break;
-				case INT8OID:
-					end_offset.value = Int64GetDatum(value);
-					break;
-				default:
-					Assert(0);
+				int64 value =
+					ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_END_OFFSET, &found);
+				end_offset.isnull = !found;
+				end_offset_type = cagg->partition_type;
+				switch (end_offset_type)
+				{
+					case INT2OID:
+						end_offset.value = Int16GetDatum((int16) value);
+						break;
+					case INT4OID:
+						end_offset.value = Int32GetDatum((int32) value);
+						break;
+					case INT8OID:
+						end_offset.value = Int64GetDatum(value);
+						break;
+					default:
+						Assert(0);
+				}
+			}
+			else
+			{
+				end_offset.value = IntervalPGetDatum(
+					ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_END_OFFSET));
+				end_offset.isnull = (DatumGetIntervalP(end_offset.value) == NULL);
+				end_offset_type = INTERVALOID;
 			}
 		}
 		else
 		{
-			end_offset.value = IntervalPGetDatum(
-				ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_END_OFFSET));
-			end_offset.isnull = (DatumGetIntervalP(end_offset.value) == NULL);
-			end_offset_type = INTERVALOID;
+
+			end_offset.value = PG_GETARG_DATUM(3);
+			end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
+			end_offset.isnull = ts_time_is_infinity_from_arg(end_offset.value, end_offset_type, cagg->partition_type);
 		}
-	}
-	else
-	{
 
-		end_offset.value = PG_GETARG_DATUM(3);
-		end_offset.isnull = PG_ARGISNULL(3);
-		end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
-		end_offset.isnull = ts_time_is_infinity_from_arg(end_offset.value, end_offset_type, cagg->partition_type);
+		refresh_job_id = policy_refresh_cagg_add_internal(rel_oid,
+															start_offset_type,
+															start_offset,
+															end_offset_type,
+															end_offset,
+															refresh_interval,
+															false);
 	}
 
-	refresh_job_id = policy_refresh_cagg_add_internal(rel_oid,
-														start_offset_type,
-														start_offset,
-														end_offset_type,
-														end_offset,
-														refresh_interval,
-														false);
 	if (!PG_ARGISNULL(4))
 	{
 		Datum compress_after_datum = PG_GETARG_DATUM(4);
@@ -292,9 +303,9 @@ policies_alter(PG_FUNCTION_ARGS)
 		compression_job_id = policy_compression_add_internal(rel_oid,
 															 compress_after_datum,
 															 compress_after_type,
-															 false,
 															 DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
-															 false);
+															 false,
+															 if_exists);
 	}
 	if (!PG_ARGISNULL(5))
 	{
