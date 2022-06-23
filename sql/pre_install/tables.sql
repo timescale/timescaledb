@@ -505,13 +505,6 @@ $$
 DECLARE
     db_owner TEXT;
 BEGIN
-    SELECT pg_catalog.pg_get_userbyid(d.datdba) AS db_owner
-    FROM pg_catalog.pg_database d
-    WHERE d.datname = current_database()
-    ORDER BY db_owner
-    INTO db_owner;
-    IF FOUND THEN
-      EXECUTE format('GRANT SELECT, UPDATE, INSERT, DELETE ON _timescaledb_catalog.metadata TO %I', db_owner);
-    END IF;
+    GRANT SELECT, UPDATE, DELETE, INSERT ON _timescaledb_catalog.metadata TO pg_database_owner;
 END
 $$ LANGUAGE plpgsql;
