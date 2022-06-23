@@ -49,7 +49,7 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 -- Test 1 step policy for integer type buckets
 ALTER materialized view mat_m1 set (timescaledb.compress = true);
 -- No policy is added if one errors out
-SELECT add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, refresh_schedule_interval =>'1 h'::interval, compress_after => 11, drop_after => 20);
+SELECT add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "integer".
 SELECT show_policies('mat_m1');
@@ -58,7 +58,7 @@ SELECT show_policies('mat_m1');
 (0 rows)
 
 -- All policies are added in one step
-SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, refresh_schedule_interval =>'1 h'::interval, compress_after => 11, drop_after => 20);
+SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, compress_after => 11, drop_after => 20);
  add_policies 
 --------------
  t
@@ -67,24 +67,24 @@ SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 
 SELECT show_policies('mat_m1');
                                                                 show_policies                                                                
 ---------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": 11}
+ {"policy_name": "policy_compression", "compress_after": 11, "compress_interval": "@ 1 day"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": 1, "refresh_start_offset": 10}
- {"drop_after": 20, "policy_name": "policy_retention"}
+ {"drop_after": 20, "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
 
 -- Alter policies
-SELECT alter_policies('mat_m1', refresh_schedule_interval =>'2 h'::interval, compress_after=>11, drop_after => 15);
+SELECT alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
  alter_policies 
 ----------------
  t
 (1 row)
 
 SELECT show_policies('mat_m1');
-                                                                show_policies                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": 11}
- {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 2 hours", "refresh_end_offset": 1, "refresh_start_offset": 10}
- {"drop_after": 15, "policy_name": "policy_retention"}
+                                                                show_policies                                                                
+---------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_compression", "compress_after": 13, "compress_interval": "@ 1 day"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": 1, "refresh_start_offset": 11}
+ {"drop_after": 25, "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
 
 -- Remove one or more policy
@@ -95,13 +95,13 @@ SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', '
 (1 row)
 
 SELECT show_policies('mat_m1');
-                     show_policies                     
--------------------------------------------------------
- {"drop_after": 15, "policy_name": "policy_retention"}
+                                     show_policies                                      
+----------------------------------------------------------------------------------------
+ {"drop_after": 25, "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (1 row)
 
 -- Add one policy
-SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, refresh_schedule_interval =>'1 h'::interval);
+SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1);
  add_policies 
 --------------
  t
@@ -111,7 +111,7 @@ SELECT show_policies('mat_m1');
                                                                 show_policies                                                                
 ---------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": 1, "refresh_start_offset": 10}
- {"drop_after": 15, "policy_name": "policy_retention"}
+ {"drop_after": 25, "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (2 rows)
 
 -- Remove all policies
@@ -127,8 +127,8 @@ SELECT show_policies('mat_m1');
 (0 rows)
 
 -- Alter non existent policies
-SELECT alter_policies('mat_m1', refresh_schedule_interval =>'2 h'::interval, compress_after=>11, drop_after => 15);
-ERROR:  continuous aggregate policy not found for "mat_m1"
+SELECT alter_policies('mat_m1', refresh_start_offset => 12, compress_after=>11, drop_after => 15);
+ERROR:  no jobs found
 ALTER materialized view mat_m1 set (timescaledb.compress = false);
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  "int_tab" is not a continuous aggregate
@@ -243,7 +243,7 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 -- Test 1 step policy for timestamp type buckets
 ALTER materialized view max_mat_view_date set (timescaledb.compress = true);
 -- Only works for cagg
-SELECT add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, refresh_schedule_interval =>'1 h'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 SELECT show_policies('continuous_agg_max_mat_date');
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
@@ -252,7 +252,7 @@ ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 SELECT remove_policies('continuous_agg_max_mat_date', false, 'policy_refresh_continuous_aggregate');
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 -- No policy is added if one errors out
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, refresh_schedule_interval =>'1 h'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
 SELECT show_policies('max_mat_view_date');
@@ -260,11 +260,72 @@ SELECT show_policies('max_mat_view_date');
 ---------------
 (0 rows)
 
--- Refresh schedule interval cannot be NULL
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
-ERROR:  cannot use NULL refresh_schedule_interval
+-- Create open ended refresh_policy
+SELECT add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval);
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 2 days", "refresh_start_offset": null}
+(1 row)
+
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+ remove_policies 
+-----------------
+ t
+(1 row)
+
+SELECT add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval, refresh_start_offset=>'-inifinity');
+ERROR:  invalid input syntax for type date: "-inifinity"
+SELECT show_policies('max_mat_view_date');
+ show_policies 
+---------------
+(0 rows)
+
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+ERROR:  continuous aggregate policy not found for "max_mat_view_date"
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval);
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 2 days"}
+(1 row)
+
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+ remove_policies 
+-----------------
+ t
+(1 row)
+
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval, refresh_end_offset=>'infinity');
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 2 days"}
+(1 row)
+
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+ remove_policies 
+-----------------
+ t
+(1 row)
+
 -- All policies are added in one step
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 days'::interval, refresh_end_offset => '1 day'::interval, refresh_schedule_interval =>'1 h'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 days'::interval, refresh_end_offset => '1 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
  add_policies 
 --------------
  t
@@ -273,24 +334,53 @@ SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 days'::inte
 SELECT show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 20 days"}
+ {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
- {"drop_after": "@ 25 days", "policy_name": "policy_retention"}
+ {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
 
 -- Alter policies
-SELECT alter_policies('max_mat_view_date', refresh_schedule_interval =>'2 h', compress_after=>'16 days'::interval, drop_after => '20 days'::interval);
+SELECT alter_policies('max_mat_view_date', compress_after=>'16 days'::interval, drop_after => '20 days'::interval);
  alter_policies 
 ----------------
  t
 (1 row)
 
 SELECT show_policies('max_mat_view_date');
-                                                                         show_policies                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 16 days"}
- {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 2 hours", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
- {"drop_after": "@ 20 days", "policy_name": "policy_retention"}
+                                                                        show_policies                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_compression", "compress_after": "@ 16 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
+ {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+(3 rows)
+
+--Alter refresh_policy to make it open ended
+SELECT alter_policies('max_mat_view_date',refresh_start_offset =>'-infinity');
+ alter_policies 
+----------------
+ t
+(1 row)
+
+SELECT show_policies('max_mat_view_date');
+                                                                     show_policies                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_compression", "compress_after": "@ 16 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": null}
+ {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+(3 rows)
+
+SELECT alter_policies('max_mat_view_date',refresh_end_offset =>'infinity');
+ alter_policies 
+----------------
+ t
+(1 row)
+
+SELECT show_policies('max_mat_view_date');
+                                                                  show_policies                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_compression", "compress_after": "@ 16 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": null}
+ {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
 
 -- Remove one or more policy
@@ -316,13 +406,13 @@ SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_ag
 (1 row)
 
 SELECT show_policies('max_mat_view_date');
-                         show_policies                          
-----------------------------------------------------------------
- {"drop_after": "@ 20 days", "policy_name": "policy_retention"}
+                                          show_policies                                          
+-------------------------------------------------------------------------------------------------
+ {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (1 row)
 
 -- Add one policy
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 day'::interval, refresh_end_offset => '1 day'::interval, refresh_schedule_interval =>'1 h'::interval);
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 day'::interval, refresh_end_offset => '1 day'::interval);
  add_policies 
 --------------
  t
@@ -332,7 +422,7 @@ SELECT show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
- {"drop_after": "@ 20 days", "policy_name": "policy_retention"}
+ {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (2 rows)
 
 -- Remove all policies
@@ -371,7 +461,7 @@ DETAIL:  The start and end offsets must cover at least two buckets in the valid 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-1 day', '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1015
+                            1019
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -384,7 +474,7 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_date');
 SELECT add_continuous_aggregate_policy('max_mat_view_date', NULL, NULL, '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1016
+                            1020
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -426,7 +516,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1018
+                            1022
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
@@ -709,13 +799,13 @@ ERROR:  compress_after value for compression policy should be greater than the s
 SELECT add_compression_policy('mat_smallint', 5::smallint); 
  add_compression_policy 
 ------------------------
-                   1026
+                   1030
 (1 row)
 
 SELECT add_compression_policy('mat_bigint', 20::bigint); 
  add_compression_policy 
 ------------------------
-                   1027
+                   1031
 (1 row)
 
 -- end of coverage tests
@@ -773,7 +863,7 @@ ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ; 
  COMP_JOB 
 ----------
-     1029
+     1033
 (1 row)
 
 SELECT remove_compression_policy('metrics_cagg');
@@ -839,7 +929,7 @@ cpu DOUBLE PRECISION);
 SELECT create_hypertable('sensor_data','time');
      create_hypertable     
 ---------------------------
- (17,public,sensor_data,t)
+ (19,public,sensor_data,t)
 (1 row)
 
 INSERT INTO sensor_data(time, sensor_id, cpu, temperature)

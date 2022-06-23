@@ -507,7 +507,7 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
-								 Interval refresh_interval, bool if_not_exists)
+								 Interval refresh_interval, bool if_not_exists, bool is_one_step)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
@@ -527,6 +527,15 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
+
+	if (is_one_step)
+	{
+		if (!start_offset.isnull)
+			start_offset.isnull = ts_time_is_infinity_from_arg(start_offset.value, start_offset_type, cagg->partition_type);
+		if (!end_offset.isnull)
+			end_offset.isnull = ts_time_is_infinity_from_arg(end_offset.value, end_offset_type, cagg->partition_type);
+
+	}
 
 	parse_cagg_policy_config(cagg,
 							 start_offset_type,
@@ -653,7 +662,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											end_offset_type,
 											end_offset,
 											refresh_interval,
-											if_not_exists);
+											if_not_exists, false);
 }
 
 Datum

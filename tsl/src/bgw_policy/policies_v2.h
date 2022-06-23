@@ -58,3 +58,5 @@ typedef struct CaggPolicyConfig
 	CaggPolicyOffset offset_start;
 	CaggPolicyOffset offset_end;
 } CaggPolicyConfig;
+
+bool ts_time_is_infinity_from_arg(Datum arg, Oid argtype, Oid timetype);

@@ -53,8 +53,8 @@ SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 
 SELECT show_policies('mat_m1');
 
 -- Alter policies
---SELECT alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
---SELECT show_policies('mat_m1');
+SELECT alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
+SELECT show_policies('mat_m1');
 
 -- Remove one or more policy
 SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
@@ -150,7 +150,15 @@ SELECT add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval
 SELECT show_policies('max_mat_view_date');
 SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
 
+SELECT add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval, refresh_start_offset=>'-inifinity');
+SELECT show_policies('max_mat_view_date');
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+
 SELECT add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval);
+SELECT show_policies('max_mat_view_date');
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval, refresh_end_offset=>'infinity');
 SELECT show_policies('max_mat_view_date');
 SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
 
@@ -166,7 +174,7 @@ SELECT show_policies('max_mat_view_date');
 SELECT alter_policies('max_mat_view_date',refresh_start_offset =>'-infinity');
 SELECT show_policies('max_mat_view_date');
 
-SELECT alter_policies('max_mat_view_date',refresh_end_offset =>'+infinity');
+SELECT alter_policies('max_mat_view_date',refresh_end_offset =>'infinity');
 SELECT show_policies('max_mat_view_date');
 
 -- Remove one or more policy

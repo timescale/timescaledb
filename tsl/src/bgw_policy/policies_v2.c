@@ -24,6 +24,23 @@
 #include "funcapi.h"
 #include "compat/compat.h"
 
+bool
+ts_time_is_infinity_from_arg(Datum arg, Oid argtype, Oid timetype)
+{
+	int64 ret;
+	/*
+	 * If no explicit cast was done by the user, try to convert
+	 * the argument to the time type used by the
+	 * continuous aggregate.
+	 */
+	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
+	if (argtype == INTERVALOID)
+		ret = ts_interval_value_to_internal(arg, argtype);
+	else
+		ret = ts_time_value_to_internal(arg, argtype);
+	return (ret == PG_INT64_MIN || ret == PG_INT64_MAX);
+}
+
 Datum
 policies_add(PG_FUNCTION_ARGS)
 {
@@ -34,7 +51,7 @@ policies_add(PG_FUNCTION_ARGS)
 	rel_oid = PG_GETARG_OID(0);
 	if_not_exists = PG_GETARG_BOOL(1);
 
-	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3) || !PG_ARGISNULL(4))
+	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3))
 	{
 		NullableDatum start_offset, end_offset;
 		Interval refresh_interval = *DEFAULT_REFRESH_SCHEDULE_INTERVAL;
@@ -53,7 +70,7 @@ policies_add(PG_FUNCTION_ARGS)
 														  end_offset_type,
 														  end_offset,
 														  refresh_interval,
-														  if_not_exists);
+														  if_not_exists, true);
 	}
 	if (!PG_ARGISNULL(4))
 	{
@@ -149,24 +166,6 @@ policies_remove_all(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(success);
 }
 
-static
-bool
-ts_time_is_infinity_from_arg(Datum arg, Oid argtype, Oid timetype)
-{
-	int64 ret;
-	/*
-	 * If no explicit cast was done by the user, try to convert
-	 * the argument to the time type used by the
-	 * continuous aggregate.
-	 */
-	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
-	if (argtype == INTERVALOID)
-		ret = ts_interval_value_to_internal(arg, argtype);
-	else
-		ret = ts_time_value_to_internal(arg, argtype);
-	return (ret == PG_INT64_MIN || ret == PG_INT64_MAX);
-}
-
 Datum
 policies_alter(PG_FUNCTION_ARGS)
 {
@@ -244,7 +243,6 @@ policies_alter(PG_FUNCTION_ARGS)
 			/* Check if user has provided -infinity to make this open ended */
 			start_offset.value = PG_GETARG_DATUM(2);
 			start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
-			start_offset.isnull = ts_time_is_infinity_from_arg(start_offset.value, start_offset_type, cagg->partition_type);
 		}
 		if (job && PG_ARGISNULL(3))
 		{
@@ -282,7 +280,6 @@ policies_alter(PG_FUNCTION_ARGS)
 
 			end_offset.value = PG_GETARG_DATUM(3);
 			end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
-			end_offset.isnull = ts_time_is_infinity_from_arg(end_offset.value, end_offset_type, cagg->partition_type);
 		}
 
 		refresh_job_id = policy_refresh_cagg_add_internal(rel_oid,
@@ -291,7 +288,7 @@ policies_alter(PG_FUNCTION_ARGS)
 															end_offset_type,
 															end_offset,
 															refresh_interval,
-															false);
+															false, true);
 	}
 
 	if (!PG_ARGISNULL(4))
