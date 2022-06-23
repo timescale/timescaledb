@@ -156,3 +156,5 @@ body:
         reproduce the issue. If possible, provide scripts that we can
         run to trigger the bug.
       render: bash
+    validations:
+      required: true
