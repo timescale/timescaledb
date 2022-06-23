@@ -14,6 +14,7 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
+#include <utils/fmgroids.h>
 #include <utils/syscache.h>
 
 #include "partialize_finalize.h"
@@ -147,6 +148,99 @@ collation_oid_from_name(char *schema_name, char *collation_name)
 	namel = lappend(namel, makeString(collation_name));
 	return get_collation_oid(namel, false);
 }
+
+#if PG14_GE
+/*
+ * =======================================
+ * Record serialized partials errata here:
+ * =======================================
+ *
+ * ================================================================================================
+ * The numeric format changed between PG13 and PG14 to include infinities. Consequently the
+ * internal aggregate for the combine functions changed as well, which lead to the serialized
+ * partial state of numeric aggregates also changing format.
+ *
+ * If a user that has stored partials (by using Continuous Aggregates or calling
+ * _timescaledb_internal.finalize_agg()) upgrades to PG14 then the partial state deserialization
+ * will lead to errors due to the mismatch with the PG14 code.
+ *
+ * For F_NUMERIC_AVG_DESERIALIZE and F_NUMERIC_DESERIALIZE the length of the serialized aggregate
+ * state is 16 bytes longer than the previous versions. It suffices to zero out the extra bytes of
+ * pInfcount and nInfcount in the numeric aggregate combine state. Those fields are only there to
+ * support infinity and -infinity in the numeric type, which wasn't supported in older PostgreSQL
+ * versions.
+ *
+ * PostgreSQL versions < 14
+ * F_NUMERIC_AVG_DESERIALIZE serialized partial length = X
+ * F_NUMERIC_DESERIALIZE serialized partial length = X + 10
+ *
+ * PostgreSQL versions >= 14
+ * F_NUMERIC_AVG_DESERIALIZE serialized partial length = X + 16
+ * F_NUMERIC_DESERIALIZE serialized partial length = X + 10 + 16
+ *
+ * For more information see: https://www.postgresql.org/message-id/606717.1591924582@sss.pgh.pa.us
+ *
+ * Non-numeric aggregate functions affected:
+ * 1. var_pop(int8)
+ * 2. var_samp(int8)
+ * 3. variance(int8)
+ * 4. stddev_pop(int8)
+ * 5. stddev_samp(int8)
+ * 6. stddev(int8)
+ * ================================================================================================
+ * F_NUMERIC_POLY_DESERIALIZE depends on compiler support for HAVE_INT128. As a result, recompiling
+ * the same versions of PostgreSQL and TimescaleDB with a different compiler can lead to corruption
+ * if the same database is reused.
+ *
+ * Non-numeric aggregate functions affected:
+ * 1. var_pop(int4)
+ * 2. var_pop(int2)
+ * 3. var_samp(int4)
+ * 4. var_samp(int2)
+ * 5. variance(int4)
+ * 6. variance(int2)
+ * 7. stddev_pop(int4)
+ * 8. stddev_pop(int2)
+ * 9. stddev_samp(int4)
+ * 10. stddev_samp(int2)
+ * 11. stddev(int4)
+ * 12. stddev(int2)
+ */
+#define NUMERIC_PARTIAL_MISSING_LENGTH (16)
+
+static bytea *
+zero_fill_bytearray(bytea *serialized_partial, size_t missing_length)
+{
+	size_t original_length = VARSIZE_ANY_EXHDR(serialized_partial);
+	size_t desired_length = original_length + missing_length;
+
+	bytea *new_bytea = repalloc(serialized_partial, desired_length + VARHDRSZ);
+
+	SET_VARSIZE(new_bytea, desired_length + VARHDRSZ);
+	void *end_of_serialized_partial = VARDATA(new_bytea) + original_length;
+	memset(end_of_serialized_partial, 0, missing_length);
+
+	return new_bytea;
+}
+#endif
+
+/* Only call this function if the partial is known to be problematic. */
+static bytea *
+sanitize_serialized_partial(Oid deserialfnoid, bytea *serialized_partial)
+{
+#if PG14_GE
+	if ((deserialfnoid == F_NUMERIC_DESERIALIZE) || (deserialfnoid == F_NUMERIC_AVG_DESERIALIZE))
+		/*
+		 * Always add NUMERIC_PARTIAL_MISSING_LENGTH extra bytes because the length is not fixed.
+		 * This is only safe to do when the partial state is known to be short, otherwise an
+		 * exception is thrown if the serialized_partial is not fully consumed by deserialfn().
+		 */
+		return zero_fill_bytearray(serialized_partial, NUMERIC_PARTIAL_MISSING_LENGTH);
+#endif
+
+	return serialized_partial;
+}
+
 /*
  * deserialize from the internal format in which data is stored in bytea
  * parameter. Callers need to check deserialized_isnull . Only if this is set to false,
@@ -169,8 +263,35 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
 
 		FC_ARG(deser_fcinfo, 0) = PointerGetDatum(serialized_partial);
 		FC_NULL(deser_fcinfo, 0) = serialized_isnull;
-		combine_meta->deserialfn_fcinfo->isnull = false;
-		deserialized = FunctionCallInvoke(deser_fcinfo);
+		deser_fcinfo->isnull = false;
+
+		/*
+		 * When an exception is thrown and longjmp() is called, CurrentMemoryContext is potentially
+		 * different than what it was inside the PG_TRY() block below.
+		 *
+		 * Restore it to the old value so that the code in the subsequent PG_CATCH() block does not
+		 * corrupt the memory.
+		 *
+		 * No need for volatile variables since we don't modify any of this function's stack frame
+		 * inside the PG_TRY() block.
+		 */
+		MemoryContext oldcontext = CurrentMemoryContext;
+		PG_TRY();
+		{
+			deserialized = FunctionCallInvoke(deser_fcinfo);
+		}
+		PG_CATCH();
+		{
+			CurrentMemoryContext = oldcontext;
+			FlushErrorState();
+			/* attempt to repair the serialized partial */
+			serialized_partial =
+				sanitize_serialized_partial(combine_meta->deserialfnoid, serialized_partial);
+			FC_ARG(deser_fcinfo, 0) = PointerGetDatum(serialized_partial);
+			deser_fcinfo->isnull = false;
+			deserialized = FunctionCallInvoke(deser_fcinfo);
+		}
+		PG_END_TRY();
 		*deserialized_isnull = deser_fcinfo->isnull;
 	}
 	else if (!serialized_isnull)
