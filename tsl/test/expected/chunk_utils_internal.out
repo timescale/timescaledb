@@ -33,9 +33,10 @@ ORDER BY chunk_name ;
  _timescaledb_internal | _hyper_1_2_chunk |                  30 |                40
 (2 rows)
 
+----- TESTS for freeze and unfreeze chunk ------------
 --TEST internal api that freezes a chunk
 --freeze one of the chunks
-SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME", chunk_name as "CHUNK_NAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
@@ -53,7 +54,7 @@ SELECT * from test1.hyper1 ORDER BY 1;
    30 |  0.5
 (2 rows)
 
---updates and deletes on frozen chunk should fail
+-- TEST updates and deletes on frozen chunk should fail
 \set ON_ERROR_STOP 0
 UPDATE test1.hyper1 SET temp = 40 WHERE time = 20;
 UPDATE test1.hyper1 SET temp = 40 WHERE temp = 0.5;
@@ -75,9 +76,10 @@ SELECT * from test1.hyper1 ORDER BY 1;
    30 |  0.5
 (2 rows)
 
---inserts into a frozen chunk fails
+-- TEST inserts into a frozen chunk fails
 INSERT INTO test1.hyper1 VALUES ( 11, 11);
 ERROR:  Insert not permitted on frozen chunk "_hyper_1_1_chunk" 
+\set ON_ERROR_STOP 1
 --insert into non-frozen chunk works
 INSERT INTO test1.hyper1 VALUES ( 31, 31);
 SELECT * from test1.hyper1 ORDER BY 1;
@@ -88,7 +90,35 @@ SELECT * from test1.hyper1 ORDER BY 1;
    31 |   31
 (3 rows)
 
-\set ON_ERROR_STOP 1
+-- TEST unfreeze frozen chunk and then drop
+SELECT table_name, status 
+FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
+    table_name    | status 
+------------------+--------
+ _hyper_1_1_chunk |      4
+(1 row)
+
+SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+--verify status in catalog
+SELECT table_name, status 
+FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
+    table_name    | status 
+------------------+--------
+ _hyper_1_1_chunk |      0
+(1 row)
+
+--unfreezing again works
+SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
 SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
  drop_chunk 
 ------------
@@ -153,6 +183,7 @@ ERROR:  Update not permitted on frozen chunk "_hyper_2_3_chunk"
 --touches only frozen chunk 
 DELETE FROM public.table_to_compress WHERE time < '2020-01-02'; 
 ERROR:  Delete not permitted on frozen chunk "_hyper_2_3_chunk" 
+\set ON_ERROR_STOP 1
 --try to refreeze
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
  freeze_chunk 
@@ -160,7 +191,6 @@ SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
  t
 (1 row)
 
-\set ON_ERROR_STOP 1
 --touches non-frozen chunk 
 SELECT * from public.table_to_compress ORDER BY 1, 3;
     time    | acq_id  | value  
@@ -177,22 +207,35 @@ SELECT * from public.table_to_compress ORDER BY 1, 3;
  01-01-2020 | 1234567 | 777888
 (1 row)
 
---TEST can drop frozen chunk
+--TEST cannot drop frozen chunk, no error is reported.
+-- simply skips
 SELECT drop_chunks('table_to_compress', older_than=> '1 day'::interval);
               drop_chunks               
 ----------------------------------------
- _timescaledb_internal._hyper_2_3_chunk
  _timescaledb_internal._hyper_2_4_chunk
  _timescaledb_internal._hyper_2_5_chunk
-(3 rows)
+(2 rows)
+
+--unfreeze and drop it
+SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+ drop_chunk 
+------------
+ t
+(1 row)
 
 --add a new chunk
-INSERT INTO public.table_to_compress VALUES ('2020-01-01', 1234567, 777888);
---TEST now feeeze and try to compress the chunk
-SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+INSERT INTO public.table_to_compress VALUES ('2019-01-01', 1234567, 777888);
+--TEST  compress a frozen chunk fails
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME", chunk_name as "CHUNK_NAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'table_to_compress' and hypertable_schema = 'public'
-ORDER BY chunk_name LIMIT 1
+ORDER BY chunk_name DESC LIMIT 1
 \gset
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
  freeze_chunk 
@@ -206,35 +249,12 @@ ERROR:  compress_chunk not permitted on frozen chunk "_hyper_2_7_chunk"
 \set ON_ERROR_STOP 1
 --TEST dropping a frozen chunk
 --DO NOT CHANGE this behavior ---
--- frozen chunks can be dropped.
-SELECT _timescaledb_internal.drop_chunk(:'CHNAME');
- drop_chunk 
-------------
- t
-(1 row)
-
-SELECT count(*) 
-FROM timescaledb_information.chunks
-WHERE hypertable_name = 'table_to_compress' and hypertable_schema = 'public';
- count 
--------
-     0
-(1 row)
-
---TEST error freeze a non-chunk
-CREATE TABLE nochunk_tab( a timestamp, b integer);
+-- frozen chunks cannot be dropped.
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.freeze_chunk('nochunk_tab');
-ERROR:  chunk not found
+SELECT _timescaledb_internal.drop_chunk(:'CHNAME');
+ERROR:  drop_chunk not permitted on frozen chunk "_hyper_2_7_chunk" 
 \set ON_ERROR_STOP 1
---TEST dropping frozen chunk in the presence of caggs
-SELECT * FROM test1.hyper1 ORDER BY 1;
- time | temp 
-------+------
-   30 |  0.5
-   31 |   31
-(2 rows)
-
+--TEST drop_chunk in the presence of caggs. Does not affect cagg data
 CREATE OR REPLACE FUNCTION hyper_dummy_now() RETURNS BIGINT
 LANGUAGE SQL IMMUTABLE AS  'SELECT 100::BIGINT';
 SELECT set_integer_now_func('test1.hyper1', 'hyper_dummy_now');
@@ -253,20 +273,39 @@ SELECT * FROM hyper1_cagg ORDER BY 1;
      30 |     2
 (1 row)
 
---now freeze chunk and drop it
---cagg data is unaffected  
-SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+--now freeze chunk and try to  drop it
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME1", chunk_name as "CHUNK_NAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME1');
  freeze_chunk 
 --------------
  t
 (1 row)
 
-SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+--cannot drop frozen chunk
+\set ON_ERROR_STOP 0
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME1');
+ERROR:  drop_chunk not permitted on frozen chunk "_hyper_1_2_chunk" 
+\set ON_ERROR_STOP 1
+-- unfreeze the chunk, then drop the single chunk
+SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME1');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+--drop the single chunk and verify that cagg is unaffected.
+SELECT * FROM test1.hyper1 ORDER BY 1;
+ time | temp 
+------+------
+   30 |  0.5
+   31 |   31
+(2 rows)
+
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME1');
  drop_chunk 
 ------------
  t
@@ -283,6 +322,15 @@ SELECT * FROM hyper1_cagg ORDER BY 1;
      30 |     2
 (1 row)
 
+--TEST error case (un)freeze a non-chunk
+CREATE TABLE nochunk_tab( a timestamp, b integer);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.freeze_chunk('nochunk_tab');
+ERROR:  chunk not found
+SELECT _timescaledb_internal.unfreeze_chunk('nochunk_tab');
+ERROR:  chunk not found
+\set ON_ERROR_STOP 1
+----- TESTS for attach_osm_table_chunk ------------
 --TEST for attaching a foreign table as a chunk
 --need superuser access to create foreign data server
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -356,3 +404,42 @@ SELECT _timescaledb_internal.attach_osm_table_chunk('non_ht', 'child_fdw_table')
 ERROR:  "non_ht" is not a hypertable
  
 \set ON_ERROR_STOP 1
+-- TEST error try freeze/unfreeze on dist hypertable
+-- Add distributed hypertables
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |         database          | node_created | database_created | extension_created 
+-------------+-----------+-------+---------------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_chunk_utils_internal_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |         database          | node_created | database_created | extension_created 
+-------------+-----------+-------+---------------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_chunk_utils_internal_2 | t            | t                | t
+(1 row)
+
+CREATE TABLE disthyper (timec timestamp, device integer);
+SELECT create_distributed_hypertable('disthyper', 'timec', 'device');
+NOTICE:  adding not-null constraint to column "timec"
+ create_distributed_hypertable 
+-------------------------------
+ (6,public,disthyper,t)
+(1 row)
+
+INSERT into disthyper VALUES ('2020-01-01', 10);
+--freeze one of the chunks
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME3"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'disthyper' 
+ORDER BY chunk_name LIMIT 1
+\gset
+\set ON_ERROR_STOP 0
+SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME3');
+ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyper_6_11_chunk"
+SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME3');
+ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyper_6_11_chunk"
+\set ON_ERROR_STOP 1
+SET ROLE :ROLE_DEFAULT_PERM_USER
