@@ -269,12 +269,6 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 	Cache *hcache;
 	MemoryContext old, mcxt;
 
-	if (!superuser() && !has_rolreplication(GetUserId()))
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg(
-					 "must be superuser or replication role to copy/move chunk to data node"))));
-
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -300,9 +294,16 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 												 CACHE_FLAG_NONE,
 												 &hcache);
 
+	if (!superuser() && !has_rolreplication(GetUserId()) &&
+		(ts_rel_get_owner(ht->main_table_relid) != GetUserId()))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 (errmsg("must be superuser, replication role, or hypertable owner to copy/move "
+						 "chunk to data node"))));
+
 	/*
-	 * We have already checked above for superuser or replication perms. There's no
-	 * need to check if the user has "ownership" on the hypertable now.
+	 * We have already checked above for superuser/replication/owner perms. There's no
+	 * need to check again if the user has "ownership" on the hypertable now.
 	 */
 	if (!hypertable_is_distributed(ht))
 		ereport(ERROR,
@@ -1051,6 +1052,7 @@ chunk_copy_execute(ChunkCopy *cc)
 	{
 		int sec_ctx;
 		Oid saved_uid;
+		bool is_superuser;
 
 		/*
 		 * A chunk copy/move operation involves a lot of stages. Many of these
@@ -1062,13 +1064,22 @@ chunk_copy_execute(ChunkCopy *cc)
 		 *
 		 * The move_chunk/copy_chunk functions can only be invoked by superuser
 		 * or REPLICATION users. To keep things manageable, we switch to the
-		 * bootstrap superuser for each stage of the execution. Care is taken to
-		 * create the chunks with original hypertable ownership.
+		 * bootstrap superuser (or if the current logged in user is a superuser)
+		 * for each stage of the execution. Care is taken to create the chunks
+		 * with original hypertable ownership.
 		 */
 		SPI_start_transaction();
-		GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+		is_superuser = superuser();
+
+		/*
+		 * Note that if the current logged in user is superuser then we use those
+		 * credentials instead of implicit bootstrap superuser
+		 */
+		if (!is_superuser)
+		{
+			GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 			SetUserIdAndSecContext(BOOTSTRAP_SUPERUSERID, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+		}
 
 		cc->stage = stage;
 
@@ -1080,7 +1091,7 @@ chunk_copy_execute(ChunkCopy *cc)
 
 		DEBUG_ERROR_INJECTION(stage->name);
 
-		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+		if (!is_superuser)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 		SPI_commit();
 	}
@@ -1223,6 +1234,7 @@ chunk_copy_cleanup_internal(ChunkCopy *cc, int stage_idx)
 	{
 		int sec_ctx;
 		Oid saved_uid;
+		bool is_superuser = superuser();
 
 		/*
 		 * A chunk copy/move cleanup operation involves a lot of stages. Many of these
@@ -1236,9 +1248,16 @@ chunk_copy_cleanup_internal(ChunkCopy *cc, int stage_idx)
 		 * bootstrap superuser for each stage of the execution.
 		 */
 		SPI_start_transaction();
-		GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+
+		/*
+		 * Note that if the current logged in user is superuser then we use those
+		 * credentials instead of implicit bootstrap superuser
+		 */
+		if (!is_superuser)
+		{
+			GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 			SetUserIdAndSecContext(BOOTSTRAP_SUPERUSERID, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+		}
 
 		cc->stage = &chunk_copy_stages[stage_idx];
 		if (cc->stage->function_cleanup)
@@ -1250,7 +1269,7 @@ chunk_copy_cleanup_internal(ChunkCopy *cc, int stage_idx)
 		else
 			first = false;
 
-		if (BOOTSTRAP_SUPERUSERID != saved_uid)
+		if (!is_superuser)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 		SPI_commit();
 	} while (--stage_idx >= 0);
@@ -1264,12 +1283,6 @@ chunk_copy_cleanup(const char *operation_id)
 	const ChunkCopyStage *stage;
 	bool found = false;
 	int stage_idx;
-
-	if (!superuser() && !has_rolreplication(GetUserId()))
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg(
-					 "must be superuser or replication role to cleanup a chunk copy operation"))));
 
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		ereport(ERROR,
@@ -1301,6 +1314,13 @@ chunk_copy_cleanup(const char *operation_id)
 			break;
 		}
 	}
+
+	if (!superuser() && !has_rolreplication(GetUserId()) &&
+		(ts_rel_get_owner(cc->chunk->hypertable_relid) != GetUserId()))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 (errmsg("must be superuser, replication role, or hypertable owner to cleanup a "
+						 "chunk copy/move operation"))));
 
 	/* should always find an entry, add ereport to quell compiler warning */
 	Assert(found == true);
