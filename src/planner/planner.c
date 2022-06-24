@@ -1147,7 +1147,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 															 root->parse->commandType ==
 																	 CMD_UPDATE ?
 																 CHUNK_UPDATE :
-																 CHUNK_DELETE);
+																 CHUNK_DELETE,
+															 true);
 			}
 			/* Check for UPDATE/DELETE (DML) on compressed chunks */
 			if (IS_UPDL_CMD(root->parse) && dml_involves_hypertable(root, ht, rti))

@@ -597,7 +597,10 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
 		elog(ERROR, "insert is not on a table");
 
-	ts_chunk_validate_chunk_status_for_operation(chunk->table_id, chunk->fd.status, CHUNK_INSERT);
+	ts_chunk_validate_chunk_status_for_operation(chunk->table_id,
+												 chunk->fd.status,
+												 CHUNK_INSERT,
+												 true);
 	if (has_compressed_chunk &&
 		(onconflict_action != ONCONFLICT_NONE || ts_chunk_dispatch_has_returning(dispatch)))
 		ereport(ERROR,

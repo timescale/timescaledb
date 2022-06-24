@@ -45,7 +45,7 @@ typedef enum ChunkOperation
 	CHUNK_DELETE,
 	CHUNK_SELECT,
 	CHUNK_COMPRESS,
-	CHUNK_DECOMPRESS
+	CHUNK_DECOMPRESS,
 } ChunkOperation;
 
 typedef struct Hypercube Hypercube;
@@ -186,6 +186,7 @@ extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
@@ -200,9 +201,10 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chun
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk);
-extern TSDLLEXPORT void ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
+extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
 																	 int32 chunk_status,
-																	 ChunkOperation cmd);
+																	 ChunkOperation cmd,
+																	 bool throw_error);
 
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 chunk_id);
