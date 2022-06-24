@@ -150,7 +150,8 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
 	ts_chunk_validate_chunk_status_for_operation(srcchunk->table_id,
 												 srcchunk->fd.status,
-												 CHUNK_COMPRESS);
+												 CHUNK_COMPRESS,
+												 true);
 	cxt->srcht = srcht;
 	cxt->compress_ht = compress_ht;
 	cxt->srcht_chunk = srcchunk;
@@ -326,7 +327,8 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk_relid,
 												 uncompressed_chunk->fd.status,
-												 CHUNK_DECOMPRESS);
+												 CHUNK_DECOMPRESS,
+												 true);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
 	/* acquire locks on src and compress hypertable and src chunk */

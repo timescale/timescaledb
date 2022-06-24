@@ -126,6 +126,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.to_timestamp_without_timezone(bigint)
  _timescaledb_internal.to_unix_microseconds(timestamp with time zone)
  _timescaledb_internal.tsl_loaded()
+ _timescaledb_internal.unfreeze_chunk(regclass)
  _timescaledb_internal.validate_as_data_node()
  _timescaledb_internal.wait_subscription_sync(name,name,integer,numeric)
  add_compression_policy(regclass,"any",boolean,interval)

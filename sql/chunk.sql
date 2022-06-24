@@ -85,6 +85,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.freeze_chunk(
    chunk REGCLASS)
 RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_freeze_chunk' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.unfreeze_chunk(
+   chunk REGCLASS)
+RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_unfreeze_chunk' LANGUAGE C VOLATILE;
+
 --wrapper for ts_chunk_drop
 --drops the chunk table and its entry in the chunk catalog
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk(
