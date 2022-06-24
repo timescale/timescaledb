@@ -8,7 +8,7 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 286;
+use Test::More tests => 287;
 
 #Initialize all the multi-node instances
 my $an  = AccessNode->create('an');
@@ -18,10 +18,18 @@ my $dn2 = DataNode->create('dn2', allows_streaming => 'logical');
 $an->add_data_node($dn1);
 $an->add_data_node($dn2);
 
+$an->safe_psql('postgres',
+	"GRANT USAGE ON FOREIGN SERVER dn1, dn2 TO PUBLIC;");
+
+for my $node ($an, $dn1, $dn2)
+{
+	$node->safe_psql('postgres', "CREATE ROLE htowner LOGIN");
+}
 #Create few distributed hypertables with default and specified schema names and insert a few rows
 $an->safe_psql(
 	'postgres',
 	qq[
+    SET ROLE htowner;
     CREATE TABLE test(time timestamp NOT NULL, device int, temp float);
     SELECT create_distributed_hypertable('test', 'time', 'device', 3);
     INSERT INTO test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
@@ -65,7 +73,7 @@ while ($curr_index < $arrSize)
 	#We provide the operation id ourselves
 	$operation_id = "ts_cloud_" . $curr_index . "_1";
 	($ret, $stdout, $stderr) = $an->psql('postgres',
-		"SELECT error_injection_on('$stages[$curr_index]'); CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2', operation_id => '$operation_id');"
+		"SELECT error_injection_on('$stages[$curr_index]'); SET ROLE htowner; CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2', operation_id => '$operation_id');"
 	);
 	is($ret, 3,
 		"move_chunk fails as expected in stage '$stages[$curr_index]'");
@@ -77,7 +85,7 @@ while ($curr_index < $arrSize)
 	#The earlier debug error point gets released automatically since it's a session lock
 	#Call the cleanup procedure to make things right
 	$an->safe_psql('postgres',
-		"CALL timescaledb_experimental.cleanup_copy_chunk_operation(operation_id=>'$operation_id');"
+		"SET ROLE htowner; CALL timescaledb_experimental.cleanup_copy_chunk_operation(operation_id=>'$operation_id');"
 	);
 
 	#Check chunk state is as before the move
@@ -103,7 +111,7 @@ for my $node ($an, $dn1, $dn2)
 
 like(
 	$stderr,
-	qr/must be superuser or replication role to copy\/move chunk to data node/,
+	qr/must be superuser, replication role, or hypertable owner to copy\/move chunk to data node/,
 	'Expected failure due to no credentials');
 
 #Provide REPLICATION creds to this user now
@@ -141,6 +149,17 @@ $an->psql_is(
 	"ts_copy_1_1|complete|dn1|dn2|t",
 	"AN catalog is as expected");
 
+# Cleanup with a role which doesn't have superuser, replication or ownernership should fail
+$an->safe_psql('postgres', "CREATE ROLE testrole2 LOGIN;");
+($ret, $stdout, $stderr) = $an->psql('postgres',
+	"SET ROLE testrole2; CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2')"
+);
+
+like(
+	$stderr,
+	qr/must be superuser, replication role, or hypertable owner to copy\/move chunk to data node/,
+	'Expected failure due to no credentials');
+#
 #Run cleanup on this operstion. It should just delete the catalog entry since the
 #activity has completed successfully. Rest of the checks below should succeed
 #Try this cleanup as the REPLICATION user
