@@ -505,6 +505,9 @@ $$
 DECLARE
     db_owner TEXT;
 BEGIN
-    GRANT SELECT, UPDATE, DELETE, INSERT ON _timescaledb_catalog.metadata TO pg_database_owner;
+    select rolname from pg_authid where rolname like 'pg_database_owner' into db_owner;
+    IF FOUND THEN
+      GRANT SELECT, UPDATE, DELETE, INSERT ON _timescaledb_catalog.metadata TO pg_database_owner;
+    END IF;
 END
 $$ LANGUAGE plpgsql;

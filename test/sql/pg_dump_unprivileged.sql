@@ -20,7 +20,11 @@ CREATE database dump_unprivileged;
 DROP DATABASE dump_unprivileged;
 DROP USER dump_unprivileged;
 
+-- run this test only if predefined role pg_database_owner exists
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
+SELECT exists (SELECT rolname FROM pg_authid where rolname like 'pg_database_owner') AS owner_role_exists \gset
 
+\if :owner_role_exists
 CREATE USER dump_owner CREATEDB;
 -- create a database owned by user dump_owner
 DROP DATABASE IF EXISTS dump_owner;
@@ -41,6 +45,7 @@ select * from mytable;
 \! utils/pg_dump_owner.sh dump/pg_dump_owner.sql
 
 \c template1 :ROLE_SUPERUSER
+DROP EXTENSION timescaledb;
 drop database dump_owner;
 
 CREATE database dump_owner_restored owner dump_owner;
@@ -60,3 +65,5 @@ SELECT timescaledb_post_restore();
 show timescaledb.restoring;
 
 select * from mytable;
+
+\endif
