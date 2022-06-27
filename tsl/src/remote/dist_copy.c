@@ -41,6 +41,12 @@
  */
 #define MAX_BATCH_ROWS 1024
 
+/*
+ * Maximum bytes of COPY data in batch. This is also the default size of the
+ * output copy data buffer.
+ */
+#define MAX_BATCH_BYTES 10 * 1024 * 1024
+
 /* This contains the information needed to parse a dimension attribute out of a row of text copy
  * data
  */
@@ -948,6 +954,42 @@ send_copy_data(StringInfo row_data, const List *connections)
 	return true;
 }
 
+/* Interleave 32 bits with zeroes */
+static uint64
+part_bits32_by2(uint32 x)
+{
+	uint64		n = x;
+
+	n = (n | (n << 16)) & UINT64CONST(0x0000FFFF0000FFFF);
+	n = (n | (n << 8)) & UINT64CONST(0x00FF00FF00FF00FF);
+	n = (n | (n << 4)) & UINT64CONST(0x0F0F0F0F0F0F0F0F);
+	n = (n | (n << 2)) & UINT64CONST(0x3333333333333333);
+	n = (n | (n << 1)) & UINT64CONST(0x5555555555555555);
+
+	return n;
+}
+
+typedef struct
+{
+	uint64 high;
+	uint64 low;
+} zorder2x64;
+
+static zorder2x64
+point_zorder(Point *p)
+{
+	Assert(p->num_coords >= 2);
+
+	zorder2x64 result = {0};
+	result.high =
+		part_bits32_by2((p->coordinates[0] & UINT64CONST(0xFFFFFFFF00000000)) >> 32) << 1
+		| part_bits32_by2((p->coordinates[1] & UINT64CONST(0xFFFFFFFF00000000)) >> 32);
+	result.low =
+		part_bits32_by2((p->coordinates[0] & UINT64CONST(0x00000000FFFFFFFF))) << 1
+		| part_bits32_by2((p->coordinates[1] & UINT64CONST(0x00000000FFFFFFFF)));
+	return result;
+}
+
 static int
 point_compare(const void *a, const void *b, void *_context)
 {
@@ -960,7 +1002,43 @@ point_compare(const void *a, const void *b, void *_context)
 	Point *pb = context->batch_points[ib];
 
 	Assert(pa->num_coords == pb->num_coords);
+	Assert(pa->num_coords != 0);
 
+/*
+	if (pa->num_coords == 1)
+	{
+		if (pa->coordinates[0] < pb->coordinates[0])
+		{
+			return -1;
+		}
+		if (pa->coordinates[0] > pb->coordinates[0])
+		{
+			return 1;
+		}
+		return 0;
+	}
+
+	zorder2x64 za = point_zorder(pa);
+	zorder2x64 zb = point_zorder(pb);
+	if (za.high < zb.high)
+	{
+		return -1;
+	}
+	if (za.high > zb.high)
+	{
+		return 1;
+	}
+	if (za.low < zb.low)
+	{
+		return -1;
+	}
+	if (za.low > zb.low)
+	{
+		return 1;
+	}
+
+	return 0;
+/*/
 	for (int i = 0; i < pa->num_coords; i++)
 	{
 		if (pa->coordinates[i] < pb->coordinates[i])
@@ -972,6 +1050,7 @@ point_compare(const void *a, const void *b, void *_context)
 			return 1;
 		}
 	}
+//*/
 
 	return 0;
 }
@@ -984,7 +1063,6 @@ typedef struct DataNodeRows
 	int data_node_id;
 	Oid server_oid;
 	TSConnection *connection;
-	int rows_sent;
 	int rows_total;
 
 	/* Array of indices into the batch row array. */
@@ -1015,6 +1093,18 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	}
 	qsort_arg(indices, context->current_batch_rows, sizeof(indices[0]), point_compare, context);
 
+	/* Comparator sanity check. */
+#ifndef NDEBUG
+	for (int i = 1; i < n; i++)
+	{
+		int prev_index = indices[i-1];
+		int this_index = indices[i];
+		Assert(point_compare(&prev_index,
+			&this_index,
+			context) <= 0);
+	}
+#endif
+
 	/*
 	 * This list tracks the per-batch insert states of the data nodes
 	 * (DataNodeRows).
@@ -1024,7 +1114,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	/*
 	 * For each row, find or create the destination chunk. Note that the data
 	 * node connections have to be flushed before this. They might have
-	 * outstanding copy from the previous batch.
+	 * outstanding COPY data from the previous batch.
 	 */
 	flush_active_connections(&context->connection_state);
 	for (int k = 0; k < n; k++)
@@ -1070,7 +1160,6 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 				/* No insert state for this data node yet. Create it. */
 				data_node_rows = palloc(sizeof(DataNodeRows));
 				data_node_rows->server_oid = chunk_data_node->foreign_server_oid;
-				data_node_rows->rows_sent = 0;
 				data_node_rows->rows_total = 0;
 				data_node_rows->row_indices = palloc(sizeof(int) * context->current_batch_rows);
 				data_nodes = lappend(data_nodes, data_node_rows);
@@ -1168,48 +1257,46 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	MemoryContextSwitchTo(old);
 
 	/*
-	 * Actually send the data to the data nodes. We don't do any interleaving
-	 * here, because the batches are relatively small.
+	 * Actually send the data to the data nodes. We don't interleave the data
+	 * nodes here, because the batches are relatively small.
 	 */
+	StringInfoData copy_data = {
+		.data = palloc(MAX_BATCH_BYTES),
+		.maxlen = MAX_BATCH_BYTES
+	};
 	foreach (lc, data_nodes)
 	{
-		int res;
 		DataNodeRows *dn = lfirst(lc);
 		PGconn *pg_conn = remote_connection_get_pg_conn(dn->connection);
 
-		for (; dn->rows_sent < dn->rows_total; dn->rows_sent++)
+		resetStringInfo(&copy_data);
+		for (int row = 0; row < dn->rows_total; row++)
 		{
-			StringInfo row_data = context->batch_rows[dn->row_indices[dn->rows_sent]];
-
-			/*
-			 * It can't really return 0 ("would block") until it runs out
-			 * of memory. It just grows buffer and tries to flush in
-			 * pqPutMsgEnd().
-			 */
-			res = PQputCopyData(pg_conn, row_data->data, row_data->len);
-
-			if (res == -1)
-			{
-				ereport(ERROR,
-						errcode(ERRCODE_CONNECTION_EXCEPTION),
-						errmsg("could not send COPY data"));
-			}
+			StringInfo row_data = context->batch_rows[dn->row_indices[row]];
+			appendBinaryStringInfo(&copy_data, row_data->data, row_data->len);
 		}
 
-		res = PQflush(pg_conn);
+		/*
+		 * Send the copy data to the remote server.
+		 * It can't really return 0 ("would block") until it runs out
+		 * of memory. It just grows the buffer and tries to flush in
+		 * pqPutMsgEnd().
+		 */
+		int res = PQputCopyData(pg_conn, copy_data.data, copy_data.len);
 
 		if (res == -1)
 		{
 			ereport(ERROR,
 					errcode(ERRCODE_CONNECTION_EXCEPTION),
-					errmsg("could not flush COPY data"));
+					errmsg("could not send COPY data"));
 		}
+
+		/*
+		 * We don't have to specially flush the data here, because the flush is
+		 * attempted after finishing each protocol message (pqPutMsgEnd()).
+		 */
 	}
 
-	/*
-	 * We don't have to specially flush the data here, because the flush is
-	 * attempted after finishing each protocol message (pqPutMsgEnd()).
-	 */
 	return true;
 }
 
@@ -1248,7 +1335,7 @@ remote_distributed_copy(const CopyStmt *stmt, CopyChunkState *ccstate, List *att
 
 			bool eof = !read_next_copy_row(context, ccstate->cstate);
 			if (!eof && context->current_batch_rows < MAX_BATCH_ROWS &&
-				context->current_batch_bytes < 10 * 1024 * 1024)
+				context->current_batch_bytes < MAX_BATCH_BYTES)
 			{
 				/*
 				 * Accumulate more rows into the current batch.
