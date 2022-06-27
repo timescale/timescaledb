@@ -11,6 +11,9 @@ ${PG_BINDIR}/pg_dump -h ${PGHOST} -U dump_owner -Fc dump_owner 2>&1 > ${DUMPFILE
 
 if [ $? -eq 0 ]; then
   echo "Database dumped successfully"
-  echo "First few lines of dump: "
-  cat ${DUMPFILE} | head
 fi
+
+# to check the contents, will remove
+echo "First few lines of dump: "
+cat ${DUMPFILE} 
+echo ""

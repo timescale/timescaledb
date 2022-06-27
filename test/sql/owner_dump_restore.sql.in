@@ -1,0 +1,52 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+
+-- run this test only if predefined role pg_database_owner exists
+\c template1 :ROLE_SUPERUSER
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+CREATE USER dump_owner CREATEDB;
+-- create a database owned by user dump_owner
+DROP DATABASE IF EXISTS dump_owner;
+CREATE database dump_owner owner dump_owner;
+-- turn on restoring, restore the database from the dump and turn off restoring 
+\c dump_owner :ROLE_SUPERUSER
+CREATE EXTENSION IF NOT EXISTS timescaledb; 
+\c dump_owner dump_owner;
+-- create a table, insert a few rows, just to check 
+-- that restore worked ok
+create table mytable(time timestamp not null, a int);
+select create_hypertable('mytable', 'time');
+
+-- insert into mytable values ('2022-01-01'::timestamp, 1), ('2022-01-02'::timestamp, 2);
+
+select * from mytable;
+\set ON_ERROR_STOP 0
+
+-- \! utils/pg_dump_aux_dump.sh dump/pg_dump_superuser.sql
+
+\! utils/pg_dump_owner.sh dump/pg_dump_owner.sql
+
+\c template1 :ROLE_SUPERUSER
+-- DROP EXTENSION timescaledb;
+drop database dump_owner;
+
+CREATE database dump_owner_restored owner dump_owner;
+\c dump_owner_restored :ROLE_SUPERUSER
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+
+\c dump_owner_restored dump_owner;
+SELECT timescaledb_pre_restore();
+
+show timescaledb.restoring;
+
+\! utils/pg_restore_owner.sh dump/pg_dump_owner.sql
+
+SELECT timescaledb_post_restore();
+
+show timescaledb.restoring;
+
+select * from mytable;
+

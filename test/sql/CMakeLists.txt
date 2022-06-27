@@ -108,6 +108,7 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES ddl_extra.sql)
+  list(APPEND TEST_TEMPLATES owner_dump_restore.sql.in)
 endif()
 
 # only test custom type if we are in 64-bit architecture
