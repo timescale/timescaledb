@@ -1091,7 +1091,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	qsort_arg(indices, context->current_batch_rows, sizeof(indices[0]), point_compare, context);
 
 	/* Comparator sanity check. */
-#ifndef NDEBUG
+#ifdef USE_ASSERT_CHECKING
 	for (int i = 1; i < n; i++)
 	{
 		int prev_index = indices[i-1];
