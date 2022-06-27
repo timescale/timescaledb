@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <port/pg_bswap.h>
 
 #include "row_by_row_fetcher.h"
 #include "tuplefactory.h"
@@ -42,6 +43,7 @@ static void
 row_by_row_fetcher_set_fetch_size(DataFetcher *df, int fetch_size)
 {
 	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+
 	data_fetcher_set_fetch_size(&fetcher->state, fetch_size);
 }
 
@@ -76,21 +78,30 @@ row_by_row_fetcher_send_fetch_request(DataFetcher *df)
 	/* make sure to have a clean state */
 	row_by_row_fetcher_reset(fetcher);
 
+	StringInfoData copy_query;
+	initStringInfo(&copy_query);
+	appendStringInfo(&copy_query, "copy (%s) to stdout with (format binary)", fetcher->state.stmt);
+
 	PG_TRY();
 	{
 		oldcontext = MemoryContextSwitchTo(fetcher->state.req_mctx);
 
+		Assert(tuplefactory_is_binary(fetcher->state.tf));
 		req = async_request_send_with_stmt_params_elevel_res_format(fetcher->state.conn,
-																	fetcher->state.stmt,
+																	copy_query.data,
 																	fetcher->state.stmt_params,
 																	ERROR,
-																	tuplefactory_is_binary(
-																		fetcher->state.tf) ?
-																		FORMAT_BINARY :
-																		FORMAT_TEXT);
+																	FORMAT_BINARY);
 		Assert(NULL != req);
 
+		/*
+		 * Single-row mode doesn't really influence the COPY queries, but setting
+		 * it here is a convenient way to prevent concurrent COPY requests on the
+		 * same connection. This can happen if we have multiple tables on the same
+		 * data node and still use the row-by-row fetcher.
+		 */
 		if (!async_request_set_single_row_mode(req))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
 					 errmsg("could not set single-row mode on connection to \"%s\"",
@@ -99,9 +110,24 @@ row_by_row_fetcher_send_fetch_request(DataFetcher *df)
 					 errhint(
 						 "Row-by-row fetching of data is not supported together with sub-queries."
 						 " Use cursor fetcher instead.")));
+		}
 
 		fetcher->state.data_req = req;
 		fetcher->state.open = true;
+
+		PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
+		if (!res)
+		{
+			elog(ERROR, "unexpected NULL response when starting COPY mode");
+		}
+		if (PQresultStatus(res) != PGRES_COPY_OUT)
+		{
+			elog(ERROR,
+				 "unexpected PQresult status %d when starting COPY mode",
+				 PQresultStatus(res));
+		}
+
+		PQclear(res);
 	}
 	PG_CATCH();
 	{
@@ -112,6 +138,89 @@ row_by_row_fetcher_send_fetch_request(DataFetcher *df)
 	}
 	PG_END_TRY();
 	MemoryContextSwitchTo(oldcontext);
+}
+
+static int
+copy_data_consume_bytes(StringInfo copy_data, int bytes_to_read)
+{
+	const int bytes_read = Min(bytes_to_read, copy_data->len - copy_data->cursor);
+	copy_data->cursor += bytes_read;
+	Assert(copy_data->cursor <= copy_data->len);
+	return bytes_read;
+}
+
+static char *
+copy_data_read_bytes(StringInfo copy_data, int bytes_to_read)
+{
+	char *result = &copy_data->data[copy_data->cursor];
+	const int bytes_read = copy_data_consume_bytes(copy_data, bytes_to_read);
+
+	if (bytes_read != bytes_to_read)
+	{
+		elog(ERROR,
+			 "could not read the requested %d bytes of COPY data, read %d instead",
+			 bytes_to_read,
+			 bytes_read);
+	}
+
+	return result;
+}
+
+static int16
+copy_data_read_int16(StringInfo copy_data)
+{
+	char *buf = &copy_data->data[copy_data->cursor];
+	if (copy_data_consume_bytes(copy_data, 2) != 2)
+	{
+		elog(ERROR, "failed to read int16 from COPY data: not enough bytes left");
+	}
+	return (int16) pg_ntoh16(*(uint16 *) buf);
+}
+
+static int32
+copy_data_read_int32(StringInfo copy_data)
+{
+	char *buf = &copy_data->data[copy_data->cursor];
+	if (copy_data_consume_bytes(copy_data, 4) != 4)
+	{
+		elog(ERROR, "failed to read int32 from COPY data: not enough bytes left");
+	}
+	return (int32) pg_ntoh32(*(uint32 *) buf);
+}
+
+static void
+copy_data_check_header(StringInfo copy_data)
+{
+	static const char required_signature[11] = "PGCOPY\n\377\r\n\0";
+	char *actual_signature = copy_data_read_bytes(copy_data, sizeof(required_signature));
+	if (memcmp(required_signature, actual_signature, sizeof(required_signature)) != 0)
+	{
+		elog(ERROR, "wrong COPY data signature");
+	}
+
+	int32 flags = copy_data_read_int32(copy_data);
+	if (flags != 0)
+	{
+		elog(ERROR, "wrong COPY flags: %d, should be 0", flags);
+	}
+
+	/*
+	 * Header extension area length
+	 * 32-bit integer, length in bytes of remainder of header, not including
+	 * self. Currently, this is zero, and the first tuple follows
+	 * immediately. Future changes to the format might allow additional data
+	 * to be present in the header. A reader should silently skip over any
+	 * header extension data it does not know what to do with.
+	 */
+	int32 header_extension_length = copy_data_read_int32(copy_data);
+	int bytes_read = copy_data_consume_bytes(copy_data, header_extension_length);
+	if (bytes_read != header_extension_length)
+	{
+		elog(ERROR,
+			 "failed to read COPY header extension: expected %d bytes, read %d",
+			 header_extension_length,
+			 bytes_read);
+	}
 }
 
 /*
@@ -138,8 +247,11 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 	 */
 	MemoryContextReset(fetcher->state.batch_mctx);
 	oldcontext = MemoryContextSwitchTo(fetcher->state.batch_mctx);
-	const int nattrs = tuplefactory_get_nattrs(fetcher->state.tf);
-	const int total = nattrs * fetcher->state.fetch_size;
+	const TupleDesc tupdesc = tuplefactory_get_tupdesc(fetcher->state.tf);
+	const List *retrieved_attrs = tuplefactory_get_retrieved_attrs(fetcher->state.tf);
+	const int tupdesc_natts = tupdesc->natts;
+	const int retrieved_natts = list_length(retrieved_attrs);
+	const int total = tupdesc_natts * fetcher->state.fetch_size;
 	fetcher->batch_nulls = palloc(sizeof(bool) * total);
 	for (int i = 0; i < total; i++)
 	{
@@ -149,73 +261,144 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 
 	PG_TRY();
 	{
-		int i;
+		int row;
 
-		for (i = 0; i < fetcher->state.fetch_size; i++)
+		for (row = 0; row < fetcher->state.fetch_size; row++)
 		{
-			PGresult *res;
-
 			MemoryContextSwitchTo(fetcher->state.req_mctx);
 
-			response = async_request_set_wait_any_result(fetch_req_wrapper);
-			if (NULL == response)
-				elog(ERROR, "unexpected NULL response");
+			StringInfoData copy_data = { 0 };
 
-			/* Make sure to drain the connection only if we've retrieved complete result set */
-			if (async_response_get_type((AsyncResponse *) response) == RESPONSE_RESULT &&
-				NULL != async_request_set_wait_any_result(fetch_req_wrapper))
-				elog(ERROR, "request must be for one sql statement");
+			copy_data.len = PQgetCopyData(remote_connection_get_pg_conn(fetcher->state.conn),
+										  &copy_data.data,
+										  /* async = */ false);
 
-			res = async_response_result_get_pg_result(response);
-
-			if (!(PQresultStatus(res) == PGRES_SINGLE_TUPLE ||
-				  PQresultStatus(res) == PGRES_TUPLES_OK))
+			if (copy_data.len == -1)
 			{
-				/* remote_result_elog will call PQclear() on the result, so
-				 * need to mark the response as NULL to avoid double
-				 * PQclear() */
-				pfree(response);
-				response = NULL;
-				remote_result_elog(res, ERROR);
+				/*
+				 * According to the docs, this means EOF, but in practice we get
+				 * it when there is an error. Check for error and report it.
+				 */
+				fetcher->state.eof = true;
+
+				PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
+				if (res == NULL)
+				{
+					/* Shouldn't really happen but technically possible. */
+					TSConnectionError err;
+					remote_connection_get_error(fetcher->state.conn, &err);
+					remote_connection_error_elog(&err, ERROR);
+				}
+				if (PQresultStatus(res) != PGRES_COPY_OUT)
+				{
+					TSConnectionError err;
+					remote_connection_get_result_error(res, &err);
+					remote_connection_error_elog(&err, ERROR);
+				}
+				break;
+			}
+			else if (copy_data.len == -2)
+			{
+				/*
+				 * Error. The docs say: consult PQerrorMessage() for the reason.
+				 * remote_connection_get_error() will do this for us.
+				 */
+				TSConnectionError err;
+				remote_connection_get_error(fetcher->state.conn, &err);
+				remote_connection_error_elog(&err, ERROR);
 			}
 
-			if (PQresultStatus(res) == PGRES_TUPLES_OK)
-			{
-				/* fetched all the data */
-				Assert(PQntuples(res) == 0);
+			copy_data.maxlen = copy_data.len;
+			Assert(copy_data.cursor == 0);
 
+			if (fetcher->state.batch_count == 0 && row == 0)
+			{
+				copy_data_check_header(&copy_data);
+			}
+
+			const AttConvInMetadata *attconv = tuplefactory_get_attconv(fetcher->state.tf);
+			Assert(attconv->binary);
+			const int16 natts = copy_data_read_int16(&copy_data);
+			if (natts == -1)
+			{
 				fetcher->state.eof = true;
-				async_response_result_close(response);
-				response = NULL;
 				break;
 			}
 
-			Assert(PQresultStatus(res) == PGRES_SINGLE_TUPLE);
-			/* Allow creating tuples in alternative memory context if user has set
-			 * it explicitly, otherwise same as batch_mctx */
-			MemoryContextSwitchTo(fetcher->state.tuple_mctx);
-
-			PG_USED_FOR_ASSERTS_ONLY ItemPointer ctid =
-				tuplefactory_make_virtual_tuple(fetcher->state.tf,
-												res,
-												0,
-												PQbinaryTuples(res),
-												&fetcher->batch_values[i * nattrs],
-												&fetcher->batch_nulls[i * nattrs]);
-
 			/*
-			 * This fetcher uses virtual tuples that can't hold ctid, so if we're
-			 * receiving a ctid here, we're doing something wrong.
+			 * There is also one case where no tupdesc attributes are retrieved.
+			 * This is when we do `select count(*) from t`, and
+			 * `enable_partitionwise_aggregate` is 0, so the data node queries
+			 * become `select null from ...` and we should get 1 NULL attribute
+			 * from COPY.
 			 */
-			Assert(ctid == NULL);
+			int16 expected_natts = Max(1, retrieved_natts);
+			if (natts != expected_natts)
+			{
+				elog(ERROR,
+					 "wrong number of attributes for a COPY tuple: expected %d, got %d",
+					 expected_natts,
+					 natts);
+			}
 
-			async_response_result_close(response);
-			response = NULL;
+			Datum *values = &fetcher->batch_values[tupdesc_natts * row];
+			bool *nulls = &fetcher->batch_nulls[tupdesc_natts * row];
+			for (int i = 0; i < tupdesc_natts; i++)
+			{
+				nulls[i] = true;
+			}
+
+			MemoryContextSwitchTo(fetcher->state.tuple_mctx);
+			for (int i = 0; i < retrieved_natts; i++)
+			{
+				const int att = list_nth_int(retrieved_attrs, i) - 1;
+				Assert(att >= 0);
+				Assert(att < tupdesc_natts);
+				const int32 att_bytes = copy_data_read_int32(&copy_data);
+				if (att_bytes == -1)
+				{
+					/*
+					 * NULL. From the Postgres docs:
+					 * Usually, a receive function should be declared STRICT; if
+					 * it is not, it will be called with a NULL first parameter
+					 * when reading a NULL input value. The function must still
+					 * return NULL in this case, unless it raises an error.
+					 * (This case is mainly meant to support domain receive
+					 * functions, which might need to reject NULL inputs.)
+					 * https://www.postgresql.org/docs/current/sql-createtype.html
+					 */
+					if (!attconv->conv_funcs[att].fn_strict)
+					{
+						values[att] = ReceiveFunctionCall(&attconv->conv_funcs[att],
+														  NULL,
+														  attconv->ioparams[att],
+														  attconv->typmods[att]);
+					}
+					else
+					{
+						values[att] = PointerGetDatum(NULL);
+					}
+					nulls[att] = true;
+					continue;
+				}
+
+				StringInfoData att_data = { 0 };
+				att_data.data = copy_data_read_bytes(&copy_data, att_bytes);
+				att_data.len = att_bytes;
+
+				values[att] = ReceiveFunctionCall(&attconv->conv_funcs[att],
+												  &att_data,
+												  attconv->ioparams[att],
+												  attconv->typmods[att]);
+				nulls[att] = false;
+			}
+
+			MemoryContextSwitchTo(fetcher->state.batch_mctx);
+
+			PQfreemem(copy_data.data);
 		}
-		/* We need to manually reset the context since we've turned off per tuple reset */
-		tuplefactory_reset_mctx(fetcher->state.tf);
 
-		fetcher->state.num_tuples = i;
+		fetcher->state.num_tuples = row;
 		fetcher->state.next_tuple_idx = 0;
 		/* Must be EOF if we didn't get as many tuples as we asked for. */
 		if (fetcher->state.num_tuples < fetcher->state.fetch_size)
@@ -229,6 +412,33 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 		{
 			pfree(fetcher->state.data_req);
 			fetcher->state.data_req = NULL;
+
+			int end_res = PQendcopy(remote_connection_get_pg_conn(fetcher->state.conn));
+			if (end_res != 0)
+			{
+				TSConnectionError err;
+				remote_connection_get_error(fetcher->state.conn, &err);
+				remote_connection_error_elog(&err, ERROR);
+			}
+
+			/*
+			 * Shouldn't have any activity on the connection after we have
+			 * finished COPY. Just double-check.
+			 */
+			PGresult *pgres = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
+			if (pgres)
+			{
+				TSConnectionError err;
+				remote_connection_get_result_error(pgres, &err);
+				if (err.msg == NULL)
+				{
+					err.msg = "internal program error: remaining activity on the data node "
+							  "connection after finishing COPY";
+				}
+				remote_connection_error_elog(&err, ERROR);
+			}
+
+			remote_connection_set_status(fetcher->state.conn, CONN_IDLE);
 		}
 	}
 	PG_CATCH();
@@ -327,6 +537,31 @@ row_by_row_fetcher_close(DataFetcher *df)
 
 	if (fetcher->state.data_req != NULL)
 	{
+		int end_res = PQendcopy(remote_connection_get_pg_conn(fetcher->state.conn));
+		if (end_res != 0)
+		{
+			TSConnectionError err;
+			remote_connection_get_error(fetcher->state.conn, &err);
+			remote_connection_error_elog(&err, ERROR);
+		}
+
+		/*
+		 * Shouldn't have any activity on the connection after we have
+		 * finished COPY. Just double-check.
+		 */
+		PGresult *pgres = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
+		if (pgres)
+		{
+			TSConnectionError err;
+			remote_connection_get_result_error(pgres, &err);
+			if (err.msg == NULL)
+			{
+				err.msg = "internal program error: remaining activity on the data node connection "
+						  "after finishing COPY";
+			}
+			remote_connection_error_elog(&err, ERROR);
+		}
+
 		async_request_discard_response(fetcher->state.data_req);
 		pfree(fetcher->state.data_req);
 		fetcher->state.data_req = NULL;

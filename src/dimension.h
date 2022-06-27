@@ -144,6 +144,7 @@ extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData
 											Oid *intervaltype, int16 *num_slices,
 											Oid *integer_now_func);
 extern TSDLLEXPORT List *ts_dimension_get_partexprs(const Dimension *dim, Index hyper_varno);
+extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
 
 #define hyperspace_get_open_dimension(space, i)                                                    \
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

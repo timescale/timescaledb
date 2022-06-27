@@ -110,47 +110,69 @@ drop table t1;
 drop view v1;
 drop table foo;
 
-create table foo (a integer, b numeric , c text, d timestamptz);
-insert into foo values( 1 , 10 , 'hello', '2010-01-01 09:00:00-08');
-insert into foo values( 1 , 20 , 'abc', '2010-01-02 09:00:00-08');
-insert into foo values( 1 , 30 , 'abcd',  '2010-01-03 09:00:00-08');
-insert into foo values( 1 , 40 , 'abcde', NULL );
-insert into foo values( 1 , 50 , NULL,  '2010-01-01 09:00:00-08');
+create table foo (a integer, b numeric , c text, d timestamptz, e bigint);
+insert into foo values( 1 , 10 , 'hello', '2010-01-01 09:00:00-08', 10);
+insert into foo values( 1 , 20 , 'abc', '2010-01-02 09:00:00-08', 20);
+insert into foo values( 1 , 30 , 'abcd',  '2010-01-03 09:00:00-08', 30);
+insert into foo values( 1 , 40 , 'abcde', NULL, 40);
+insert into foo values( 1 , 50 , NULL,  '2010-01-01 09:00:00-08', 50);
 --group with all values for c and d same
-insert into foo values( 2 , 10 ,  'hello', '2010-01-01 09:00:00-08');
-insert into foo values( 2 , 20 , 'hello', '2010-01-01 09:00:00-08');
-insert into foo values( 2 , 30 , 'hello', '2010-01-01 09:00:00-08');
+insert into foo values( 2 , 10 ,  'hello', '2010-01-01 09:00:00-08', 10);
+insert into foo values( 2 , 20 , 'hello', '2010-01-01 09:00:00-08', 20);
+insert into foo values( 2 , 30 , 'hello', '2010-01-01 09:00:00-08', 30);
 --group with all values for c and d NULL
-insert into foo values( 3 , 40 , NULL, NULL);
-insert into foo values( 3 , 50 , NULL, NULL);
-insert into foo values(11, NULL, NULL, NULL);
-insert into foo values(11, NULL, 'hello', '2010-01-02 09:00:00-05');
+insert into foo values( 3 , 40 , NULL, NULL, 40);
+insert into foo values( 3 , 50 , NULL, NULL, 50);
+insert into foo values(11, NULL, NULL, NULL, NULL);
+insert into foo values(11, NULL, 'hello', '2010-01-02 09:00:00-05', NULL);
 --group with all values for c and d NULL and later add non-null.
-insert into foo values(12, NULL, NULL, NULL);
+insert into foo values(12, NULL, NULL, NULL, NULL);
 
 
-create or replace view v1(a , b, partialb, partialc, partiald)
+create or replace view v1(a , b, partialb, partialc, partiald, partiale, partialf)
 as
- SELECT a, b, _timescaledb_internal.partialize_agg( sum(b)) , _timescaledb_internal.partialize_agg( min(c)) , _timescaledb_internal.partialize_agg(max(d)) from foo group by a, b ;
+ SELECT a, b, _timescaledb_internal.partialize_agg(sum(b))
+ , _timescaledb_internal.partialize_agg(min(c))
+ , _timescaledb_internal.partialize_agg(max(d))
+ , _timescaledb_internal.partialize_agg(stddev(b))
+ , _timescaledb_internal.partialize_agg(stddev(e)) from foo group by a, b ;
 
 create table t1 as select * from v1;
 
 --sum 2114, collid 0, min(text) 2145, collid 100, max(ts) 2127
-insert into foo values(12, 10, 'hello', '2010-01-02 09:00:00-05');
+insert into foo values(12, 10, 'hello', '2010-01-02 09:00:00-05', 10);
 insert into t1 select * from v1 where  (a = 12 and b = 10) ;
 
---select a, sum(b), min(c) , max(d) from foo group by a order by a;
+--select a, sum(b), min(c) , max(d), stddev(b), stddev(e) from foo group by a order by a;
 --results should match above query
+CREATE OR REPLACE VIEW vfinal(a , sumb, minc, maxd, stddevb, stddeve)
+AS
 select a, _timescaledb_internal.finalize_agg( 'sum(numeric)', null, null, null, partialb, null::numeric ) sumb
 , _timescaledb_internal.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc
-, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd from t1 group by a order by a ;
+, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd
+, _timescaledb_internal.finalize_agg( 'stddev(numeric)', null, null, null, partiale, null::numeric ) stddevb
+, _timescaledb_internal.finalize_agg( 'stddev(int8)', null, null, null, partialf, null::numeric ) stddeve
+from t1 group by a order by a ;
+
+SELECT * FROM vfinal;
+CREATE TABLE vfinal_res AS SELECT * FROM vfinal;
+
+-- overwrite partials with dumped binary values from PostrgeSQL 13 --
+TRUNCATE TABLE t1;
+\COPY t1 FROM data/partialize_finalize_data.csv WITH CSV HEADER
+
+--repeat query to verify partial serialization sanitization works for versions PG >= 14
+CREATE TABLE vfinal_dump_res AS SELECT * FROM vfinal;
+
+-- compare results to verify there is no difference
+(SELECT * FROM vfinal_res) EXCEPT (SELECT * FROM vfinal_dump_res);
 
 --with having clause --
 select a, b ,  _timescaledb_internal.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd from t1  where b is not null group by a, b having _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) is not null order by a, b;
 
-
 --TEST5 test with TOAST data
 
+drop view vfinal;
 drop table t1;
 drop view v1;
 drop table foo;

@@ -19,6 +19,8 @@ FROM pg_proc p
     e.oid = d.refobjid
 WHERE proname <> 'get_telemetry_report'
 ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text COLLATE "C";
+ _timescaledb_internal.alter_job_set_hypertable_id(integer,regclass)
+ _timescaledb_internal.attach_osm_table_chunk(regclass,regclass)
  _timescaledb_internal.bookend_deserializefunc(bytea,internal)
  _timescaledb_internal.bookend_finalfunc(internal,anyelement,"any")
  _timescaledb_internal.bookend_serializefunc(internal)

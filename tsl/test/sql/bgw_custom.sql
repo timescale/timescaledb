@@ -292,5 +292,28 @@ SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, in
 SELECT wait_for_job_to_run(:job_id_5, 1);
 SELECT count(*) FROM conditions_summary_daily;
 
+-- TESTs for alter_job_set_hypertable_id API
+
+SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, NULL);
+SELECT id, proc_name, hypertable_id 
+FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+
+-- error case, try to associate with a PG relation
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, 'custom_log');
+\set ON_ERROR_STOP 1
+
+-- TEST associate the cagg with the job
+SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, 'conditions_summary_daily'::regclass);
+
+SELECT id, proc_name, hypertable_id 
+FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+
+--verify that job is dropped when cagg is dropped
+DROP MATERIALIZED VIEW conditions_summary_daily;
+
+SELECT id, proc_name, hypertable_id 
+FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+
 -- Stop Background Workers
 SELECT _timescaledb_internal.stop_background_workers();

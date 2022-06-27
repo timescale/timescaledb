@@ -15,6 +15,7 @@
 
 #include "job.h"
 #include "job_api.h"
+#include "hypertable_cache.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -262,4 +263,60 @@ job_alter(PG_FUNCTION_ARGS)
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);
+}
+
+static Hypertable *
+get_hypertable_from_oid(Cache **hcache, Oid table_oid)
+{
+	Hypertable *hypertable = NULL;
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, CACHE_FLAG_MISSING_OK, hcache);
+	if (!hypertable)
+	{
+		const char *view_name = get_rel_name(table_oid);
+
+		if (!view_name)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("relation is not a hypertable or continuous aggregate")));
+		else
+		{
+			ContinuousAgg *ca = ts_continuous_agg_find_by_relid(table_oid);
+
+			if (!ca)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("relation \"%s\" is not a hypertable or continuous aggregate",
+								view_name)));
+			hypertable = ts_hypertable_get_by_id(ca->data.mat_hypertable_id);
+		}
+	}
+	Assert(hypertable != NULL);
+	return hypertable;
+}
+
+Datum
+job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
+{
+	int32 job_id = PG_GETARG_INT32(0);
+	Oid table_oid = PG_GETARG_OID(1);
+	Cache *hcache = NULL;
+	Hypertable *ht = NULL;
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false /* missing_ok */);
+	if (job == NULL)
+		PG_RETURN_NULL();
+	ts_bgw_job_permission_check(job);
+
+	if (!PG_ARGISNULL(1))
+	{
+		ht = get_hypertable_from_oid(&hcache, table_oid);
+		ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+	}
+
+	job->fd.hypertable_id = (ht != NULL ? ht->fd.id : 0);
+	ts_bgw_job_update_by_id(job_id, job);
+	if (hcache)
+		ts_cache_release(hcache);
+	PG_RETURN_INT32(job_id);
 }

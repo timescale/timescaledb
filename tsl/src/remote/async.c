@@ -15,6 +15,8 @@
 #include <catalog/pg_type.h>
 #include <nodes/pathnodes.h>
 
+#include <postmaster/postmaster.h>
+
 #include <annotations.h>
 #include "async.h"
 #include "connection.h"
@@ -463,7 +465,9 @@ async_request_wait_any_result(AsyncRequest *req)
 
 	/* Should expect exactly one response */
 	if (NULL == result)
-		elog(ERROR, "remote request failed");
+	{
+		elog(ERROR, "expected response for the remote tuple request, but received none");
+	}
 
 	/* Make sure to drain the connection only if we've retrieved complete result set */
 	if (result->base.type == RESPONSE_RESULT)
@@ -527,7 +531,8 @@ async_request_cleanup_result(AsyncRequest *req, TimestampTz endtime)
 	{
 		case DEFERRED:
 			if (remote_connection_is_processing(req->conn))
-				return async_response_error_create("request already in progress");
+				return async_response_error_create(
+					psprintf("request already in progress on port %d", PostPortNumber));
 
 			req = async_request_send_internal(req, WARNING);
 
@@ -619,7 +624,10 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 		{
 			case DEFERRED:
 				if (remote_connection_is_processing(req->conn))
-					return async_response_error_create("request already in progress");
+				{
+					return async_response_error_create(
+						psprintf("request already in progress on port %d", PostPortNumber));
+				}
 
 				req = async_request_send_internal(req, WARNING);
 
@@ -903,14 +911,16 @@ async_request_set_wait_all_ok_commands(AsyncRequestSet *set)
 void
 async_request_discard_response(AsyncRequest *req)
 {
-	AsyncResponseResult *result = NULL;
-
 	Assert(req != NULL);
 
+	AsyncRequestSet set = { 0 };
+	async_request_set_add(&set, req);
+
+	AsyncResponseResult *result = NULL;
 	do
 	{
 		/* for row-by-row fetching we need to loop until we consume the whole response */
-		result = async_request_wait_any_result(req);
+		result = async_request_set_wait_any_result(&set);
 		if (result != NULL)
 			async_response_result_close(result);
 	} while (result != NULL && req->state != COMPLETED);
