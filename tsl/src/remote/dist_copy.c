@@ -1004,7 +1004,7 @@ point_compare(const void *a, const void *b, void *_context)
 	Assert(pa->num_coords == pb->num_coords);
 	Assert(pa->num_coords != 0);
 
-/*
+//*
 	if (pa->num_coords == 1)
 	{
 		if (pa->coordinates[0] < pb->coordinates[0])
@@ -1037,9 +1037,7 @@ point_compare(const void *a, const void *b, void *_context)
 		return 1;
 	}
 
-	return 0;
-/*/
-	for (int i = 0; i < pa->num_coords; i++)
+	for (int i = 2; i < pa->num_coords; i++)
 	{
 		if (pa->coordinates[i] < pb->coordinates[i])
 		{
@@ -1050,7 +1048,6 @@ point_compare(const void *a, const void *b, void *_context)
 			return 1;
 		}
 	}
-//*/
 
 	return 0;
 }
