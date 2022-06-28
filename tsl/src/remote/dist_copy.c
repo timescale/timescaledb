@@ -954,104 +954,6 @@ send_copy_data(StringInfo row_data, const List *connections)
 	return true;
 }
 
-/* Interleave 32 bits with zeroes */
-static uint64
-part_bits32_by2(uint32 x)
-{
-	uint64		n = x;
-
-	n = (n | (n << 16)) & UINT64CONST(0x0000FFFF0000FFFF);
-	n = (n | (n << 8)) & UINT64CONST(0x00FF00FF00FF00FF);
-	n = (n | (n << 4)) & UINT64CONST(0x0F0F0F0F0F0F0F0F);
-	n = (n | (n << 2)) & UINT64CONST(0x3333333333333333);
-	n = (n | (n << 1)) & UINT64CONST(0x5555555555555555);
-
-	return n;
-}
-
-typedef struct
-{
-	uint64 high;
-	uint64 low;
-} zorder2x64;
-
-static zorder2x64
-point_zorder(Point *p)
-{
-	Assert(p->num_coords >= 2);
-
-	zorder2x64 result = {0};
-	result.high =
-		part_bits32_by2((p->coordinates[0] & UINT64CONST(0xFFFFFFFF00000000)) >> 32) << 1
-		| part_bits32_by2((p->coordinates[1] & UINT64CONST(0xFFFFFFFF00000000)) >> 32);
-	result.low =
-		part_bits32_by2((p->coordinates[0] & UINT64CONST(0x00000000FFFFFFFF))) << 1
-		| part_bits32_by2((p->coordinates[1] & UINT64CONST(0x00000000FFFFFFFF)));
-	return result;
-}
-
-static int
-point_compare(const void *a, const void *b, void *_context)
-{
-	RemoteCopyContext *context = (RemoteCopyContext *) _context;
-	int ia = *((int *) a);
-	int ib = *((int *) b);
-	Assert(0 <= ia && ia < context->current_batch_rows);
-	Assert(0 <= ib && ib < context->current_batch_rows);
-	Point *pa = context->batch_points[ia];
-	Point *pb = context->batch_points[ib];
-
-	Assert(pa->num_coords == pb->num_coords);
-	Assert(pa->num_coords != 0);
-
-//*
-	if (pa->num_coords == 1)
-	{
-		if (pa->coordinates[0] < pb->coordinates[0])
-		{
-			return -1;
-		}
-		if (pa->coordinates[0] > pb->coordinates[0])
-		{
-			return 1;
-		}
-		return 0;
-	}
-
-	zorder2x64 za = point_zorder(pa);
-	zorder2x64 zb = point_zorder(pb);
-	if (za.high < zb.high)
-	{
-		return -1;
-	}
-	if (za.high > zb.high)
-	{
-		return 1;
-	}
-	if (za.low < zb.low)
-	{
-		return -1;
-	}
-	if (za.low > zb.low)
-	{
-		return 1;
-	}
-
-	for (int i = 2; i < pa->num_coords; i++)
-	{
-		if (pa->coordinates[i] < pb->coordinates[i])
-		{
-			return -1;
-		}
-		else if (pa->coordinates[i] > pb->coordinates[i])
-		{
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
 /*
  * Rows for sending to a particular data node.
  */
@@ -1074,35 +976,6 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	Assert(n <= MAX_BATCH_ROWS);
 
 	/*
-	 * Sort the rows by the insertion point. This helps to preserve data
-	 * locality when doing inserts, because after sorting we're more likely to
-	 * have many rows from the same chunk go in sequence. Note that this is not
-	 * equivalent to sorting by the destination chunk. For example, if time is
-	 * slightly different for each point, we effectively do not sort on the
-	 * space dimension. Z-order of point coordinates would be a better
-	 * approximation, or sorting again after finding the destination chunks.
-	 * Still, this is better than nothing.
-	 */
-	int indices[MAX_BATCH_ROWS];
-	for (int i = 0; i < n; i++)
-	{
-		indices[i] = i;
-	}
-	qsort_arg(indices, context->current_batch_rows, sizeof(indices[0]), point_compare, context);
-
-	/* Comparator sanity check. */
-#ifdef USE_ASSERT_CHECKING
-	for (int i = 1; i < n; i++)
-	{
-		int prev_index = indices[i-1];
-		int this_index = indices[i];
-		Assert(point_compare(&prev_index,
-			&this_index,
-			context) <= 0);
-	}
-#endif
-
-	/*
 	 * This list tracks the per-batch insert states of the data nodes
 	 * (DataNodeRows).
 	 */
@@ -1114,9 +987,8 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	 * outstanding COPY data from the previous batch.
 	 */
 	flush_active_connections(&context->connection_state);
-	for (int k = 0; k < n; k++)
+	for (int row_in_batch = 0; row_in_batch < n; row_in_batch++)
 	{
-		const int row_in_batch = indices[k];
 		Point *point = context->batch_points[row_in_batch];
 
 		Chunk *chunk = ts_hypertable_find_chunk_for_point(ht, point);
