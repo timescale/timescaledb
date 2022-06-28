@@ -574,3 +574,83 @@ SELECT _timescaledb_internal.stop_background_workers();
  t
 (1 row)
 
+SELECT _timescaledb_internal.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- add test for custom jobs with custom check functions
+-- create the functions/procedures to be used as checking functions
+CREATE OR REPLACE PROCEDURE test_config_check_proc(config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config must have drop_after';
+    END IF ;
+END
+$$;
+CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config must have drop_after';
+    END IF ;
+END
+$$ LANGUAGE PLPGSQL;
+-- step 2, create a procedure to run as a custom job
+CREATE OR REPLACE PROCEDURE test_proc_with_check(job_id int, config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  RAISE NOTICE 'Will only print this if config passes checks, my config is %', config; 
+END
+$$;
+-- step 3, add the job with the config check function passed as argument
+-- test procedures
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_proc'::regproc);
+ERROR:  Config must have drop_after
+select add_job('test_proc_with_check', '5 secs', config => '{"one": "two"}', check_config => 'test_config_check_proc'::regproc);
+ERROR:  Config must have drop_after
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_proc'::regproc);
+ERROR:  invalid input syntax for type interval: "chicken"
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_proc'::regproc)
+as job_with_proc_check_id \gset
+-- test functions
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
+ERROR:  Config must have drop_after
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
+ add_job 
+---------
+    1006
+(1 row)
+
+select add_job('test_proc_with_check', '5 secs', config => '{"one": "two"}', check_config => 'test_config_check_func'::regproc);
+ERROR:  Config must have drop_after
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
+ERROR:  invalid input syntax for type interval: "chicken"
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_func'::regproc) 
+as job_with_func_check_id \gset
+--- test alter_job
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
+ERROR:  invalid input syntax for type interval: "chicken"
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
+                                     alter_job                                     
+-----------------------------------------------------------------------------------
+ (1007,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""5 years""}",-infinity)
+(1 row)
+
+select alter_job(:job_with_proc_check_id, config => '{"drop_after":"4 days"}');
+                                    alter_job                                     
+----------------------------------------------------------------------------------
+ (1005,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""4 days""}",-infinity)
+(1 row)
+
