@@ -10,6 +10,9 @@
 #include <utils/acl.h>
 #include <utils/builtins.h>
 
+#include <parser/parse_func.h>
+#include <parser/parser.h>
+
 #include <bgw/job.h>
 #include <bgw/job_stat.h>
 
@@ -25,7 +28,37 @@
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
-#define ALTER_JOB_NUM_COLS 8
+#define ALTER_JOB_NUM_COLS 9
+
+/*
+ * This function ensures that the check function has the required signature
+ * @param check A valid Oid
+ */
+static inline void
+validate_check_signature(Oid check)
+{
+	Oid proc = InvalidOid;
+	ObjectWithArgs *object;
+	NameData check_name = { 0 };
+	NameData check_schema = { 0 };
+
+	namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
+	namestrcpy(&check_name, get_func_name(check));
+
+	object = makeNode(ObjectWithArgs);
+	object->objname =
+		list_make2(makeString(NameStr(check_schema)), makeString(NameStr(check_name)));
+	object->objargs = list_make1(SystemTypeName("jsonb"));
+	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+
+	if (!OidIsValid(proc))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("function or procedure %s.%s(config jsonb) not found",
+						NameStr(check_schema),
+						NameStr(check_name)),
+				 errhint("The check function's signature must be (config jsonb).")));
+}
 
 /*
  * CREATE FUNCTION add_job(
@@ -110,8 +143,11 @@ job_add(PG_FUNCTION_ARGS)
 	namestrcpy(&proc_name, func_name);
 	namestrcpy(&owner_name, GetUserNameFromId(owner, false));
 
-	if (config)
-		ts_bgw_job_run_config_check(check, 0, config);
+	/* The check exists but may not have the expected signature: (config jsonb) */
+	if (OidIsValid(check))
+		validate_check_signature(check);
+
+	ts_bgw_job_run_config_check(check, 0, config);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										schedule_interval,
@@ -206,6 +242,7 @@ job_run(PG_FUNCTION_ARGS)
  * 6    config JSONB = NULL,
  * 7    next_start TIMESTAMPTZ = NULL
  * 8    if_exists BOOL = FALSE,
+ * 9    check_config REGPROC = NULL
  * ) RETURNS TABLE (
  *      job_id INTEGER,
  *      schedule_interval INTERVAL,
@@ -215,6 +252,7 @@ job_run(PG_FUNCTION_ARGS)
  *      scheduled BOOL,
  *      config JSONB,
  *      next_start TIMESTAMPTZ
+ *      check_config TEXT
  * )
  */
 Datum
@@ -229,6 +267,13 @@ job_alter(PG_FUNCTION_ARGS)
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
 	BgwJob *job;
+	NameData check_name = { 0 };
+	NameData check_schema = { 0 };
+	Oid check = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
+	char *check_name_str = NULL;
+	/* Added space for period and NULL */
+	char schema_qualified_check_name[2 * NAMEDATALEN + 2] = { 0 };
+	bool unregister_check = (!PG_ARGISNULL(9) && !OidIsValid(check));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -259,6 +304,50 @@ job_alter(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(6))
 		job->fd.config = PG_GETARG_JSONB_P(6);
 
+	if (!PG_ARGISNULL(9))
+	{
+		if (OidIsValid(check))
+		{
+			check_name_str = get_func_name(check);
+			if (check_name_str == NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("function with OID %d does not exist", check)));
+
+			if (pg_proc_aclcheck(check, GetUserId(), ACL_EXECUTE) != ACLCHECK_OK)
+				ereport(ERROR,
+						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+						 errmsg("permission denied for function \"%s\"", check_name_str),
+						 errhint("Job owner must have EXECUTE privilege on the function.")));
+
+			namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
+			namestrcpy(&check_name, check_name_str);
+
+			/* The check exists but may not have the expected signature: (config jsonb) */
+			validate_check_signature(check);
+
+			namestrcpy(&job->fd.check_schema, NameStr(check_schema));
+			namestrcpy(&job->fd.check_name, NameStr(check_name));
+			snprintf(schema_qualified_check_name,
+					 sizeof(schema_qualified_check_name) / sizeof(schema_qualified_check_name[0]),
+					 "%s.%s",
+					 NameStr(check_schema),
+					 check_name_str);
+		}
+	}
+	else
+		snprintf(schema_qualified_check_name,
+				 sizeof(schema_qualified_check_name) / sizeof(schema_qualified_check_name[0]),
+				 "%s.%s",
+				 NameStr(job->fd.check_schema),
+				 NameStr(job->fd.check_name));
+
+	if (unregister_check)
+	{
+		NameData empty_namedata = { 0 };
+		namestrcpy(&job->fd.check_schema, NameStr(empty_namedata));
+		namestrcpy(&job->fd.check_name, NameStr(empty_namedata));
+	}
 	ts_bgw_job_update_by_id(job_id, job);
 
 	if (!PG_ARGISNULL(7))
@@ -284,6 +373,13 @@ job_alter(PG_FUNCTION_ARGS)
 		values[6] = JsonbPGetDatum(job->fd.config);
 
 	values[7] = TimestampTzGetDatum(next_start);
+
+	if (unregister_check)
+		nulls[8] = true;
+	else if (strlen(NameStr(job->fd.check_schema)) > 0)
+		values[8] = CStringGetTextDatum(schema_qualified_check_name);
+	else
+		nulls[8] = true;
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);

@@ -109,12 +109,9 @@ check_valid_index(Hypertable *ht, Name index_name)
 Datum
 policy_reorder_check(PG_FUNCTION_ARGS)
 {
-	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
-		PG_RETURN_VOID();
-
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	policy_reorder_read_and_validate_config(PG_GETARG_JSONB_P(1), NULL);
+	policy_reorder_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
 
 	PG_RETURN_VOID();
 }
