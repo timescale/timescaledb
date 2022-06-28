@@ -220,10 +220,7 @@ policy_refresh_cagg_proc(PG_FUNCTION_ARGS)
 Datum
 policy_refresh_cagg_check(PG_FUNCTION_ARGS)
 {
-	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
-		PG_RETURN_VOID();
-
-	policy_refresh_cagg_read_and_validate_config(PG_GETARG_JSONB_P(1), NULL);
+	policy_refresh_cagg_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
 
 	PG_RETURN_VOID();
 }

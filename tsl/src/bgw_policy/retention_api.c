@@ -43,12 +43,9 @@ policy_retention_proc(PG_FUNCTION_ARGS)
 Datum
 policy_retention_check(PG_FUNCTION_ARGS)
 {
-	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
-		PG_RETURN_VOID();
-
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(1), NULL);
+	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
 
 	PG_RETURN_VOID();
 }

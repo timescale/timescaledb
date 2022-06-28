@@ -10,6 +10,9 @@
 #include <utils/acl.h>
 #include <utils/builtins.h>
 
+#include <parser/parse_func.h>
+#include <parser/parser.h>
+
 #include <bgw/job.h>
 #include <bgw/job_stat.h>
 
@@ -25,7 +28,7 @@
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
-#define ALTER_JOB_NUM_COLS 8
+#define ALTER_JOB_NUM_COLS 9
 
 /*
  * CREATE FUNCTION add_job(
@@ -58,6 +61,7 @@ job_add(PG_FUNCTION_ARGS)
 	Jsonb *config = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
 	Oid check = PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
+	ObjectWithArgs *object;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -109,6 +113,22 @@ job_add(PG_FUNCTION_ARGS)
 	namestrcpy(&proc_schema, get_namespace_name(get_func_namespace(proc)));
 	namestrcpy(&proc_name, func_name);
 	namestrcpy(&owner_name, GetUserNameFromId(owner, false));
+
+	/* Verify that the check function has the required signature */
+	object = makeNode(ObjectWithArgs);
+	object->objname =
+		list_make2(makeString(NameStr(check_schema)), makeString(NameStr(check_name)));
+	object->objargs = list_make1(SystemTypeName("jsonb"));
+	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+
+	/* The check exists but does not have the expected signature: (config jsonb) */
+	if (OidIsValid(check) && !OidIsValid(proc))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("function or procedure %s.%s(config jsonb) not found",
+						NameStr(check_schema),
+						NameStr(check_name)),
+				 errhint("The check function's signature must be (config jsonb).")));
 
 	if (config)
 		ts_bgw_job_run_config_check(check, 0, config);
@@ -206,6 +226,7 @@ job_run(PG_FUNCTION_ARGS)
  * 6    config JSONB = NULL,
  * 7    next_start TIMESTAMPTZ = NULL
  * 8    if_exists BOOL = FALSE,
+ * 9    check_config REGPROC = NULL
  * ) RETURNS TABLE (
  *      job_id INTEGER,
  *      schedule_interval INTERVAL,
@@ -229,6 +250,10 @@ job_alter(PG_FUNCTION_ARGS)
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
 	BgwJob *job;
+	NameData check_name = { 0 };
+	NameData check_schema = { 0 };
+	Oid check = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
+	char *check_name_str = NULL;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -258,6 +283,30 @@ job_alter(PG_FUNCTION_ARGS)
 		job->fd.scheduled = PG_GETARG_BOOL(5);
 	if (!PG_ARGISNULL(6))
 		job->fd.config = PG_GETARG_JSONB_P(6);
+
+	if (!PG_ARGISNULL(9))
+	{
+		if (OidIsValid(check))
+		{
+			check_name_str = get_func_name(check);
+			if (check_name_str == NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("function with OID %d does not exist", check)));
+
+			if (pg_proc_aclcheck(check, GetUserId(), ACL_EXECUTE) != ACLCHECK_OK)
+				ereport(ERROR,
+						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+						 errmsg("permission denied for function \"%s\"", check_name_str),
+						 errhint("Job owner must have EXECUTE privilege on the function.")));
+
+			namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
+			namestrcpy(&check_name, check_name_str);
+
+			namestrcpy(&job->fd.check_schema, NameStr(check_schema));
+			namestrcpy(&job->fd.check_name, NameStr(check_name));
+		}
+	}
 
 	ts_bgw_job_update_by_id(job_id, job);
 
