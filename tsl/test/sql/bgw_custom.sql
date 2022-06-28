@@ -317,3 +317,66 @@ FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 -- Stop Background Workers
 SELECT _timescaledb_internal.stop_background_workers();
+
+SELECT _timescaledb_internal.restart_background_workers();
+
+\set ON_ERROR_STOP 0
+-- add test for custom jobs with custom check functions
+-- create the functions/procedures to be used as checking functions
+CREATE OR REPLACE PROCEDURE test_config_check_proc(config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config must have drop_after';
+    END IF ;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config must have drop_after';
+    END IF ;
+END
+$$ LANGUAGE PLPGSQL;
+
+-- step 2, create a procedure to run as a custom job
+CREATE OR REPLACE PROCEDURE test_proc_with_check(job_id int, config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  RAISE NOTICE 'Will only print this if config passes checks, my config is %', config; 
+END
+$$;
+
+-- step 3, add the job with the config check function passed as argument
+-- test procedures
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_proc'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"one": "two"}', check_config => 'test_config_check_proc'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_proc'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_proc'::regproc)
+as job_with_proc_check_id \gset
+
+-- test functions
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"one": "two"}', check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_func'::regproc) 
+as job_with_func_check_id \gset
+
+
+--- test alter_job
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
+
+select alter_job(:job_with_proc_check_id, config => '{"drop_after":"4 days"}');
+
