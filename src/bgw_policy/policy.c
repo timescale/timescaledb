@@ -6,10 +6,8 @@
 
 #include <postgres.h>
 #include <utils/builtins.h>
-#include <jsonb_utils.h>
 
 #include "bgw/job.h"
-#include "dimension.h"
 #include "policy.h"
 
 void

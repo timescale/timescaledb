@@ -176,7 +176,7 @@ DROP TABLE _timescaledb_config.bgw_job;
 
 CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
-SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called)
+SELECT pg_catalog.setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called)
 FROM _timescaledb_internal.tmp_bgw_job_seq_value;
 DROP TABLE _timescaledb_internal.tmp_bgw_job_seq_value;
 
@@ -218,8 +218,31 @@ ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
           FOREIGN KEY(job_id) REFERENCES _timescaledb_config.bgw_job(id)
           ON DELETE CASCADE;
 
-DROP FUNCTION IF EXISTS @extschema@.add_job;
+DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL, REGPROC);
 DROP FUNCTION IF EXISTS _timescaledb_internal.policy_retention_check(JSONB);
 DROP FUNCTION IF EXISTS _timescaledb_internal.policy_compression_check(JSONB);
 DROP FUNCTION IF EXISTS _timescaledb_internal.policy_reorder_check(JSONB);
 DROP FUNCTION IF EXISTS _timescaledb_internal.policy_refresh_continuous_aggregate_check(JSONB);
+DROP FUNCTION IF EXISTS @extschema@.alter_job(INTEGER, INTERVAL, INTERVAL, INTEGER, INTERVAL, BOOL, JSONB, TIMESTAMPTZ, BOOL, REGPROC);
+
+CREATE FUNCTION @extschema@.add_job(proc REGPROC,
+  schedule_interval INTERVAL,
+  config JSONB = NULL,
+  initial_start TIMESTAMPTZ = NULL,
+  scheduled BOOL = true)
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.alter_job(
+    job_id INTEGER,
+    schedule_interval INTERVAL = NULL,
+    max_runtime INTERVAL = NULL,
+    max_retries INTEGER = NULL,
+    retry_period INTERVAL = NULL,
+    scheduled BOOL = NULL,
+    config JSONB = NULL,
+    next_start TIMESTAMPTZ = NULL,
+    if_exists BOOL = FALSE
+)
+RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ)
+AS '@MODULE_PATHNAME@', 'ts_job_alter'
+LANGUAGE C VOLATILE;

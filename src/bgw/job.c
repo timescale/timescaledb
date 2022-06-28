@@ -10,6 +10,7 @@
 #include <catalog/pg_authid.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_func.h>
+#include <parser/parser.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <tcop/tcopprot.h>
@@ -109,15 +110,20 @@ job_execute_procedure(FuncExpr *funcexpr)
 void
 ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 {
-	List *args =
-		list_make2(makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(job_id), false, true),
-				   makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(config), false, false));
-	FuncExpr *funcexpr =
-		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-
 	/* Nothing to check if there is no check function provided */
 	if (!OidIsValid(check))
 		return;
+
+	/* NULL config may be valid */
+	Const *arg;
+	if (config == NULL)
+		arg = makeNullConst(JSONBOID, -1, InvalidOid);
+	else
+		arg = makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(config), false, false);
+
+	List *args = list_make1(arg);
+	FuncExpr *funcexpr =
+		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 
 	switch (get_func_prokind(check))
 	{
@@ -140,10 +146,8 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 static void
 job_config_check(BgwJob *job, Jsonb *config)
 {
-	const Oid proc_args[] = { INT4OID, JSONBOID };
-	List *name;
 	Oid proc;
-	bool started = false;
+	ObjectWithArgs *object;
 
 	/* Both should either be empty or contain a schema and name */
 	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
@@ -153,27 +157,25 @@ job_config_check(BgwJob *job, Jsonb *config)
 	if (strlen(NameStr(job->fd.check_name)) == 0)
 		return;
 
-	if (!IsTransactionOrTransactionBlock())
-	{
-		started = true;
-		StartTransactionCommand();
-		/* executing sql functions requires snapshot */
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
+	object = makeNode(ObjectWithArgs);
 
-	/* We are using LookupFuncName here, which will find functions but not
-	 * procedures. We could use LookupFuncWithArgs here instead. */
-	name = list_make2(makeString(NameStr(job->fd.check_schema)),
-					  makeString(NameStr(job->fd.check_name)));
-	proc = LookupFuncName(name, 2, proc_args, false);
-	ts_bgw_job_run_config_check(proc, job->fd.id, config);
-	if (started)
-	{
-		/* if job does its own transaction handling it might not have set a snapshot */
-		if (ActiveSnapshotSet())
-			PopActiveSnapshot();
-		CommitTransactionCommand();
-	}
+	object->objname = list_make2(makeString(NameStr(job->fd.check_schema)),
+								 makeString(NameStr(job->fd.check_name)));
+	object->objargs = list_make1(SystemTypeName("jsonb"));
+	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+
+	/* a check function has been registered but it can't be found anymore
+	 because it was dropped or renamed. Allow alter_job to run if that's the case
+	 without validating the config but also print a warning */
+	if (OidIsValid(proc))
+		ts_bgw_job_run_config_check(proc, job->fd.id, config);
+	else
+		elog(WARNING,
+			 "function or procedure %s.%s(config jsonb) not found, skipping config validation for "
+			 "job %d",
+			 NameStr(job->fd.check_schema),
+			 NameStr(job->fd.check_name),
+			 job->fd.id);
 }
 
 static BgwJob *
@@ -782,9 +784,24 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
 
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] =
+		NameGetDatum(&updated_job->fd.check_schema);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] =
+		NameGetDatum(&updated_job->fd.check_name);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+
+	if (strlen(NameStr(updated_job->fd.check_name)) == 0)
+	{
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+	}
+
 	if (updated_job->fd.config)
 	{
-		job_config_check(bgw_job_from_tupleinfo(ti, sizeof(BgwJob)), updated_job->fd.config);
+		job_config_check(updated_job, updated_job->fd.config);
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] =
 			JsonbPGetDatum(updated_job->fd.config);
 	}

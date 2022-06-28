@@ -22,11 +22,8 @@ ALTER TABLE _timescaledb_catalog.chunk
 
 CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
 
-DROP FUNCTION IF EXISTS @extschema@.add_job;
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_retention_check(INTEGER, JSONB);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_compression_check(INTEGER, JSONB);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_reorder_check(INTEGER, JSONB);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_refresh_continuous_aggregate_check(INTEGER, JSONB);
+DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.alter_job(INTEGER, INTERVAL, INTERVAL, INTEGER, INTERVAL, BOOL, JSONB, TIMESTAMPTZ, BOOL);
 
 -- add fields for check function
 ALTER TABLE _timescaledb_config.bgw_job
@@ -71,3 +68,5 @@ SET
   check_name = 'policy_refresh_continuous_aggregate_check'
 WHERE proc_schema = '_timescaledb_internal'
   AND proc_name = 'policy_refresh_continuous_aggregate';
+
+DROP VIEW IF EXISTS timescaledb_information.jobs;
