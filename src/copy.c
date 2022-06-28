@@ -263,6 +263,17 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 	if (miinfo->bufferedTuples >= MAX_BUFFERED_TUPLES ||
 		miinfo->bufferedBytes >= MAX_BUFFERED_BYTES)
 		return true;
+
+	if (hash_get_num_entries(miinfo->multiInsertBuffers) >= ts_guc_max_open_chunks_per_insert)
+	{
+		/*
+		 * Flushing each multi-insert buffer will require looking up the
+		 * corresponding chunk insert state in the cache, so don't accumulate
+		 * more inserts than the cache can fit, to avoid thrashing.
+		 */
+		return true;
+	}
+
 	return false;
 }
 
