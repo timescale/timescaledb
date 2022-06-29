@@ -1,0 +1,131 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_lock_compression s3_lock_decompression s1_compress s2_compress s3_unlock_compression s1_decompress s2_decompress s3_unlock_decompression
+step s3_lock_compression: 
+    SELECT debug_waitpoint_enable('compress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s3_lock_decompression: 
+    SELECT debug_waitpoint_enable('decompress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_compress: 
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+ <waiting ...>
+step s2_compress: 
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+   RESET client_min_messages;
+ <waiting ...>
+step s3_unlock_compression: 
+    -- Ensure that we are waiting on our debug waitpoint and one chunk
+    -- Note: The OIDs of the advisory locks are based on the hash value of the lock name (see debug_point_init())
+    --       compress_chunk_impl_start = 3379597659.
+    -- 'SELECT relation::regclass, ....' can not be used, because it returns a field with a variable length
+    SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND (locktype = 'advisory' or relation::regclass::text LIKE '%chunk') ORDER BY relation, locktype, mode, granted;
+    SELECT debug_waitpoint_release('compress_chunk_impl_start');
+
+locktype|mode     |granted|     objid
+--------+---------+-------+----------
+relation|ShareLock|f      |          
+advisory|ShareLock|f      |3379597659
+(2 rows)
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_compress: <... completed>
+compression_status
+------------------
+Uncompressed      
+Uncompressed      
+(2 rows)
+
+count
+-----
+    2
+(1 row)
+
+compression_status
+------------------
+Compressed        
+Compressed        
+(2 rows)
+
+  count
+-------
+1008050
+(1 row)
+
+step s2_compress: <... completed>
+compression_status
+------------------
+Uncompressed      
+Uncompressed      
+(2 rows)
+
+ERROR:  chunk "_hyper_X_X_chunk" is already compressed
+step s1_decompress: 
+   SELECT count(*) FROM (SELECT decompress_chunk(i, if_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+ <waiting ...>
+step s2_decompress: 
+   SELECT count(*) FROM (SELECT decompress_chunk(i, if_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+   RESET client_min_messages;
+ <waiting ...>
+step s3_unlock_decompression: 
+    -- Ensure that we are waiting on our debug waitpoint and one chunk
+    -- Note: The OIDs of the advisory locks are based on the hash value of the lock name (see debug_point_init())
+    --       decompress_chunk_impl_start = 2415054640.
+    -- 'SELECT relation::regclass, ....' can not be used, because it returns a field with a variable length
+    SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND (locktype = 'advisory' or relation::regclass::text LIKE '%chunk') ORDER BY relation, locktype, mode, granted;
+    SELECT debug_waitpoint_release('decompress_chunk_impl_start');
+
+locktype|mode         |granted|     objid
+--------+-------------+-------+----------
+relation|ExclusiveLock|f      |          
+advisory|ShareLock    |f      |2415054640
+(2 rows)
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_decompress: <... completed>
+count
+-----
+    2
+(1 row)
+
+compression_status
+------------------
+Uncompressed      
+Uncompressed      
+(2 rows)
+
+  count
+-------
+1008050
+(1 row)
+
+step s2_decompress: <... completed>
+ERROR:  chunk "_hyper_X_X_chunk" is already decompressed

@@ -1,9 +1,9 @@
 Parsed test spec with 3 sessions
 
 starting permutation: recompress_insert_rows lock_after_decompress recompress_chunks_start query_start unlock_after_decompress
-compress_chunk                            
-------------------------------------------
-_timescaledb_internal._hyper_141_300_chunk
+count
+-----
+    1
 (1 row)
 
 step recompress_insert_rows: 
