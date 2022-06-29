@@ -4325,6 +4325,7 @@ bool
 ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status,
 											 ChunkOperation cmd, bool throw_error)
 {
+	/* Handle frozen chunks */
 	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))
 	{
 		/* Data modification is not permitted on a frozen chunk */
@@ -4349,6 +4350,41 @@ ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status
 				break; /*supported operations */
 		}
 	}
+	/* Handle unfrozen chunks */
+	else
+	{
+		switch (cmd)
+		{
+			/* supported operations */
+			case CHUNK_INSERT:
+			case CHUNK_DELETE:
+			case CHUNK_UPDATE:
+				break;
+			/* Only uncompressed chunks can be compressed */
+			case CHUNK_COMPRESS:
+			{
+				if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_COMPRESSED))
+					ereport((throw_error ? ERROR : NOTICE),
+							(errcode(ERRCODE_DUPLICATE_OBJECT),
+							 errmsg("chunk \"%s\" is already compressed",
+									get_rel_name(chunk_relid))));
+				return false;
+			}
+			/* Only compressed chunks can be decompressed */
+			case CHUNK_DECOMPRESS:
+			{
+				if (!ts_flags_are_set_32(chunk_status, CHUNK_STATUS_COMPRESSED))
+					ereport((throw_error ? ERROR : NOTICE),
+							(errcode(ERRCODE_DUPLICATE_OBJECT),
+							 errmsg("chunk \"%s\" is already decompressed",
+									get_rel_name(chunk_relid))));
+				return false;
+			}
+			default:
+				break;
+		}
+	}
+
 	return true;
 }
 

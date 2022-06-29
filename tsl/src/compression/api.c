@@ -28,6 +28,7 @@
 #include "compat/compat.h"
 #include "cache.h"
 #include "chunk.h"
+#include "debug_point.h"
 #include "errors.h"
 #include "error_utils.h"
 #include "hypertable.h"
@@ -236,10 +237,26 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	/* Perform an analyze on the chunk to get up-to-date stats before compressing */
 	preserve_uncompressed_chunk_stats(chunk_relid);
 
-	/* aquire locks on catalog tables to keep till end of txn */
+	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
 					AccessShareLock);
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+
+	DEBUG_WAITPOINT("compress_chunk_impl_start");
+
+	/*
+	 * Re-read the state of the chunk after all locks have been acquired and ensure
+	 * it is still uncompressed. Another process running in parallel might have
+	 * already performed the compression while we were waiting for the locks to be
+	 * acquired.
+	 */
+	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(chunk_relid, true);
+
+	/* Throw error if chunk has invalid status for operation */
+	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock->table_id,
+												 chunk_state_after_lock->fd.status,
+												 CHUNK_COMPRESS,
+												 true);
 
 	/* get compression properties for hypertable */
 	htcols_list = ts_hypertable_compression_get(cxt.srcht->fd.id);
@@ -334,19 +351,59 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);
 	LockRelationOid(compressed_hypertable->main_table_relid, AccessShareLock);
-	LockRelationOid(uncompressed_chunk->table_id, AccessShareLock); /*upgrade when needed */
 
-	/* aquire locks on catalog tables to keep till end of txn */
+	/*
+	 * Acquire an ExclusiveLock on the uncompressed and the compressed
+	 * chunk (the chunks can still be accessed by reads).
+	 *
+	 * The lock on the compressed chunk is needed because it gets deleted
+	 * after decompression. The lock on the uncompressed chunk is needed
+	 * to avoid deadlocks (e.g., caused by later lock upgrades or parallel
+	 * started chunk compressions).
+	 *
+	 * Note: Also the function decompress_chunk() will request an
+	 *       ExclusiveLock on the compressed and on the uncompressed
+	 *       chunk. See the comments in function about the concurrency of
+	 *       operations.
+	 */
+	LockRelationOid(uncompressed_chunk->table_id, ExclusiveLock);
+	LockRelationOid(compressed_chunk->table_id, ExclusiveLock);
+
+	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
 					AccessShareLock);
+
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
+	DEBUG_WAITPOINT("decompress_chunk_impl_start");
+
+	/*
+	 * Re-read the state of the chunk after all locks have been acquired and ensure
+	 * it is still compressed. Another process running in parallel might have
+	 * already performed the decompression while we were waiting for the locks to be
+	 * acquired.
+	 */
+	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
+
+	/* Throw error if chunk has invalid status for operation */
+	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock->table_id,
+												 chunk_state_after_lock->fd.status,
+												 CHUNK_DECOMPRESS,
+												 true);
+
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
+
 	/* Recreate FK constraints, since they were dropped during compression. */
 	ts_chunk_create_fks(uncompressed_chunk);
+
+	/* Prevent readers from using the compressed chunk that is going to be deleted */
+	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
+
+	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
+
 	/* reenable autovacuum if necessary */
 	restore_autovacuum_on_decompress(uncompressed_hypertable_relid, uncompressed_chunk_relid);
 
