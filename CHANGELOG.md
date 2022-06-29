@@ -11,6 +11,9 @@ accidentally triggering the load of a previous DB version.**
 * #4393 Support intervals with day component when constifying now()
 * #4397 Support intervals with month component when constifying now()
 
+**Bugfixes**
+* #4482 Ensure (de-)compression is not performed twice on the same chunk
+
 **Thanks**
 @nikugogoi for reporting a bug with CTEs and upserts on distributed hypertables
 

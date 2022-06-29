@@ -28,7 +28,7 @@ setup {
 
     ALTER TABLE hyper SET (timescaledb.compress = true);
 
-    SELECT compress_chunk(show_chunks('hyper'));
+    SELECT count(*) FROM (SELECT compress_chunk(show_chunks('hyper'))) i;
 }
 
 teardown {
