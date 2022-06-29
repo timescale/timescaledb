@@ -15,8 +15,39 @@ accidentally triggering the load of a previous DB version.**
 * #4482 Ensure (de-)compression is not performed twice on the same chunk
 
 **Thanks**
-@nikugogoi for reporting a bug with CTEs and upserts on distributed hypertables
-@jflambert for reporting a bug with IMMUTABLE functions
+
+
+## 2.7.1 (2022-07-07)
+
+This release is a patch release. We recommend that you upgrade at the
+next available opportunity.
+
+**Bugfixes**
+* #4494 Handle timescaledb versions aptly in multinode
+* #4493 Segfault when executing IMMUTABLE functions
+* #4482 Fix race conditions during chunk (de)compression
+* #4367 Improved buffer management in the copy operator
+* #4375 Don't ask for orderby column if default already set
+* #4400 Use our implementation of `find_em_expr_for_rel` for PG15+
+* #4408 Fix crash during insert into distributed hypertable
+* #4411 Add `shmem_request_hook`
+* #4437 Fix segfault in subscription_exec
+* #4442 Fix perms in copy/move chunk
+* #4450 Retain hypertable ownership on `attach_data_node`
+* #4451 Repair numeric partial state on the fly
+* #4463 Fix empty bytea handlng with distributed tables
+* #4469 Better superuser handling for `move_chunk`
+
+**Features**
+* #4244 Function telemetry
+* #4287 Add internal api for foreign table chunk
+* #4470 Block drop chunk if chunk is in frozen state
+* #4464 Add internal api to associate a hypertable with custom jobs
+
+**Thanks**
+* @xin-hedera Finding bug in empty bytea values for distributed tables
+* @jflambert for reporting a bug with IMMUTABLE functions
+* @nikugogoi for reporting a bug with CTEs and upserts on distributed hypertables
 
 ## 2.7.0 (2022-05-24)
 
