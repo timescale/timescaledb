@@ -12,9 +12,11 @@ set client_min_messages to error;
 set client_min_messages to error;
 \ir include/dist_remote_error_setup.sql
 
+\set sleepy_recv 1
 \c data_node_3 :ROLE_SUPERUSER
 set client_min_messages to error;
 \ir include/dist_remote_error_setup.sql
+\unset sleepy_recv
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 set client_min_messages to error;
@@ -23,8 +25,8 @@ set client_min_messages to error;
 
 -- Disable SSL to get stable error output across versions. SSL adds some output
 -- that changed in PG 14.
-\c -reuse-previous=on sslmode=disable
 set timescaledb.debug_enable_ssl to off;
+
 set client_min_messages to error;
 
 -- A relatively big table on one data node
@@ -117,17 +119,39 @@ alter table metrics_dist_br alter column v0 type br;
 select table_name from create_distributed_hypertable('metrics_dist_br',
     'time', 'device_id');
 
--- Test that the insert fails on data nodes.
-insert into metrics_dist_br select * from metrics_dist_remote_error;
-
--- Also test that the COPY fails on data nodes. Note that we use the text format
--- for the insert, so that the access node doesn't call `recv` and fail by itself.
--- It's going to use binary format for transferring COPY data to data nodes
--- regardless of the input format.
+-- Test that INSERT and COPY fail on data nodes.
+-- Note that we use the text format for the COPY input, so that the access node
+-- doesn't call `recv` and fail by itself. It's going to use binary format for
+-- transfer to data nodes regardless of the input format.
+-- First, create the reference.
 \copy (select * from metrics_dist_remote_error) to 'dist_remote_error.text' with (format text);
 
+-- We have to test various interleavings of COPY and INSERT to check that
+-- one can recover from connection failure states introduced by another.
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+insert into metrics_dist_br select * from metrics_dist_remote_error;
 \copy metrics_dist_br from 'dist_remote_error.text' with (format text);
 
 drop table metrics_dist_br;
+
+-- Table with sleepy receive for a data type, to improve coverage of the waiting
+-- code on the access node.
+create table metrics_dist_bl(like metrics_dist);
+
+alter table metrics_dist_bl alter column v0 type bl;
+
+select table_name from create_distributed_hypertable('metrics_dist_bl',
+    'time', 'device_id');
+
+-- Test INSERT and COPY with slow data node.
+\copy metrics_dist_bl from 'dist_remote_error.text' with (format text);
+
+insert into metrics_dist_bl select * from metrics_dist_remote_error;
+
+select count(*) from metrics_dist_bl;
+
+drop table metrics_dist_bl;
 
 drop table metrics_dist_remote_error;

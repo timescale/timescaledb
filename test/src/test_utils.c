@@ -3,15 +3,18 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <postgres.h>
+#include "test_utils.h"
+
+#include <commands/dbcommands.h>
 #include <fmgr.h>
+#include <miscadmin.h>
+#include <postgres.h>
+#include <storage/latch.h>
+#include <storage/proc.h>
+#include <storage/procarray.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
-#include <storage/procarray.h>
-#include <storage/proc.h>
-#include <commands/dbcommands.h>
 
-#include "test_utils.h"
 #include "debug_point.h"
 
 TS_FUNCTION_INFO_V1(ts_test_error_injection);
@@ -142,6 +145,38 @@ ts_debug_broken_int4send(PG_FUNCTION_ARGS)
 {
 	(void) throw_after_n_rows(ARBITRARY_PRIME_NUMBER, ERROR);
 	return int4send(fcinfo);
+}
+
+TS_FUNCTION_INFO_V1(ts_debug_sleepy_int4recv);
+
+/* Sleep after some rows. */
+Datum
+ts_debug_sleepy_int4recv(PG_FUNCTION_ARGS)
+{
+	static LocalTransactionId last_lxid = 0;
+	static int rows_seen = 0;
+
+	if (last_lxid != MyProc->lxid)
+	{
+		/* Reset it for each new transaction for predictable results. */
+		rows_seen = 0;
+		last_lxid = MyProc->lxid;
+	}
+
+	rows_seen++;
+
+	if (rows_seen >= 1000)
+	{
+		(void) WaitLatch(MyLatch,
+						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+						 1000,
+						 /* wait_event_info = */ 0);
+		ResetLatch(MyLatch);
+
+		rows_seen = 0;
+	}
+
+	return int4recv(fcinfo);
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_wait);
