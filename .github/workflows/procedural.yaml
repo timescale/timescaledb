@@ -1,0 +1,18 @@
+name: Add bugs to bugs project
+
+on:
+  issues:
+    types: [ opened, labeled ]
+
+jobs:
+  add-to-project:
+    name: Add issue to project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v0.1.0
+        with:
+          project-url: https://github.com/orgs/timescale/projects/55
+          # Token will expire Oct 2, 2022
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          labeled: bug, needs-triage
+          label-operator: OR
