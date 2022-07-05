@@ -116,3 +116,21 @@ CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
 -- on PG14 custom types are hashable
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
 \set ON_ERROR_STOP 1
+
+-- immutable functions with sub-transaction (issue #4489)
+CREATE FUNCTION i4489(value TEXT DEFAULT '') RETURNS INTEGER
+AS
+$$
+BEGIN
+  RETURN value::INTEGER;
+EXCEPTION WHEN invalid_text_representation THEN
+  RETURN 0;
+END;
+$$
+LANGUAGE PLPGSQL IMMUTABLE;
+
+-- should return 1 (one) in both cases
+SELECT i4489('1'), i4489('1');
+-- should return 0 (zero) in all cases handled by the exception
+SELECT i4489(), i4489();
+SELECT i4489('a'), i4489('a');
