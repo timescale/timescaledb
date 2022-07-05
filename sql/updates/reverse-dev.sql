@@ -248,3 +248,23 @@ LANGUAGE C VOLATILE;
 
 DROP FUNCTION @extschema@.time_bucket(INTERVAL, TIMESTAMPTZ, TEXT, TIMESTAMPTZ, INTERVAL);
 
+-- reverse cagg catalog relations
+DROP PROCEDURE @extschema@.cagg_migrate (REGCLASS, BOOLEAN, BOOLEAN);
+DROP FUNCTION _timescaledb_internal.cagg_migrate_pre_validation (TEXT, TEXT, TEXT);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_create_plan (_timescaledb_catalog.continuous_agg, TEXT, BOOLEAN, BOOLEAN);
+DROP FUNCTION _timescaledb_internal.cagg_migrate_plan_exists (INTEGER);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_plan (_timescaledb_catalog.continuous_agg);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_create_new_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_disable_policies (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_enable_policies (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_copy_policies (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_copy_data (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_override_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE _timescaledb_internal.cagg_migrate_execute_drop_old_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;

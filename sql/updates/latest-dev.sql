@@ -11,13 +11,13 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_parti
 GRANT SELECT ON _timescaledb_catalog.dimension_partition TO PUBLIC;
 DROP FUNCTION IF EXISTS @extschema@.remove_continuous_aggregate_policy(REGCLASS, BOOL);
 
--- add a new column to chunk catalog table 
+-- add a new column to chunk catalog table
 ALTER TABLE _timescaledb_catalog.chunk ADD COLUMN  osm_chunk boolean ;
 UPDATE _timescaledb_catalog.chunk SET osm_chunk = FALSE;
 
 ALTER TABLE _timescaledb_catalog.chunk
   ALTER COLUMN  osm_chunk SET NOT NULL;
-ALTER TABLE _timescaledb_catalog.chunk 
+ALTER TABLE _timescaledb_catalog.chunk
   ALTER COLUMN  osm_chunk SET DEFAULT FALSE;
 
 CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
@@ -69,4 +69,39 @@ SET
 WHERE proc_schema = '_timescaledb_internal'
   AND proc_name = 'policy_refresh_continuous_aggregate';
 
-DROP VIEW IF EXISTS timescaledb_information.jobs;
+DROP VIEW IF EXISTS timescaledb_information.jobs;-- cagg migration catalog relations
+
+CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
+  mat_hypertable_id integer NOT NULL,
+  start_ts TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
+  end_ts TIMESTAMPTZ,
+  -- table constraints
+  CONSTRAINT continuous_agg_migrate_plan_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan', '');
+
+CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step (
+  mat_hypertable_id integer NOT NULL,
+  step_id serial NOT NULL,
+  status TEXT NOT NULL DEFAULT 'NOT STARTED', -- NOT STARTED, STARTED, FINISHED, CANCELED
+  start_ts TIMESTAMPTZ,
+  end_ts TIMESTAMPTZ,
+  type TEXT NOT NULL,
+  config JSONB,
+  -- table constraints
+  CONSTRAINT continuous_agg_migrate_plan_step_pkey PRIMARY KEY (mat_hypertable_id, step_id),
+  CONSTRAINT continuous_agg_migrate_plan_step_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg_migrate_plan (mat_hypertable_id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_migrate_plan_step_check CHECK (start_ts <= end_ts),
+  CONSTRAINT continuous_agg_migrate_plan_step_check2 CHECK (type IN ('CREATE NEW CAGG', 'DISABLE POLICIES', 'COPY POLICIES', 'ENABLE POLICIES', 'SAVE WATERMARK', 'REFRESH NEW CAGG', 'COPY DATA'))
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan_step', '');
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq', '');
+
+-- in tables.sql the same is done with GRANT SELECT ON ALL TABLES IN SCHEMA
+GRANT SELECT ON _timescaledb_catalog.continuous_agg_migrate_plan TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.continuous_agg_migrate_plan_step TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO PUBLIC;
