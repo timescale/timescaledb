@@ -562,7 +562,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				ts_data_node_fetcher_scan_type = AutoFetcherType;
 			}
 
-			if (reset_baserel_info)
+			if (reset_baserel_info && ts_baserel_info)
 			{
 				BaserelInfo_destroy(ts_baserel_info);
 				ts_baserel_info = NULL;

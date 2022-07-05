@@ -559,3 +559,34 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 \set ON_ERROR_STOP 1
+-- immutable functions with sub-transaction (issue #4489)
+CREATE FUNCTION i4489(value TEXT DEFAULT '') RETURNS INTEGER
+AS
+$$
+BEGIN
+  RETURN value::INTEGER;
+EXCEPTION WHEN invalid_text_representation THEN
+  RETURN 0;
+END;
+$$
+LANGUAGE PLPGSQL IMMUTABLE;
+-- should return 1 (one) in both cases
+SELECT i4489('1'), i4489('1');
+ i4489 | i4489 
+-------+-------
+     1 |     1
+(1 row)
+
+-- should return 0 (zero) in all cases handled by the exception
+SELECT i4489(), i4489();
+ i4489 | i4489 
+-------+-------
+     0 |     0
+(1 row)
+
+SELECT i4489('a'), i4489('a');
+ i4489 | i4489 
+-------+-------
+     0 |     0
+(1 row)
+

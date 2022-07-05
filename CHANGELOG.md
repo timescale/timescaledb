@@ -16,6 +16,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Thanks**
 @nikugogoi for reporting a bug with CTEs and upserts on distributed hypertables
+@jflambert for reporting a bug with IMMUTABLE functions
 
 ## 2.7.0 (2022-05-24)
 
