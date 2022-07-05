@@ -1015,19 +1015,11 @@ remote_result_query_ok(PGresult *res)
 void
 remote_validate_extension_version(TSConnection *conn, const char *data_node_version)
 {
-	bool old_version;
-
-	if (!dist_util_is_compatible_version(data_node_version, TIMESCALEDB_VERSION, &old_version))
+	if (!dist_util_is_compatible_version(data_node_version, TIMESCALEDB_VERSION))
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("remote PostgreSQL instance has an incompatible timescaledb extension "
 						"version"),
-				 errdetail_internal("Access node version: %s, remote version: %s.",
-									TIMESCALEDB_VERSION_MOD,
-									data_node_version)));
-	if (old_version)
-		ereport(WARNING,
-				(errmsg("remote PostgreSQL instance has an outdated timescaledb extension version"),
 				 errdetail_internal("Access node version: %s, remote version: %s.",
 									TIMESCALEDB_VERSION_MOD,
 									data_node_version)));
