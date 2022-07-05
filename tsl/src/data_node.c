@@ -639,12 +639,8 @@ data_node_validate_extension_availability(TSConnection *conn)
 
 	for (i = 0; i < PQntuples(res); i++)
 	{
-		bool old_version = false;
-
 		appendStringInfo(concat_versions, "%s, ", PQgetvalue(res, i, 0));
-		compatible = dist_util_is_compatible_version(PQgetvalue(res, i, 0),
-													 TIMESCALEDB_VERSION,
-													 &old_version);
+		compatible = dist_util_is_compatible_version(PQgetvalue(res, i, 0), TIMESCALEDB_VERSION);
 		if (compatible)
 			break;
 	}

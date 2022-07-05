@@ -7,7 +7,7 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 
 CREATE OR REPLACE FUNCTION compatible_version(version CSTRING, reference CSTRING)
-RETURNS TABLE(is_compatible BOOLEAN, is_old_version BOOLEAN)
+RETURNS BOOLEAN
 AS :TSL_MODULE_PATHNAME, 'ts_test_compatible_version'
 LANGUAGE C VOLATILE;
 
