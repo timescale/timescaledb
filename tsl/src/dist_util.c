@@ -319,25 +319,20 @@ validate_data_node_settings(void)
  * Check that the data node version is compatible with the version on this
  * node by checking that all of the following are true:
  *
- * - The major version is identical on the data node and the access node.
- * - The minor version on the data node is before or the same as on the access
- *   node.
+ * - The major version is identical or newer on the data node as compared to the access node.
+ * - The minor version on the data node is newer or the same as on the access
+ *   node in case major version is identical.
  *
  * We explicitly do *not* check the patch version since changes between patch
  * versions will only fix bugs and there should be no problem using an older
  * patch version of the extension on the data node.
- *
- * We also check if the version on the data node is older and set
- * `old_version` to `true` or `false` so that caller can print a warning.
  */
 bool
-dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version,
-								bool *is_old_version)
+dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version)
 {
 	unsigned int data_node_major, data_node_minor, data_node_patch;
 	unsigned int access_node_major, access_node_minor, access_node_patch;
 
-	Assert(is_old_version);
 	Assert(data_node_version);
 
 	if (sscanf(data_node_version,
@@ -357,15 +352,17 @@ dist_util_is_compatible_version(const char *data_node_version, const char *acces
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("invalid access node version %s", access_node_version)));
 
+	/* if major versions are same, compare minor versions */
 	if (data_node_major == access_node_major)
-		if (data_node_minor == access_node_minor)
-			*is_old_version = (data_node_patch < access_node_patch);
-		else
-			*is_old_version = (data_node_minor < access_node_minor);
+		/*
+		 * if minor versions are same (or newer on DN), we ignore patch versions and
+		 * declare compatibility. If minor version of DN is lower then it's not
+		 * compatible
+		 */
+		return (data_node_minor >= access_node_minor) ? true : false;
 	else
-		*is_old_version = (data_node_major < access_node_major);
-
-	return (data_node_major == access_node_major) && (data_node_minor <= access_node_minor);
+		/* if DN major version is newer, then still compatible. Else not */
+		return (data_node_major > access_node_major);
 }
 
 /*

@@ -36,7 +36,7 @@ Datum dist_util_remote_compressed_chunk_info(PG_FUNCTION_ARGS);
 Datum dist_util_remote_hypertable_index_info(PG_FUNCTION_ARGS);
 
 void validate_data_node_settings(void);
-bool dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version,
-									 bool *is_old_version);
+bool dist_util_is_compatible_version(const char *data_node_version,
+									 const char *access_node_version);
 
 #endif /* TIMESCALEDB_TSL_DIST_UTIL_H */
