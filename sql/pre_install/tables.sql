@@ -517,6 +517,36 @@ CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
   CONSTRAINT chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
 
+CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
+  mat_hypertable_id integer NOT NULL,
+  start_ts TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
+  end_ts TIMESTAMPTZ,
+  -- table constraints
+  CONSTRAINT continuous_agg_migrate_plan_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan', '');
+
+CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step (
+  mat_hypertable_id integer NOT NULL,
+  step_id serial NOT NULL,
+  status TEXT NOT NULL DEFAULT 'NOT STARTED', -- NOT STARTED, STARTED, FINISHED, CANCELED
+  start_ts TIMESTAMPTZ,
+  end_ts TIMESTAMPTZ,
+  type TEXT NOT NULL,
+  config JSONB,
+  -- table constraints
+  CONSTRAINT continuous_agg_migrate_plan_step_pkey PRIMARY KEY (mat_hypertable_id, step_id),
+  CONSTRAINT continuous_agg_migrate_plan_step_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg_migrate_plan (mat_hypertable_id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_migrate_plan_step_check CHECK (start_ts <= end_ts),
+  CONSTRAINT continuous_agg_migrate_plan_step_check2 CHECK (type IN ('CREATE NEW CAGG', 'DISABLE POLICIES', 'COPY POLICIES', 'ENABLE POLICIES', 'SAVE WATERMARK', 'REFRESH NEW CAGG', 'COPY DATA', 'OVERRIDE CAGG', 'DROP OLD CAGG'))
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan_step', '');
+
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.continuous_agg_migrate_plan_step', 'step_id'), '');
+
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
