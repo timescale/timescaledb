@@ -97,9 +97,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     pg_dump.sql
     symbol_conflict.sql
     test_utils.sql)
-  if(USE_TELEMETRY)
-    list(APPEND TEST_FILES telemetry.sql)
-  endif()
+  # if(USE_TELEMETRY) list(APPEND TEST_FILES telemetry.sql) endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
