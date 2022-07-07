@@ -63,6 +63,7 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("could not find %s in config for job", json_label)));
+
 		return DatumGetBool(
 			DirectFunctionCall2(interval_eq, IntervalPGetDatum(config_value), lag_datum));
 	}
