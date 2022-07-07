@@ -26,7 +26,7 @@ bool policy_refresh_cagg_exists(int32 materialization_id);
 Datum policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type,
 									   NullableDatum start_offset, Oid end_offset_type,
 									   NullableDatum end_offset, Interval refresh_interval,
-									   bool if_not_exists, bool is_one_step);
+									   bool if_not_exists);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_CAGG_API_H */
