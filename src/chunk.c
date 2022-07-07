@@ -4562,6 +4562,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 * See: ts_chunk_constraints_add_dimension_constraints.
 	 */
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
+	chunk_add_inheritance(chunk, parent_ht);
 }
 
 /* Internal API used by OSM extension. OSM table is a foreign table that is
