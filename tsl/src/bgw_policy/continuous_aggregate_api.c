@@ -365,7 +365,7 @@ interval_to_int128(const Interval *interval)
 	return span;
 }
 
-static int64
+int64
 interval_to_int64(Datum interval, Oid type)
 {
 	switch (type)
@@ -531,10 +531,9 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	if (is_one_step)
 	{
 		if (!start_offset.isnull)
-			start_offset.isnull = ts_time_is_infinity_from_arg(start_offset.value, start_offset_type, cagg->partition_type);
+			start_offset.isnull = ts_if_offset_is_infinity(start_offset.value, start_offset_type, cagg->partition_type);
 		if (!end_offset.isnull)
-			end_offset.isnull = ts_time_is_infinity_from_arg(end_offset.value, end_offset_type, cagg->partition_type);
-
+			end_offset.isnull = ts_if_offset_is_infinity(end_offset.value, end_offset_type, cagg->partition_type);
 	}
 
 	parse_cagg_policy_config(cagg,

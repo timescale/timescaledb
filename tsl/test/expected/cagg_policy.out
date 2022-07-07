@@ -49,22 +49,22 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 -- Test 1 step policy for integer type buckets
 ALTER materialized view mat_m1 set (timescaledb.compress = true);
 -- No policy is added if one errors out
-SELECT add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
+SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "integer".
-SELECT show_policies('mat_m1');
+SELECT timescaledb_experimental.show_policies('mat_m1');
  show_policies 
 ---------------
 (0 rows)
 
 -- All policies are added in one step
-SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, compress_after => 11, drop_after => 20);
+SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, compress_after => 11, drop_after => 20);
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('mat_m1');
+SELECT timescaledb_experimental.show_policies('mat_m1');
                                                                 show_policies                                                                
 ---------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_compression", "compress_after": 11, "compress_interval": "@ 1 day"}
@@ -73,13 +73,13 @@ SELECT show_policies('mat_m1');
 (3 rows)
 
 -- Alter policies
-SELECT alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
+SELECT timescaledb_experimental.alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
  alter_policies 
 ----------------
  t
 (1 row)
 
-SELECT show_policies('mat_m1');
+SELECT timescaledb_experimental.show_policies('mat_m1');
                                                                 show_policies                                                                
 ---------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_compression", "compress_after": 13, "compress_interval": "@ 1 day"}
@@ -88,26 +88,26 @@ SELECT show_policies('mat_m1');
 (3 rows)
 
 -- Remove one or more policy
-SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
+SELECT timescaledb_experimental.remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
  remove_policies 
 -----------------
  t
 (1 row)
 
-SELECT show_policies('mat_m1');
+SELECT timescaledb_experimental.show_policies('mat_m1');
                                      show_policies                                      
 ----------------------------------------------------------------------------------------
  {"drop_after": 25, "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (1 row)
 
 -- Add one policy
-SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1);
+SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1);
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('mat_m1');
+SELECT timescaledb_experimental.show_policies('mat_m1');
                                                                 show_policies                                                                
 ---------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": 1, "refresh_start_offset": 10}
@@ -115,19 +115,29 @@ SELECT show_policies('mat_m1');
 (2 rows)
 
 -- Remove all policies
-SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
+SELECT timescaledb_experimental.remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
  remove_policies 
 -----------------
  t
 (1 row)
 
-SELECT show_policies('mat_m1');
+SELECT timescaledb_experimental.show_policies('mat_m1');
  show_policies 
 ---------------
 (0 rows)
 
+--Cross policy checks
+--refresh and compression policy overlap
+SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 12, refresh_end_offset => 1, compress_after=>11);
+ERROR:  refresh and compression policies overlap
+--refresh and retention policy overlap
+SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 12, refresh_end_offset => 1, drop_after=>11);
+ERROR:  refresh and retention policies overlap
+--compression and retention policy overlap
+SELECT timescaledb_experimental.add_policies('mat_m1', compress_after => 10, drop_after => 10);
+ERROR:  compression and retention policies overlap
 -- Alter non existent policies
-SELECT alter_policies('mat_m1', refresh_start_offset => 12, compress_after=>11, drop_after => 15);
+SELECT timescaledb_experimental.alter_policies('mat_m1', refresh_start_offset => 12, compress_after=>11, drop_after => 15);
 ERROR:  no jobs found
 ALTER materialized view mat_m1 set (timescaledb.compress = false);
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
@@ -243,95 +253,123 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 -- Test 1 step policy for timestamp type buckets
 ALTER materialized view max_mat_view_date set (timescaledb.compress = true);
 -- Only works for cagg
-SELECT add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT timescaledb_experimental.add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
-SELECT show_policies('continuous_agg_max_mat_date');
+SELECT timescaledb_experimental.show_policies('continuous_agg_max_mat_date');
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
-SELECT alter_policies('continuous_agg_max_mat_date', compress_after=>'16 days'::interval);
+SELECT timescaledb_experimental.alter_policies('continuous_agg_max_mat_date', compress_after=>'16 days'::interval);
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
-SELECT remove_policies('continuous_agg_max_mat_date', false, 'policy_refresh_continuous_aggregate');
+SELECT timescaledb_experimental.remove_policies('continuous_agg_max_mat_date', false, 'policy_refresh_continuous_aggregate');
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 -- No policy is added if one errors out
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
-ERROR:  policy refresh window too small
-DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+WARNING:  refresh_interval = 3600000000, diff = -86400000000 start_offset = 86400000000, end_offset = 172800000000
+ERROR:  there are gaps in refresh policy
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
  show_policies 
 ---------------
 (0 rows)
 
 -- Create open ended refresh_policy
-SELECT add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval);
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval);
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 2 days", "refresh_start_offset": null}
 (1 row)
 
-SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
  remove_policies 
 -----------------
  t
 (1 row)
 
-SELECT add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval, refresh_start_offset=>'-inifinity');
-ERROR:  invalid input syntax for type date: "-inifinity"
-SELECT show_policies('max_mat_view_date');
- show_policies 
----------------
-(0 rows)
-
-SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
-ERROR:  continuous aggregate policy not found for "max_mat_view_date"
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval);
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_end_offset => '2 day'::interval, refresh_start_offset=>'-infinity');
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 2 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 2 days", "refresh_start_offset": null}
 (1 row)
 
-SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
  remove_policies 
 -----------------
  t
 (1 row)
 
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval, refresh_end_offset=>'infinity');
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval);
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 2 days"}
 (1 row)
 
-SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+ remove_policies 
+-----------------
+ t
+(1 row)
+
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '2 day'::interval, refresh_end_offset=>'infinity');
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 2 days"}
+(1 row)
+
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
+ remove_policies 
+-----------------
+ t
+(1 row)
+
+-- Open ended at both sides, for code coverage
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_end_offset => 'infinity', refresh_start_offset => '-infinity');
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
+                                                                  show_policies                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": null}
+(1 row)
+
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate');
  remove_policies 
 -----------------
  t
 (1 row)
 
 -- All policies are added in one step
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 days'::interval, refresh_end_offset => '1 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '15 days'::interval, refresh_end_offset => '1 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
@@ -340,99 +378,131 @@ SELECT show_policies('max_mat_view_date');
 (3 rows)
 
 -- Alter policies
-SELECT alter_policies('max_mat_view_date', compress_after=>'16 days'::interval, drop_after => '20 days'::interval);
+SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_start_offset => '16 days'::interval, compress_after=>'26 days'::interval, drop_after => '40 days'::interval);
  alter_policies 
 ----------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 16 days", "compress_interval": "@ 35 days"}
- {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
- {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+ {"policy_name": "policy_compression", "compress_after": "@ 26 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 16 days"}
+ {"drop_after": "@ 40 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
 
 --Alter refresh_policy to make it open ended
-SELECT alter_policies('max_mat_view_date',refresh_start_offset =>'-infinity');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_retention', 'policy_compression');
+ remove_policies 
+-----------------
+ t
+(1 row)
+
+SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_start_offset =>'-infinity');
  alter_policies 
 ----------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                     
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 16 days", "compress_interval": "@ 35 days"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": null}
- {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
-(3 rows)
+(1 row)
 
-SELECT alter_policies('max_mat_view_date',refresh_end_offset =>'infinity');
+SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_end_offset =>'infinity', refresh_start_offset =>'5 days'::interval);
  alter_policies 
 ----------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
-                                                                  show_policies                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 16 days", "compress_interval": "@ 35 days"}
- {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": null}
- {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 5 days"}
+(1 row)
+
+--Cross policy checks
+-- Refresh and compression policies overlap
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT timescaledb_experimental.alter_policies('max_mat_view_date', compress_after=> '4 days'::interval);
+WARNING:  refresh_interval = 3600000000, star_offset = 432000000000, refresh_total_interval = 435600000000, compress_after = 345600000000
+ERROR:  refresh and compression policies overlap
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 5 days"}
+ {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+(3 rows)
+
+-- Refresh and retention policies overlap
+SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_start_offset =>'5 days'::interval, drop_after=> '4 days'::interval);
+ERROR:  refresh and retention policies overlap
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
+                                                                     show_policies                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 5 days"}
+ {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
 
 -- Remove one or more policy
 -- Code coverage: no policy names provided
-SELECT remove_policies('max_mat_view_date', false);
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false);
  remove_policies 
 -----------------
  f
 (1 row)
 
 -- Code coverage: incorrect name of policy
-SELECT remove_policies('max_mat_view_date', false, 'refresh_policy');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'refresh_policy');
 NOTICE:  No relevant policy found
  remove_policies 
 -----------------
  f
 (1 row)
 
-SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
  remove_policies 
 -----------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                           show_policies                                          
 -------------------------------------------------------------------------------------------------
- {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+ {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (1 row)
 
 -- Add one policy
-SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 day'::interval, refresh_end_offset => '1 day'::interval);
+SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '15 day'::interval, refresh_end_offset => '1 day'::interval);
  add_policies 
 --------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
- {"drop_after": "@ 20 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
+ {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (2 rows)
 
 -- Remove all policies
-SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
  remove_policies 
 -----------------
  t
 (1 row)
 
-SELECT show_policies('max_mat_view_date');
+SELECT timescaledb_experimental.show_policies('max_mat_view_date');
  show_policies 
 ---------------
 (0 rows)
@@ -461,7 +531,7 @@ DETAIL:  The start and end offsets must cover at least two buckets in the valid 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-1 day', '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1019
+                            1024
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -474,7 +544,7 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_date');
 SELECT add_continuous_aggregate_policy('max_mat_view_date', NULL, NULL, '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1020
+                            1025
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -516,7 +586,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1022
+                            1027
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
@@ -799,13 +869,13 @@ ERROR:  compress_after value for compression policy should be greater than the s
 SELECT add_compression_policy('mat_smallint', 5::smallint); 
  add_compression_policy 
 ------------------------
-                   1030
+                   1035
 (1 row)
 
 SELECT add_compression_policy('mat_bigint', 20::bigint); 
  add_compression_policy 
 ------------------------
-                   1031
+                   1036
 (1 row)
 
 -- end of coverage tests
@@ -863,7 +933,7 @@ ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ; 
  COMP_JOB 
 ----------
-     1033
+     1038
 (1 row)
 
 SELECT remove_compression_policy('metrics_cagg');

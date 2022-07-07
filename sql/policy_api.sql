@@ -63,7 +63,7 @@ LANGUAGE C VOLATILE;
 /* 1 step policies */
 
 /* Add policies */
-CREATE OR REPLACE FUNCTION @extschema@.add_policies(
+CREATE OR REPLACE FUNCTION timescaledb_experimental.add_policies(
     relation REGCLASS,
     if_not_exists BOOL = false,
     refresh_start_offset "any" = NULL,
@@ -75,7 +75,7 @@ AS '@MODULE_PATHNAME@', 'ts_policies_add'
 LANGUAGE C VOLATILE;
 
 /* Remove policies */
-CREATE OR REPLACE FUNCTION @extschema@.remove_policies(
+CREATE OR REPLACE FUNCTION timescaledb_experimental.remove_policies(
     relation REGCLASS,
     if_exists BOOL = false,
     VARIADIC policy_names TEXT[] = NULL)
@@ -83,8 +83,17 @@ RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_policies_remove'
 LANGUAGE C VOLATILE;
 
+/* Remove all policies */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.remove_all_policies(
+    relation REGCLASS,
+    if_exists BOOL = false,
+    VARIADIC policy_names TEXT[] = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_remove_all'
+LANGUAGE C VOLATILE;
+
 /* Alter policies */
-CREATE OR REPLACE FUNCTION @extschema@.alter_policies(
+CREATE OR REPLACE FUNCTION timescaledb_experimental.alter_policies(
     relation REGCLASS,
     if_exists BOOL = false,
     refresh_start_offset "any" = NULL,
@@ -96,7 +105,7 @@ AS '@MODULE_PATHNAME@', 'ts_policies_alter'
 LANGUAGE C VOLATILE;
 
 /* Show policies info */
-CREATE OR REPLACE FUNCTION @extschema@.show_policies(
+CREATE OR REPLACE FUNCTION timescaledb_experimental.show_policies(
     relation REGCLASS)
 RETURNS SETOF JSONB
 AS '@MODULE_PATHNAME@', 'ts_policies_show'

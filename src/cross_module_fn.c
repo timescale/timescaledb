@@ -53,6 +53,7 @@ CROSSMODULE_WRAPPER(subscription_exec);
 
 CROSSMODULE_WRAPPER(policies_add);
 CROSSMODULE_WRAPPER(policies_remove);
+CROSSMODULE_WRAPPER(policies_remove_all);
 CROSSMODULE_WRAPPER(policies_alter);
 CROSSMODULE_WRAPPER(policies_show);
 

@@ -39,10 +39,6 @@
 #define DEFAULT_COMPRESSION_SCHEDULE_INTERVAL                                                                  \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 day"), InvalidOid, -1))
 
-/*
- * Default scheduled interval for compress jobs = default chunk length.
- * If this is non-timestamp based hypertable, then default is 1 day
- */
 #define DEFAULT_REFRESH_SCHEDULE_INTERVAL                                                                  \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
 
@@ -59,4 +55,41 @@ typedef struct CaggPolicyConfig
 	CaggPolicyOffset offset_end;
 } CaggPolicyConfig;
 
-bool ts_time_is_infinity_from_arg(Datum arg, Oid argtype, Oid timetype);
+typedef struct refresh_policy
+{
+	Interval schedule_interval;
+	NullableDatum start_offset;
+	NullableDatum end_offset;
+	Oid start_offset_type, end_offset_type;
+	bool create_policy;
+}refresh_policy;
+
+typedef struct compression_policy
+{
+	Datum compress_after;
+	Oid compress_after_type;
+	bool create_policy;
+}compression_policy;
+
+typedef struct retention_policy
+{
+	Datum drop_after;
+	Oid drop_after_type;
+	bool create_policy;
+}retention_policy;
+
+typedef struct policies_info
+{
+	Oid rel_oid;
+	Oid original_HT;
+	Oid partition_type;
+	refresh_policy *refresh;
+	compression_policy *compress;
+	retention_policy *retention;
+	bool is_alter_policy;
+}policies_info;
+
+bool ts_if_offset_is_infinity(Datum arg, Oid argtype, Oid timetype);
+bool valdiate_and_create_policies(policies_info all_policies, bool if_exists);
+int64 interval_to_int64(Datum interval, Oid type);
+int64 offset_to_int64(NullableDatum arg, Oid argtype, Oid partition_type, bool is_start);

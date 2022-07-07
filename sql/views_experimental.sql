@@ -25,4 +25,16 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = c.hypertable_id)
 GROUP BY h.id, c.id, hypertable_schema, hypertable_name, chunk_schema, chunk_name
 ORDER BY h.id, c.id, hypertable_schema, hypertable_name, chunk_schema, chunk_name;
 
+CREATE OR REPLACE VIEW timescaledb_experimental.show_policies AS
+SELECT ca.view_name AS relation_name,
+  j.schedule_interval,
+  j.proc_schema,
+  j.proc_name,
+  j.config,
+  ht.schema_name AS hypertable_schema,
+  ht.table_name AS hypertable_name
+FROM _timescaledb_config.bgw_job j, timescaledb_information.continuous_aggregates ca,
+ _timescaledb_catalog.hypertable ht
+WHERE ht.id = j.hypertable_id AND ca.view_schema = hypertable_schema;
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_experimental TO PUBLIC;
