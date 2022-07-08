@@ -5,6 +5,7 @@ services:
   - docker
 build_script:
 - ps: >-
+    Set-PSDebug -Trace 1
 
     # Create directories for tablespaces
 
@@ -131,7 +132,7 @@ build_script:
 
     # build timescale
 
-     .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
+     .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DASSERTIONS=ON -DCMAKE_C_FLAGS=/MP
 
     # Filter ssl and local configuration from pg_hba.conf file since
     # we have turned off SSL and local (unix domain socket)
@@ -143,9 +144,19 @@ build_script:
 
     Get-Content "C:\Program Files\postgresql\12\data\pg_hba.conf"
 
-    cmake --build ./build --config Debug
+    echo "!!1"
 
-    cmake --build ./build --config Debug --target install
+    cmake -DASSERTIONS=ON ./build
+
+    echo "!!2"
+
+    cmake --build ./build
+
+    echo "!!3"
+
+    cmake --build ./build --target install
+
+    echo "!!3"
 
     # postgres should restart
 
