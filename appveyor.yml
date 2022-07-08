@@ -144,19 +144,9 @@ build_script:
 
     Get-Content "C:\Program Files\postgresql\12\data\pg_hba.conf"
 
-    echo "!!1"
+    cmake --build ./build --config Debug
 
-    cmake -DASSERTIONS=ON ./build
-
-    echo "!!2"
-
-    cmake --build ./build
-
-    echo "!!3"
-
-    cmake --build ./build --target install
-
-    echo "!!3"
+    cmake --build ./build --config Debug --target install
 
     # postgres should restart
 
@@ -191,7 +181,7 @@ build_script:
 
     docker exec -it pgregress /bin/bash -c "git clone  --depth 1 https://github.com/timescale/timescaledb.git /timescaledb && cd /timescaledb && git fetch -q origin $commit && git checkout -qf FETCH_HEAD"
 
-    docker exec -it pgregress /bin/bash -c "cd /timescaledb && ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DTEST_PGHOST=docker.for.win.localhost -DTEST_PGPORT_LOCAL=55432"
+    docker exec -it pgregress /bin/bash -c "cd /timescaledb && ./bootstrap -DASSERTIONS=ON -DCMAKE_BUILD_TYPE=Debug -DTEST_PGHOST=docker.for.win.localhost -DTEST_PGPORT_LOCAL=55432"
 
 test_script:
 - ps: >-

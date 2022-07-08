@@ -153,6 +153,8 @@ TS_FUNCTION_INFO_V1(ts_debug_sleepy_int4recv);
 Datum
 ts_debug_sleepy_int4recv(PG_FUNCTION_ARGS)
 {
+	Assert(false);
+
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
 
