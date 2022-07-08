@@ -263,7 +263,6 @@ SELECT timescaledb_experimental.remove_policies('continuous_agg_max_mat_date', f
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
-WARNING:  refresh_interval = 3600000000, diff = -86400000000 start_offset = 86400000000, end_offset = 172800000000
 ERROR:  there are gaps in refresh policy
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
  show_policies 
@@ -432,7 +431,6 @@ SELECT timescaledb_experimental.add_policies('max_mat_view_date', compress_after
 (1 row)
 
 SELECT timescaledb_experimental.alter_policies('max_mat_view_date', compress_after=> '4 days'::interval);
-WARNING:  refresh_interval = 3600000000, star_offset = 432000000000, refresh_total_interval = 435600000000, compress_after = 345600000000
 ERROR:  refresh and compression policies overlap
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                      

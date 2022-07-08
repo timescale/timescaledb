@@ -27,6 +27,7 @@ ORDER BY h.id, c.id, hypertable_schema, hypertable_name, chunk_schema, chunk_nam
 
 CREATE OR REPLACE VIEW timescaledb_experimental.show_policies AS
 SELECT ca.view_name AS relation_name,
+  ca.view_schema AS relation_schema,
   j.schedule_interval,
   j.proc_schema,
   j.proc_name,

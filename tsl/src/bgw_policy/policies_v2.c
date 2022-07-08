@@ -70,10 +70,9 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
 	bool error = false;
 	int64 refresh_interval, compress_after, drop_after, drop_after_HT;
-	int64 start_offset, end_offset, refresh_window_size;
+	int64 start_offset, end_offset, refresh_window_size, refresh_total_interval;
 	List *jobs = NIL;
 	BgwJob *orig_ht_reten_job = NULL;
-	Datum refresh_total_interval = 0;
 
 	char *err_gap_refresh = "there are gaps in refresh policy";
 	char *err_refresh_compress_overlap = "refresh and compression policies overlap";
@@ -93,7 +92,7 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 		start_offset = offset_to_int64(all_policies.refresh->start_offset, all_policies.refresh->start_offset_type, all_policies.partition_type, true);
 		end_offset = offset_to_int64(all_policies.refresh->end_offset, all_policies.refresh->end_offset_type, all_policies.partition_type, false);
 		refresh_interval =  interval_to_int64(IntervalPGetDatum(&all_policies.refresh->schedule_interval), INTERVALOID);
-		refresh_total_interval = start_offset == ts_time_get_max(all_policies.partition_type)? start_offset: start_offset + refresh_interval; // ts_time_saturating_add(refresh_interval, start_offset, all_policies.partition_type);
+		refresh_total_interval = start_offset == ts_time_get_max(all_policies.partition_type)? start_offset: start_offset + refresh_interval;
 	}
 	if(IS_INTEGER_TYPE(all_policies.partition_type))
 	{
@@ -129,7 +128,7 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 		/* Disallow refreshed data to be deleted */
 		if (orig_ht_reten_job)
 		{
-			if (DatumGetInt64(refresh_total_interval) > drop_after_HT)
+			if (refresh_total_interval > drop_after_HT)
 				emit_error(err_refresh_reten_ht_overlap);
 		}
 	}
@@ -140,7 +139,7 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 		/* Check if refresh policy does not overlap with compression */
 		if(IS_INTEGER_TYPE(all_policies.partition_type))
 		{
-			if (DatumGetInt64(refresh_total_interval) > compress_after)
+			if (refresh_total_interval > compress_after)
 				error = true;
 		}
 		else
@@ -156,7 +155,7 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 		/* Check if refresh policy does not overlap with compression */
 		if(IS_INTEGER_TYPE(all_policies.partition_type))
 		{
-			if (DatumGetInt64(refresh_total_interval) > drop_after)
+			if (refresh_total_interval > drop_after)
 				error = true;
 		}
 		else
