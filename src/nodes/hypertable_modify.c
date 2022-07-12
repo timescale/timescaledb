@@ -1689,13 +1689,17 @@ ExecInsert(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, TupleTableSl
 	if (mtstate->operation == CMD_UPDATE && mtstate->mt_transition_capture &&
 		mtstate->mt_transition_capture->tcs_update_new_table)
 	{
-		ExecARUpdateTriggers(estate,
-							 resultRelInfo,
-							 NULL,
-							 NULL,
-							 slot,
-							 NULL,
-							 mtstate->mt_transition_capture);
+		ExecARUpdateTriggersCompat(estate,
+								   resultRelInfo,
+								   NULL, /* src_partinfo */
+								   NULL, /* dst_partinfo */
+								   NULL,
+								   NULL,
+								   slot,
+								   NULL,
+								   mtstate->mt_transition_capture,
+								   false /* is_crosspart_update */
+		);
 
 		/*
 		 * We've already captured the NEW TABLE row, so make sure any AR
@@ -1836,7 +1840,13 @@ ExecUpdate(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, ItemPointer 
 	/* BEFORE ROW UPDATE Triggers */
 	if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_update_before_row)
 	{
-		if (!ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot))
+		if (!ExecBRUpdateTriggersCompat(estate,
+										epqstate,
+										resultRelInfo,
+										tupleid,
+										oldtuple,
+										slot,
+										NULL))
 			return NULL; /* "do nothing" */
 	}
 
@@ -2122,14 +2132,19 @@ ExecUpdate(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, ItemPointer 
 		(estate->es_processed)++;
 
 	/* AFTER ROW UPDATE Triggers */
-	ExecARUpdateTriggers(estate,
-						 resultRelInfo,
-						 tupleid,
-						 oldtuple,
-						 slot,
-						 recheckIndexes,
-						 mtstate->operation == CMD_INSERT ? mtstate->mt_oc_transition_capture :
-															mtstate->mt_transition_capture);
+	ExecARUpdateTriggersCompat(estate,
+							   resultRelInfo,
+							   NULL,
+							   NULL,
+							   tupleid,
+							   oldtuple,
+							   slot,
+							   recheckIndexes,
+							   mtstate->operation == CMD_INSERT ?
+								   mtstate->mt_oc_transition_capture :
+								   mtstate->mt_transition_capture,
+							   false /* is_crosspart_update */
+	);
 
 	list_free(recheckIndexes);
 
@@ -2729,13 +2744,16 @@ ExecDelete(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, ItemPointer 
 	if (mtstate->operation == CMD_UPDATE && mtstate->mt_transition_capture &&
 		mtstate->mt_transition_capture->tcs_update_old_table)
 	{
-		ExecARUpdateTriggers(estate,
-							 resultRelInfo,
-							 tupleid,
-							 oldtuple,
-							 NULL,
-							 NULL,
-							 mtstate->mt_transition_capture);
+		ExecARUpdateTriggersCompat(estate,
+								   resultRelInfo,
+								   NULL,
+								   NULL,
+								   tupleid,
+								   oldtuple,
+								   NULL,
+								   NULL,
+								   mtstate->mt_transition_capture,
+								   false);
 
 		/*
 		 * We've already captured the NEW TABLE row, so make sure any AR
@@ -2745,7 +2763,7 @@ ExecDelete(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, ItemPointer 
 	}
 
 	/* AFTER ROW DELETE Triggers */
-	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs);
+	ExecARDeleteTriggersCompat(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs, false);
 
 	/* Process RETURNING if present and if requested */
 	if (processReturning && resultRelInfo->ri_projectReturning)
