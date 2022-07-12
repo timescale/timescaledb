@@ -571,4 +571,60 @@ pg_strtoint64(const char *str)
 #include <utils/builtins.h>
 #endif
 
+/*
+ * PG 15 removes "recheck" argument from check_index_is_clusterable
+ *
+ * https://github.com/postgres/postgres/commit/b940918d
+ */
+#if PG15_GE
+#define check_index_is_clusterable_compat(rel, indexOid, lock)                                     \
+	check_index_is_clusterable(rel, indexOid, lock)
+#else
+#define check_index_is_clusterable_compat(rel, indexOid, lock)                                     \
+	check_index_is_clusterable(rel, indexOid, true, lock)
+#endif
+
+/*
+ * PG15 consolidate VACUUM xid cutoff logic.
+ *
+ * https://github.com/postgres/postgres/commit/efa4a946
+ */
+#if PG15_LT
+#define vacuum_set_xid_limits_compat(rel,                                                          \
+									 freeze_min_age,                                               \
+									 freeze_table_age,                                             \
+									 multixact_freeze_min_age,                                     \
+									 multixact_freeze_table_age,                                   \
+									 oldestXmin,                                                   \
+									 freezeLimit,                                                  \
+									 multiXactCutoff)                                              \
+	vacuum_set_xid_limits(rel,                                                                     \
+						  freeze_min_age,                                                          \
+						  freeze_table_age,                                                        \
+						  multixact_freeze_min_age,                                                \
+						  multixact_freeze_table_age,                                              \
+						  oldestXmin,                                                              \
+						  freezeLimit,                                                             \
+						  NULL,                                                                    \
+						  multiXactCutoff,                                                         \
+						  NULL)
+#else
+#define vacuum_set_xid_limits_compat(rel,                                                          \
+									 freeze_min_age,                                               \
+									 freeze_table_age,                                             \
+									 multixact_freeze_min_age,                                     \
+									 multixact_freeze_table_age,                                   \
+									 oldestXmin,                                                   \
+									 freezeLimit,                                                  \
+									 multiXactCutoff)                                              \
+	vacuum_set_xid_limits(rel,                                                                     \
+						  freeze_min_age,                                                          \
+						  freeze_table_age,                                                        \
+						  multixact_freeze_min_age,                                                \
+						  multixact_freeze_table_age,                                              \
+						  oldestXmin,                                                              \
+						  freezeLimit,                                                             \
+						  multiXactCutoff)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
