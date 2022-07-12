@@ -624,7 +624,92 @@ pg_strtoint64(const char *str)
 						  multixact_freeze_table_age,                                              \
 						  oldestXmin,                                                              \
 						  freezeLimit,                                                             \
-						  multiXactCutoff)
+						  multiXactCutoff,                                                         \
+						  NULL)
+#endif
+
+#if PG15_LT
+#define ExecARUpdateTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   src_partinfo,                                                   \
+								   dst_partinfo,                                                   \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   inewslot,                                                       \
+								   recheckIndexes,                                                 \
+								   transtition_capture,                                            \
+								   is_crosspart_update)                                            \
+	ExecARUpdateTriggers(estate,                                                                   \
+						 resultRelInfo,                                                            \
+						 tupleid,                                                                  \
+						 oldtuple,                                                                 \
+						 inewslot,                                                                 \
+						 recheckIndexes,                                                           \
+						 transtition_capture)
+#else
+#define ExecARUpdateTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   src_partinfo,                                                   \
+								   dst_partinfo,                                                   \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   inewslot,                                                       \
+								   recheckIndexes,                                                 \
+								   transtition_capture,                                            \
+								   is_crosspart_update)                                            \
+	ExecARUpdateTriggers(estate,                                                                   \
+						 resultRelInfo,                                                            \
+						 src_partinfo,                                                             \
+						 dst_partinfo,                                                             \
+						 tupleid,                                                                  \
+						 oldtuple,                                                                 \
+						 inewslot,                                                                 \
+						 recheckIndexes,                                                           \
+						 transtition_capture,                                                      \
+						 is_crosspart_update)
+#endif
+
+#if PG15_LT
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot)
+#else
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
+#endif
+
+#if PG15_LT
+#define ExecARDeleteTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   ar_delete_trig_tcs,                                             \
+								   is_crosspart_update)                                            \
+	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs)
+#else
+#define ExecARDeleteTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   ar_delete_trig_tcs,                                             \
+								   is_crosspart_update)                                            \
+	ExecARDeleteTriggers(estate,                                                                   \
+						 resultRelInfo,                                                            \
+						 tupleid,                                                                  \
+						 oldtuple,                                                                 \
+						 ar_delete_trig_tcs,                                                       \
+						 is_crosspart_update)
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */
