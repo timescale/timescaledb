@@ -170,10 +170,17 @@ static int16
 copy_data_read_int16(StringInfo copy_data)
 {
 	char *buf = &copy_data->data[copy_data->cursor];
+	char aligned_buf[2];
 	if (copy_data_consume_bytes(copy_data, 2) != 2)
 	{
 		elog(ERROR, "failed to read int16 from COPY data: not enough bytes left");
 	}
+	if (buf != (const char *) TYPEALIGN(2, buf))
+	{
+		memcpy(aligned_buf, buf, 2);
+		buf = aligned_buf;
+	}
+	AssertPointerAlignment(buf, 2);
 	return (int16) pg_ntoh16(*(uint16 *) buf);
 }
 
@@ -181,10 +188,17 @@ static int32
 copy_data_read_int32(StringInfo copy_data)
 {
 	char *buf = &copy_data->data[copy_data->cursor];
+	char aligned_buf[4];
 	if (copy_data_consume_bytes(copy_data, 4) != 4)
 	{
 		elog(ERROR, "failed to read int32 from COPY data: not enough bytes left");
 	}
+	if (buf != (const char *) TYPEALIGN(4, buf))
+	{
+		memcpy(aligned_buf, buf, 4);
+		buf = aligned_buf;
+	}
+	AssertPointerAlignment(buf, 4);
 	return (int32) pg_ntoh32(*(uint32 *) buf);
 }
 
