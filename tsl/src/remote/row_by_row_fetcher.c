@@ -323,9 +323,11 @@ row_by_row_fetcher_close(DataFetcher *df)
 {
 	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
 
-	Assert(fetcher->state.open);
-
-	if (fetcher->state.data_req != NULL)
+	/*
+	 * The fetcher state might not be open if the fetcher got initialized but
+	 * never executed due to executor constraints.
+	 */
+	if (fetcher->state.open && fetcher->state.data_req != NULL)
 	{
 		async_request_discard_response(fetcher->state.data_req);
 		pfree(fetcher->state.data_req);
