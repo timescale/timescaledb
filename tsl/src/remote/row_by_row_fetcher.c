@@ -547,9 +547,11 @@ row_by_row_fetcher_close(DataFetcher *df)
 {
 	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
 
-	Assert(fetcher->state.open);
-
-	if (fetcher->state.data_req != NULL)
+	/*
+	 * The fetcher state might not be open if the fetcher got initialized but
+	 * never executed due to executor constraints.
+	 */
+	if (fetcher->state.open && fetcher->state.data_req != NULL)
 	{
 		int end_res = PQendcopy(remote_connection_get_pg_conn(fetcher->state.conn));
 		if (end_res != 0)
