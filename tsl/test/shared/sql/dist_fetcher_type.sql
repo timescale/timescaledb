@@ -113,3 +113,26 @@ WHERE EXISTS (
   WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
 );
 
+-- #4518
+-- test error handling for queries with multiple distributed hypertables
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+);
+SET timescaledb.remote_data_fetcher = 'auto';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1,2;

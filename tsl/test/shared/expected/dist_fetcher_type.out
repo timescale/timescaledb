@@ -72,7 +72,7 @@ set timescaledb.remote_data_fetcher = 'rowbyrow';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
-ERROR:  could not set single-row mode on connection to "data_node_1"
+ERROR:  row-by-row fetcher not supported
 -- Check once again that 'auto' is used after 'rowbyrow'.
 set timescaledb.remote_data_fetcher = 'auto';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
@@ -190,4 +190,34 @@ WHERE EXISTS (
  time | device | value 
 ------+--------+-------
 (0 rows)
+
+-- #4518
+-- test error handling for queries with multiple distributed hypertables
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+);
+ERROR:  row-by-row fetcher not supported
+SET timescaledb.remote_data_fetcher = 'auto';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1,2;
+             time             | device | value 
+------------------------------+--------+-------
+ Sun Jan 01 06:01:00 2017 PST |      1 |   1.2
+ Sun Jan 01 08:01:00 2017 PST |      1 |   7.3
+(2 rows)
 

@@ -25,7 +25,6 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_REFER
 -- Use a small fetch size to make sure that result are fetched across
 -- multiple fetches.
 --ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fetch_size '500');
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
 SET client_min_messages TO notice;
 
 -- Load the data
