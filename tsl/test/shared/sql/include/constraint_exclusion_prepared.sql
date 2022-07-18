@@ -102,3 +102,14 @@ DEALLOCATE prep;
 
 RESET timescaledb.enable_chunk_append;
 
+-- test prepared statement with params and generic plan
+SET plan_cache_mode TO force_generic_plan;
+PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
+
+:PREFIX EXECUTE prep('2000-01-01 23:42');
+:PREFIX EXECUTE prep('2000-01-10 23:42');
+:PREFIX EXECUTE prep(now());
+
+DEALLOCATE prep;
+RESET plan_cache_mode;
+

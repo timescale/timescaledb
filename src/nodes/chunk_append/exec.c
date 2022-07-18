@@ -176,7 +176,7 @@ do_startup_exclusion(ChunkAppendState *state)
 	 * create skeleton plannerinfo for estimate_expression_value
 	 */
 	PlannerGlobal glob = {
-		.boundParams = NULL,
+		.boundParams = state->csstate.ss.ps.state->es_param_list_info,
 	};
 	PlannerInfo root = {
 		.glob = &glob,
@@ -339,7 +339,7 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 	int i = 0;
 
 	PlannerGlobal glob = {
-		.boundParams = NULL,
+		.boundParams = state->csstate.ss.ps.state->es_param_list_info,
 	};
 	PlannerInfo root = {
 		.glob = &glob,

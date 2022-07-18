@@ -18,7 +18,7 @@ set(TEST_TEMPLATES_SHARED
     ordered_append_join.sql.in transparent_decompress_chunk.sql.in)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES_SHARED memoize.sql)
+  list(APPEND TEST_FILES_SHARED compression_dml.sql memoize.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
