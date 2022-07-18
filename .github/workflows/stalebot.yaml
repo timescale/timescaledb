@@ -35,6 +35,3 @@ jobs:
           # Exclude assigned issues         
           exempt-all-assignees: true
  
-          # Dry run
-          debug-only: true
-
