@@ -1,0 +1,26 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test constraint exclusion with prepared statements and generic plans
+CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
+SELECT table_name FROM create_hypertable('i3719', 'time');
+ table_name 
+ i3719
+(1 row)
+
+ALTER TABLE i3719 SET (timescaledb.compress);
+INSERT INTO i3719 VALUES('2021-01-01 00:00:00', 'chunk 1');
+SELECT count(compress_chunk(c)) FROM show_chunks('i3719') c;
+ count 
+     1
+(1 row)
+
+INSERT INTO i3719 VALUES('2021-02-22 08:00:00', 'chunk 2');
+SET plan_cache_mode TO force_generic_plan;
+PREPARE p1(timestamptz) AS UPDATE i3719 SET data = 'x' WHERE time=$1;
+PREPARE p2(timestamptz) AS DELETE FROM i3719 WHERE time=$1;
+EXECUTE p1('2021-02-22T08:00:00+00');
+EXECUTE p2('2021-02-22T08:00:00+00');
+DEALLOCATE p1;
+DEALLOCATE p2;
+DROP TABLE i3719;

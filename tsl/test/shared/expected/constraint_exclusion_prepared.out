@@ -541,6 +541,47 @@ QUERY PLAN
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
+-- test prepared statement with params and generic plan
+SET plan_cache_mode TO force_generic_plan;
+PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
+:PREFIX EXECUTE prep('2000-01-01 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics (actual rows=5 loops=1)
+   Chunks excluded during runtime: 2
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=5 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+(8 rows)
+
+:PREFIX EXECUTE prep('2000-01-10 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics (actual rows=5 loops=1)
+   Chunks excluded during runtime: 2
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=5 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+(8 rows)
+
+:PREFIX EXECUTE prep(now());
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+   Chunks excluded during runtime: 3
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+(8 rows)
+
+DEALLOCATE prep;
+RESET plan_cache_mode;
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -1336,6 +1377,83 @@ QUERY PLAN
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
+-- test prepared statement with params and generic plan
+SET plan_cache_mode TO force_generic_plan;
+PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
+:PREFIX EXECUTE prep('2000-01-01 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=5 loops=1)
+   Chunks excluded during runtime: 6
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=3 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+(20 rows)
+
+:PREFIX EXECUTE prep('2000-01-10 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=5 loops=1)
+   Chunks excluded during runtime: 6
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=3 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+(20 rows)
+
+:PREFIX EXECUTE prep(now());
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
+   Chunks excluded during runtime: 9
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
+         Index Cond: ("time" = $1)
+(20 rows)
+
+DEALLOCATE prep;
+RESET plan_cache_mode;
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -1946,6 +2064,69 @@ QUERY PLAN
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
+-- test prepared statement with params and generic plan
+SET plan_cache_mode TO force_generic_plan;
+PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
+:PREFIX EXECUTE prep('2000-01-01 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
+   Chunks excluded during runtime: 2
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 4995
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 15
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+(16 rows)
+
+:PREFIX EXECUTE prep('2000-01-10 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
+   Chunks excluded during runtime: 2
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 4995
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 25
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+(16 rows)
+
+:PREFIX EXECUTE prep(now());
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_compressed (actual rows=0 loops=1)
+   Chunks excluded during runtime: 3
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+(14 rows)
+
+DEALLOCATE prep;
+RESET plan_cache_mode;
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -2996,6 +3177,149 @@ QUERY PLAN
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
+-- test prepared statement with params and generic plan
+SET plan_cache_mode TO force_generic_plan;
+PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
+:PREFIX EXECUTE prep('2000-01-01 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5 loops=1)
+   Chunks excluded during runtime: 6
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 999
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 3
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 2997
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 9
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 999
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 3
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+(44 rows)
+
+:PREFIX EXECUTE prep('2000-01-10 23:42');
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5 loops=1)
+   Chunks excluded during runtime: 6
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 999
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 5
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 2997
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 15
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 999
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Rows Removed by Filter: 5
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+(44 rows)
+
+:PREFIX EXECUTE prep(now());
+QUERY PLAN
+ Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=0 loops=1)
+   Chunks excluded during runtime: 9
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+(38 rows)
+
+DEALLOCATE prep;
+RESET plan_cache_mode;
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
