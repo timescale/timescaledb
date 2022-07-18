@@ -1,0 +1,14 @@
+name: Ask for reviewer assignment
+on: 
+  pull_request:
+jobs:
+  comment-review:
+    name: Leave a comment asking for review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment "/review" on PR
+        uses: unsplash/comment-on-pr@v1.3.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          msg: "/review"
