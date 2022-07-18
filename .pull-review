@@ -6,7 +6,7 @@ version: 1
 use_review_requests: true
 
 # maximum number of files to evaluate per pull request (set to 0 for no limit)
-max_files: 0
+max_files: 0 # evaluate all files of the PR
 
 # minimum number of reviewers to assign and notify for a pull request
 min_reviewers: 2
@@ -33,7 +33,7 @@ min_percent_authorship_for_extra_reviewer: 0
 min_lines_changed_for_extra_reviewer: 0
 
 # require a user to be listed in the reviewers section in order to be assigned to a pull request
-require_notification: true
+require_notification: false
 
 # list of users and their app-specific usernames
 reviewers:
