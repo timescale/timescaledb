@@ -55,7 +55,24 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 include(build-defs.cmake)
 
-configure_file(gitcommit.h.in gitcommit.h)
+set(GITREV_TMP ${CMAKE_CURRENT_BINARY_DIR}/tmp_gitcommit.h)
+set(GITREV_FILE ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
+
+# The commands for generating gitcommit.h need to be executed on every make run
+# and not on cmake run to detect branch switches, commit changes or local
+# modifications. That's why we add the commands in a custom target and run them
+# on every make run. We do the generation part in a temporary file and only
+# overwrite the actual file when the content is different to not trigger
+# unnecessary recompilations.
+
+add_custom_target(
+  gitcheck
+  COMMAND
+    ${CMAKE_COMMAND} "-DGIT_FOUND=${GIT_FOUND}"
+    "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+    "-DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/gitcommit.h.in"
+    "-DOUTPUT_FILE=${GITREV_TMP}" -P ${CMAKE_CURRENT_SOURCE_DIR}/gitcommit.cmake
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GITREV_TMP} ${GITREV_FILE})
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   add_library(${PROJECT_NAME} MODULE ${SOURCES} ${GITCOMMIT_H}
@@ -86,7 +103,7 @@ if(USE_OPENSSL)
 endif(USE_OPENSSL)
 
 configure_file(config.h.in config.h)
-
+add_dependencies(${PROJECT_NAME} gitcheck)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory(bgw)
 add_subdirectory(net)
