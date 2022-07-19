@@ -9,6 +9,7 @@
 #include <access/attnum.h>
 #include <access/htup_details.h>
 #include <catalog/pg_cast.h>
+#include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
@@ -24,6 +25,7 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include <annotations.h>
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/locf.h"
 #include "nodes/gapfill/interpolate.h"
@@ -950,10 +952,12 @@ gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot)
 			value = slot_getattr(slot, AttrOffsetGetAttrNumber(i), &isnull);
 			if (isnull && column.group->isnull)
 				continue;
-			if (isnull != column.group->isnull || !datumIsEqual(value,
-																column.group->value,
-																column.base->typbyval,
-																column.base->typlen))
+			if (isnull != column.group->isnull)
+				return true;
+			if (!DatumGetBool(DirectFunctionCall2Coll(column.group->eq_func.fn_addr,
+													  column.group->collation,
+													  value,
+													  column.group->value)))
 				return true;
 		}
 	}
@@ -1165,13 +1169,16 @@ gapfill_state_initialize_columns(GapFillState *state)
 static GapFillColumnState *
 gapfill_column_state_create(GapFillColumnType ctype, Oid typeid)
 {
-	TypeCacheEntry *tce = lookup_type_cache(typeid, 0);
+	TypeCacheEntry *tce;
+	int tc_flags = 0;
 	GapFillColumnState *column;
 	size_t size;
 
 	switch (ctype)
 	{
 		case GROUP_COLUMN:
+			tc_flags |= TYPECACHE_EQ_OPR;
+			TS_FALLTHROUGH;
 		case DERIVED_COLUMN:
 			size = sizeof(GapFillGroupColumnState);
 			break;
@@ -1185,12 +1192,21 @@ gapfill_column_state_create(GapFillColumnType ctype, Oid typeid)
 			size = sizeof(GapFillColumnState);
 			break;
 	}
+	tce = lookup_type_cache(typeid, tc_flags);
 
 	column = palloc0(size);
 	column->ctype = ctype;
 	column->typid = tce->type_id;
 	column->typbyval = tce->typbyval;
 	column->typlen = tce->typlen;
+
+	if (ctype == GROUP_COLUMN)
+	{
+		GapFillGroupColumnState *gcolumn = (GapFillGroupColumnState *) column;
+		Oid eq_opr_func = get_opcode(tce->eq_opr);
+		fmgr_info_cxt(eq_opr_func, &gcolumn->eq_func, CurrentMemoryContext);
+		gcolumn->collation = tce->typcollation;
+	}
 
 	return column;
 }

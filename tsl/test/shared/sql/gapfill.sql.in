@@ -1452,3 +1452,23 @@ SELECT
 FROM (VALUES ('2019-11-05 2:20'), ('2019-11-05 2:30')) v (ts)
 GROUP BY 1;
 
+-- check gapfill group change detection with TOASTed values
+CREATE TABLE gapfill_group_toast(time timestamptz NOT NULL, device text, value float);
+SELECT table_name FROM create_hypertable('gapfill_group_toast', 'time');
+
+INSERT INTO gapfill_group_toast
+SELECT
+  generate_series('2022-06-01'::timestamptz, '2022-06-03'::timestamptz, '1min'::interval),
+  '4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43',
+  random();
+
+ALTER TABLE gapfill_group_toast SET(timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('gapfill_group_toast') c;
+
+SELECT
+  time_bucket_gapfill('1 day', time), device
+FROM gapfill_group_toast
+WHERE time >= '2022-06-01' AND time <= '2022-06-02'
+GROUP BY 1,2;
+
+DROP TABLE gapfill_group_toast;
