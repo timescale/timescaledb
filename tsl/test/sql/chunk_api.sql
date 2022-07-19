@@ -11,11 +11,12 @@ GRANT CREATE ON DATABASE :"TEST_DBNAME" TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE SCHEMA "ChunkSchema";
-CREATE TABLE chunkapi (time timestamptz, device int, temp float);
+-- Use range types as well for columns
+CREATE TABLE chunkapi (time timestamptz, device int, temp float, rng int8range);
 
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 
-INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
+INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4, int8range(4, 10));
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('chunkapi')

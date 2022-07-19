@@ -733,8 +733,9 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 		ATTSTATSSLOT_NUMBERS,						/* CORRELATION */
 		ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS, /* MCELEM */
 		ATTSTATSSLOT_NUMBERS,						/* DECHIST */
-		ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS, /* RANGE_LENGTH_HISTOGRAM */
-		ATTSTATSSLOT_VALUES							/* BOUNDS_HISTOGRAM */
+		/* ATTSTATSSLOT_VALUES is not always present for all HISTOGRAM operators.. */
+		ATTSTATSSLOT_NUMBERS, /* RANGE_LENGTH_HISTOGRAM */
+		ATTSTATSSLOT_VALUES   /* BOUNDS_HISTOGRAM */
 	};
 
 	int i;
@@ -772,8 +773,12 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 			continue;
 		}
 
-		convert_op_oid_to_strings(slot_op, op_strings + nopstrings);
-		nopstrings += STRINGS_PER_OP_OID;
+		/* slot_op can be invalid for some "kinds" like STATISTIC_KIND_BOUNDS_HISTOGRAM */
+		if (OidIsValid(slot_op))
+		{
+			convert_op_oid_to_strings(slot_op, op_strings + nopstrings);
+			nopstrings += STRINGS_PER_OP_OID;
+		}
 
 		if (kind > STATISTIC_KIND_BOUNDS_HISTOGRAM)
 			ereport(ERROR,
