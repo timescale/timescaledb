@@ -83,6 +83,8 @@ typedef struct GapFillGroupColumnState
 	GapFillColumnState base;
 	Datum value;
 	bool isnull;
+	Oid collation;
+	FmgrInfo eq_func;
 } GapFillGroupColumnState;
 
 typedef struct GapFillState
