@@ -1,0 +1,19 @@
+name: Run pull-review with docker
+on: 
+  pull_request:
+jobs:
+  ask-review:
+    name: Run pull-review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run shell script
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            OWNER: ${{ github.repository_owner }}
+            REPO: ${{ github.event.repository.name }}
+            PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          PR_URL="https://github.com/${OWNER}/${REPO}/pull/${PULL_REQUEST_NUMBER}"
+          bash scripts/pull-review.sh "${GITHUB_TOKEN}" "${PR_URL}"

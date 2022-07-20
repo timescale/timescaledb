@@ -1,0 +1,63 @@
+---
+# pull-review config version (required)
+version: 1
+
+# use review requests instead of assignees to assign reviewers to pull requests
+use_review_requests: true
+
+# maximum number of files to evaluate per pull request (set to 0 for no limit)
+max_files: 0 # evaluate all files of the PR
+
+# minimum number of reviewers to assign and notify for a pull request
+min_reviewers: 2
+
+# maximum number of reviewers to assign and notify for a pull request
+max_reviewers: 2
+
+# maximum number of files per reviewer (set to 0 for no limit)
+max_files_per_reviewer: 0
+
+# maximum number of lines changed per reviewer (set to 0 for no limit)
+max_lines_per_reviewer: 0
+
+# if at least a minimum number of reviewers is not found, assign a minimum number of reviewers randomly
+assign_min_reviewers_randomly: true
+
+# if the pull request changes code with fewer than a minimum number of authors, add extra reviewers if possible (set to 0 to disable)
+min_authors_of_changed_files: 0
+
+# minimum percent of lines authored by a reviewer to require an extra reviewer (set to 0 to disable)
+min_percent_authorship_for_extra_reviewer: 0
+
+# minimum number of lines that must be changed to add an extra reviewer (set to 0 to disable)
+min_lines_changed_for_extra_reviewer: 0
+
+# require a user to be listed in the reviewers section in order to be assigned to a pull request
+require_notification: false
+
+# list of users and their app-specific usernames
+reviewers:
+  svenklemm: {}
+  mkindahl: {}
+  mfundul: {}
+  fabriziomello: {}
+  konskov: {}
+  erimatnor: {}
+  pmwkaa: {}
+  nikkhils: {}
+  akuzm: {}
+  RafiaSabih: {}
+  gayyappan: {}
+  jnidzwetzki: {}
+
+# list of users who will never be notified
+review_blacklist:
+  - horzsolt
+
+# ignore changes to the test output files. 
+# 1. because they usually will have equivalent .sql files
+# 2. because people that modify a test, don't necessarily change the same c-functionality at all
+# so tests should be less important than C files
+file_blacklist:
+  - tsl/test/expected/*.out
+  - test/expected/*.out
