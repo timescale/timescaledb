@@ -265,9 +265,12 @@ function_telemetry_increment(Oid func_id, HTAB **local_counts)
 		HASHCTL hash_info = {
 			.keysize = sizeof(Oid),
 			.entrysize = sizeof(FnTelemetryEntry),
+			.hcxt = CurrentMemoryContext,
 		};
-		*local_counts =
-			hash_create("fn telemetry local function hash", 10, &hash_info, HASH_ELEM | HASH_BLOBS);
+		*local_counts = hash_create("fn telemetry local function hash",
+									10,
+									&hash_info,
+									HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 	}
 
 	entry = hash_search(*local_counts, &func_id, HASH_ENTER, &found);
