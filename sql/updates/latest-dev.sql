@@ -2,11 +2,11 @@ DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL);
 DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL);
 DROP FUNCTION IF EXISTS @extschema@.detach_data_node;
 
-DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_retention_check(JSONB);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_compression_check(JSONB);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_reorder_check(JSONB);
-DROP FUNCTION IF EXISTS _timescaledb_internal.policy_refresh_continuous_aggregate_check(JSONB);
+-- DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL);
+-- DROP FUNCTION IF EXISTS _timescaledb_internal.policy_retention_check(JSONB);
+-- DROP FUNCTION IF EXISTS _timescaledb_internal.policy_compression_check(JSONB);
+-- DROP FUNCTION IF EXISTS _timescaledb_internal.policy_reorder_check(JSONB);
+-- DROP FUNCTION IF EXISTS _timescaledb_internal.policy_refresh_continuous_aggregate_check(JSONB);
 
 -- add fields for check function
 ALTER TABLE _timescaledb_config.bgw_job
