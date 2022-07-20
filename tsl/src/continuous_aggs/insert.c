@@ -103,7 +103,7 @@ cache_inval_init()
 	continuous_aggs_cache_inval_htab = hash_create("TS Continuous Aggs Cache Inval",
 												   CA_CACHE_INVAL_INIT_HTAB_SIZE,
 												   &ctl,
-												   HASH_ELEM | HASH_BLOBS);
+												   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 };
 
 static int64
