@@ -464,7 +464,10 @@ initialize_func_info()
 	Relation rel;
 	int i;
 
-	func_hash = hash_create("func_cache", _MAX_CACHE_FUNCTIONS, &hashctl, HASH_ELEM | HASH_BLOBS);
+	func_hash = hash_create("func_cache",
+							_MAX_CACHE_FUNCTIONS,
+							&hashctl,
+							HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 	rel = table_open(ProcedureRelationId, AccessShareLock);
 
