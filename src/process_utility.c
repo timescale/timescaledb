@@ -273,6 +273,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 		bool has_default = false;
 		bool has_notnull = col->is_not_null;
 		ListCell *lc;
+		bool is_bool = false;
 		foreach (lc, col->constraints)
 		{
 			Constraint *constraint = lfirst_node(Constraint, lc);
@@ -282,14 +283,30 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 					has_notnull = true;
 					continue;
 				case CONSTR_DEFAULT:
-					/* since default expressions might trigger a table rewrite we
-					 * only allow Const here for now */
+					/*
+					 * Since default expressions might trigger a table rewrite we
+					 * only allow Const here for now.
+					 */
 					if (!IsA(constraint->raw_expr, A_Const))
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("cannot add column with non-constant default expression "
-										"to a hypertable that has compression enabled")));
-
+					{
+						if (IsA(constraint->raw_expr, TypeCast) &&
+							IsA(castNode(TypeCast, constraint->raw_expr)->arg, A_Const))
+						{
+							/*
+							 * Ignore error only for boolean column, as values like
+							 * 'True' or 'False' are treated as TypeCast.
+							 */
+							char *name =
+								strVal(llast(((TypeCast *) constraint->raw_expr)->typeName->names));
+							is_bool = strstr(name, "bool") ? true : false;
+						}
+						if (!is_bool)
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg(
+										 "cannot add column with non-constant default expression "
+										 "to a hypertable that has compression enabled")));
+					}
 					has_default = true;
 					continue;
 
