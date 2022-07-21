@@ -11,6 +11,12 @@ accidentally triggering the load of a previous DB version.**
 * #4393 Support intervals with day component when constifying now()
 * #4397 Support intervals with month component when constifying now()
 
+**Bugfixes**
+* #4486 Adding boolean column with default value doesn't work on compressed table
+
+**Thanks**
+@janko for reporting
+
 ## 2.7.2 (2022-07-26)
 
 This release is a patch release. We recommend that you upgrade at the

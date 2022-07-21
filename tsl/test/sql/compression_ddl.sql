@@ -42,6 +42,12 @@ ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
 
+--test adding boolean columns with default and not null
+CREATE TABLE records (time timestamp NOT NULL);
+SELECT create_hypertable('records', 'time');
+ALTER TABLE records SET (timescaledb.compress = true);
+ALTER TABLE records ADD COLUMN col boolean DEFAULT false NOT NULL;
+DROP table records CASCADE;
 
 -- TABLESPACES
 -- For tablepaces with compressed chunks the semantics are the following:
@@ -469,13 +475,13 @@ SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=>
 
 SELECT attach_tablespace('tablespace2', 'test2');
 
-INSERT INTO test2 SELECT t,  gen_rand_minstd(), 22 
+INSERT INTO test2 SELECT t,  gen_rand_minstd(), 22
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 13:00', '1 hour') t;
 
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = 'i', timescaledb.compress_orderby = 'timec');
 
 SELECT relname FROM pg_class
-WHERE reltablespace in 
+WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
 
 -- test compress_chunk() with utility statement (SELECT ... INTO)
@@ -490,7 +496,7 @@ SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
 -- instead of printing the table/index names
 SELECT count(*) FROM (
 SELECT relname FROM pg_class
-WHERE reltablespace in 
+WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2'))q;
 
 DROP TABLE test2 CASCADE;

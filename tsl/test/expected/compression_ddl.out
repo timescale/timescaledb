@@ -62,6 +62,17 @@ DROP INDEX new_index;
 ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
+--test adding boolean columns with default and not null
+CREATE TABLE records (time timestamp NOT NULL);
+SELECT create_hypertable('records', 'time');
+  create_hypertable   
+----------------------
+ (3,public,records,t)
+(1 row)
+
+ALTER TABLE records SET (timescaledb.compress = true);
+ALTER TABLE records ADD COLUMN col boolean DEFAULT false NOT NULL;
+DROP table records CASCADE;
 -- TABLESPACES
 -- For tablepaces with compressed chunks the semantics are the following:
 --  - compressed chunks get put into the same tablespace as the
@@ -623,9 +634,9 @@ AS sub;
 (1 row)
 
 DROP TABLE test1 CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_4_57_chunk
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_6_57_chunk
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_56_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_56_chunk
 DROP TABLESPACE tablespace1;
 -- Triggers are NOT fired for compress/decompress
 CREATE TABLE test1 ("Time" timestamptz, i integer);
@@ -686,7 +697,7 @@ CREATE TABLE i2844 (created_at timestamptz NOT NULL,c1 float);
 SELECT create_hypertable('i2844', 'created_at', chunk_time_interval => '6 hour'::interval);
  create_hypertable  
 --------------------
- (7,public,i2844,t)
+ (9,public,i2844,t)
 (1 row)
 
 INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'::timestamptz,'1h'::interval);
@@ -696,26 +707,26 @@ ALTER TABLE i2844 SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('i2844');
             compressed_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_7_62_chunk
- _timescaledb_internal._hyper_7_63_chunk
- _timescaledb_internal._hyper_7_64_chunk
- _timescaledb_internal._hyper_7_65_chunk
- _timescaledb_internal._hyper_7_66_chunk
+ _timescaledb_internal._hyper_9_62_chunk
+ _timescaledb_internal._hyper_9_63_chunk
+ _timescaledb_internal._hyper_9_64_chunk
+ _timescaledb_internal._hyper_9_65_chunk
+ _timescaledb_internal._hyper_9_66_chunk
 (5 rows)
 
 SELECT drop_chunks('i2844', older_than => '2000-01-01 18:00'::timestamptz);
                drop_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_7_62_chunk
- _timescaledb_internal._hyper_7_63_chunk
- _timescaledb_internal._hyper_7_64_chunk
+ _timescaledb_internal._hyper_9_62_chunk
+ _timescaledb_internal._hyper_9_63_chunk
+ _timescaledb_internal._hyper_9_64_chunk
 (3 rows)
 
 SELECT decompress_chunk(show_chunks, if_compressed => TRUE) AS decompressed_chunks FROM show_chunks('i2844');
            decompressed_chunks           
 -----------------------------------------
- _timescaledb_internal._hyper_7_65_chunk
- _timescaledb_internal._hyper_7_66_chunk
+ _timescaledb_internal._hyper_9_65_chunk
+ _timescaledb_internal._hyper_9_66_chunk
 (2 rows)
 
 ALTER TABLE i2844 SET (timescaledb.compress = FALSE);
@@ -764,12 +775,12 @@ SELECT * FROM _timescaledb_catalog.hypertable_compression
 ORDER BY attname;
  hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
-            10 | Time     |                        4 |                        |                    1 | f           | t
-            10 | bntcol   |                        0 |                      1 |                      |             | 
-            10 | intcol   |                        4 |                        |                      |             | 
-            10 | new_coli |                        4 |                        |                      |             | 
-            10 | new_colv |                        2 |                        |                      |             | 
-            10 | txtcol   |                        2 |                        |                      |             | 
+            12 | Time     |                        4 |                        |                    1 | f           | t
+            12 | bntcol   |                        0 |                      1 |                      |             | 
+            12 | intcol   |                        4 |                        |                      |             | 
+            12 | new_coli |                        4 |                        |                      |             | 
+            12 | new_colv |                        2 |                        |                      |             | 
+            12 | txtcol   |                        2 |                        |                      |             | 
 (6 rows)
 
 SELECT count(*) from test1 where new_coli is not null;
@@ -861,7 +872,7 @@ WHERE attname = 'new_coli' and hypertable_id = (SELECT id from _timescaledb_cata
                        WHERE table_name = 'test1' );
  hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
-            10 | new_coli |                        4 |                        |                      |             | 
+            12 | new_coli |                        4 |                        |                      |             | 
 (1 row)
 
 ALTER TABLE test1 RENAME new_coli TO coli;
@@ -870,7 +881,7 @@ WHERE attname = 'coli' and hypertable_id = (SELECT id from _timescaledb_catalog.
                        WHERE table_name = 'test1' );
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            10 | coli    |                        4 |                        |                      |             | 
+            12 | coli    |                        4 |                        |                      |             | 
 (1 row)
 
 SELECT count(*) from test1 where coli  = 100;
@@ -886,7 +897,7 @@ WHERE attname = 'bigintcol' and hypertable_id = (SELECT id from _timescaledb_cat
                        WHERE table_name = 'test1' );
  hypertable_id |  attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+-----------+--------------------------+------------------------+----------------------+-------------+--------------------
-            10 | bigintcol |                        0 |                      1 |                      |             | 
+            12 | bigintcol |                        0 |                      1 |                      |             | 
 (1 row)
 
 --query by segment by column name 
@@ -989,7 +1000,7 @@ CREATE TABLE test_defaults(time timestamptz NOT NULL, device_id int);
 SELECT create_hypertable('test_defaults','time');
       create_hypertable      
 -----------------------------
- (12,public,test_defaults,t)
+ (14,public,test_defaults,t)
 (1 row)
 
 ALTER TABLE test_defaults SET (timescaledb.compress,timescaledb.compress_segmentby='device_id');
@@ -1000,7 +1011,7 @@ INSERT INTO test_defaults SELECT '2001-01-01', 1;
 SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
              compressed_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_12_89_chunk
+ _timescaledb_internal._hyper_14_89_chunk
 (1 row)
 
 SELECT * FROM test_defaults ORDER BY 1;
@@ -1044,7 +1055,7 @@ SELECT create_hypertable('test_drop','time');
 psql:include/compression_alter.sql:178: NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
- (14,public,test_drop,t)
+ (16,public,test_drop,t)
 (1 row)
 
 ALTER TABLE test_drop SET (timescaledb.compress,timescaledb.compress_segmentby='device',timescaledb.compress_orderby='o1,o2');
@@ -1148,16 +1159,16 @@ SELECT attach_tablespace('tablespace2', 'test2');
  
 (1 row)
 
-INSERT INTO test2 SELECT t,  gen_rand_minstd(), 22 
+INSERT INTO test2 SELECT t,  gen_rand_minstd(), 22
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 13:00', '1 hour') t;
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = 'i', timescaledb.compress_orderby = 'timec');
 SELECT relname FROM pg_class
-WHERE reltablespace in 
+WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
                relname               
 -------------------------------------
- _hyper_16_103_chunk
- _hyper_16_103_chunk_test2_timec_idx
+ _hyper_18_103_chunk
+ _hyper_18_103_chunk_test2_timec_idx
  test2
 (3 rows)
 
@@ -1168,7 +1179,7 @@ SELECT decompress_chunk(ch) INTO decompressed_chunks FROM show_chunks('test2') c
 SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_16_103_chunk
+ _timescaledb_internal._hyper_18_103_chunk
 (1 row)
 
 -- the chunk, compressed chunk + index + toast tables are in tablespace2 now .
@@ -1176,7 +1187,7 @@ SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
 -- instead of printing the table/index names
 SELECT count(*) FROM (
 SELECT relname FROM pg_class
-WHERE reltablespace in 
+WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2'))q;
  count 
 -------
@@ -1184,7 +1195,7 @@ WHERE reltablespace in
 (1 row)
 
 DROP TABLE test2 CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_17_105_chunk
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_19_105_chunk
 DROP TABLESPACE tablespace2;
 -- Create a table with a compressed table and then delete the
 -- compressed table and see that the drop of the hypertable does not
@@ -1195,7 +1206,7 @@ CREATE TABLE issue4140("time" timestamptz NOT NULL, device_id int);
 SELECT create_hypertable('issue4140', 'time');
     create_hypertable    
 -------------------------
- (18,public,issue4140,t)
+ (20,public,issue4140,t)
 (1 row)
 
 ALTER TABLE issue4140 SET(timescaledb.compress);
