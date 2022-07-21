@@ -428,3 +428,22 @@ CREATE VIEW v1 AS SELECT random();
 ALTER VIEW v1 SET (autovacuum_enabled = false);
 \set ON_ERROR_STOP 1
 
+-- issue 4474
+-- test hypertable with non-default statistics target
+-- and chunk creation triggered by non-owner
+CREATE ROLE role_4474;
+CREATE TABLE i4474(time timestamptz NOT NULL);
+SELECT table_name FROM public.create_hypertable( 'i4474', 'time');
+GRANT SELECT, INSERT on i4474 TO role_4474;
+
+-- create chunk as owner
+INSERT INTO i4474 SELECT '2020-01-01';
+
+-- set statistics
+ALTER TABLE i4474 ALTER COLUMN time SET statistics 10;
+
+-- create chunk as non-owner
+SET ROLE role_4474;
+INSERT INTO i4474 SELECT '2021-01-01';
+RESET ROLE;
+
