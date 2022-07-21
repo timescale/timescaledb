@@ -701,6 +701,17 @@ VACUUM;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP TABLE disttable;
 
+-- Ensure ANALYZE commands can be run on a set of data nodes
+--
+-- Issue: #4508
+--
+CREATE TABLE hyper(time TIMESTAMPTZ, device INT, temp FLOAT);
+SELECT create_distributed_hypertable('hyper', 'time', 'device', 4, chunk_time_interval => interval '18 hours', replication_factor => 1, data_nodes => '{ data_node_1, data_node_2 }');
+
+INSERT INTO hyper SELECT t, ceil((random() * 5))::int, random() * 80
+FROM generate_series('2019-01-01'::timestamptz, '2019-01-05'::timestamptz, '1 minute') as t;
+ANALYZE hyper;
+
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :MY_DB1;

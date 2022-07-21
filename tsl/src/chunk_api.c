@@ -1340,6 +1340,7 @@ static void
 fetch_remote_chunk_stats(Hypertable *ht, FunctionCallInfo fcinfo, bool col_stats)
 {
 	StatsProcessContext statsctx;
+	List *data_nodes;
 	DistCmdResult *cmdres;
 	TupleDesc tupdesc;
 	TupleFactory *tf;
@@ -1355,7 +1356,8 @@ fetch_remote_chunk_stats(Hypertable *ht, FunctionCallInfo fcinfo, bool col_stats
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
 
-	cmdres = ts_dist_cmd_invoke_func_call_on_all_data_nodes(fcinfo);
+	data_nodes = ts_hypertable_get_data_node_name_list(ht);
+	cmdres = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
 
 	/* Expect TEXT response format since dist command API currently defaults
 	 * to requesting TEXT */
