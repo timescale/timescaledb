@@ -103,7 +103,7 @@ def build_apache_config(overrides):
 def macos_config(overrides):
   base_config = dict({
     "pg": PG12_LATEST,
-    "os": "macos-10.15",
+    "os": "macos-11",
     "cc": "clang",
     "cxx": "clang++",
     "clang": "clang",
