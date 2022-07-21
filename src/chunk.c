@@ -889,6 +889,12 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		 */
 		create_toast_table(&stmt.base, objaddr.objectId);
 
+		/*
+		 * Some options require being table owner to set for example statistics
+		 * so we have to set them before restoring security context
+		 */
+		set_attoptions(rel, objaddr.objectId);
+
 		if (uid != saved_uid)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 	}
@@ -914,6 +920,12 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		CreateForeignTable(&stmt, objaddr.objectId);
 
 		/*
+		 * Some options require being table owner to set for example statistics
+		 * so we have to set them before restoring security context
+		 */
+		set_attoptions(rel, objaddr.objectId);
+
+		/*
 		 * Need to restore security context to execute remote commands as the
 		 * original user
 		 */
@@ -928,8 +940,6 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	}
 	else
 		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
-
-	set_attoptions(rel, objaddr.objectId);
 
 	table_close(rel, AccessShareLock);
 
