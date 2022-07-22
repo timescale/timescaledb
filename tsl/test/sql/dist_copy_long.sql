@@ -32,23 +32,23 @@ create table uk_price_paid_space10(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_space10', 'date', 'postcode2', 10, chunk_time_interval => interval '90 day');
 
 
-\copy uk_price_paid_space2 from program 'zcat data/prices-10k-random-1.tsv.gz';
+\copy uk_price_paid_space2 from program 'zcat < data/prices-10k-random-1.tsv.gz';
 select count(*) from uk_price_paid_space2;
-\copy uk_price_paid_space2 from program 'zcat data/prices-10k-random-1.tsv.gz';
+\copy uk_price_paid_space2 from program 'zcat < data/prices-10k-random-1.tsv.gz';
 select count(*) from uk_price_paid_space2;
 
-\copy uk_price_paid_space10 from program 'zcat data/prices-10k-random-1.tsv.gz';
+\copy uk_price_paid_space10 from program 'zcat < data/prices-10k-random-1.tsv.gz';
 select count(*) from uk_price_paid_space10;
-\copy uk_price_paid_space10 from program 'zcat data/prices-10k-random-1.tsv.gz';
+\copy uk_price_paid_space10 from program 'zcat < data/prices-10k-random-1.tsv.gz';
 select count(*) from uk_price_paid_space10;
 
 
 set timescaledb.max_open_chunks_per_insert = 1;
 
-\copy uk_price_paid from program 'zcat data/prices-100k-random-1.tsv.gz';
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
-\copy uk_price_paid from program 'zcat data/prices-100k-random-1.tsv.gz';
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
 truncate uk_price_paid;
@@ -56,10 +56,10 @@ truncate uk_price_paid;
 
 set timescaledb.max_open_chunks_per_insert = 2;
 
-\copy uk_price_paid from program 'zcat data/prices-100k-random-1.tsv.gz';
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
-\copy uk_price_paid from program 'zcat data/prices-100k-random-1.tsv.gz';
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
 truncate uk_price_paid;
@@ -67,10 +67,10 @@ truncate uk_price_paid;
 
 set timescaledb.max_open_chunks_per_insert = 1117;
 
-\copy uk_price_paid from program 'zcat data/prices-100k-random-1.tsv.gz';
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
-\copy uk_price_paid from program 'zcat data/prices-100k-random-1.tsv.gz';
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
 truncate uk_price_paid;
