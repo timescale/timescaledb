@@ -8,17 +8,15 @@ on:
 jobs:
   coccinelle:
     name: Coccinelle
-    runs-on: ubuntu-latest
-    container:
-      # coccinelle version in ubuntu-latest (20.04) is too old so we run
-      # this in impish (21.10) container which has the version we need
-      image: ubuntu:impish
+    # coccinelle version in ubuntu-latest (20.04) is too old so we run
+    # this in jammy (22.04)
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Install Dependencies
       run: |
-        apt-get update
-        apt-get -y install coccinelle
+        sudo apt-get update
+        sudo apt-get -y install coccinelle
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v2
