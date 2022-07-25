@@ -22,7 +22,7 @@ jobs:
       matrix:
         # Debian images:  9 (stretch), 10 (buster), 11 (bullseye)
         # Ubuntu images:  18.04 LTS (bionic), 20.04 LTS (focal), 21.10 (impish), 22.04 (jammy)
-        image: [ "debian:9-slim", "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:impish", "ubuntu:jammy"]
+        image: [ "debian:9-slim", "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy"]
         pg: [ 12, 13, 14 ]
         license: [ "TSL", "Apache"]
         include:
