@@ -4,8 +4,7 @@
 #  Please see the included NOTICE for copyright information and
 #  LICENSE-APACHE for a copy of the license.
 
-# Python script to check if there are memory spikes when running
-# out of order random inserts to TimescaleDB database
+# Python script to check if there are memory spikes when running queries
 import psutil
 import time
 import sys
@@ -13,7 +12,7 @@ from datetime import datetime
 
 DEFAULT_MEMCAP = 300 # in MB
 THRESHOLD_RATIO = 1.5 # ratio above which considered memory spike
-WAIT_TO_STABILIZE = 30 # wait in seconds before considering memory stable
+WAIT_TO_STABILIZE = 15 # wait in seconds before considering memory stable
 CHECK_INTERVAL = 15
 DEBUG = False
 
@@ -63,7 +62,7 @@ def find_new_process():
     process_count = len(base_process)
 
     print("Waiting {} seconds for process running inserts to start".format(WAIT_TO_STABILIZE), flush=True)
-    time.sleep(WAIT_TO_STABILIZE) # wait 30 seconds to get process that runs the inserts
+    time.sleep(WAIT_TO_STABILIZE) # wait WAIT_TO_STABILIZE seconds to get process that runs the inserts
 
     # continuously check for creation of new postgres process
     timeout = time.time() + 60
@@ -95,7 +94,7 @@ def main():
     pid = find_new_process()
     p = psutil.Process(pid)
     print('*** Check this pid is the same as "pg_backend_pid" from SQL command ***')
-    print('New process running random inserts:', pid)
+    print('New process backend process:', pid)
 
     print('Waiting {} seconds for memory consumption to stabilize'.format(WAIT_TO_STABILIZE), flush=True)
     time.sleep(WAIT_TO_STABILIZE)
@@ -138,7 +137,7 @@ def main():
             sys.exit(4)
         time.sleep(CHECK_INTERVAL)
 
-    print('No memory errors detected with out of order random inserts', flush=True)
+    print('No memory leaks detected', flush=True)
     sys.exit(0) # success
 
 if __name__ == '__main__':
