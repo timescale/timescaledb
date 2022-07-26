@@ -489,3 +489,8 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP SCHEMA test_schema CASCADE;
 DROP ROLE user_noexec;
+
+-- check that alter_job rejects a check function with invalid signature
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
+select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
+select alter_job(:job_id_alter);

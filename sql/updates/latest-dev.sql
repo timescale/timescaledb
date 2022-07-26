@@ -68,3 +68,5 @@ SET
   check_name = 'policy_refresh_continuous_aggregate_check'
 WHERE proc_schema = '_timescaledb_internal'
   AND proc_name = 'policy_refresh_continuous_aggregate';
+
+DROP VIEW IF EXISTS timescaledb_information.jobs;
