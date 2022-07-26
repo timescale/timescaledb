@@ -54,9 +54,13 @@ jobs:
         sudo systemctl start postgresql@${{ matrix.pg }}-main.service
         sudo -u postgres psql -X -c "CREATE USER runner SUPERUSER LOGIN;"
 
-    - name: Run memory test
+    - name: Run insert memory test
       run: |
         sudo -u postgres python ./scripts/test_memory_spikes.py & sleep 5 && psql -d postgres -v ECHO=all -X -f scripts/out_of_order_random_direct.sql
+
+    - name: Run generic memory test
+      run: |
+        sudo -u postgres python ./scripts/test_memory_spikes.py & sleep 5 && psql -d postgres -v ECHO=all -X -f scripts/memory_leaks.sql
 
     - name: Postgres log
       if: always()
