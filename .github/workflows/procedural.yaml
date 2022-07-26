@@ -3,6 +3,8 @@ name: Add bugs to bugs project
 on:
   issues:
     types: [ opened, labeled ]
+  issue_comment:
+    types: [created, edited]
 
 jobs:
   add-to-project:
