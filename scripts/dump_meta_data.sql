@@ -12,7 +12,7 @@
 \echo '<exclude_from_test>'
 \echo 'Date, git commit, and extension version can change without it being an error.'
 \echo 'Adding this tag allows us to run regression tests on this script file.'
-\echo `date`
+select now();
 \echo 'Postgres version'
 select version();
 
