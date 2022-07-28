@@ -152,6 +152,39 @@ DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
  */
 static struct BaserelInfo_hash *ts_baserel_info = NULL;
 
+/*
+ * Add information about a chunk to the baserel info cache. Used to cache the
+ * chunk info at the plan time chunk exclusion.
+ */
+void
+add_baserel_cache_entry_for_chunk(Oid chunk_reloid, uint32 chunk_status, Hypertable *hypertable,
+								  TsRelType chunk_reltype)
+{
+	Assert(hypertable != NULL);
+	Assert(chunk_reltype == TS_REL_CHUNK || chunk_reltype == TS_REL_CHUNK_CHILD);
+
+	if (ts_baserel_info == NULL)
+	{
+		return;
+	}
+
+	bool found = false;
+	BaserelInfoEntry *entry = BaserelInfo_insert(ts_baserel_info, chunk_reloid, &found);
+	if (found)
+	{
+		/* Already cached, check that the parameters are the same. */
+		Assert(entry->type == chunk_reltype);
+		Assert(entry->ht != NULL);
+		Assert(entry->chunk_status == chunk_status);
+		return;
+	}
+
+	/* Fill the cache entry. */
+	entry->type = chunk_reltype;
+	entry->ht = hypertable;
+	entry->chunk_status = chunk_status;
+}
+
 static void
 rte_mark_for_expansion(RangeTblEntry *rte)
 {

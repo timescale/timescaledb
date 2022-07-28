@@ -896,6 +896,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockm
 
 		return chunks;
 	}
+
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there
 	 * are restrictions the parent table cannot fulfill them and since we do
@@ -1347,11 +1348,21 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	unsigned int num_chunks = 0;
 	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
 	/* Can have zero chunks. */
-	Assert(chunks == NULL || num_chunks != 0);
+	Assert(num_chunks == 0 || chunks != NULL);
 
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
+
+		/*
+		 * Add the information about chunks to the baserel info cache for
+		 * classify_relation(). The relation type is TS_REL_CHUNK_CHILD -- chunk
+		 * added as a result of expanding a hypertable.
+		 */
+		add_baserel_cache_entry_for_chunk(chunks[i]->table_id,
+										  chunks[i]->fd.status,
+										  ht,
+										  TS_REL_CHUNK_CHILD);
 	}
 
 	/* nothing to do here if we have no chunks and no data nodes */
