@@ -100,6 +100,9 @@ UPDATE _timescaledb_config.bgw_job SET scheduled = false;
 RESET client_min_messages;
 SELECT timescaledb_pre_restore();
 SHOW timescaledb.restoring;
+-- reconnect and check GUC value in new session
+\c
+SHOW timescaledb.restoring;
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
 
