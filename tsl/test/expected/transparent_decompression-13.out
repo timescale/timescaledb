@@ -8122,6 +8122,7 @@ ORDER BY c.id;
          ->  Limit (actual rows=0 loops=6840)
                ->  Custom Scan (ChunkAppend) on metrics_ordered m (actual rows=0 loops=6840)
                      Order: m."time" DESC
+                     Hypertables excluded during runtime: 0
                      ->  Custom Scan (DecompressChunk) on _hyper_11_28_chunk m_1 (actual rows=0 loops=6840)
                            ->  Sort (actual rows=0 loops=6840)
                                  Sort Key: compress_hyper_12_31_chunk_1._ts_meta_sequence_num
@@ -8143,7 +8144,7 @@ ORDER BY c.id;
                                  ->  Seq Scan on compress_hyper_12_29_chunk compress_hyper_12_29_chunk_1 (actual rows=0 loops=6840)
                                        Filter: ((device_id = d_1.device_id) AND (device_id_peer = 3))
                                        Rows Removed by Filter: 5
-(34 rows)
+(35 rows)
 
 \ir include/transparent_decompression_systemcolumns.sql
 -- This file and its contents are licensed under the Timescale License.

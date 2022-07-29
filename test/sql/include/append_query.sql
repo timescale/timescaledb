@@ -359,3 +359,45 @@ ANALYZE i3030;
 DROP TABLE i3030;
 RESET enable_seqscan;
 
+
+--parent runtime exclusion tests:
+--optimization works with ANY (array)
+:PREFIX
+SELECT *
+FROM append_test a
+WHERE a.attr @> ANY((SELECT coalesce(array_agg(attr), array[]::jsonb[]) FROM join_test_plain WHERE temp > 100)::jsonb[]);
+
+--optimization does not work for ANY subquery (does not force an initplan)
+:PREFIX
+SELECT *
+FROM append_test a
+WHERE a.attr @> ANY((SELECT attr FROM join_test_plain WHERE temp > 100));
+
+--works on any strict operator without ANY
+:PREFIX
+SELECT *
+FROM append_test a
+WHERE a.attr @> (SELECT attr FROM join_test_plain WHERE temp > 100 limit 1);
+
+
+--optimization works with function calls
+CREATE OR REPLACE FUNCTION select_tag(_min_temp int)
+ RETURNS jsonb[]
+ LANGUAGE sql
+ STABLE PARALLEL SAFE
+AS $function$
+   SELECT coalesce(array_agg(attr), array[]::jsonb[])
+  FROM join_test_plain
+  WHERE temp > _min_temp
+$function$;
+
+:PREFIX
+SELECT *
+FROM append_test a
+WHERE a.attr @> ANY((SELECT select_tag(100))::jsonb[]);
+
+--optimization does not work when result is null
+:PREFIX
+SELECT *
+FROM append_test a
+WHERE a.attr @> ANY((SELECT array_agg(attr) FROM join_test_plain WHERE temp > 100)::jsonb[]);
