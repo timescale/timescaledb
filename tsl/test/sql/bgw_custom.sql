@@ -494,3 +494,32 @@ DROP ROLE user_noexec;
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
 select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 select alter_job(:job_id_alter);
+
+-- test what happens if the check function contains a COMMIT
+-- procedure with transaction handling
+CREATE OR REPLACE PROCEDURE custom_proc2_jsonb(config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+--   RAISE NOTICE 'Starting some transactions inside procedure';
+  INSERT INTO custom_log VALUES(1, $1, 'custom_proc 1 COMMIT');
+  COMMIT;
+END
+$$;
+
+select add_job('test_proc_with_check', '5 secs', config => '{}') as job_id_err \gset
+select alter_job(:job_id_err, check_config => 'custom_proc2_jsonb');
+select alter_job(:job_id_err, schedule_interval => '3 minutes');
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'custom_proc2_jsonb') as job_id_commit \gset
+
+-- test the case where we have a background job that registers jobs with a check fn
+CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
+$$
+BEGIN
+    perform add_job('test_proc_with_check', schedule_interval => '10 secs', config => '{}', check_config => 'renamed_func');
+END
+$$;
+
+select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
+-- wait for enough time
+SELECT wait_for_job_to_run(:last_job_id, 1);
+select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;

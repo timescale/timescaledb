@@ -142,7 +142,6 @@ job_config_check(BgwJob *job, Jsonb *config)
 {
 	Oid proc;
 	ObjectWithArgs *object;
-	bool started = false;
 
 	/* Both should either be empty or contain a schema and name */
 	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
@@ -151,14 +150,6 @@ job_config_check(BgwJob *job, Jsonb *config)
 	/* If there is no function, just return */
 	if (strlen(NameStr(job->fd.check_name)) == 0)
 		return;
-
-	if (!IsTransactionOrTransactionBlock())
-	{
-		started = true;
-		StartTransactionCommand();
-		/* executing sql functions requires snapshot */
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
 
 	object = makeNode(ObjectWithArgs);
 
@@ -179,13 +170,6 @@ job_config_check(BgwJob *job, Jsonb *config)
 			 NameStr(job->fd.check_schema),
 			 NameStr(job->fd.check_name),
 			 job->fd.id);
-	if (started)
-	{
-		/* if job does its own transaction handling it might not have set a snapshot */
-		if (ActiveSnapshotSet())
-			PopActiveSnapshot();
-		CommitTransactionCommand();
-	}
 }
 
 static BgwJob *

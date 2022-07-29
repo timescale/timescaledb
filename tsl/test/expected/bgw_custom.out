@@ -813,3 +813,45 @@ NOTICE:  This message will only get printed if config is not NULL
  (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
 (1 row)
 
+-- test what happens if the check function contains a COMMIT
+-- procedure with transaction handling
+CREATE OR REPLACE PROCEDURE custom_proc2_jsonb(config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+--   RAISE NOTICE 'Starting some transactions inside procedure';
+  INSERT INTO custom_log VALUES(1, $1, 'custom_proc 1 COMMIT');
+  COMMIT;
+END
+$$;
+select add_job('test_proc_with_check', '5 secs', config => '{}') as job_id_err \gset
+select alter_job(:job_id_err, check_config => 'custom_proc2_jsonb');
+                                   alter_job                                    
+--------------------------------------------------------------------------------
+ (1012,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.custom_proc2_jsonb)
+(1 row)
+
+select alter_job(:job_id_err, schedule_interval => '3 minutes');
+ERROR:  portal snapshots (0) did not account for all active snapshots (1)
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'custom_proc2_jsonb') as job_id_commit \gset
+ERROR:  portal snapshots (0) did not account for all active snapshots (1)
+-- test the case where we have a background job that registers jobs with a check fn
+CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
+$$
+BEGIN
+    perform add_job('test_proc_with_check', schedule_interval => '10 secs', config => '{}', check_config => 'renamed_func');
+END
+$$;
+select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
+-- wait for enough time
+SELECT wait_for_job_to_run(:last_job_id, 1);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
+ total_runs | total_successes | last_run_status 
+------------+-----------------+-----------------
+          1 |               1 | Success
+(1 row)
+
