@@ -27,9 +27,6 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/policies_v2.h"
 
-#define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_DROP_AFTER "drop_after"
-
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
 {
@@ -47,7 +44,8 @@ int32
 policy_retention_get_hypertable_id(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
+	int32 hypertable_id =
+		ts_jsonb_get_int32_field(config, POL_RETENTION_CONF_KEY_HYPERTABLE_ID, &found);
 
 	if (!found)
 		ereport(ERROR,
@@ -61,12 +59,12 @@ int64
 policy_retention_get_drop_after_int(const Jsonb *config)
 {
 	bool found;
-	int64 drop_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_DROP_AFTER, &found);
+	int64 drop_after = ts_jsonb_get_int64_field(config, POL_RETENTION_CONF_KEY_DROP_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_DROP_AFTER)));
+				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 
 	return drop_after;
 }
@@ -74,12 +72,12 @@ policy_retention_get_drop_after_int(const Jsonb *config)
 Interval *
 policy_retention_get_drop_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_DROP_AFTER);
+	Interval *interval = ts_jsonb_get_interval_field(config, POL_RETENTION_CONF_KEY_DROP_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_DROP_AFTER)));
+				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 
 	return interval;
 }
@@ -178,7 +176,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		BgwJob *existing = linitial(jobs);
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_DROP_AFTER,
+														POL_RETENTION_CONF_KEY_DROP_AFTER,
 														partitioning_type,
 														window_type,
 														window_datum))
@@ -205,43 +203,49 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	if (IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(window_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", CONFIG_KEY_DROP_AFTER),
+				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
 				 errhint("Integer time duration is required for hypertables"
 						 " with integer time dimension.")));
 
 	if (IS_TIMESTAMP_TYPE(partitioning_type) && window_type != INTERVALOID)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", CONFIG_KEY_DROP_AFTER),
+				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
 				 errhint("Interval time duration is required for hypertable"
 						 " with timestamp-based time dimension.")));
 
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
 
 	switch (window_type)
 	{
 		case INTERVALOID:
 			ts_jsonb_add_interval(parse_state,
-								  CONFIG_KEY_DROP_AFTER,
+								  POL_RETENTION_CONF_KEY_DROP_AFTER,
 								  DatumGetIntervalP(window_datum));
 			break;
 		case INT2OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_DROP_AFTER, DatumGetInt16(window_datum));
+			ts_jsonb_add_int64(parse_state,
+							   POL_RETENTION_CONF_KEY_DROP_AFTER,
+							   DatumGetInt16(window_datum));
 			break;
 		case INT4OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_DROP_AFTER, DatumGetInt32(window_datum));
+			ts_jsonb_add_int64(parse_state,
+							   POL_RETENTION_CONF_KEY_DROP_AFTER,
+							   DatumGetInt32(window_datum));
 			break;
 		case INT8OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_DROP_AFTER, DatumGetInt64(window_datum));
+			ts_jsonb_add_int64(parse_state,
+							   POL_RETENTION_CONF_KEY_DROP_AFTER,
+							   DatumGetInt64(window_datum));
 			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("unsupported datatype for %s: %s",
-							CONFIG_KEY_DROP_AFTER,
+							POL_RETENTION_CONF_KEY_DROP_AFTER,
 							format_type_be(window_type))));
 	}
 
@@ -288,8 +292,11 @@ policy_retention_add(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	return policy_retention_add_internal(ht_oid, window_type, window_datum, default_schedule_interval,
-										if_not_exists);
+	return policy_retention_add_internal(ht_oid,
+										 window_type,
+										 window_datum,
+										 default_schedule_interval,
+										 if_not_exists);
 }
 
 Datum

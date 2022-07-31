@@ -217,7 +217,8 @@ SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 
 -- Remove all policies
-SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
+SELECT * FROM timescaledb_experimental.policies;
+SELECT timescaledb_experimental.remove_all_policies('max_mat_view_date', false);
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 
 ALTER materialized view max_mat_view_date set (timescaledb.compress = false);

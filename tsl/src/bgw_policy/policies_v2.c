@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <miscadmin.h>
 #include <utils/builtins.h>
+#include <utils/float.h>
 #include <parser/parse_coerce.h>
 
 #include "compression_api.h"
@@ -26,30 +27,38 @@
 
 /* Check if the provided argument is infinity */
 bool
-ts_if_offset_is_infinity(Datum arg, Oid argtype, Oid timetype)
+ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 {
-	int64 ret;
+	if (OidIsValid(argtype) && argtype != UNKNOWNOID && argtype != FLOAT8OID)
+		return false;
 
-	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
-	if (argtype == INTERVALOID)
-		ret = ts_interval_value_to_internal(arg, argtype);
-	else
-		ret = ts_time_value_to_internal(arg, argtype);
-	return (ret == PG_INT64_MIN || ret == PG_INT64_MAX);
+	if (argtype != FLOAT8OID)
+	{
+		double val;
+		char *num = DatumGetCString(arg);
+		bool have_error = false;
+		val = float8in_internal_opt_error(num, NULL, "double precision", num, &have_error);
+
+		if (have_error)
+			return false;
+
+		arg = Float8GetDatum(val);
+	}
+	float8 result = DatumGetFloat8(arg);
+	return ((result == -get_float8_infinity() && is_start) ||
+			(result == get_float8_infinity() && !is_start));
 }
 
-void
+static void
 emit_error(const char *err)
 {
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				errmsg(err)));
+	ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", err)));
 }
 
-int64
+static int64
 offset_to_int64(NullableDatum arg, Oid argtype, Oid partition_type, bool is_start)
 {
-	if (arg.isnull || ts_if_offset_is_infinity(arg.value, argtype, partition_type))
+	if (arg.isnull || ts_if_offset_is_infinity(arg.value, argtype, is_start))
 	{
 		if (is_start)
 			return ts_time_get_max(partition_type);
@@ -65,12 +74,12 @@ offset_to_int64(NullableDatum arg, Oid argtype, Oid partition_type, bool is_star
  * provided policies.
  */
 bool
-valdiate_and_create_policies(policies_info all_policies, bool if_exists)
+validate_and_create_policies(policies_info all_policies, bool if_exists)
 {
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
 	bool error = false;
-	int64 refresh_interval, compress_after, drop_after, drop_after_HT;
-	int64 start_offset, end_offset, refresh_window_size, refresh_total_interval;
+	int64 refresh_interval = 0, compress_after = 0, drop_after = 0, drop_after_HT = 0;
+	int64 start_offset = 0, end_offset = 0, refresh_window_size = 0, refresh_total_interval = 0;
 	List *jobs = NIL;
 	BgwJob *orig_ht_reten_job = NULL;
 
@@ -80,7 +89,9 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 	char *err_refresh_reten_ht_overlap = "do not allow refreshed data to be deleted";
 	char *err_compress_reten_overlap = "compression and retention policies overlap";
 
-	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME, EXPERIMENTAL_SCHEMA_NAME, all_policies.original_HT);
+	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
+													 EXPERIMENTAL_SCHEMA_NAME,
+													 all_policies.original_HT);
 	if (jobs != NIL)
 	{
 		Assert(list_length(jobs) == 1);
@@ -89,40 +100,58 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 
 	if (all_policies.refresh)
 	{
-		start_offset = offset_to_int64(all_policies.refresh->start_offset, all_policies.refresh->start_offset_type, all_policies.partition_type, true);
-		end_offset = offset_to_int64(all_policies.refresh->end_offset, all_policies.refresh->end_offset_type, all_policies.partition_type, false);
-		refresh_interval =  interval_to_int64(IntervalPGetDatum(&all_policies.refresh->schedule_interval), INTERVALOID);
-		refresh_total_interval = start_offset == ts_time_get_max(all_policies.partition_type)? start_offset: start_offset + refresh_interval;
+		start_offset = offset_to_int64(all_policies.refresh->start_offset,
+									   all_policies.refresh->start_offset_type,
+									   all_policies.partition_type,
+									   true);
+		end_offset = offset_to_int64(all_policies.refresh->end_offset,
+									 all_policies.refresh->end_offset_type,
+									 all_policies.partition_type,
+									 false);
+		refresh_interval =
+			interval_to_int64(IntervalPGetDatum(&all_policies.refresh->schedule_interval),
+							  INTERVALOID);
+		refresh_total_interval = start_offset;
+		if (!IS_INTEGER_TYPE(all_policies.partition_type) &&
+			refresh_total_interval != ts_time_get_max(all_policies.partition_type))
+			refresh_total_interval += refresh_interval;
 	}
-	if(IS_INTEGER_TYPE(all_policies.partition_type))
+
+	if (all_policies.compress)
+		compress_after = interval_to_int64(all_policies.compress->compress_after,
+										   all_policies.compress->compress_after_type);
+	if (all_policies.retention)
+		drop_after = interval_to_int64(all_policies.retention->drop_after,
+									   all_policies.retention->drop_after_type);
+
+	if (orig_ht_reten_job)
 	{
-		if (all_policies.refresh)
-			refresh_total_interval = start_offset;
-		if (all_policies.compress)
-			compress_after = DatumGetInt64(all_policies.compress->compress_after);
-		if (all_policies.retention)
-			drop_after = DatumGetInt64(all_policies.retention->drop_after);
-		if (orig_ht_reten_job)
-			drop_after_HT = ts_jsonb_get_int64_field(orig_ht_reten_job->fd.config, CONFIG_KEY_DROP_AFTER, false);
-	}
-	else
-	{
-		if (all_policies.compress)
-			compress_after = interval_to_int64(all_policies.compress->compress_after, all_policies.compress->compress_after_type);
-		if (all_policies.retention)
-			drop_after = interval_to_int64(all_policies.retention->drop_after, all_policies.retention->drop_after_type);
-		if (orig_ht_reten_job)
-			drop_after_HT = interval_to_int64(IntervalPGetDatum(ts_jsonb_get_interval_field(orig_ht_reten_job->fd.config, CONFIG_KEY_DROP_AFTER)), INTERVALOID);
+		if (IS_INTEGER_TYPE(all_policies.partition_type))
+		{
+			drop_after_HT = ts_jsonb_get_int64_field(orig_ht_reten_job->fd.config,
+													 POL_RETENTION_CONF_KEY_DROP_AFTER,
+													 false);
+		}
+		else
+		{
+			drop_after_HT = interval_to_int64(
+				IntervalPGetDatum(ts_jsonb_get_interval_field(orig_ht_reten_job->fd.config,
+															  POL_RETENTION_CONF_KEY_DROP_AFTER)),
+				INTERVALOID);
+		}
 	}
 
 	/* Per policy checks */
 	if (all_policies.refresh && !IS_INTEGER_TYPE(all_policies.partition_type))
 	{
 		/* Check if there are any gaps in the refresh policy */
-		refresh_window_size = (start_offset == ts_time_get_max(all_policies.partition_type) || end_offset == ts_time_get_min(all_policies.partition_type))? start_offset: start_offset - end_offset;
+		refresh_window_size = (start_offset == ts_time_get_max(all_policies.partition_type) ||
+							   end_offset == ts_time_get_min(all_policies.partition_type)) ?
+								  start_offset :
+								  start_offset - end_offset;
 
 		/* if refresh_interval is greater than half of refresh_window_size, then there are gaps */
-		if (refresh_interval > refresh_window_size/2)
+		if (refresh_interval > refresh_window_size / 2)
 			emit_error(err_gap_refresh);
 
 		/* Disallow refreshed data to be deleted */
@@ -134,10 +163,10 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 	}
 
 	/* Cross policy checks */
-	if  (all_policies.refresh && all_policies.compress)
+	if (all_policies.refresh && all_policies.compress)
 	{
 		/* Check if refresh policy does not overlap with compression */
-		if(IS_INTEGER_TYPE(all_policies.partition_type))
+		if (IS_INTEGER_TYPE(all_policies.partition_type))
 		{
 			if (refresh_total_interval > compress_after)
 				error = true;
@@ -153,7 +182,7 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 	if (all_policies.refresh && all_policies.retention)
 	{
 		/* Check if refresh policy does not overlap with compression */
-		if(IS_INTEGER_TYPE(all_policies.partition_type))
+		if (IS_INTEGER_TYPE(all_policies.partition_type))
 		{
 			if (refresh_total_interval > drop_after)
 				error = true;
@@ -179,32 +208,35 @@ valdiate_and_create_policies(policies_info all_policies, bool if_exists)
 		if (all_policies.is_alter_policy)
 			policy_refresh_cagg_remove_internal(all_policies.rel_oid, if_exists);
 		refresh_job_id = policy_refresh_cagg_add_internal(all_policies.rel_oid,
-														all_policies.refresh->start_offset_type,
-														all_policies.refresh->start_offset,
-														all_policies.refresh->end_offset_type,
-														all_policies.refresh->end_offset,
-														all_policies.refresh->schedule_interval,
-														false, true);
-
+														  all_policies.refresh->start_offset_type,
+														  all_policies.refresh->start_offset,
+														  all_policies.refresh->end_offset_type,
+														  all_policies.refresh->end_offset,
+														  all_policies.refresh->schedule_interval,
+														  false);
 	}
 	if (all_policies.compress && all_policies.compress->create_policy)
 	{
 		if (all_policies.is_alter_policy)
 			policy_compression_remove_internal(all_policies.rel_oid, if_exists);
-		compression_job_id = policy_compression_add_internal(all_policies.rel_oid,
-															all_policies.compress->compress_after,
-															all_policies.compress->compress_after_type,
-															DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
-															false,
-															if_exists);
+		compression_job_id =
+			policy_compression_add_internal(all_policies.rel_oid,
+											all_policies.compress->compress_after,
+											all_policies.compress->compress_after_type,
+											DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
+											false,
+											if_exists);
 	}
 	if (all_policies.retention && all_policies.retention->create_policy)
 	{
 		if (all_policies.is_alter_policy)
 			policy_retention_remove_internal(all_policies.rel_oid, if_exists);
 		retention_job_id =
-			policy_retention_add_internal(all_policies.rel_oid, all_policies.retention->drop_after_type, all_policies.retention->drop_after,
-										(Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL, false);
+			policy_retention_add_internal(all_policies.rel_oid,
+										  all_policies.retention->drop_after_type,
+										  all_policies.retention->drop_after,
+										  (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL,
+										  false);
 	}
 	return (refresh_job_id || compression_job_id || retention_job_id);
 }
@@ -215,11 +247,10 @@ policies_add(PG_FUNCTION_ARGS)
 	Oid rel_oid;
 	bool if_not_exists;
 	ContinuousAgg *cagg;
-	policies_info all_policies = {
-									.refresh = NULL,
-									.compress = NULL,
-									.retention = NULL
-								};
+	policies_info all_policies = { .refresh = NULL, .compress = NULL, .retention = NULL };
+	refresh_policy ref;
+	compression_policy comp;
+	retention_policy ret;
 
 	rel_oid = PG_GETARG_OID(0);
 	if_not_exists = PG_GETARG_BOOL(1);
@@ -247,13 +278,7 @@ policies_add(PG_FUNCTION_ARGS)
 		start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 		end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 
-
-		if (!start_offset.isnull)
-			start_offset.isnull = ts_if_offset_is_infinity(start_offset.value, start_offset_type, cagg->partition_type);
-		if (!end_offset.isnull)
-			end_offset.isnull = ts_if_offset_is_infinity(end_offset.value, end_offset_type, cagg->partition_type);
-
-		refresh_policy ref = {
+		refresh_policy tmp = {
 			.create_policy = true,
 			.start_offset = start_offset,
 			.end_offset = end_offset,
@@ -261,28 +286,26 @@ policies_add(PG_FUNCTION_ARGS)
 			.start_offset_type = start_offset_type,
 			.end_offset_type = end_offset_type,
 		};
+		ref = tmp;
 		all_policies.refresh = &ref;
 	}
 	if (!PG_ARGISNULL(4))
 	{
-		compression_policy comp ={
-			.create_policy = true,
-			.compress_after = PG_GETARG_DATUM(4),
-			.compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4)
-		};
+		compression_policy tmp = { .create_policy = true,
+								   .compress_after = PG_GETARG_DATUM(4),
+								   .compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4) };
+		comp = tmp;
 		all_policies.compress = &comp;
 	}
 	if (!PG_ARGISNULL(5))
 	{
-		retention_policy ret ={
-			.create_policy = true,
-			.drop_after = PG_GETARG_DATUM(5),
-			.drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5)
-		};
+		retention_policy tmp = { .create_policy = true,
+								 .drop_after = PG_GETARG_DATUM(5),
+								 .drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5) };
+		ret = tmp;
 		all_policies.retention = &ret;
-
 	}
-	PG_RETURN_BOOL(valdiate_and_create_policies(all_policies, if_not_exists));
+	PG_RETURN_BOOL(validate_and_create_policies(all_policies, if_not_exists));
 }
 Datum
 policies_remove(PG_FUNCTION_ARGS)
@@ -291,7 +314,7 @@ policies_remove(PG_FUNCTION_ARGS)
 	ArrayType *policy_array = PG_ARGISNULL(2) ? NULL : PG_GETARG_ARRAYTYPE_P(2);
 	bool if_exists = PG_GETARG_BOOL(1);
 	Datum *policy;
-	int npolicies;
+	int npolicies, failures = 0;
 	int i;
 	bool success = false;
 
@@ -314,8 +337,10 @@ policies_remove(PG_FUNCTION_ARGS)
 			success = policy_retention_remove_internal(cagg_oid, if_exists);
 		else
 			ereport(NOTICE, (errmsg("No relevant policy found")));
+		if (!success)
+			++failures;
 	}
-	PG_RETURN_BOOL(success);
+	PG_RETURN_BOOL(success && (0 == failures));
 }
 
 Datum
@@ -328,7 +353,8 @@ policies_remove_all(PG_FUNCTION_ARGS)
 	bool if_exists = PG_GETARG_BOOL(1);
 	List *jobs;
 	ListCell *lc;
-	bool success = false;
+	bool success = if_exists;
+	int failures = 0;
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
 
 	if (!cagg)
@@ -336,22 +362,22 @@ policies_remove_all(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
 
-
 	jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
-	foreach(lc, jobs)
+	foreach (lc, jobs)
 	{
 		BgwJob *job = lfirst(lc);
 		if (namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME) == 0)
 			success = policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
 		else if (namestrcmp(&(job->fd.proc_name), POLICY_COMPRESSION_PROC_NAME) == 0)
 			success = policy_compression_remove_internal(cagg_oid, if_exists);
-		else if (namestrcmp(&(job->fd.proc_name),
-								POLICY_RETENTION_PROC_NAME) == 0)
+		else if (namestrcmp(&(job->fd.proc_name), POLICY_RETENTION_PROC_NAME) == 0)
 			success = policy_retention_remove_internal(cagg_oid, if_exists);
 		else
 			ereport(NOTICE, (errmsg("No relevant policy found")));
+		if (!success)
+			++failures;
 	}
-	PG_RETURN_BOOL(success);
+	PG_RETURN_BOOL(success && (0 == failures));
 }
 
 Datum
@@ -361,12 +387,11 @@ policies_alter(PG_FUNCTION_ARGS)
 	ContinuousAgg *cagg;
 	List *jobs;
 	ListCell *lc;
-	bool if_exists = false, found;
-	policies_info all_policies = {
-									.refresh = NULL,
-									.compress = NULL,
-									.retention = NULL
-								};
+	bool if_exists = false, found, start_found, end_found;
+	policies_info all_policies = { .refresh = NULL, .compress = NULL, .retention = NULL };
+	refresh_policy ref;
+	compression_policy comp;
+	retention_policy ret;
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)
@@ -381,45 +406,47 @@ policies_alter(PG_FUNCTION_ARGS)
 
 	jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
 	if ((NIL == jobs))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("no jobs found")));
-	foreach(lc, jobs)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no jobs found")));
+	foreach (lc, jobs)
 	{
 		BgwJob *job = lfirst(lc);
 		if (namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME) == 0)
 		{
-			refresh_policy ref = {
-				.create_policy = false,
-				.end_offset =  {},
-				.end_offset_type = InvalidOid,
-				.start_offset = {},
-				.start_offset_type = InvalidOid,
-				.schedule_interval = job->fd.schedule_interval};
+			refresh_policy tmp = { .create_policy = false,
+								   .end_offset = { 0 },
+								   .end_offset_type = InvalidOid,
+								   .start_offset = { 0 },
+								   .start_offset_type = InvalidOid,
+								   .schedule_interval = job->fd.schedule_interval };
+			ref = tmp;
 			all_policies.refresh = &ref;
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
-				int64 start_value =
-					ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_START_OFFSET, &found);
-				int64 end_value =
-					ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_END_OFFSET, &found);
-			   /*
-				* If there is job then start_offset has to be there because policy is
-				* not created without it. However if found it to be NULL, then we
-				* want to keep it to NULL in this alter command also.
-				*/
-				all_policies.refresh->start_offset.isnull = !found;
+				int64 start_value = ts_jsonb_get_int64_field(job->fd.config,
+															 POL_REFRESH_CONF_KEY_START_OFFSET,
+															 &start_found);
+				int64 end_value = ts_jsonb_get_int64_field(job->fd.config,
+														   POL_REFRESH_CONF_KEY_END_OFFSET,
+														   &end_found);
+				/*
+				 * If there is job then start_offset has to be there because policy is
+				 * not created without it. However if found it to be NULL, then we
+				 * want to keep it to NULL in this alter command also.
+				 */
+				all_policies.refresh->start_offset.isnull = !start_found;
 				all_policies.refresh->start_offset_type = cagg->partition_type;
-				all_policies.refresh->end_offset.isnull = !found;
+				all_policies.refresh->end_offset.isnull = !end_found;
 				all_policies.refresh->end_offset_type = cagg->partition_type;
 				switch (all_policies.refresh->start_offset_type)
 				{
 					case INT2OID:
-						all_policies.refresh->start_offset.value = Int16GetDatum((int16) start_value);
+						all_policies.refresh->start_offset.value =
+							Int16GetDatum((int16) start_value);
 						all_policies.refresh->end_offset.value = Int16GetDatum((int16) end_value);
 						break;
 					case INT4OID:
-						all_policies.refresh->start_offset.value = Int32GetDatum((int32) start_value);
+						all_policies.refresh->start_offset.value =
+							Int32GetDatum((int32) start_value);
 						all_policies.refresh->end_offset.value = Int32GetDatum((int32) end_value);
 						break;
 					case INT8OID:
@@ -433,36 +460,42 @@ policies_alter(PG_FUNCTION_ARGS)
 			else
 			{
 				all_policies.refresh->start_offset.value = IntervalPGetDatum(
-					ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_START_OFFSET));
-				all_policies.refresh->start_offset.isnull = (DatumGetIntervalP(all_policies.refresh->start_offset.value) == NULL);
+					ts_jsonb_get_interval_field(job->fd.config, POL_REFRESH_CONF_KEY_START_OFFSET));
+				all_policies.refresh->start_offset.isnull =
+					(DatumGetIntervalP(all_policies.refresh->start_offset.value) == NULL);
 				all_policies.refresh->start_offset_type = INTERVALOID;
 
 				all_policies.refresh->end_offset.value = IntervalPGetDatum(
-					ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_END_OFFSET));
-				all_policies.refresh->end_offset.isnull = (DatumGetIntervalP(all_policies.refresh->end_offset.value) == NULL);
+					ts_jsonb_get_interval_field(job->fd.config, POL_REFRESH_CONF_KEY_END_OFFSET));
+				all_policies.refresh->end_offset.isnull =
+					(DatumGetIntervalP(all_policies.refresh->end_offset.value) == NULL);
 				all_policies.refresh->end_offset_type = INTERVALOID;
 			}
 		}
 		else if (namestrcmp(&(job->fd.proc_name), POLICY_COMPRESSION_PROC_NAME) == 0)
 		{
-			compression_policy comp = {
-				.compress_after = 0,
-				.compress_after_type = InvalidOid,
-				.create_policy = false
-			};
+			compression_policy tmp = { .compress_after = 0,
+									   .compress_after_type = InvalidOid,
+									   .create_policy = false };
+			comp = tmp;
 			all_policies.compress = &comp;
 
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
-				int64 compress_value = ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_COMPRESS_AFTER, &found);
+				int64 compress_value =
+					ts_jsonb_get_int64_field(job->fd.config,
+											 POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+											 &found);
 				all_policies.compress->compress_after_type = cagg->partition_type;
 				switch (all_policies.compress->compress_after_type)
 				{
 					case INT2OID:
-						all_policies.compress->compress_after = Int16GetDatum((int16)compress_value);
+						all_policies.compress->compress_after =
+							Int16GetDatum((int16) compress_value);
 						break;
 					case INT4OID:
-						all_policies.compress->compress_after = Int32GetDatum((int32)compress_value);
+						all_policies.compress->compress_after =
+							Int32GetDatum((int32) compress_value);
 						break;
 					case INT8OID:
 						all_policies.compress->compress_after = Int64GetDatum(compress_value);
@@ -470,34 +503,35 @@ policies_alter(PG_FUNCTION_ARGS)
 					default:
 						Assert(0);
 				}
-
 			}
 			else
 			{
-				all_policies.compress->compress_after = IntervalPGetDatum(ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_COMPRESS_AFTER));
+				all_policies.compress->compress_after = IntervalPGetDatum(
+					ts_jsonb_get_interval_field(job->fd.config,
+												POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER));
 				all_policies.compress->compress_after_type = INTERVALOID;
 			}
 		}
-		else if (namestrcmp(&(job->fd.proc_name),
-								POLICY_RETENTION_PROC_NAME) == 0)
+		else if (namestrcmp(&(job->fd.proc_name), POLICY_RETENTION_PROC_NAME) == 0)
 		{
-			retention_policy ret = {
-				.create_policy = false,
-				.drop_after = 0,
-				.drop_after_type = InvalidOid
-			};
+			retention_policy tmp = { .create_policy = false,
+									 .drop_after = 0,
+									 .drop_after_type = InvalidOid };
+			ret = tmp;
 			all_policies.retention = &ret;
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
-				int64 drop_value = ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_DROP_AFTER, &found);
+				int64 drop_value = ts_jsonb_get_int64_field(job->fd.config,
+															POL_RETENTION_CONF_KEY_DROP_AFTER,
+															&found);
 				all_policies.retention->drop_after_type = cagg->partition_type;
 				switch (all_policies.retention->drop_after_type)
 				{
 					case INT2OID:
-						all_policies.retention->drop_after = Int16GetDatum((int16)drop_value);
+						all_policies.retention->drop_after = Int16GetDatum((int16) drop_value);
 						break;
 					case INT4OID:
-						all_policies.retention->drop_after = Int32GetDatum((int32)drop_value);
+						all_policies.retention->drop_after = Int32GetDatum((int32) drop_value);
 						break;
 					case INT8OID:
 						all_policies.retention->drop_after = Int64GetDatum(drop_value);
@@ -508,7 +542,8 @@ policies_alter(PG_FUNCTION_ARGS)
 			}
 			else
 			{
-				all_policies.retention->drop_after = IntervalPGetDatum(ts_jsonb_get_interval_field(job->fd.config, CONFIG_KEY_DROP_AFTER));
+				all_policies.retention->drop_after = IntervalPGetDatum(
+					ts_jsonb_get_interval_field(job->fd.config, POL_RETENTION_CONF_KEY_DROP_AFTER));
 				all_policies.retention->drop_after_type = INTERVALOID;
 			}
 		}
@@ -517,8 +552,7 @@ policies_alter(PG_FUNCTION_ARGS)
 	{
 		if (!all_policies.refresh)
 			ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("no refresh job found")));
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no refresh job found")));
 		all_policies.refresh->start_offset.value = PG_GETARG_DATUM(2);
 		all_policies.refresh->start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 		all_policies.refresh->start_offset.isnull = false;
@@ -528,8 +562,7 @@ policies_alter(PG_FUNCTION_ARGS)
 	{
 		if (!all_policies.refresh)
 			ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("no refresh job found")));
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no refresh job found")));
 		all_policies.refresh->end_offset.value = PG_GETARG_DATUM(3);
 		all_policies.refresh->end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 		all_policies.refresh->end_offset.isnull = false;
@@ -539,8 +572,7 @@ policies_alter(PG_FUNCTION_ARGS)
 	{
 		if (!all_policies.compress)
 			ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("no compress job found")));
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no compress job found")));
 		all_policies.compress->compress_after = PG_GETARG_DATUM(4);
 		all_policies.compress->compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
 		all_policies.compress->create_policy = true;
@@ -549,14 +581,13 @@ policies_alter(PG_FUNCTION_ARGS)
 	{
 		if (!all_policies.retention)
 			ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					errmsg("no retention job found")));
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no retention job found")));
 		all_policies.retention->drop_after = PG_GETARG_DATUM(5);
 		all_policies.retention->drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
 		all_policies.retention->create_policy = true;
 	}
 
-	PG_RETURN_BOOL(valdiate_and_create_policies(all_policies, if_exists));
+	PG_RETURN_BOOL(validate_and_create_policies(all_policies, if_exists));
 }
 
 static void
@@ -633,12 +664,12 @@ policies_show(PG_FUNCTION_ARGS)
 			push_to_json(type,
 						 parse_state,
 						 job,
-						 CONFIG_KEY_START_OFFSET,
+						 POL_REFRESH_CONF_KEY_START_OFFSET,
 						 SHOW_POLICY_KEY_REFRESH_START_OFFSET);
 			push_to_json(type,
 						 parse_state,
 						 job,
-						 CONFIG_KEY_END_OFFSET,
+						 POL_REFRESH_CONF_KEY_END_OFFSET,
 						 SHOW_POLICY_KEY_REFRESH_END_OFFSET);
 			ts_jsonb_add_interval(parse_state,
 								  SHOW_POLICY_KEY_REFRESH_INTERVAL,
@@ -652,7 +683,7 @@ policies_show(PG_FUNCTION_ARGS)
 			push_to_json(type,
 						 parse_state,
 						 job,
-						 CONFIG_KEY_COMPRESS_AFTER,
+						 POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 						 SHOW_POLICY_KEY_COMPRESS_AFTER);
 			ts_jsonb_add_interval(parse_state,
 								  SHOW_POLICY_KEY_COMPRESS_INTERVAL,
@@ -661,7 +692,11 @@ policies_show(PG_FUNCTION_ARGS)
 		else if (!namestrcmp(&(job->fd.proc_name), POLICY_RETENTION_PROC_NAME))
 		{
 			ts_jsonb_add_str(parse_state, SHOW_POLICY_KEY_POLICY_NAME, POLICY_RETENTION_PROC_NAME);
-			push_to_json(type, parse_state, job, CONFIG_KEY_DROP_AFTER, SHOW_POLICY_KEY_DROP_AFTER);
+			push_to_json(type,
+						 parse_state,
+						 job,
+						 POL_RETENTION_CONF_KEY_DROP_AFTER,
+						 SHOW_POLICY_KEY_DROP_AFTER);
 			ts_jsonb_add_interval(parse_state,
 								  SHOW_POLICY_KEY_RETENTION_INTERVAL,
 								  &(job->fd.schedule_interval));

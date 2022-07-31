@@ -25,7 +25,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = c.hypertable_id)
 GROUP BY h.id, c.id, hypertable_schema, hypertable_name, chunk_schema, chunk_name
 ORDER BY h.id, c.id, hypertable_schema, hypertable_name, chunk_schema, chunk_name;
 
-CREATE OR REPLACE VIEW timescaledb_experimental.show_policies AS
+CREATE OR REPLACE VIEW timescaledb_experimental.policies AS
 SELECT ca.view_name AS relation_name,
   ca.view_schema AS relation_schema,
   j.schedule_interval,

@@ -31,29 +31,15 @@
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
 
-#define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
-#define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_RECOMPRESS_AFTER "recompress_after"
-#define CONFIG_KEY_RECOMPRESS "recompress"
-#define CONFIG_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
-
 static Hypertable *validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid,
 													   bool *is_cagg);
-
-bool
-policy_compression_get_recompress(const Jsonb *config)
-{
-	bool found;
-	bool recompress = ts_jsonb_get_bool_field(config, CONFIG_KEY_RECOMPRESS, &found);
-
-	return found ? recompress : true;
-}
 
 int32
 policy_compression_get_maxchunks_per_job(const Jsonb *config)
 {
 	bool found;
-	int32 maxchunks = ts_jsonb_get_int32_field(config, CONFIG_KEY_MAXCHUNKS_TO_COMPRESS, &found);
+	int32 maxchunks =
+		ts_jsonb_get_int32_field(config, POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS, &found);
 	return (found && maxchunks > 0) ? maxchunks : 0;
 }
 
@@ -61,7 +47,8 @@ int32
 policy_compression_get_hypertable_id(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
+	int32 hypertable_id =
+		ts_jsonb_get_int32_field(config, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, &found);
 
 	if (!found)
 		ereport(ERROR,
@@ -75,12 +62,14 @@ int64
 policy_compression_get_compress_after_int(const Jsonb *config)
 {
 	bool found;
-	int64 compress_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_COMPRESS_AFTER, &found);
+	int64 compress_after =
+		ts_jsonb_get_int64_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER)));
 
 	return compress_after;
 }
@@ -88,12 +77,14 @@ policy_compression_get_compress_after_int(const Jsonb *config)
 Interval *
 policy_compression_get_compress_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_COMPRESS_AFTER);
+	Interval *interval =
+		ts_jsonb_get_interval_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER)));
 
 	return interval;
 }
@@ -102,12 +93,14 @@ int64
 policy_recompression_get_recompress_after_int(const Jsonb *config)
 {
 	bool found;
-	int64 compress_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_RECOMPRESS_AFTER, &found);
+	int64 compress_after =
+		ts_jsonb_get_int64_field(config, POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_RECOMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 
 	return compress_after;
 }
@@ -115,12 +108,14 @@ policy_recompression_get_recompress_after_int(const Jsonb *config)
 Interval *
 policy_recompression_get_recompress_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_RECOMPRESS_AFTER);
+	Interval *interval =
+		ts_jsonb_get_interval_field(config, POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_RECOMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 
 	return interval;
 }
@@ -162,10 +157,8 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 
 Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
-								Oid compress_after_type, 
-								Interval *default_schedule_interval,
-								bool user_defined_schedule_interval,
-								bool if_not_exists)
+								Oid compress_after_type, Interval *default_schedule_interval,
+								bool user_defined_schedule_interval, bool if_not_exists)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
@@ -206,7 +199,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		BgwJob *existing = linitial(jobs);
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_COMPRESS_AFTER,
+														POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 														partitioning_type,
 														compress_after_type,
 														compress_after_datum))
@@ -245,35 +238,35 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	ts_jsonb_add_int32(parse_state, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
 	validate_compress_after_type(partitioning_type, compress_after_type);
 	switch (compress_after_type)
 	{
 		case INTERVALOID:
 			ts_jsonb_add_interval(parse_state,
-								  CONFIG_KEY_COMPRESS_AFTER,
+								  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 								  DatumGetIntervalP(compress_after_datum));
 			break;
 		case INT2OID:
 			ts_jsonb_add_int64(parse_state,
-							   CONFIG_KEY_COMPRESS_AFTER,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt16(compress_after_datum));
 			break;
 		case INT4OID:
 			ts_jsonb_add_int64(parse_state,
-							   CONFIG_KEY_COMPRESS_AFTER,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt32(compress_after_datum));
 			break;
 		case INT8OID:
 			ts_jsonb_add_int64(parse_state,
-							   CONFIG_KEY_COMPRESS_AFTER,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt64(compress_after_datum));
 			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("unsupported datatype for %s: %s",
-							CONFIG_KEY_COMPRESS_AFTER,
+							POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
 	}
 	/*
@@ -316,9 +309,9 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
-	/* 
+	/*
 	 * The function is not STRICT but we can't allow required args to be NULL
-	 * so we need to act like a strict function in those cases 
+	 * so we need to act like a strict function in those cases
 	 */
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
 		PG_RETURN_NULL();

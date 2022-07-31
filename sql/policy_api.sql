@@ -86,8 +86,7 @@ LANGUAGE C VOLATILE;
 /* Remove all policies */
 CREATE OR REPLACE FUNCTION timescaledb_experimental.remove_all_policies(
     relation REGCLASS,
-    if_exists BOOL = false,
-    VARIADIC policy_names TEXT[] = NULL)
+    if_exists BOOL = false)
 RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_policies_remove_all'
 LANGUAGE C VOLATILE;
