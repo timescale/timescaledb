@@ -48,6 +48,11 @@ ts_cache_init(Cache *cache)
 	 */
 	Assert(MemoryContextContains(ts_cache_memory_ctx(cache), cache));
 
+	/*
+	 * We always want to be explicit about the memory context our hash table
+	 * ends up in to ensure it's not accidently put in TopMemoryContext.
+	 */
+	Assert(cache->flags & HASH_CONTEXT);
 	cache->htab = hash_create(cache->name, cache->numelements, &cache->hctl, cache->flags);
 	cache->refcount = 1;
 	cache->handle_txn_callbacks = true;
