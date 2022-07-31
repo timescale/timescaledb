@@ -241,7 +241,7 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 	all_data_node_slice_htab = hash_create("all_data_node_slices",
 										   scas->total_num_chunks,
 										   &hashctl,
-										   HASH_ELEM | HASH_BLOBS);
+										   HASH_BLOBS | HASH_CONTEXT | HASH_ELEM);
 
 	hash_seq_init(&status, scas->assignments);
 

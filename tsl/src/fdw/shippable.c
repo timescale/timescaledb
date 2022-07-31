@@ -102,13 +102,15 @@ InvalidateShippableCacheCallback(Datum arg, int cacheid, uint32 hashvalue)
 static void
 InitializeShippableCache(void)
 {
-	HASHCTL ctl;
+	HASHCTL ctl = {
+		.keysize = sizeof(ShippableCacheKey),
+		.entrysize = sizeof(ShippableCacheEntry),
+		.hcxt = TopMemoryContext,
+	};
 
 	/* Create the hash table. */
-	MemSet(&ctl, 0, sizeof(ctl));
-	ctl.keysize = sizeof(ShippableCacheKey);
-	ctl.entrysize = sizeof(ShippableCacheEntry);
-	ShippableCacheHash = hash_create("Shippability cache", 256, &ctl, HASH_ELEM | HASH_BLOBS);
+	ShippableCacheHash =
+		hash_create("Shippability cache", 256, &ctl, HASH_BLOBS | HASH_CONTEXT | HASH_ELEM);
 
 	/* Set up invalidation callback on pg_foreign_server. */
 	CacheRegisterSyscacheCallback(FOREIGNSERVEROID, InvalidateShippableCacheCallback, (Datum) 0);
