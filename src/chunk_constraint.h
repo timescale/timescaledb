@@ -46,6 +46,10 @@ extern int ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSl
 extern int ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id,
 														  ChunkConstraints *ccs,
 														  MemoryContext mctx);
+extern ChunkConstraint *ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id,
+												 int32 dimension_slice_id,
+												 const char *constraint_name,
+												 const char *hypertable_constraint_name);
 extern int ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
 														  const Hypercube *cube);
 extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs,
@@ -75,6 +79,7 @@ extern int ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constr
 extern char *
 ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 														const char *hypertable_constraint_name);
+extern void ts_chunk_constraint_insert(ChunkConstraint *constraint);
 extern ChunkConstraint *ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs,
 															const TupleInfo *ti);
 

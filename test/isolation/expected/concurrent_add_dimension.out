@@ -1,0 +1,78 @@
+unused step name: s1_wp_enable
+unused step name: s1_wp_release
+Parsed test spec with 3 sessions
+
+starting permutation: s3_wp_enable s1_add_dimension s2_add_dimension s3_wp_release s3_query
+step s3_wp_enable: SELECT debug_waitpoint_enable('add_dimension_ht_lock');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_add_dimension: SELECT true FROM add_dimension('dim_test', 'device', 2); <waiting ...>
+step s2_add_dimension: SELECT true FROM add_dimension('dim_test', 'device', 1); <waiting ...>
+step s3_wp_release: SELECT debug_waitpoint_release('add_dimension_ht_lock');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_add_dimension: <... completed>
+bool
+----
+t   
+(1 row)
+
+step s2_add_dimension: <... completed>
+ERROR:  column "device" is already a dimension
+step s3_query: 
+	SELECT count(*)
+	FROM _timescaledb_catalog.chunk c
+	INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+	INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+	INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+	INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+	WHERE h.table_name = 'dim_test';
+
+count
+-----
+    2
+(1 row)
+
+
+starting permutation: s3_chunk_wp_enable s1_create_chunk s2_add_dimension2 s3_chunk_wp_release s3_query
+step s3_chunk_wp_enable: SELECT debug_waitpoint_enable('chunk_create_for_point');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_create_chunk: INSERT INTO dim_test VALUES ('2004-10-20 00:00:00+00', 1, 2); <waiting ...>
+step s2_add_dimension2: SELECT true FROM add_dimension('dim_test', 'device2', 1); <waiting ...>
+step s3_chunk_wp_release: SELECT debug_waitpoint_release('chunk_create_for_point');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_create_chunk: <... completed>
+step s2_add_dimension2: <... completed>
+bool
+----
+t   
+(1 row)
+
+step s3_query: 
+	SELECT count(*)
+	FROM _timescaledb_catalog.chunk c
+	INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+	INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+	INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+	INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+	WHERE h.table_name = 'dim_test';
+
+count
+-----
+    4
+(1 row)
+

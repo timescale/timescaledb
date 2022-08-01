@@ -2235,14 +2235,24 @@ NOTICE:  adding not-null constraint to column "time"
 
 -- Create one chunk to block add_dimension
 INSERT INTO dimented_table VALUES('2017-01-01 06:01', 1, '2017-01-01 08:01', 1);
-\set ON_ERROR_STOP 0
--- add_dimension should fail when table has data and a chunk
-SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
-ERROR:  hypertable "dimented_table" has data or empty chunks
-\set ON_ERROR_STOP 1
--- Clear table
-TRUNCATE dimented_table;
--- Now add_dimension should work
+CREATE VIEW dimented_table_slices AS
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS
+       chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+WHERE h.table_name = 'dimented_table'
+ORDER BY c.id, ds.dimension_id;
+SELECT * FROM dimented_table_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |      chunk_table       |     range_start      |    range_end     
+----------+---------------+--------------+--------------------+-----------------------+------------------------+----------------------+------------------
+       11 |             5 |            7 |                  8 | _timescaledb_internal | _dist_hyper_5_11_chunk |     1482969600000000 | 1483574400000000
+       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |        536870911
+(2 rows)
+
+-- add_dimension() with existing data
 SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
 NOTICE:  adding not-null constraint to column "column2"
  dimension_id | schema_name |   table_name   | column_name | created 
@@ -2250,10 +2260,33 @@ NOTICE:  adding not-null constraint to column "column2"
             9 | public      | dimented_table | column2     | t
 (1 row)
 
+SELECT * FROM dimented_table_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |      chunk_table       |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------------+----------------------+---------------------
+       11 |             5 |            7 |                  8 | _timescaledb_internal | _dist_hyper_5_11_chunk |     1482969600000000 |    1483574400000000
+       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |           536870911
+       11 |             5 |            9 |                 10 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 | 9223372036854775807
+(3 rows)
+
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
  dimension_id | schema_name |   table_name   | column_name | created 
 --------------+-------------+----------------+-------------+---------
            10 | public      | dimented_table | column3     | t
+(1 row)
+
+SELECT * FROM dimented_table_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |      chunk_table       |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------------+----------------------+---------------------
+       11 |             5 |            7 |                  8 | _timescaledb_internal | _dist_hyper_5_11_chunk |     1482969600000000 |    1483574400000000
+       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |           536870911
+       11 |             5 |            9 |                 10 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 | 9223372036854775807
+       11 |             5 |           10 |                 11 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 | 9223372036854775807
+(4 rows)
+
+SELECT * FROM dimented_table ORDER BY time;
+             time             | column1 |           column2            | column3 
+------------------------------+---------+------------------------------+---------
+ Sun Jan 01 06:01:00 2017 PST |       1 | Sun Jan 01 08:01:00 2017 PST |       1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -2290,7 +2323,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
  10 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                 |                         | 
 (9 rows)
 
--- Note that this didn't get the add_dimension
+-- ensure data node has new dimensions
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM _timescaledb_catalog.dimension;
 $$);
