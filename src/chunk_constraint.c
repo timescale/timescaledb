@@ -106,9 +106,9 @@ chunk_constraint_choose_name(Name dst, const char *hypertable_constraint_name, i
 	namestrcpy(dst, constrname);
 }
 
-static ChunkConstraint *
-chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_slice_id,
-					  const char *constraint_name, const char *hypertable_constraint_name)
+ChunkConstraint *
+ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_slice_id,
+						 const char *constraint_name, const char *hypertable_constraint_name)
 {
 	ChunkConstraint *cc;
 
@@ -198,8 +198,8 @@ ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs)
 /*
  * Insert a single chunk constraints into the metadata catalog.
  */
-static void
-chunk_constraint_insert(ChunkConstraint *constraint)
+void
+ts_chunk_constraint_insert(ChunkConstraint *constraint)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -246,13 +246,12 @@ ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
 		hypertable_constraint_name = DatumGetName(DirectFunctionCall1(namein, CStringGetDatum("")));
 	}
 
-	constraints =
-		chunk_constraints_add(ccs,
-							  DatumGetInt32(
-								  values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]),
-							  dimension_slice_id,
-							  NameStr(*constraint_name),
-							  NameStr(*hypertable_constraint_name));
+	constraints = ts_chunk_constraints_add(ccs,
+										   DatumGetInt32(values[AttrNumberGetAttrOffset(
+											   Anum_chunk_constraint_chunk_id)]),
+										   dimension_slice_id,
+										   NameStr(*constraint_name),
+										   NameStr(*hypertable_constraint_name));
 
 	MemoryContextSwitchTo(oldcxt);
 
@@ -593,7 +592,7 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 	int i;
 
 	for (i = 0; i < cube->num_slices; i++)
-		chunk_constraints_add(ccs, chunk_id, cube->slices[i]->fd.id, NULL, NULL);
+		ts_chunk_constraints_add(ccs, chunk_id, cube->slices[i]->fd.id, NULL, NULL);
 
 	return cube->num_slices;
 }
@@ -614,7 +613,7 @@ chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
 
 	if (chunk_constraint_need_on_chunk(cc->chunk_relkind, constraint))
 	{
-		chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
+		ts_chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
 		return CONSTR_PROCESSED;
 	}
 
@@ -649,10 +648,13 @@ ts_chunk_constraint_create_on_chunk(const Chunk *chunk, Oid constraint_oid)
 
 	if (chunk_constraint_need_on_chunk(chunk->relkind, con))
 	{
-		ChunkConstraint *cc =
-			chunk_constraints_add(chunk->constraints, chunk->fd.id, 0, NULL, NameStr(con->conname));
+		ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
+													   chunk->fd.id,
+													   0,
+													   NULL,
+													   NameStr(con->conname));
 
-		chunk_constraint_insert(cc);
+		ts_chunk_constraint_insert(cc);
 
 		chunk_constraint_create(cc,
 								chunk->table_id,

@@ -1489,6 +1489,8 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *sche
 	 */
 	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
 
+	DEBUG_WAITPOINT("chunk_create_for_point");
+
 	/*
 	 * Recheck if someone else created the chunk before we got the table
 	 * lock. The returned chunk will have all slices locked so that they

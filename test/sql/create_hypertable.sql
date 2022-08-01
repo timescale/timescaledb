@@ -123,27 +123,76 @@ select add_dimension('test_schema.test_table', 'location', 2);
 --adding dimension with both number_partitions and chunk_time_interval should fail
 select add_dimension('test_schema.test_table', 'id2', number_partitions => 2, chunk_time_interval => 1000);
 
---adding a new dimension on a non-empty table should also fail
-insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'nyc', 1, 1);
-select add_dimension('test_schema.test_table', 'device_type', 2);
-
--- should fail on non-empty table with 'if_not_exists' in case the dimension does not exists
-select add_dimension('test_schema.test_table', 'device_type', 2, if_not_exists => true);
-
 \set ON_ERROR_STOP 1
+
+-- test adding a new dimension on a non-empty table
+CREATE TABLE dim_test(time TIMESTAMPTZ, device int);
+SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
+
+CREATE VIEW dim_test_slices AS
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+WHERE h.table_name = 'dim_test'
+ORDER BY c.id, ds.dimension_id;
+
+INSERT INTO dim_test VALUES ('2004-10-10 00:00:00+00', 1);
+INSERT INTO dim_test VALUES ('2004-10-20 00:00:00+00', 2);
+
+SELECT * FROM dim_test_slices;
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_2_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_3_chunk');
+
+-- add dimension to the existing chunks by adding -inf/inf dimension slices
+SELECT add_dimension('dim_test', 'device', 2);
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_2_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_3_chunk');
+SELECT * FROM dim_test_slices;
+
+-- newer chunks have proper dimension slices range
+INSERT INTO dim_test VALUES ('2004-10-30 00:00:00+00', 3);
+SELECT * FROM dim_test_slices;
+
+SELECT * FROM dim_test ORDER BY time;
+
+DROP VIEW dim_test_slices;
+DROP TABLE dim_test;
+
+-- test add_dimension() with existing data on table with space partitioning
+CREATE TABLE dim_test(time TIMESTAMPTZ, device int, data int);
+SELECT create_hypertable('dim_test', 'time', 'device', 2, chunk_time_interval => INTERVAL '1 day');
+
+CREATE VIEW dim_test_slices AS
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+WHERE h.table_name = 'dim_test'
+ORDER BY c.id, ds.dimension_id;
+
+INSERT INTO dim_test VALUES ('2004-10-10 00:00:00+00', 1, 3);
+INSERT INTO dim_test VALUES ('2004-10-20 00:00:00+00', 2, 2);
+SELECT * FROM dim_test_slices;
+
+-- new dimension slice will cover full range on existing chunks
+SELECT add_dimension('dim_test', 'data', 1);
+SELECT * FROM dim_test_slices;
+
+INSERT INTO dim_test VALUES ('2004-10-30 00:00:00+00', 3, 1);
+SELECT * FROM dim_test_slices;
+SELECT * FROM dim_test ORDER BY time;
+
+DROP VIEW dim_test_slices;
+DROP TABLE dim_test;
 
 -- should not fail on non-empty table with 'if_not_exists' in case the dimension exists
 select add_dimension('test_schema.test_table', 'location', 2, if_not_exists => true);
-
---should fail on empty table that still has chunks --
-\set ON_ERROR_STOP 0
-delete from test_schema.test_table where time is not null;
-select count(*) from test_schema.test_table;
-select add_dimension('test_schema.test_table', 'device_type', 2);
-\set ON_ERROR_STOP 1
-
---show chunks in the associated schema
-\dt "chunk_schema".*
 
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
@@ -230,8 +279,8 @@ select * from _timescaledb_catalog.chunk;
 select * from test_schema.test_migrate;
 --main table should now be empty
 select * from only test_schema.test_migrate;
-select * from only _timescaledb_internal._hyper_8_4_chunk;
-select * from only _timescaledb_internal._hyper_8_5_chunk;
+select * from only _timescaledb_internal._hyper_10_9_chunk;
+select * from only _timescaledb_internal._hyper_10_10_chunk;
 
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
