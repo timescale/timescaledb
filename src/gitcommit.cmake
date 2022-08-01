@@ -13,7 +13,7 @@ if(GIT_FOUND)
 
   # Fetch the commit HASH of head (short version) using rev-parse
   execute_process(
-    COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+    COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
     OUTPUT_VARIABLE EXT_GIT_COMMIT_HASH
     RESULT_VARIABLE _revparse_RESULT
     OUTPUT_STRIP_TRAILING_WHITESPACE)
