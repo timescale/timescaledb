@@ -131,7 +131,7 @@ build_script:
 
     # build timescale
 
-     .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
+     .\bootstrap -DCMAKE_VERBOSE_MAKEFILE=ON -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DASSERTIONS=ON -DCMAKE_C_FLAGS=/MP
 
     # Filter ssl and local configuration from pg_hba.conf file since
     # we have turned off SSL and local (unix domain socket)
