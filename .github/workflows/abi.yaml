@@ -41,7 +41,8 @@ jobs:
         fi
 
         docker run -i --rm -v $(pwd):/mnt ${BUILDER_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev openssl-dev > /dev/null
+          apk add cmake gcc make build-base krb5-dev openssl-dev git > /dev/null
+          git config --global --add safe.directory /mnt
           cd /mnt
           BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
           make -C build_abi install
