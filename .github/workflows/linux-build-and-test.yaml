@@ -108,7 +108,7 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DREQUIRE_ALL_TESTS=ON -DLINTER_STRICT=ON -DCMAKE_VERBOSE_MAKEFILE=ON
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DLINTER_STRICT=ON
         make -j $MAKE_JOBS -C build
         make -C build install
 
