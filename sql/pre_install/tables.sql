@@ -185,6 +185,7 @@ CREATE TABLE _timescaledb_catalog.chunk (
   compressed_chunk_id integer ,
   dropped boolean NOT NULL DEFAULT FALSE,
   status integer NOT NULL DEFAULT 0,
+  osm_chunk boolean NOT NULL DEFAULT FALSE,
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),
@@ -194,8 +195,8 @@ CREATE TABLE _timescaledb_catalog.chunk (
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
-
 CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
+CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk ( osm_chunk  );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');

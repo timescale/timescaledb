@@ -175,12 +175,6 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
  */
 #define CHUNK_STATUS_FROZEN 4
 
-/* A OSM table  is added as a chunk to the hypertable.
- * This is different from a distributed hypertable chunk that
- * is managed by the Timescale extension.
- */
-#define CHUNK_STATUS_FOREIGN 8
-
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 {
@@ -203,6 +197,7 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 	}
 	values[AttrNumberGetAttrOffset(Anum_chunk_dropped)] = BoolGetDatum(fd->dropped);
 	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(fd->status);
+	values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)] = BoolGetDatum(fd->osm_chunk);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -224,6 +219,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_table_name)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_status)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
@@ -242,6 +238,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 
 	fd->dropped = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_status)]);
+	fd->osm_chunk = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
 
 	if (should_free)
 		heap_freetuple(tuple);
@@ -4461,6 +4458,9 @@ fill_hypercube_for_foreign_table_chunk(Hyperspace *hs)
  *
  * Does not add any inheritable constraints or indexes that are already
  * defined on the hypertable.
+ *
+ * This is used to add an OSM table as a chunk.
+ * Set the osm_chunk flag to true.
  */
 static void
 add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
@@ -4493,13 +4493,13 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 
 	/* fill in the correct table_name for the chunk*/
 	chunk->fd.hypertable_id = hs->hypertable_id;
+	chunk->fd.osm_chunk = true; /* this is an OSM chunk */
 	chunk->cube = fill_hypercube_for_foreign_table_chunk(hs);
 	chunk->hypertable_relid = parent_ht->main_table_relid;
 	chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 
 	namestrcpy(&chunk->fd.schema_name, relschema);
 	namestrcpy(&chunk->fd.table_name, relname);
-	chunk->fd.status = CHUNK_STATUS_FOREIGN;
 
 	/* Insert chunk */
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);

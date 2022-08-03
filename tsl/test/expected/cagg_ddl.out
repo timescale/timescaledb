@@ -633,11 +633,11 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 --we see the chunks row with the dropped flags set;
 SELECT * FROM _timescaledb_catalog.chunk where dropped;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+--------------------+---------------------+---------+--------
- 13 |            10 | _timescaledb_internal | _hyper_10_13_chunk |                     | t       |      0
- 14 |            10 | _timescaledb_internal | _hyper_10_14_chunk |                     | t       |      0
- 15 |            10 | _timescaledb_internal | _hyper_10_15_chunk |                     | t       |      0
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
+ 13 |            10 | _timescaledb_internal | _hyper_10_13_chunk |                     | t       |      0 | f
+ 14 |            10 | _timescaledb_internal | _hyper_10_14_chunk |                     | t       |      0 | f
+ 15 |            10 | _timescaledb_internal | _hyper_10_15_chunk |                     | t       |      0 | f
 (3 rows)
 
 --still see data in the view
