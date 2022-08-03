@@ -47,7 +47,7 @@ def build_debug_config(overrides):
     "name": "Debug",
     "build_type": "Debug",
     "pg_build_args": "--enable-debug --enable-cassert",
-    "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON",
+    "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
     "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
     "extra_packages": "clang-9 llvm-9 llvm-9-dev llvm-9-tools",
@@ -70,7 +70,7 @@ def build_release_config(overrides):
     "name": "Release",
     "build_type": "Release",
     "pg_build_args": "",
-    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON",
+    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
     "coverage": False,
   })
   base_config.update(release_config)
@@ -81,7 +81,7 @@ def build_without_telemetry(overrides):
   config = build_release_config({})
   config.update({
     'name': 'ReleaseWithoutTelemetry',
-    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DUSE_TELEMETRY=OFF",
+    "tsdb_build_args": config['tsdb_build_args'] + " -DUSE_TELEMETRY=OFF",
     "coverage": False,
   })
   config.update(overrides)
@@ -92,7 +92,7 @@ def build_apache_config(overrides):
   apache_config = dict({
     "name": "ApacheOnly",
     "build_type": "Release",
-    "tsdb_build_args": "-DAPACHE_ONLY=1",
+    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON -DAPACHE_ONLY=1",
     "pg_build_args": "",
     "coverage": False,
   })
@@ -108,7 +108,7 @@ def macos_config(overrides):
     "cxx": "clang++",
     "clang": "clang",
     "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
-    "tsdb_build_args": "-DASSERTIONS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
+    "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
     "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher pg_dump remote_connection compressed_collation'",
@@ -136,14 +136,16 @@ if event_type != "pull_request":
   # chunk_utils, telemetry and tablespace are skipped because of use after free bugs in postgres 12.0 which those tests hit
   pg12_debug_earliest = {
     "pg": PG12_EARLIEST,
-    "installcheck_args": "SKIPS='chunk_utils tablespace telemetry' IGNORES='cluster-12 compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht cagg_policy compression_chunk_race deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select debug_notice dist_gapfill_pushdown-12 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
+    "installcheck_args": "SKIPS='chunk_utils tablespace telemetry' IGNORES='cluster-12 cagg_policy debug_notice dist_gapfill_pushdown-12'",
+    "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
 
   # add debug test for first supported PG13 version
   pg13_debug_earliest = {
     "pg": PG13_EARLIEST,
-    "installcheck_args": "SKIPS='deadlock_recompress_chunk 001_extension' IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht compression_chunk_race deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_gapfill_pushdown-13 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback telemetry'"
+    "installcheck_args": "SKIPS='001_extension' IGNORES='dist_gapfill_pushdown-13'",
+    "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
   }
   m["include"].append(build_debug_config(pg13_debug_earliest))
 
