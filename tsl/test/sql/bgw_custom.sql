@@ -494,6 +494,10 @@ DROP ROLE user_noexec;
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
 select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 select alter_job(:job_id_alter);
+-- test that we can unregister the check function
+select alter_job(:job_id_alter, check_config => 0);
+-- no message printed now
+select alter_job(:job_id_alter, config => '{}'); 
 
 -- test what happens if the check function contains a COMMIT
 -- procedure with transaction handling

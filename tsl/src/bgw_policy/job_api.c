@@ -273,6 +273,7 @@ job_alter(PG_FUNCTION_ARGS)
 	char *check_name_str = NULL;
 	/* Added space for period and NULL */
 	char schema_qualified_check_name[2 * NAMEDATALEN + 2] = { 0 };
+	bool unregister_check = (!PG_ARGISNULL(9) && !OidIsValid(check));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -347,6 +348,8 @@ job_alter(PG_FUNCTION_ARGS)
 				 NameStr(job->fd.check_schema),
 				 NameStr(job->fd.check_name));
 
+	job->unregister_check = unregister_check;
+
 	ts_bgw_job_update_by_id(job_id, job);
 
 	if (!PG_ARGISNULL(7))
@@ -373,7 +376,9 @@ job_alter(PG_FUNCTION_ARGS)
 
 	values[7] = TimestampTzGetDatum(next_start);
 
-	if (strlen(NameStr(job->fd.check_schema)) > 0)
+	if (unregister_check)
+		nulls[8] = true;
+	else if (strlen(NameStr(job->fd.check_schema)) > 0)
 		values[8] = CStringGetTextDatum(schema_qualified_check_name);
 	else
 		nulls[8] = true;

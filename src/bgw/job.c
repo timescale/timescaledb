@@ -793,6 +793,14 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
 	}
 
+	if (updated_job->unregister_check)
+	{
+		repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+		repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+	}
+
 	if (updated_job->fd.config)
 	{
 		job_config_check(bgw_job_from_tupleinfo(ti, sizeof(BgwJob)), updated_job->fd.config);

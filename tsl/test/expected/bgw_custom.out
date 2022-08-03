@@ -813,6 +813,21 @@ NOTICE:  This message will only get printed if config is not NULL
  (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
 (1 row)
 
+-- test that we can unregister the check function
+select alter_job(:job_id_alter, check_config => 0);
+NOTICE:  This message will only get printed if config is not NULL
+                       alter_job                       
+-------------------------------------------------------
+ (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+(1 row)
+
+-- no message printed now
+select alter_job(:job_id_alter, config => '{}'); 
+                       alter_job                       
+-------------------------------------------------------
+ (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+(1 row)
+
 -- test what happens if the check function contains a COMMIT
 -- procedure with transaction handling
 CREATE OR REPLACE PROCEDURE custom_proc2_jsonb(config jsonb) LANGUAGE PLPGSQL AS

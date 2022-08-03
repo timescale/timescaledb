@@ -538,7 +538,12 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
 
-	parse_cagg_policy_config(cagg, fcinfo, &policyconf);
+	if (!start_offset.isnull)
+		start_offset.isnull =
+			ts_if_offset_is_infinity(start_offset.value, start_offset_type, true /* is_start */);
+	if (!end_offset.isnull)
+		end_offset.isnull =
+			ts_if_offset_is_infinity(end_offset.value, end_offset_type, false /* is_start */);
 
 	parse_cagg_policy_config(cagg,
 							 start_offset_type,

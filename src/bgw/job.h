@@ -16,6 +16,7 @@
 typedef struct BgwJob
 {
 	FormData_bgw_job fd;
+	bool unregister_check;
 } BgwJob;
 
 typedef bool job_main_func(void);
