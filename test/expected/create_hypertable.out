@@ -544,12 +544,12 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
 (1 row)
 
 select * from _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+--------------------+---------------------+---------+--------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk   |                     | f       |      0
-  8 |             7 | _timescaledb_internal | _hyper_7_8_chunk   |                     | f       |      0
-  9 |            10 | _timescaledb_internal | _hyper_10_9_chunk  |                     | f       |      0
- 10 |            10 | _timescaledb_internal | _hyper_10_10_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk   |                     | f       |      0 | f
+  8 |             7 | _timescaledb_internal | _hyper_7_8_chunk   |                     | f       |      0 | f
+  9 |            10 | _timescaledb_internal | _hyper_10_9_chunk  |                     | f       |      0 | f
+ 10 |            10 | _timescaledb_internal | _hyper_10_10_chunk |                     | f       |      0 | f
 (4 rows)
 
 select * from test_schema.test_migrate;

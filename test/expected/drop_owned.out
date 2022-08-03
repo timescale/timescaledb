@@ -32,10 +32,10 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+------------------+---------------------+---------+--------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0 | f
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
 (2 rows)
 
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
@@ -46,9 +46,9 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+------------------+---------------------+---------+--------
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
 (1 row)
 
 DROP TABLE  hypertable_schema.superuser;
@@ -59,8 +59,8 @@ SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status 
-----+---------------+-------------+------------+---------------------+---------+--------
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+---------+--------+-----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;

@@ -494,6 +494,8 @@ scan_and_append_slices(ScanIterator *it, int old_nkeys, DimensionVec **dv, bool 
 	return *dv;
 }
 
+/* search dimension_slice catalog table for slices that meet hri restriction
+ */
 static List *
 gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 {

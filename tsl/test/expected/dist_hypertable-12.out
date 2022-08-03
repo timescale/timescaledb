@@ -1667,8 +1667,8 @@ SELECT * FROM disttable;
 
 -- Metadata and tables cleaned up
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status 
-----+---------------+-------------+------------+---------------------+---------+--------
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+---------+--------+-----------
 (0 rows)
 
 SELECT * FROM show_chunks('disttable');
@@ -1685,8 +1685,8 @@ $$);
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM _timescaledb_catalog.chunk
 NOTICE:  [db_dist_hypertable_1]:
-id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped|status
---+-------------+-----------+----------+-------------------+-------+------
+id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped|status|osm_chunk
+--+-------------+-----------+----------+-------------------+-------+------+---------
 (0 rows)
 
 
@@ -1709,8 +1709,8 @@ time|device|temp|Color
 NOTICE:  [db_dist_hypertable_2]: 
 SELECT * FROM _timescaledb_catalog.chunk
 NOTICE:  [db_dist_hypertable_2]:
-id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped|status
---+-------------+-----------+----------+-------------------+-------+------
+id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped|status|osm_chunk
+--+-------------+-----------+----------+-------------------+-------+------+---------
 (0 rows)
 
 
@@ -1733,8 +1733,8 @@ time|device|temp|Color
 NOTICE:  [db_dist_hypertable_3]: 
 SELECT * FROM _timescaledb_catalog.chunk
 NOTICE:  [db_dist_hypertable_3]:
-id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped|status
---+-------------+-----------+----------+-------------------+-------+------
+id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped|status|osm_chunk
+--+-------------+-----------+----------+-------------------+-------+------+---------
 (0 rows)
 
 

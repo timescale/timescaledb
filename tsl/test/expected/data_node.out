@@ -433,11 +433,11 @@ SELECT * FROM test.show_subtables('disttable');
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+-----------------------+---------------------+---------+--------
-  2 |             3 | _timescaledb_internal | _dist_hyper_3_2_chunk |                     | f       |      0
-  3 |             3 | _timescaledb_internal | _dist_hyper_3_3_chunk |                     | f       |      0
-  4 |             3 | _timescaledb_internal | _dist_hyper_3_4_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-----------------------+---------------------+---------+--------+-----------
+  2 |             3 | _timescaledb_internal | _dist_hyper_3_2_chunk |                     | f       |      0 | f
+  3 |             3 | _timescaledb_internal | _dist_hyper_3_3_chunk |                     | f       |      0 | f
+  4 |             3 | _timescaledb_internal | _dist_hyper_3_4_chunk |                     | f       |      0 | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -586,10 +586,10 @@ ORDER BY foreign_table_name;
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+-----------------------+---------------------+---------+--------
-  3 |             3 | _timescaledb_internal | _dist_hyper_3_3_chunk |                     | f       |      0
-  4 |             3 | _timescaledb_internal | _dist_hyper_3_4_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-----------------------+---------------------+---------+--------+-----------
+  3 |             3 | _timescaledb_internal | _dist_hyper_3_3_chunk |                     | f       |      0 | f
+  4 |             3 | _timescaledb_internal | _dist_hyper_3_4_chunk |                     | f       |      0 | f
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -636,8 +636,8 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status 
-----+---------------+-------------+------------+---------------------+---------+--------
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+---------+--------+-----------
 (0 rows)
 
 -- Attach data node should now succeed
@@ -828,8 +828,8 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status 
-----+---------------+-------------+------------+---------------------+---------+--------
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+---------+--------+-----------
 (0 rows)
 
 \set ON_ERROR_STOP 0
@@ -898,11 +898,11 @@ SELECT * FROM test.show_subtables('disttable');
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+-----------------------+---------------------+---------+--------
-  5 |             5 | _timescaledb_internal | _dist_hyper_5_5_chunk |                     | f       |      0
-  6 |             5 | _timescaledb_internal | _dist_hyper_5_6_chunk |                     | f       |      0
-  7 |             5 | _timescaledb_internal | _dist_hyper_5_7_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-----------------------+---------------------+---------+--------+-----------
+  5 |             5 | _timescaledb_internal | _dist_hyper_5_5_chunk |                     | f       |      0 | f
+  6 |             5 | _timescaledb_internal | _dist_hyper_5_6_chunk |                     | f       |      0 | f
+  7 |             5 | _timescaledb_internal | _dist_hyper_5_7_chunk |                     | f       |      0 | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
