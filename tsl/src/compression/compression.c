@@ -164,6 +164,17 @@ static void row_compressor_finish(RowCompressor *row_compressor);
  ** compress_chunk **
  ********************/
 
+static CompressedDataHeader *
+get_compressed_data_header(Datum data)
+{
+	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(data);
+
+	if (header->compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
+		elog(ERROR, "invalid compression algorithm %d", header->compression_algorithm);
+
+	return header;
+}
+
 static void
 capture_pgclass_stats(Oid table_oid, int *out_pages, int *out_visible, float *out_tuples)
 {
@@ -1200,12 +1211,11 @@ populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_co
 
 		if (per_col->is_compressed)
 		{
-			char *data = (char *) PG_DETOAST_DATUM(compressed_datums[col]);
-			CompressedDataHeader *header = (CompressedDataHeader *) data;
+			CompressedDataHeader *header = get_compressed_data_header(compressed_datums[col]);
 
 			per_col->iterator =
 				definitions[header->compression_algorithm]
-					.iterator_init_forward(PointerGetDatum(data), per_col->decompressed_type);
+					.iterator_init_forward(PointerGetDatum(header), per_col->decompressed_type);
 		}
 		else
 			per_col->val = compressed_datums[col];
@@ -1311,7 +1321,6 @@ per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *deco
 Datum
 tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 {
-	Datum compressed;
 	CompressedDataHeader *header;
 	FuncCallContext *funcctx;
 	MemoryContext oldcontext;
@@ -1321,17 +1330,16 @@ tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	compressed = PG_GETARG_DATUM(0);
-	header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
-
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		iter =
-			definitions[header->compression_algorithm]
-				.iterator_init_forward(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 1));
+		header = get_compressed_data_header(PG_GETARG_DATUM(0));
+
+		iter = definitions[header->compression_algorithm]
+				   .iterator_init_forward(PointerGetDatum(header),
+										  get_fn_expr_argtype(fcinfo->flinfo, 1));
 
 		funcctx->user_fctx = iter;
 		MemoryContextSwitchTo(oldcontext);
@@ -1354,7 +1362,6 @@ tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 Datum
 tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 {
-	Datum compressed;
 	CompressedDataHeader *header;
 	FuncCallContext *funcctx;
 	MemoryContext oldcontext;
@@ -1364,16 +1371,16 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	compressed = PG_GETARG_DATUM(0);
-	header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		iter =
-			definitions[header->compression_algorithm]
-				.iterator_init_reverse(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 1));
+		header = get_compressed_data_header(PG_GETARG_DATUM(0));
+
+		iter = definitions[header->compression_algorithm]
+				   .iterator_init_reverse(PointerGetDatum(header),
+										  get_fn_expr_argtype(fcinfo->flinfo, 1));
 
 		funcctx->user_fctx = iter;
 		MemoryContextSwitchTo(oldcontext);
@@ -1397,8 +1404,9 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 Datum
 tsl_compressed_data_send(PG_FUNCTION_ARGS)
 {
-	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+	CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
 	StringInfoData buf;
+
 	pq_begintypsend(&buf);
 	pq_sendbyte(&buf, header->compression_algorithm);
 
@@ -1414,6 +1422,9 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	CompressedDataHeader header = { { 0 } };
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
+
+	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
+		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
 
 	return definitions[header.compression_algorithm].compressed_data_recv(buf);
 }
