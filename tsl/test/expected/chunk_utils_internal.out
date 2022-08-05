@@ -363,7 +363,7 @@ SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 d
  (5,public,ht_try,t)
 (1 row)
 
-INSERT INTO ht_try VALUES ('2020-05-05 01:00', 222, 222);
+INSERT INTO ht_try VALUES ('2022-05-05 01:00', 222, 222);
 SELECT * FROM child_fdw_table;
             timec             | acq_id | value 
 ------------------------------+--------+-------
@@ -381,7 +381,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'ht_try' ORDER BY 1;
     chunk_name    |           range_start           |            range_end            
 ------------------+---------------------------------+---------------------------------
- _hyper_5_9_chunk | Mon May 04 17:00:00 2020 PDT    | Tue May 05 17:00:00 2020 PDT
+ _hyper_5_9_chunk | Wed May 04 17:00:00 2022 PDT    | Thu May 05 17:00:00 2022 PDT
  child_fdw_table  | Tue Nov 23 16:00:00 4684 PST BC | Wed Nov 24 16:00:00 4684 PST BC
 (2 rows)
 
@@ -389,7 +389,7 @@ SELECT * FROM ht_try ORDER BY 1;
             timec             | acq_id | value 
 ------------------------------+--------+-------
  Wed Jan 01 01:00:00 2020 PST |    100 |  1000
- Tue May 05 01:00:00 2020 PDT |    222 |   222
+ Thu May 05 01:00:00 2022 PDT |    222 |   222
 (2 rows)
 
 SELECT relname, relowner::regrole FROM pg_class
@@ -408,6 +408,38 @@ FROM pg_inherits WHERE inhparent = 'ht_try'::regclass ORDER BY 1;
  child_fdw_table
  _timescaledb_internal._hyper_5_9_chunk
 (2 rows)
+
+--TEST chunk exclusion code does not filter out OSM chunk
+SELECT * from ht_try ORDER BY 1;
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+ Thu May 05 01:00:00 2022 PDT |    222 |   222
+(2 rows)
+
+SELECT * from ht_try WHERE timec < '2022-01-01 01:00' ORDER BY 1; 
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+(1 row)
+
+SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1; 
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+(1 row)
+
+SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 01:00' ORDER BY 1;
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+(1 row)
+
+SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1; 
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Thu May 05 01:00:00 2022 PDT |    222 |   222
+(1 row)
 
 -- TEST error have to be hypertable owner to attach a chunk to it
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

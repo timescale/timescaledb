@@ -1050,8 +1050,7 @@ chunk_create_table_constraints(const Chunk *chunk)
 								chunk->hypertable_relid,
 								chunk->fd.hypertable_id);
 
-	if (chunk->relkind == RELKIND_RELATION &&
-		!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FOREIGN))
+	if (chunk->relkind == RELKIND_RELATION && !IS_OSM_CHUNK(chunk))
 	{
 		ts_trigger_create_all_on_chunk(chunk);
 		ts_chunk_index_create_all(chunk->fd.hypertable_id,
@@ -1610,7 +1609,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
 	chunk->relkind = get_rel_relkind(chunk->table_id);
 
-	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE && !IS_OSM_CHUNK(chunk))
 		chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
 
 	return SCAN_DONE;
@@ -4550,4 +4549,68 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 
 	PG_RETURN_BOOL(ret);
+}
+
+static ScanTupleResult
+chunk_tuple_osm_chunk_found(TupleInfo *ti, void *arg)
+{
+	bool isnull;
+	Datum osm_chunk = slot_getattr(ti->slot, Anum_chunk_osm_chunk, &isnull);
+
+	Assert(!isnull);
+	bool is_osm_chunk = DatumGetBool(osm_chunk);
+
+	if (!is_osm_chunk)
+		return SCAN_CONTINUE;
+
+	int *chunk_id = (int *) arg;
+	Datum chunk_id_datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
+	Assert(!isnull);
+	*chunk_id = DatumGetInt32(chunk_id_datum);
+	return SCAN_DONE;
+}
+
+/* get OSM chunk id associated with the hypertable */
+int
+ts_chunk_get_osm_chunk_id(int hypertable_id)
+{
+	int chunk_id = INVALID_CHUNK_ID;
+	ScanKeyData scankey[2];
+	bool is_osm_chunk = true;
+	Catalog *catalog = ts_catalog_get();
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_OSM_CHUNK_INDEX),
+		.nkeys = 2,
+		.scankey = scankey,
+		.data = &chunk_id,
+		.tuple_found = chunk_tuple_osm_chunk_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	/*
+	 * Perform an index scan on hypertable ID + osm_chunk
+	 */
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_osm_chunk_idx_osm_chunk,
+				BTEqualStrategyNumber,
+				F_BOOLEQ,
+				BoolGetDatum(is_osm_chunk));
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_osm_chunk_idx_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	int num_found = ts_scanner_scan(&scanctx);
+
+	if (num_found > 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("More than 1 OSM chunk found for hypertable (%d)", hypertable_id)));
+	}
+
+	return chunk_id;
 }

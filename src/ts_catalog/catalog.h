@@ -461,6 +461,7 @@ enum Anum_chunk_schema_name_idx
 enum Anum_chunk_osm_chunk_idx
 {
 	Anum_chunk_osm_chunk_idx_osm_chunk = 1,
+	Anum_chunk_osm_chunk_idx_hypertable_id,
 };
 
 /************************************
