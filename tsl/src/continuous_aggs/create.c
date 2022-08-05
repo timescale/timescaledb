@@ -47,6 +47,7 @@
 #include <parser/parse_type.h>
 #include <rewrite/rewriteHandler.h>
 #include <rewrite/rewriteManip.h>
+#include <utils/acl.h>
 #include <utils/rel.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
@@ -2257,7 +2258,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										   panquery,
 										   materialize_hypertable_id);
 
-	create_view_for_query(final_selquery, stmt->view);
+	/* copy view acl to materialization hypertable */
+	ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
+	ts_copy_relation_acl(view_address.objectId, mataddress.objectId, GetUserId());
 
 	/* Step 3: create the internal view with select partialize(..)
 	 */
