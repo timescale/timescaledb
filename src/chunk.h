@@ -201,6 +201,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chun
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_osm_chunk(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
 																	 int32 chunk_status,
 																	 ChunkOperation cmd,
@@ -227,6 +228,7 @@ extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);
 extern int ts_chunk_oid_cmp(const void *p1, const void *p2);
+int ts_chunk_get_osm_chunk_id(int hypertable_id);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

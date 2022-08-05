@@ -196,6 +196,7 @@ ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.c
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
 
 CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
+CREATE INDEX chunk_status_hypertable_id_idx ON _timescaledb_catalog.chunk (status, hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');

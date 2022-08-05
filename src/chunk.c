@@ -1053,8 +1053,7 @@ chunk_create_table_constraints(const Chunk *chunk)
 								chunk->hypertable_relid,
 								chunk->fd.hypertable_id);
 
-	if (chunk->relkind == RELKIND_RELATION &&
-		!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FOREIGN))
+	if (chunk->relkind == RELKIND_RELATION && !ts_chunk_is_osm_chunk(chunk))
 	{
 		ts_trigger_create_all_on_chunk(chunk);
 		ts_chunk_index_create_all(chunk->fd.hypertable_id,
@@ -1613,7 +1612,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
 	chunk->relkind = get_rel_relkind(chunk->table_id);
 
-	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE && ts_chunk_is_osm_chunk(chunk) == false)
 		chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
 
 	return SCAN_DONE;
@@ -4250,6 +4249,12 @@ ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk)
 			!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED));
 }
 
+bool
+ts_chunk_is_osm_chunk(const Chunk *chunk)
+{
+	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FOREIGN);
+}
+
 static const char *
 get_chunk_operation_str(ChunkOperation cmd)
 {
@@ -4550,4 +4555,71 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 
 	PG_RETURN_BOOL(ret);
+}
+
+static ScanTupleResult
+chunk_tuple_osm_chunk_found(TupleInfo *ti, void *arg)
+{
+	bool isnull;
+
+	Datum osm_status_datum = slot_getattr(ti->slot, Anum_chunk_status, &isnull);
+	Assert(!isnull);
+	int32 osm_status = DatumGetInt32(osm_status_datum);
+	bool is_dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &isnull));
+	if (is_dropped || !ts_flags_are_set_32(osm_status, CHUNK_STATUS_FOREIGN))
+		return SCAN_CONTINUE;
+
+	int *chunk_id = (int *) arg;
+	Datum chunk_id_datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
+	Assert(!isnull);
+	*chunk_id = DatumGetInt32(chunk_id_datum);
+
+	return SCAN_DONE;
+}
+
+/* get OSM chunk id associated with the hypertable */
+int
+ts_chunk_get_osm_chunk_id(int hypertable_id)
+{
+	int chunk_id = INVALID_CHUNK_ID;
+	ScanKeyData scankey[2];
+	int32 osm_chunk_status = CHUNK_STATUS_FOREIGN;
+	Catalog *catalog = ts_catalog_get();
+	int num_found;
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_STATUS_HYPERTABLE_ID_INDEX),
+		.nkeys = 2,
+		.scankey = scankey,
+		.data = &chunk_id,
+		.filter = NULL,
+		.tuple_found = chunk_tuple_osm_chunk_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	/*
+	 * Perform an index scan on status + hypertable ID
+	 */
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_status_hypertable_id_idx_status,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(osm_chunk_status));
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_status_hypertable_id_idx_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	num_found = ts_scanner_scan(&scanctx);
+
+	if (num_found > 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("More than 1 OSM chunk found for hypertable (%d)", hypertable_id)));
+	}
+
+	return chunk_id;
 }

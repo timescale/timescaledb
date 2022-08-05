@@ -224,7 +224,7 @@ CREATE FOREIGN TABLE child_fdw_table
 --now attach foreign table as a chunk of the hypertable.
 CREATE TABLE ht_try(timec timestamptz NOT NULL, acq_id bigint, value bigint);
 SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 day');
-INSERT INTO ht_try VALUES ('2020-05-05 01:00', 222, 222);
+INSERT INTO ht_try VALUES ('2022-05-05 01:00', 222, 222);
 
 SELECT * FROM child_fdw_table;
 
@@ -243,6 +243,13 @@ WHERE relname in ( select chunk_name FROM timescaledb_information.chunks
 SELECT inhrelid::regclass
 FROM pg_inherits WHERE inhparent = 'ht_try'::regclass ORDER BY 1;
 
+--TEST chunk exclusion code does not filter out OSM chunk
+SELECT * from ht_try ORDER BY 1;
+SELECT * from ht_try WHERE timec < '2022-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 01:00' ORDER BY 1;
+
+SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1; 
 -- TEST error have to be hypertable owner to attach a chunk to it
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 \set ON_ERROR_STOP 0

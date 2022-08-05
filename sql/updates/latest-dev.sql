@@ -10,3 +10,6 @@ CREATE TABLE _timescaledb_catalog.dimension_partition (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_partition', '');
 GRANT SELECT ON _timescaledb_catalog.dimension_partition TO PUBLIC;
 DROP FUNCTION IF EXISTS @extschema@.remove_continuous_aggregate_policy(REGCLASS, BOOL);
+
+--Add new index on chunk catalog table
+CREATE INDEX chunk_status_hypertable_id_idx ON _timescaledb_catalog.chunk (status, hypertable_id);

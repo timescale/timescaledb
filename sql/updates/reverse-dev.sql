@@ -35,3 +35,5 @@ LANGUAGE C VOLATILE STRICT;
 
 DROP VIEW IF EXISTS timescaledb_experimental.policies;
 
+--drop new index on chunk table
+DROP INDEX _timescaledb_catalog.chunk_status_hypertable_id_idx;

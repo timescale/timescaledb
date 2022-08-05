@@ -431,6 +431,7 @@ enum
 	CHUNK_HYPERTABLE_ID_INDEX,
 	CHUNK_SCHEMA_NAME_INDEX,
 	CHUNK_COMPRESSED_CHUNK_ID_INDEX,
+	CHUNK_STATUS_HYPERTABLE_ID_INDEX,
 	_MAX_CHUNK_INDEX,
 };
 
@@ -453,6 +454,12 @@ enum Anum_chunk_schema_name_idx
 {
 	Anum_chunk_schema_name_idx_schema_name = 1,
 	Anum_chunk_schema_name_idx_table_name,
+};
+
+enum Anum_chunk_status_hypertable_id_idx
+{
+	Anum_chunk_status_hypertable_id_idx_status = 1,
+	Anum_chunk_status_hypertable_id_idx_hypertable_id,
 };
 
 /************************************
