@@ -19,6 +19,7 @@
 #include "export.h"
 
 #define INVALID_CHUNK_ID 0
+#define IS_OSM_CHUNK(chunk) ((chunk)->fd.osm_chunk == true)
 
 /* Should match definitions in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
@@ -227,6 +228,7 @@ extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);
 extern int ts_chunk_oid_cmp(const void *p1, const void *p2);
+int ts_chunk_get_osm_chunk_id(int hypertable_id);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

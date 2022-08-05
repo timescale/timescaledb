@@ -136,6 +136,10 @@ scan_stubs_by_constraints(ScanIterator *constr_it, const Hyperspace *hs, const L
  * For performance, try not to interleave scans of different metadata tables
  * in order to maintain data locality while scanning. Also, keep scanned
  * tables and indexes open until all the metadata is scanned for all chunks.
+ *
+ * NOTE:
+ * An OSM chunk has only dummy constraints. Always include an OSM chunk, if
+ * it exists, in the set of returned results.
  */
 Chunk **
 ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
@@ -162,6 +166,7 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 	Assert(OidIsValid(hs->main_table_relid));
 	orig_mcxt = MemoryContextSwitchTo(work_mcxt);
 
+	int osm_chunk_id = ts_chunk_get_osm_chunk_id(hs->hypertable_id);
 	/*
 	 * Step 1: Scan for chunks that match in all the given dimensions. The
 	 * matching chunks are returned as chunk stubs as they are not yet full
@@ -179,10 +184,17 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 		MemoryContextSwitchTo(orig_mcxt);
 		MemoryContextDelete(work_mcxt);
 
+		Chunk *osm_chunk = NULL;
+		if (osm_chunk_id != INVALID_CHUNK_ID)
+		{
+			osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+			chunks = MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * 1);
+			chunks[0] = osm_chunk;
+		}
 		if (numchunks)
-			*numchunks = 0;
+			*numchunks = osm_chunk ? 1 : 0;
 
-		return NULL;
+		return chunks;
 	}
 
 	/*
@@ -192,6 +204,7 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 	chunk_it = ts_chunk_scan_iterator_create(orig_mcxt);
 	unlocked_chunks = MemoryContextAlloc(work_mcxt, sizeof(Chunk *) * list_length(chunk_stubs));
 
+	bool found_osm_chunk = false;
 	foreach (lc, chunk_stubs)
 	{
 		const ChunkStub *stub = lfirst(lc);
@@ -240,6 +253,8 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 				unlocked_chunks[unlocked_chunk_count] = chunk;
 				unlocked_chunk_count++;
 
+				if (IS_OSM_CHUNK(chunk))
+					found_osm_chunk = true;
 				/*
 				 * Try to detect when sorting is needed for locking
 				 * purposes. Sometimes, the chunk order resulting from
@@ -284,17 +299,29 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 		{
 			/* Lazy initialize the chunks array */
 			if (NULL == chunks)
-				chunks = MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * unlocked_chunk_count);
-
+			{
+				int chunks_alloc = unlocked_chunk_count;
+				if (osm_chunk_id != INVALID_CHUNK_ID && !found_osm_chunk)
+					chunks_alloc = unlocked_chunk_count + 1;
+				chunks = MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * chunks_alloc);
+			}
 			chunks[chunk_count] = chunk;
 
-			if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+			if (chunk->relkind == RELKIND_FOREIGN_TABLE && !IS_OSM_CHUNK(chunk))
 				remote_chunk_count++;
 
 			chunk_count++;
 		}
 	}
-
+	/* get the osm chunk if needed */
+	if (osm_chunk_id != INVALID_CHUNK_ID && !found_osm_chunk)
+	{
+		MemoryContext old_mcxt;
+		old_mcxt = MemoryContextSwitchTo(orig_mcxt);
+		chunks[chunk_count] = ts_chunk_get_by_id(osm_chunk_id, true);
+		MemoryContextSwitchTo(old_mcxt);
+		chunk_count++;
+	}
 	/*
 	 * Step 3: The chunk stub scan only contained dimensional
 	 * constraints. Scan the chunk constraints again to get all

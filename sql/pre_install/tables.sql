@@ -196,7 +196,11 @@ ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.c
 
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
 CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
-CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk ( osm_chunk  );
+--we could use a partial index (where osm_chunk is true). However, the catalog code
+--does not work with partial/functional indexes. So we instead have a full index here.
+--Another option would be to use the status field to identify a OSM chunk. However bit
+--operations only work on varbit datatype and not integer datatype. 
+CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
