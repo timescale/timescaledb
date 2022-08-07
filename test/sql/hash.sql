@@ -76,3 +76,15 @@ SELECT _timescaledb_internal.get_partition_for_key(187::numeric);
 SELECT _timescaledb_internal.get_partition_for_key(187::double precision);
 SELECT _timescaledb_internal.get_partition_for_key(int4range(10, 20));
 SELECT _timescaledb_internal.get_partition_hash('08002b:010203'::macaddr);
+
+-- Test inside IMMUTABLE function (Issue #4575)
+CREATE FUNCTION my_get_partition_hash(INTEGER) RETURNS INTEGER
+AS 'SELECT _timescaledb_internal.get_partition_hash($1);'
+LANGUAGE SQL IMMUTABLE;
+
+CREATE FUNCTION my_get_partition_for_key(INTEGER) RETURNS INTEGER
+AS 'SELECT _timescaledb_internal.get_partition_for_key($1);'
+LANGUAGE SQL IMMUTABLE;
+
+SELECT my_get_partition_hash(1);
+SELECT my_get_partition_for_key(1);
