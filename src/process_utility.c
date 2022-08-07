@@ -1592,7 +1592,8 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 				/* Execute command right away, to check any permission errors before propagating
 				 * it to the distributed DDL */
 				result = DDL_DONE;
-				prev_ProcessUtility(args);
+				if (stmt->objects != NIL)
+					prev_ProcessUtility(args);
 
 				/* Restore ALL IN SCHEMA command type and it's objects */
 				if (was_schema_op)
