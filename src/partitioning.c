@@ -317,6 +317,9 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 			/* Argument is function, so our input is its result type */
 			argtype = ((FuncExpr *) node)->funcresulttype;
 			break;
+		case T_Param:
+			argtype = ((Param *) node)->paramtype;
+			break;
 		default:
 			elog(ERROR, "unsupported expression argument node type %u", nodeTag(node));
 	}
