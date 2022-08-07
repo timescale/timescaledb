@@ -111,3 +111,8 @@ REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER_2;
 \z measurements
 \z conditions
 \z public.*chunk
+
+-- GRANT/REVOKE in an empty schema (Issue #4581)
+CREATE SCHEMA test_grant;
+GRANT ALL ON ALL TABLES IN SCHEMA test_grant TO :ROLE_DEFAULT_PERM_USER_2;
+REVOKE ALL ON ALL TABLES IN SCHEMA test_grant FROM :ROLE_DEFAULT_PERM_USER_2;
