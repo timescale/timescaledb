@@ -585,6 +585,19 @@ chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conf
 	return true;
 }
 
+static bool
+chunk_constraint_is_check(const char chunk_relkind, Form_pg_constraint conform)
+{
+	if (conform->contype == CONSTRAINT_CHECK)
+	{
+		/*
+		 * check constraints supported on foreign tables (like OSM chunks)
+		 */
+		return true;
+	}
+	return false;
+}
+
 int
 ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
 											   const Hypercube *cube)
@@ -631,6 +644,39 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	};
 
 	return ts_constraint_process(hypertable_oid, chunk_constraint_add, &cc);
+}
+
+/* check constraints have the same name as the one on the hypertable */
+static ConstraintProcessStatus
+chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
+{
+	ConstraintContext *cc = arg;
+	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+
+	if (chunk_constraint_is_check(cc->chunk_relkind, constraint))
+	{
+		ts_chunk_constraints_add(cc->ccs,
+								 cc->chunk_id,
+								 0,
+								 NameStr(constraint->conname),
+								 NameStr(constraint->conname));
+		return CONSTR_PROCESSED;
+	}
+
+	return CONSTR_IGNORED;
+}
+
+/* Adds only inheritable check constraints */
+int
+ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, int32 chunk_id,
+													   const char chunk_relkind, Oid hypertable_oid)
+{
+	ConstraintContext cc = {
+		.chunk_relkind = chunk_relkind,
+		.ccs = ccs,
+		.chunk_id = chunk_id,
+	};
+	return ts_constraint_process(hypertable_oid, chunk_constraint_add_check, &cc);
 }
 
 void
