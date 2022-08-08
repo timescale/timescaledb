@@ -994,6 +994,62 @@ ts_get_node_name(Node *node)
 	switch (nodeTag(node))
 	{
 		/*
+		 * primitive nodes (primnodes.h)
+		 */
+		NODE_CASE(Alias);
+		NODE_CASE(RangeVar);
+		NODE_CASE(TableFunc);
+		NODE_CASE(IntoClause);
+		NODE_CASE(Expr);
+		NODE_CASE(Var);
+		NODE_CASE(Const);
+		NODE_CASE(Param);
+		NODE_CASE(Aggref);
+		NODE_CASE(GroupingFunc);
+		NODE_CASE(WindowFunc);
+		NODE_CASE(SubscriptingRef);
+		NODE_CASE(FuncExpr);
+		NODE_CASE(NamedArgExpr);
+		NODE_CASE(OpExpr);
+		NODE_CASE(DistinctExpr);
+		NODE_CASE(NullIfExpr);
+		NODE_CASE(ScalarArrayOpExpr);
+		NODE_CASE(BoolExpr);
+		NODE_CASE(SubLink);
+		NODE_CASE(SubPlan);
+		NODE_CASE(AlternativeSubPlan);
+		NODE_CASE(FieldSelect);
+		NODE_CASE(FieldStore);
+		NODE_CASE(RelabelType);
+		NODE_CASE(CoerceViaIO);
+		NODE_CASE(ArrayCoerceExpr);
+		NODE_CASE(ConvertRowtypeExpr);
+		NODE_CASE(CollateExpr);
+		NODE_CASE(CaseExpr);
+		NODE_CASE(CaseWhen);
+		NODE_CASE(CaseTestExpr);
+		NODE_CASE(ArrayExpr);
+		NODE_CASE(RowExpr);
+		NODE_CASE(RowCompareExpr);
+		NODE_CASE(CoalesceExpr);
+		NODE_CASE(MinMaxExpr);
+		NODE_CASE(SQLValueFunction);
+		NODE_CASE(XmlExpr);
+		NODE_CASE(NullTest);
+		NODE_CASE(BooleanTest);
+		NODE_CASE(CoerceToDomain);
+		NODE_CASE(CoerceToDomainValue);
+		NODE_CASE(SetToDefault);
+		NODE_CASE(CurrentOfExpr);
+		NODE_CASE(NextValueExpr);
+		NODE_CASE(InferenceElem);
+		NODE_CASE(TargetEntry);
+		NODE_CASE(RangeTblRef);
+		NODE_CASE(JoinExpr);
+		NODE_CASE(FromExpr);
+		NODE_CASE(OnConflictExpr);
+
+		/*
 		 * plan nodes (plannodes.h)
 		 */
 		NODE_CASE(Plan);
