@@ -205,7 +205,7 @@ test_script:
     # killer. Therefore, we need to ignore the results of the
     # remote_connection and remote_txn tests.
 
-    docker exec -e IGNORES="bgw_db_scheduler compression_algos cagg_bgw debug_notice ordered_append_join-12 remote_connection" -e SKIPS="bgw_db_scheduler remote_txn" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make -k regresschecklocal-t regresschecklocal-shared"
+    docker exec -e IGNORES="bgw_db_scheduler compression_algos cagg_bgw debug_notice ordered_append_join-12 remote_connection" -e SKIPS="bgw_db_scheduler build_info remote_txn" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make -k regresschecklocal-t regresschecklocal-shared"
 
     if( -not $? -or -not $TESTS1 ) { exit 1 }
 
