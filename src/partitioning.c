@@ -305,23 +305,23 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 	switch (nodeTag(node))
 	{
 		case T_Var:
-			argtype = ((Var *) node)->vartype;
+			argtype = castNode(Var, node)->vartype;
 			break;
 		case T_Const:
-			argtype = ((Const *) node)->consttype;
+			argtype = castNode(Const, node)->consttype;
 			break;
 		case T_CoerceViaIO:
-			argtype = ((CoerceViaIO *) node)->resulttype;
+			argtype = castNode(CoerceViaIO, node)->resulttype;
 			break;
 		case T_FuncExpr:
 			/* Argument is function, so our input is its result type */
-			argtype = ((FuncExpr *) node)->funcresulttype;
+			argtype = castNode(FuncExpr, node)->funcresulttype;
 			break;
 		case T_Param:
-			argtype = ((Param *) node)->paramtype;
+			argtype = castNode(Param, node)->paramtype;
 			break;
 		default:
-			elog(ERROR, "unsupported expression argument node type %u", nodeTag(node));
+			elog(ERROR, "unsupported expression argument node type: %s", ts_get_node_name(node));
 	}
 
 	return argtype;
