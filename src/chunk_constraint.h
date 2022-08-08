@@ -56,6 +56,8 @@ extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkCon
 																		int32 chunk_id,
 																		const char chunk_relkind,
 																		Oid hypertable_oid);
+extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_check_constraints(
+	ChunkConstraints *ccs, int32 chunk_id, const char chunk_relkind, Oid hypertable_oid);
 extern TSDLLEXPORT void ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs);
 extern TSDLLEXPORT void ts_chunk_constraints_create(const ChunkConstraints *ccs, Oid chunk_oid,
 													int32 chunk_id, Oid hypertable_oid,

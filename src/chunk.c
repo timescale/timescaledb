@@ -1115,7 +1115,8 @@ chunk_create_table_constraints(const Chunk *chunk)
 								chunk->hypertable_relid,
 								chunk->fd.hypertable_id);
 
-	if (chunk->relkind == RELKIND_RELATION)
+	if (chunk->relkind == RELKIND_RELATION &&
+		!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FOREIGN))
 	{
 		ts_trigger_create_all_on_chunk(chunk);
 		ts_chunk_index_create_all(chunk->fd.hypertable_id,
@@ -4566,13 +4567,22 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* insert dimension slices if they do not exist.
-	 * Then add dimension constraints for the chunk
 	 */
 	ts_dimension_slice_insert_multi(chunk->cube->slices, chunk->cube->num_slices);
-	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	/* check constraints are not automatically created for foreign tables.
 	 * See: ts_chunk_constraints_add_dimension_constraints.
+	 * Collect all the check constraints from the hypertable and add them to the
+	 * foreign table. Otherwise, cannot add as child of the hypertable (pg inheritance
+	 * code will error. Note that the name of the check constraint on the hypertable
+	 * and the foreign table chunk should match.
 	 */
+	ts_chunk_constraints_add_inheritable_check_constraints(chunk->constraints,
+														   chunk->fd.id,
+														   chunk->relkind,
+														   chunk->hypertable_relid);
+	chunk_create_table_constraints(chunk);
+	/* Add dimension constriants for the chunk */
+	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 	chunk_add_inheritance(chunk, parent_ht);
 }
