@@ -228,7 +228,9 @@ evaluate_stable_function(Oid funcid, Oid result_type, int32 result_typmod, Oid r
 		else
 			has_nonconst_input = true;
 	}
-
+	if (has_null_input)
+	{
+	}
 	/*
 	 * The simplification of strict functions with constant NULL inputs must
 	 * have been already performed by eval_const_expressions().
