@@ -34,6 +34,7 @@
 
 #include "allpaths.h"
 #include "compat/compat.h"
+#include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
@@ -588,8 +589,14 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * baserestrictinfo quals were already copied/substituted when the
 		 * child RelOptInfo was built.  So we don't need any additional setup
 		 * before applying constraint exclusion.
+		 * Note that if we are performing a SELECT, the chunks were already
+		 * excluded by our hypertable expansion code, so we don't need to
+		 * check this again.
 		 */
-		if (relation_excluded_by_constraints(root, childrel, childRTE))
+		bool exclusion_already_checked = (root->parse->commandType == CMD_SELECT)
+			&& (ts_classify_relation(root, childrel, NULL) == TS_REL_CHUNK_CHILD);
+		if (!exclusion_already_checked
+			&& relation_excluded_by_constraints(root, childrel, childRTE))
 		{
 			/*
 			 * This child need not be scanned, so we can omit it from the
