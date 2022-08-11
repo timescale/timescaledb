@@ -8,6 +8,6 @@ CA_CRT=${CA_CRT:-${CA_FILE_PREFIX}.crt}
 openssl genrsa -out ${CA_KEY} 2048
 
 # Generate CA certificate
-openssl req -new -x509 -days 1095 \
+openssl req -new -x509 -days 36500 \
 -subj '/C=SE/ST=Stockholm/L=Stockholm/O=TSCA/CN=TSCA' \
 -key ts_ca.key -out ${CA_CRT}
