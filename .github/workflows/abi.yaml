@@ -15,13 +15,25 @@ on:
     branches:
       - prerelease_test
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   abi_test:
     name: ABI Test ${{ matrix.type}} PG${{ matrix.pg }}
     runs-on: ubuntu-latest
+    needs: config
     strategy:
       fail-fast: false
       matrix:
-        pg: ["12.8","13.4","14.0"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         type: ["min","max"]
 
     steps:
