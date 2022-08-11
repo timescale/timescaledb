@@ -57,9 +57,12 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 	HASHCTL hash_info = {
 		.keysize = sizeof(Oid),
 		.entrysize = sizeof(AllowedFnHashEntry),
+		.hcxt = CurrentMemoryContext,
 	};
-	HTAB *allowed_fns =
-		hash_create("fn telemetry allowed_functions", 1000, &hash_info, HASH_ELEM | HASH_BLOBS);
+	HTAB *allowed_fns = hash_create("fn telemetry allowed_functions",
+									1000,
+									&hash_info,
+									HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 	Relation depRel = table_open(DependRelationId, AccessShareLock);
 
