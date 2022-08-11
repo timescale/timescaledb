@@ -897,6 +897,15 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
+
+	/*
+	 * The sequence number of the compressed tuple is per segment by grouping
+	 * and should be reset when the grouping changes to prevent overflows with
+	 * many segmentby columns.
+	 */
+	if (changed_groups)
+		row_compressor->sequence_num = SEQUENCE_NUM_GAP;
+
 	MemoryContextReset(row_compressor->per_row_ctx);
 }
 
