@@ -12,26 +12,26 @@ jobs:
         with:
           stale-issue-message: 'This issue has been automatically marked as stale due to lack of activity. You can remove the stale label or comment. Otherwise, this issue will be closed in 30 days. Thank you!'
           close-issue-message: 'We are closing this issue due to lack of activity. Feel free to add a comment to this issue if you can provide more information and we will re-open it. Thank you!'
-       
-          # Don't process PRs 
+
+          # Don't process PRs
           days-before-stale: -1
 
           # Process only issues
           days-before-issue-stale: 60
           days-before-issue-close: 30
-          
+
           # Add this label after 'days-before-issue-stale' days to mark it as stale
           stale-issue-label: 'no-activity'
 
           # Process only issues that contain the label 'need-more-info'
           only-labels: 'need-more-info'
-          
+
           # Stale only issues with one of these labels
           any-of-issue-labels: 'bug,enhancement'
-          
+
           # Exclude issues with the 'in-progress' label
           exempt-issue-labels: 'in-progress'
 
-          # Exclude assigned issues         
+          # Exclude assigned issues
           exempt-all-assignees: true
- 
+
