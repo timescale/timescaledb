@@ -22,11 +22,11 @@ import sys
 event_type = sys.argv[1]
 
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.11"
+PG12_LATEST = "12.12"
 PG13_EARLIEST = "13.2"
-PG13_LATEST = "13.7"
+PG13_LATEST = "13.8"
 PG14_EARLIEST = "14.0"
-PG14_LATEST = "14.4"
+PG14_LATEST = "14.5"
 
 m = {"include": [],}
 
@@ -39,7 +39,7 @@ def build_debug_config(overrides):
   # with gcc as clang is used to compile the llvm parts.
   #
   # Strictly speaking, WARNINGS_AS_ERRORS=ON is not needed here, but
-  # we add it as a precation. Intention is to have at least one
+  # we add it as a precaution. Intention is to have at least one
   # release and one debug build with WARNINGS_AS_ERRORS=ON so that we
   # capture warnings generated due to changes in the code base or the
   # compiler.
