@@ -21,7 +21,7 @@ openssl req -new -nodes -key ${DN_KEY} \
 -out ${DN_CSR}
 
 # Sign data node key with CA private key
-openssl x509 -days 1095 \
+openssl x509 -days 36500 \
 -req -in ${DN_CSR} \
 -CA ${CA_CRT} \
 -CAkey ${CA_KEY} -CAcreateserial \
