@@ -5,34 +5,35 @@
 // to be explicit about the memory context our hash tables live in so we enforce
 // usage of the flag.
 @ hash_create @
-expression res;
 position p;
 @@
 
-res@p = hash_create(...);
+hash_create@p(...)
 
 @safelist@
-expression res;
 expression arg1, arg2, arg3;
 expression w1, w2;
-expression flags;
 position hash_create.p;
 @@
 (
-res@p = hash_create(arg1,arg2,arg3, w1 | HASH_CONTEXT | w2);
+hash_create@p(arg1,arg2,arg3, w1 | HASH_CONTEXT | w2)
 |
-res@p = hash_create(arg1,arg2,arg3, w1 | HASH_CONTEXT);
+hash_create@p(arg1,arg2,arg3, w1 | HASH_CONTEXT)
 |
-res@p = hash_create(arg1,arg2,arg3, HASH_CONTEXT | w2 );
-|
-Assert(flags & HASH_CONTEXT);
-res@p = hash_create(arg1,arg2,arg3, flags);
+hash_create@p(arg1,arg2,arg3, HASH_CONTEXT | w2 )
 )
-@ depends on !safelist @
+@safelist2@
 expression res;
+expression arg1, arg2, arg3;
+expression flags;
+position hash_create.p;
+@@
+Assert(flags & HASH_CONTEXT);
+res = hash_create@p(arg1,arg2,arg3, flags);
+@ depends on !safelist && !safelist2 @
 position hash_create.p;
 @@
 
 + /* hash_create without HASH_CONTEXT flag */
-  res@p = hash_create(...);
+  hash_create@p(...)
 
