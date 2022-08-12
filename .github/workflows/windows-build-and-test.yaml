@@ -6,28 +6,57 @@ on:
       - prerelease_test
   pull_request:
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      build_type: ${{ steps.config.outputs.build_type }}
+
+    steps:
+    - name: Build matrix
+      id: config
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "::set-output name=build_type::['Debug']"
+        else
+          echo "::set-output name=build_type::['Debug','Release']"
+        fi
+
   build:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: config
     strategy:
       fail-fast: false
       matrix:
         pg: [ 12, 13, 14 ]
-        os: [ windows-2019 ]
-        build_type: [ Debug, Release ]
+        os: [ windows-2022 ]
+        build_type: ${{ fromJson(needs.config.outputs.build_type) }}
+        tsl_ignores: ["compression_algos dist_partial_agg remote_connection"]
+        tsl_skips: ["bgw_db_scheduler build_info cagg_ddl_dist_ht data_fetcher dist_remote_error remote_txn"]
         include:
           - pg: 12
             pkg_version: 12.12.1
           - pg: 13
             pkg_version: 13.8.1
+            ignores_version: chunk_adaptive metadata
+            tsl_skips_version: dist_grant-13 dist_move_chunk build_info
           - pg: 14
             pkg_version: 14.5.1
-            build_args: -DUSE_OPENSSL=OFF
+            shared_ignores_version: dist_distinct_pushdown ordered_append_join-14
     env:
       # PostgreSQL configuration
-      PGPORT: 6543
+      PGPORT: 55432
       PGDATA: pgdata
+      TABLESPACE1: D:\tablespace1\
+      TABLESPACE2: D:\tablespace2\
     steps:
+    - name: Configure git
+      # Since we want to reuse the checkout in the WSL environment
+      # we have to prevent git from changing the line ending in the
+      # shell scripts as that would break them.
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
     - name: Checkout TimescaleDB source
       uses: actions/checkout@v2
       # Use a cache for the PostgreSQL installation to speed things up
@@ -49,20 +78,108 @@ jobs:
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
         choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
-    - name: Configure [${{ matrix.build_type }}]
-      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" ${{ matrix.build_args}}
-      # Build step: could potentially speed things up with --parallel
-      # <num_cpu> or "-- -m:<num_cpu>", but MSBuild doesn't seem to be
-      # able to realize interdependencies between targets, which leads
-      # to linker failures when a target finished before another one
-      # it depends on.
-    - name: Build [${{ matrix.build_type }}]
-      run: cmake --build ${{ matrix.build_type }} --config ${{ matrix.build_type }}
-    - name: Install [${{ matrix.build_type }}]
-      run: cmake --install ${{ matrix.build_type }} --config ${{ matrix.build_type }}
-    - name: Create DB
-      run: ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust
-    - name: Start PostgreSQL
-      run: ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "-cshared_preload_libraries=timescaledb"
-    - name: Test CREATE EXTENSION
-      run: ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE EXTENSION timescaledb'
+
+    - name: Configure TimescaleDB
+      run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON
+    - name: Build TimescaleDB
+      run: cmake --build build_win --config ${{ matrix.build_type }}
+    - name: Install TimescaleDB
+      run: cmake --install build_win --config ${{ matrix.build_type }}
+
+    - name: Setup postgres cluster
+      if: matrix.pg != '12'
+      run: |
+        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=us --encoding=UTF8
+        mkdir -p ${{ env.TABLESPACE1 }}\_default
+        mkdir -p ${{ env.TABLESPACE2 }}\_default
+        icacls ${{ env.TABLESPACE1 }} /grant runneradmin:F /T
+        icacls ${{ env.TABLESPACE2 }} /grant runneradmin:F /T
+        copy build_win/test/postgresql.conf ${{ env.PGDATA }}
+        copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "-cfsync=off"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;SHOW data_directory;SELECT version();'
+
+    - name: Setup WSL
+      if: matrix.pg != '12'
+      uses: Vampire/setup-wsl@v1
+      with:
+        additional-packages:
+          cmake
+          gcc
+          git
+          gnupg
+          make
+          postgresql-common
+    - name: Install postgres for test runner
+      if: matrix.pg != '12'
+      shell: wsl-bash {0}
+      run: |
+        yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
+        apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
+
+    - name: Run tests
+      if: matrix.pg != '12'
+      shell: wsl-bash {0}
+      run: |
+        export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
+        export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
+        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
+
+        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
+        # to get it for earlier versions so we skip it for < 14.
+        if [[ "${{ matrix.pg }}" == "14" ]]; then
+          make -C build_wsl isolationchecklocal
+        fi
+
+        make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores_version }}"
+
+    - name: Setup postgres cluster for TSL tests
+      if: matrix.pg != '12'
+      run: |
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl stop
+        Remove-Item -Recurse ${{ env.PGDATA }}
+        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=us --encoding=UTF8
+        copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
+        copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "-cfsync=off -clog_filename=postgres.log"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
+
+    - name: Run TSL tests
+      if: matrix.pg != '12'
+      shell: wsl-bash {0}
+      run: |
+        export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
+        export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
+        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
+
+        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
+        # to get it for earlier versions so we skip it for < 14.
+        if [[ "${{ matrix.pg }}" == "14" ]]; then
+          make -C build_wsl isolationchecklocal-t
+        fi
+
+        make -C build_wsl -k regresschecklocal-t IGNORES="${{ matrix.tsl_ignores }}" SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}"
+
+        if [[ "${{ matrix.pg }}" == "14" ]]; then
+          make -C build_wsl -k regresschecklocal-shared IGNORES="${{ matrix.shared_ignores_version }}"
+        fi
+
+    - name: Show regression diffs
+      if: always() && matrix.pg != '12'
+      id: collectlogs
+      shell: wsl-bash {0}
+      run: |
+        find build_wsl -name regression.out -exec cat {} + > installcheck.log
+        find build_wsl -name regression.diffs -exec cat {} + > regression.log
+        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        cat regression.log
+
+    - name: Save regression diffs
+      if: always() && matrix.pg != '12' && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: regression.log
+
