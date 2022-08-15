@@ -87,3 +87,9 @@ WHERE
     num_replicas < desired_num_replicas
 ORDER BY
     chunk_schema, chunk_name;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE view_node_1;
+DROP DATABASE view_node_2;
+DROP DATABASE view_node_3;
+

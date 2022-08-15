@@ -410,3 +410,9 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
 FROM test.show_subtables('disttable') st;
 $$);
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+

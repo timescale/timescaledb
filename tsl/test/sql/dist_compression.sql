@@ -652,3 +652,9 @@ FROM generate_series('2021-08-18 00:00:00'::timestamp,
                     '2021-08-19 00:02:00'::timestamp, '30 s'::interval) s;
 
 SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+

@@ -285,3 +285,7 @@ SELECT add_job('now','12h');
 SELECT alter_job(1,scheduled:=false);
 SELECT delete_job(1);
 
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+

@@ -210,3 +210,7 @@ ORDER BY
  _timescaledb_internal._dist_hyper_1_1_chunk | view_node_2    | view_node_1
 (1 row)
 
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE view_node_1;
+DROP DATABASE view_node_2;
+DROP DATABASE view_node_3;

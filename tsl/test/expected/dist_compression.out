@@ -1473,3 +1473,7 @@ SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
  Wed Aug 18 00:00:00 2021 PDT | 4.14 |      1 | medium_value_text | 
 (1 row)
 
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
