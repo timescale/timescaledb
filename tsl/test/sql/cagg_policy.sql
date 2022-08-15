@@ -52,11 +52,11 @@ SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 1
 SELECT timescaledb_experimental.show_policies('mat_m1');
 
 --Test coverage: new view for policies on CAggs
-SELECT * FROM timescaledb_experimental.policies;
+SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
 
 --Test coverage: new view for policies only shows the policies for  CAggs
 SELECT add_retention_policy('int_tab', 20);
-SELECT * FROM timescaledb_experimental.policies;
+SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
 SELECT remove_retention_policy('int_tab');
 
 -- Alter policies
@@ -230,7 +230,7 @@ SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 
 -- Remove all policies
-SELECT * FROM timescaledb_experimental.policies;
+SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
 SELECT timescaledb_experimental.remove_all_policies(NULL); -- should fail
 SELECT timescaledb_experimental.remove_all_policies('continuous_agg_max_mat_date'); -- should fail
 SELECT timescaledb_experimental.remove_all_policies('max_mat_view_date', false);
