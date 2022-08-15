@@ -22,7 +22,7 @@ SELECT create_hypertable('test1.hyper1', 'time', chunk_time_interval => 10);
 INSERT INTO test1.hyper1 VALUES (10, 0.5);
 
 INSERT INTO test1.hyper1 VALUES (30, 0.5);
-SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME", 
+SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME",
        range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
@@ -60,13 +60,13 @@ INSERT INTO test1.hyper1 VALUES ( 31, 31);
 SELECT * from test1.hyper1 ORDER BY 1;
 
 -- TEST unfreeze frozen chunk and then drop
-SELECT table_name, status 
+SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
 
 SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
 
 --verify status in catalog
-SELECT table_name, status 
+SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
 --unfreezing again works
 SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
@@ -102,16 +102,16 @@ SELECT  decompress_chunk( :'CHNAME');
 --insert into frozen chunk, should fail
 INSERT INTO public.table_to_compress VALUES ('2020-01-01 10:00', 12, 77);
 --touches all chunks
-UPDATE public.table_to_compress SET value = 3; 
---touches only frozen chunk 
-DELETE FROM public.table_to_compress WHERE time < '2020-01-02'; 
+UPDATE public.table_to_compress SET value = 3;
+--touches only frozen chunk
+DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
 \set ON_ERROR_STOP 1
 --try to refreeze
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
 
---touches non-frozen chunk 
+--touches non-frozen chunk
 SELECT * from public.table_to_compress ORDER BY 1, 3;
-DELETE FROM public.table_to_compress WHERE time > '2020-01-02'; 
+DELETE FROM public.table_to_compress WHERE time > '2020-01-02';
 
 SELECT * from public.table_to_compress ORDER BY 1, 3;
 
@@ -205,11 +205,11 @@ INSERT INTO fdw_table VALUES( '2020-01-01 01:00', 100, 1000);
 SELECT current_setting('port') as "PORTNO" \gset
 
 CREATE EXTENSION postgres_fdw;
-CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw 
+CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw
 OPTIONS ( host 'localhost', dbname 'postgres_fdw_db', port :'PORTNO');
 GRANT USAGE ON FOREIGN SERVER s3_server TO :ROLE_4;
 
-CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server 
+CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server
 OPTIONS (  user :'ROLE_4' , password :'ROLE_4_PASS');
 
 ALTER USER MAPPING FOR :ROLE_4 SERVER s3_server
@@ -231,14 +231,14 @@ SELECT * FROM child_fdw_table;
 SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table');
 
 SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'ht_try' ORDER BY 1;
 
 SELECT * FROM ht_try ORDER BY 1;
 
-SELECT relname, relowner FROM pg_class
+SELECT relname, relowner::regrole FROM pg_class
 WHERE relname in ( select chunk_name FROM timescaledb_information.chunks
-                   WHERE hypertable_name = 'ht_try' ); 
+                   WHERE hypertable_name = 'ht_try' );
 
 SELECT inhrelid::regclass
 FROM pg_inherits WHERE inhparent = 'ht_try'::regclass ORDER BY 1;
@@ -258,10 +258,10 @@ SELECT _timescaledb_internal.attach_osm_table_chunk('non_ht', 'child_fdw_table')
 \c :TEST_DBNAME :ROLE_4;
 DROP TABLE ht_try;
 
-SELECT relname FROM pg_class WHERE relname = 'child_fdw_table'; 
+SELECT relname FROM pg_class WHERE relname = 'child_fdw_table';
 
 SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'ht_try' ORDER BY 1;
 
 
@@ -279,7 +279,7 @@ INSERT into disthyper VALUES ('2020-01-01', 10);
 --freeze one of the chunks
 SELECT chunk_schema || '.' ||  chunk_name as "CHNAME3"
 FROM timescaledb_information.chunks
-WHERE hypertable_name = 'disthyper' 
+WHERE hypertable_name = 'disthyper'
 ORDER BY chunk_name LIMIT 1
 \gset
 
@@ -293,10 +293,10 @@ SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME3');
 CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
 INSERT INTO measure VALUES( 1, 'temp');
 
-CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer 
+CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer
                              ,PRIMARY KEY (id, time)
-                             ,FOREIGN KEY ( mid) REFERENCES measure(id) 
-                             ,CHECK ( temp > 10) 
+                             ,FOREIGN KEY ( mid) REFERENCES measure(id)
+                             ,CHECK ( temp > 10)
                            );
 
 SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
@@ -316,11 +316,11 @@ CREATE FOREIGN TABLE child_hyper_constr
 SELECT _timescaledb_internal.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
 
 SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper_constr' ORDER BY 1;
 
 SELECT * FROM hyper_constr order by time;
 
 --verify the check constraint exists on the OSM chunk
-SELECT conname FROM pg_constraint 
+SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;

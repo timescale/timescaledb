@@ -22,7 +22,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO test1.hyper1 VALUES (10, 0.5);
 INSERT INTO test1.hyper1 VALUES (30, 0.5);
-SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME", 
+SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME",
        range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
@@ -91,7 +91,7 @@ SELECT * from test1.hyper1 ORDER BY 1;
 (3 rows)
 
 -- TEST unfreeze frozen chunk and then drop
-SELECT table_name, status 
+SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
     table_name    | status 
 ------------------+--------
@@ -105,7 +105,7 @@ SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
 (1 row)
 
 --verify status in catalog
-SELECT table_name, status 
+SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
     table_name    | status 
 ------------------+--------
@@ -178,10 +178,10 @@ ERROR:  decompress_chunk not permitted on frozen chunk "_hyper_2_3_chunk"
 INSERT INTO public.table_to_compress VALUES ('2020-01-01 10:00', 12, 77);
 ERROR:  Insert not permitted on frozen chunk "_hyper_2_3_chunk" 
 --touches all chunks
-UPDATE public.table_to_compress SET value = 3; 
+UPDATE public.table_to_compress SET value = 3;
 ERROR:  Update not permitted on frozen chunk "_hyper_2_3_chunk" 
---touches only frozen chunk 
-DELETE FROM public.table_to_compress WHERE time < '2020-01-02'; 
+--touches only frozen chunk
+DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
 ERROR:  Delete not permitted on frozen chunk "_hyper_2_3_chunk" 
 \set ON_ERROR_STOP 1
 --try to refreeze
@@ -191,7 +191,7 @@ SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
  t
 (1 row)
 
---touches non-frozen chunk 
+--touches non-frozen chunk
 SELECT * from public.table_to_compress ORDER BY 1, 3;
     time    | acq_id  | value  
 ------------+---------+--------
@@ -200,7 +200,7 @@ SELECT * from public.table_to_compress ORDER BY 1, 3;
  02-10-2020 |    1234 |   5678
 (3 rows)
 
-DELETE FROM public.table_to_compress WHERE time > '2020-01-02'; 
+DELETE FROM public.table_to_compress WHERE time > '2020-01-02';
 SELECT * from public.table_to_compress ORDER BY 1, 3;
     time    | acq_id  | value  
 ------------+---------+--------
@@ -343,10 +343,10 @@ INSERT INTO fdw_table VALUES( '2020-01-01 01:00', 100, 1000);
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT current_setting('port') as "PORTNO" \gset
 CREATE EXTENSION postgres_fdw;
-CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw 
+CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw
 OPTIONS ( host 'localhost', dbname 'postgres_fdw_db', port :'PORTNO');
 GRANT USAGE ON FOREIGN SERVER s3_server TO :ROLE_4;
-CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server 
+CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server
 OPTIONS (  user :'ROLE_4' , password :'ROLE_4_PASS');
 ALTER USER MAPPING FOR :ROLE_4 SERVER s3_server
 OPTIONS (ADD password_required 'false');
@@ -377,7 +377,7 @@ SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table')
 (1 row)
 
 SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'ht_try' ORDER BY 1;
     chunk_name    |           range_start           |            range_end            
 ------------------+---------------------------------+---------------------------------
@@ -392,13 +392,13 @@ SELECT * FROM ht_try ORDER BY 1;
  Tue May 05 01:00:00 2020 PDT |    222 |   222
 (2 rows)
 
-SELECT relname, relowner FROM pg_class
+SELECT relname, relowner::regrole FROM pg_class
 WHERE relname in ( select chunk_name FROM timescaledb_information.chunks
-                   WHERE hypertable_name = 'ht_try' ); 
-     relname      | relowner 
-------------------+----------
- child_fdw_table  |    16392
- _hyper_5_9_chunk |    16392
+                   WHERE hypertable_name = 'ht_try' );
+     relname      |  relowner   
+------------------+-------------
+ child_fdw_table  | test_role_4
+ _hyper_5_9_chunk | test_role_4
 (2 rows)
 
 SELECT inhrelid::regclass
@@ -423,13 +423,13 @@ ERROR:  "non_ht" is not a hypertable
 -- TEST drop the hypertable and make sure foreign chunks are dropped as well --
 \c :TEST_DBNAME :ROLE_4;
 DROP TABLE ht_try;
-SELECT relname FROM pg_class WHERE relname = 'child_fdw_table'; 
+SELECT relname FROM pg_class WHERE relname = 'child_fdw_table';
  relname 
 ---------
 (0 rows)
 
 SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'ht_try' ORDER BY 1;
  chunk_name | range_start | range_end 
 ------------+-------------+-----------
@@ -464,7 +464,7 @@ INSERT into disthyper VALUES ('2020-01-01', 10);
 --freeze one of the chunks
 SELECT chunk_schema || '.' ||  chunk_name as "CHNAME3"
 FROM timescaledb_information.chunks
-WHERE hypertable_name = 'disthyper' 
+WHERE hypertable_name = 'disthyper'
 ORDER BY chunk_name LIMIT 1
 \gset
 \set ON_ERROR_STOP 0
@@ -477,10 +477,10 @@ ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyp
 \c :TEST_DBNAME :ROLE_4
 CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
 INSERT INTO measure VALUES( 1, 'temp');
-CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer 
+CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer
                              ,PRIMARY KEY (id, time)
-                             ,FOREIGN KEY ( mid) REFERENCES measure(id) 
-                             ,CHECK ( temp > 10) 
+                             ,FOREIGN KEY ( mid) REFERENCES measure(id)
+                             ,CHECK ( temp > 10)
                            );
 SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
      create_hypertable     
@@ -505,7 +505,7 @@ SELECT _timescaledb_internal.attach_osm_table_chunk('hyper_constr', 'child_hyper
 (1 row)
 
 SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper_constr' ORDER BY 1;
      chunk_name     | range_start | range_end 
 --------------------+-------------+-----------
@@ -521,7 +521,7 @@ SELECT * FROM hyper_constr order by time;
 (2 rows)
 
 --verify the check constraint exists on the OSM chunk
-SELECT conname FROM pg_constraint 
+SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
          conname         
 -------------------------
