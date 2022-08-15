@@ -32,7 +32,7 @@ jobs:
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.3.2
+        python -m pip install pgspot==0.3.3
 
     - name: Build timescaledb sqlfiles
       run: |
@@ -57,8 +57,5 @@ jobs:
         pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
         # The next pgspot execution tests the downgrade script to the previous version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        # skip this check for 2.6.1 since the search_path in 2.6.1 is not considered safe by pgspot
-        if [ "${downgrade_to}" != "2.6.1" ]; then
-          pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
-        fi
+        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
 
