@@ -34,6 +34,7 @@ sub init
 	# template config file
 	$self->append_conf('postgresql.conf',
 		TestLib::slurp_file("$ENV{'CONFDIR'}/postgresql.conf"));
+	$self->append_conf('postgresql.conf', 'datestyle=ISO');
 }
 
 # helper function to check output from PSQL for a query
