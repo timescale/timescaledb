@@ -737,71 +737,9 @@ get_am_name_for_rel(Oid relid)
 }
 
 static void
-copy_hypertable_acl_to_relid(const Hypertable *ht, Oid owner_id, Oid relid)
+copy_hypertable_acl_to_relid(const Hypertable *ht, const Oid owner_id, const Oid relid)
 {
-	HeapTuple ht_tuple;
-	bool is_null;
-	Datum acl_datum;
-	Relation class_rel;
-
-	/* We open it here since there is no point in trying to update the tuples
-	 * if we cannot open the Relation catalog table */
-	class_rel = table_open(RelationRelationId, RowExclusiveLock);
-
-	ht_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(ht->main_table_relid));
-	Assert(HeapTupleIsValid(ht_tuple));
-
-	/* We only bother about setting the chunk ACL if the hypertable ACL is
-	 * non-null */
-	acl_datum = SysCacheGetAttr(RELOID, ht_tuple, Anum_pg_class_relacl, &is_null);
-	if (!is_null)
-	{
-		HeapTuple chunk_tuple, newtuple;
-		Datum new_val[Natts_pg_class] = { 0 };
-		bool new_null[Natts_pg_class] = { false };
-		bool new_repl[Natts_pg_class] = { false };
-		Acl *acl = DatumGetAclP(acl_datum);
-
-		new_repl[Anum_pg_class_relacl - 1] = true;
-		new_val[Anum_pg_class_relacl - 1] = PointerGetDatum(acl);
-
-		/* Find the tuple for the chunk in `pg_class` */
-		chunk_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-		Assert(HeapTupleIsValid(chunk_tuple));
-
-		/* Update the relacl for the chunk tuple to use the acl from the hypertable */
-		newtuple = heap_modify_tuple(chunk_tuple,
-									 RelationGetDescr(class_rel),
-									 new_val,
-									 new_null,
-									 new_repl);
-		CatalogTupleUpdate(class_rel, &newtuple->t_self, newtuple);
-
-		/* We need to update the shared dependencies as well to indicate that
-		 * the chunk is dependent on any roles that the hypertable is
-		 * dependent on. */
-		Oid *newmembers;
-		int nnewmembers = aclmembers(acl, &newmembers);
-
-		/* The list of old members is intentionally empty since we are using
-		 * updateAclDependencies to set the ACL for the chunk. We can use NULL
-		 * because getOidListDiff, which is called from updateAclDependencies,
-		 * can handle that. */
-		updateAclDependencies(RelationRelationId,
-							  relid,
-							  0,
-							  owner_id,
-							  0,
-							  NULL,
-							  nnewmembers,
-							  newmembers);
-
-		heap_freetuple(newtuple);
-		ReleaseSysCache(chunk_tuple);
-	}
-
-	ReleaseSysCache(ht_tuple);
-	table_close(class_rel, RowExclusiveLock);
+	ts_copy_relation_acl(ht->main_table_relid, relid, owner_id);
 }
 
 /*
@@ -1115,7 +1053,8 @@ chunk_create_table_constraints(const Chunk *chunk)
 								chunk->hypertable_relid,
 								chunk->fd.hypertable_id);
 
-	if (chunk->relkind == RELKIND_RELATION)
+	if (chunk->relkind == RELKIND_RELATION &&
+		!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FOREIGN))
 	{
 		ts_trigger_create_all_on_chunk(chunk);
 		ts_chunk_index_create_all(chunk->fd.hypertable_id,
@@ -4566,13 +4505,22 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* insert dimension slices if they do not exist.
-	 * Then add dimension constraints for the chunk
 	 */
 	ts_dimension_slice_insert_multi(chunk->cube->slices, chunk->cube->num_slices);
-	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	/* check constraints are not automatically created for foreign tables.
 	 * See: ts_chunk_constraints_add_dimension_constraints.
+	 * Collect all the check constraints from the hypertable and add them to the
+	 * foreign table. Otherwise, cannot add as child of the hypertable (pg inheritance
+	 * code will error. Note that the name of the check constraint on the hypertable
+	 * and the foreign table chunk should match.
 	 */
+	ts_chunk_constraints_add_inheritable_check_constraints(chunk->constraints,
+														   chunk->fd.id,
+														   chunk->relkind,
+														   chunk->hypertable_relid);
+	chunk_create_table_constraints(chunk);
+	/* Add dimension constriants for the chunk */
+	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 	chunk_add_inheritance(chunk, parent_ht);
 }

@@ -24,6 +24,7 @@
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <parser/scansup.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/date.h>
@@ -1196,4 +1197,73 @@ ts_alter_table_with_event_trigger(Oid relid, Node *cmd, List *cmds, bool recurse
 	EventTriggerAlterTableStart(cmd);
 	AlterTableInternal(relid, cmds, recurse);
 	EventTriggerAlterTableEnd();
+}
+
+void
+ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid owner_id)
+{
+	HeapTuple source_tuple;
+	bool is_null;
+	Datum acl_datum;
+	Relation class_rel;
+
+	/* We open it here since there is no point in trying to update the tuples
+	 * if we cannot open the Relation catalog table */
+	class_rel = table_open(RelationRelationId, RowExclusiveLock);
+
+	source_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(source_relid));
+	Assert(HeapTupleIsValid(source_tuple));
+
+	/* We only bother about setting the ACL if the source relation ACL is
+	 * non-null */
+	acl_datum = SysCacheGetAttr(RELOID, source_tuple, Anum_pg_class_relacl, &is_null);
+
+	if (!is_null)
+	{
+		HeapTuple target_tuple, newtuple;
+		Datum new_val[Natts_pg_class] = { 0 };
+		bool new_null[Natts_pg_class] = { false };
+		bool new_repl[Natts_pg_class] = { false };
+		Acl *acl = DatumGetAclP(acl_datum);
+
+		new_repl[Anum_pg_class_relacl - 1] = true;
+		new_val[Anum_pg_class_relacl - 1] = PointerGetDatum(acl);
+
+		/* Find the tuple for the target in `pg_class` */
+		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));
+		Assert(HeapTupleIsValid(target_tuple));
+
+		/* Update the relacl for the target tuple to use the acl from the source */
+		newtuple = heap_modify_tuple(target_tuple,
+									 RelationGetDescr(class_rel),
+									 new_val,
+									 new_null,
+									 new_repl);
+		CatalogTupleUpdate(class_rel, &newtuple->t_self, newtuple);
+
+		/* We need to update the shared dependencies as well to indicate that
+		 * the target is dependent on any roles that the source is
+		 * dependent on. */
+		Oid *newmembers;
+		int nnewmembers = aclmembers(acl, &newmembers);
+
+		/* The list of old members is intentionally empty since we are using
+		 * updateAclDependencies to set the ACL for the target. We can use NULL
+		 * because getOidListDiff, which is called from updateAclDependencies,
+		 * can handle that. */
+		updateAclDependencies(RelationRelationId,
+							  target_relid,
+							  0,
+							  owner_id,
+							  0,
+							  NULL,
+							  nnewmembers,
+							  newmembers);
+
+		heap_freetuple(newtuple);
+		ReleaseSysCache(target_tuple);
+	}
+
+	ReleaseSysCache(source_tuple);
+	table_close(class_rel, RowExclusiveLock);
 }

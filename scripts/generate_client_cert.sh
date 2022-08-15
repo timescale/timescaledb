@@ -19,7 +19,7 @@ openssl req -new -key ${CLIENT_KEY} \
 -out ${CLIENT_CSR}
 
 # Generate client certificate
-openssl x509 -days 1095 -req -in ${CLIENT_CSR} \
+openssl x509 -days 36500 -req -in ${CLIENT_CSR} \
 -CA ${CA_CRT} \
 -CAkey ${CA_KEY} \
 -CAcreateserial \

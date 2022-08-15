@@ -198,5 +198,7 @@ extern TSDLLEXPORT const char *ts_get_node_name(Node *node);
 extern TSDLLEXPORT int ts_get_relnatts(Oid relid);
 extern TSDLLEXPORT void ts_alter_table_with_event_trigger(Oid relid, Node *cmd, List *cmds,
 														  bool recurse);
+extern TSDLLEXPORT void ts_copy_relation_acl(const Oid source_relid, const Oid target_relid,
+											 const Oid owner_id);
 
 #endif /* TIMESCALEDB_UTILS_H */

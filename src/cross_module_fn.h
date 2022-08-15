@@ -53,6 +53,12 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_retention_proc;
 	PGFunction policy_retention_remove;
 
+	PGFunction policies_add;
+	PGFunction policies_remove;
+	PGFunction policies_remove_all;
+	PGFunction policies_alter;
+	PGFunction policies_show;
+
 	PGFunction job_add;
 	PGFunction job_alter;
 	PGFunction job_alter_set_hypertable_id;

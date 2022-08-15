@@ -287,4 +287,40 @@ ORDER BY chunk_name LIMIT 1
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME3');
 SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME3');
 \set ON_ERROR_STOP 1
-SET ROLE :ROLE_DEFAULT_PERM_USER
+
+-- TEST can create OSM chunk if there are constraints on the hypertable
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
+INSERT INTO measure VALUES( 1, 'temp');
+
+CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer 
+                             ,PRIMARY KEY (id, time)
+                             ,FOREIGN KEY ( mid) REFERENCES measure(id) 
+                             ,CHECK ( temp > 10) 
+                           );
+
+SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
+INSERT INTO hyper_constr VALUES( 10, 200, 22, 1);
+
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer);
+INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 1);
+
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_hyper_constr
+( id integer NOT NULL, time bigint NOT NULL, temp float, mid integer)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_constr');
+
+--check constraints are automatically added for the foreign table
+SELECT _timescaledb_internal.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'hyper_constr' ORDER BY 1;
+
+SELECT * FROM hyper_constr order by time;
+
+--verify the check constraint exists on the OSM chunk
+SELECT conname FROM pg_constraint 
+where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;

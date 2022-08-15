@@ -473,4 +473,58 @@ ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyp
 SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME3');
 ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyper_6_11_chunk"
 \set ON_ERROR_STOP 1
-SET ROLE :ROLE_DEFAULT_PERM_USER
+-- TEST can create OSM chunk if there are constraints on the hypertable
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
+INSERT INTO measure VALUES( 1, 'temp');
+CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer 
+                             ,PRIMARY KEY (id, time)
+                             ,FOREIGN KEY ( mid) REFERENCES measure(id) 
+                             ,CHECK ( temp > 10) 
+                           );
+SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
+     create_hypertable     
+---------------------------
+ (7,public,hyper_constr,t)
+(1 row)
+
+INSERT INTO hyper_constr VALUES( 10, 200, 22, 1);
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer);
+INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 1);
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_hyper_constr
+( id integer NOT NULL, time bigint NOT NULL, temp float, mid integer)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_constr');
+--check constraints are automatically added for the foreign table
+SELECT _timescaledb_internal.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
+ attach_osm_table_chunk 
+------------------------
+ t
+(1 row)
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'hyper_constr' ORDER BY 1;
+     chunk_name     | range_start | range_end 
+--------------------+-------------+-----------
+ _hyper_7_12_chunk  |             | 
+ child_hyper_constr |             | 
+(2 rows)
+
+SELECT * FROM hyper_constr order by time;
+ id | time | temp | mid 
+----+------+------+-----
+ 10 |  100 |   33 |   1
+ 10 |  200 |   22 |   1
+(2 rows)
+
+--verify the check constraint exists on the OSM chunk
+SELECT conname FROM pg_constraint 
+where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
+         conname         
+-------------------------
+ hyper_constr_temp_check
+(1 row)
+

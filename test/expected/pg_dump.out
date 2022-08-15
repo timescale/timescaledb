@@ -558,6 +558,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         ORDER BY objid::text DESC;
                        objid                       
 ---------------------------------------------------
+ timescaledb_experimental.policies
  timescaledb_experimental.chunk_replication_status
  timescaledb_information.compression_settings
  timescaledb_information.dimensions
@@ -575,7 +576,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  _timescaledb_internal.bgw_policy_chunk_stats
  _timescaledb_internal.bgw_job_stat
  _timescaledb_catalog.tablespace_id_seq
-(17 rows)
+(18 rows)
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
