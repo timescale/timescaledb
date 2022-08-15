@@ -686,3 +686,9 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamptz',
 
 -- Clean up
 DROP TABLE conditions_timestamptz CASCADE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+

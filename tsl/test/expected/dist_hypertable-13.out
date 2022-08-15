@@ -3776,21 +3776,6 @@ INSERT INTO hyper_estimate VALUES
        ('2018-01-13 05:01', 2, 2),
        ('2018-01-13 05:50', 2, 4),
        ('2018-01-13 16:01', 3, 2);
--- Since there are no stats we use shared buffers size to estimate number of rows
-EXPLAIN (COSTS ON)
-SELECT *
-FROM hyper_estimate;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
- Append  (cost=100.00..455110.20 rows=4118040 width=20)
-   ->  Foreign Scan on _dist_hyper_16_38_chunk  (cost=100.00..96527.00 rows=915120 width=20)
-   ->  Foreign Scan on _dist_hyper_16_39_chunk  (cost=100.00..96527.00 rows=915120 width=20)
-   ->  Foreign Scan on _dist_hyper_16_40_chunk  (cost=100.00..96527.00 rows=915120 width=20)
-   ->  Foreign Scan on _dist_hyper_16_41_chunk  (cost=100.00..48313.00 rows=457560 width=20)
-   ->  Foreign Scan on _dist_hyper_16_42_chunk  (cost=100.00..48313.00 rows=457560 width=20)
-   ->  Foreign Scan on _dist_hyper_16_43_chunk  (cost=100.00..48313.00 rows=457560 width=20)
-(7 rows)
-
 -- This will calculate the stats
 ANALYZE hyper_estimate;
 EXPLAIN (COSTS ON)

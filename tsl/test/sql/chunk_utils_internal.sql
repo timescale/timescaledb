@@ -324,3 +324,10 @@ SELECT * FROM hyper_constr order by time;
 --verify the check constraint exists on the OSM chunk
 SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
+
+-- clean up databases created
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE postgres_fdw_db;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+

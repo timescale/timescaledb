@@ -342,3 +342,6 @@ SELECT alter_job(1,scheduled:=false);
 ERROR:  cannot execute alter_job() in a read-only transaction
 SELECT delete_job(1);
 ERROR:  cannot execute delete_job() in a read-only transaction
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;

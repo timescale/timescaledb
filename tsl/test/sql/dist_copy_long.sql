@@ -76,3 +76,9 @@ select count(*) from uk_price_paid;
 truncate uk_price_paid;
 
 reset timescaledb.max_open_chunks_per_insert;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
+

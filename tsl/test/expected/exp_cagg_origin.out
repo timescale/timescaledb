@@ -1140,3 +1140,7 @@ DROP TABLE conditions_timestamptz CASCADE;
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_248_chunk
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

@@ -528,3 +528,8 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
  hyper_constr_temp_check
 (1 row)
 
+-- clean up databases created
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE postgres_fdw_db;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
