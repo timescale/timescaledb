@@ -535,8 +535,6 @@ get_reindex_options(ReindexStmt *stmt)
 	make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock)
 #endif
 
-#endif /* TIMESCALEDB_COMPAT_H */
-
 /*
  * PostgreSQL < 14 does not have F_TIMESTAMPTZ_GT macro but instead has
  * the oid of that function as F_TIMESTAMP_GT even though the signature
@@ -547,3 +545,25 @@ get_reindex_options(ReindexStmt *stmt)
 #define F_TIMESTAMPTZ_GE F_TIMESTAMP_GE
 #define F_TIMESTAMPTZ_GT F_TIMESTAMP_GT
 #endif
+
+/*
+ * PostgreSQL 15 removed "utils/int8.h" header and change the "scanint8"
+ * function to "pg_strtoint64" in "utils/builtins.h".
+ *
+ * https://github.com/postgres/postgres/commit/cfc7191dfea330dd7a71e940d59de78129bb6175
+ */
+#if PG15_LT
+#include <utils/int8.h>
+static inline int64
+pg_strtoint64(const char *str)
+{
+	int64 result;
+	scanint8(str, false, &result);
+
+	return result;
+}
+#else
+#include <utils/builtins.h>
+#endif
+
+#endif /* TIMESCALEDB_COMPAT_H */

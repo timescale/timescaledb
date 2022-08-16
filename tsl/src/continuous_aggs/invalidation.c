@@ -5,7 +5,6 @@
  */
 #include <postgres.h>
 #include <utils/builtins.h>
-#include <utils/int8.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
@@ -29,6 +28,7 @@
 #include <time_bucket.h>
 #include <hypertable_cache.h>
 
+#include "compat/compat.h"
 #include "remote/dist_commands.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
@@ -1452,8 +1452,8 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 				Assert(PQgetisnull(result, 0, 1));
 				continue;
 			}
-			scanint8(PQgetvalue(result, 0, 0), false, &start_time);
-			scanint8(PQgetvalue(result, 0, 1), false, &end_time);
+			start_time = pg_strtoint64(PQgetvalue(result, 0, 0));
+			end_time = pg_strtoint64(PQgetvalue(result, 0, 1));
 			elog(DEBUG1,
 				 "merged invalidations for refresh on [" INT64_FORMAT ", " INT64_FORMAT "] from %s",
 				 start_time,
