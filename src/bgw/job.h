@@ -41,12 +41,10 @@ extern TimestampTz ts_bgw_job_timeout_at(BgwJob *job, TimestampTz start_time);
 
 extern TSDLLEXPORT bool ts_bgw_job_delete_by_id(int32 job_id);
 extern TSDLLEXPORT bool ts_bgw_job_update_by_id(int32 job_id, BgwJob *job);
-extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name,
-													Interval *schedule_interval,
-													Interval *max_runtime, int32 max_retries,
-													Interval *retry_period, Name proc_schema,
-													Name proc_name, Name owner, bool scheduled,
-													int32 hypertable_id, Jsonb *config);
+extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(
+	Name application_name, Interval *schedule_interval, Interval *max_runtime, int32 max_retries,
+	Interval *retry_period, Name proc_schema, Name proc_name, Name owner, bool scheduled,
+	bool fixed_schedule, int32 hypertable_id, Jsonb *config);
 extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
 
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);

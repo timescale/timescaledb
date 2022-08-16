@@ -20,6 +20,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw/job_stat.h"
 
 /* Default max runtime is unlimited for compress chunks */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -158,7 +159,8 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 								Oid compress_after_type, Interval *default_schedule_interval,
-								bool user_defined_schedule_interval, bool if_not_exists)
+								bool user_defined_schedule_interval, bool if_not_exists,
+								bool fixed_schedule)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
@@ -297,6 +299,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										&proc_name,
 										&owner,
 										true,
+										fixed_schedule,
 										hypertable->fd.id,
 										config);
 
@@ -322,15 +325,25 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
 	Interval *default_schedule_interval =
 		PG_ARGISNULL(3) ? DEFAULT_COMPRESSION_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
+	bool fixed_schedule = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	return policy_compression_add_internal(user_rel_oid,
-										   compress_after_datum,
-										   compress_after_type,
-										   default_schedule_interval,
-										   user_defined_schedule_interval,
-										   if_not_exists);
+	Datum retval;
+	retval = policy_compression_add_internal(user_rel_oid,
+											 compress_after_datum,
+											 compress_after_type,
+											 default_schedule_interval,
+											 user_defined_schedule_interval,
+											 if_not_exists,
+											 fixed_schedule);
+	if (!PG_ARGISNULL(4))
+	{
+		int32 job_id = DatumGetInt32(retval);
+		TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(4);
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
+	return retval;
 }
 
 bool

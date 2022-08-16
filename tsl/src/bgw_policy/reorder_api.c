@@ -240,6 +240,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										&proc_name,
 										&owner,
 										true,
+										false,
 										hypertable_id,
 										config);
 

@@ -34,6 +34,7 @@
  * 2 config JSONB DEFAULT NULL,
  * 3 initial_start TIMESTAMPTZ DEFAULT NULL,
  * 4 scheduled BOOL DEFAULT true
+ * 5 fixed_schedule BOOL DEFAULT false
  * ) RETURNS INTEGER
  */
 Datum
@@ -53,6 +54,7 @@ job_add(PG_FUNCTION_ARGS)
 	Interval *schedule_interval = PG_ARGISNULL(1) ? NULL : PG_GETARG_INTERVAL_P(1);
 	Jsonb *config = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
+	bool fixed_schedule = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -99,6 +101,7 @@ job_add(PG_FUNCTION_ARGS)
 										&proc_name,
 										&owner_name,
 										scheduled,
+										fixed_schedule,
 										0,
 										config);
 

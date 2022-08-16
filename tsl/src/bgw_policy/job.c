@@ -579,12 +579,12 @@ job_execute(BgwJob *job)
 	Portal portal = ActivePortal;
 
 	if (job->fd.config)
-		elog(DEBUG1,
+		elog(LOG,
 			 "Executing %s with parameters %s",
 			 NameStr(job->fd.proc_name),
 			 DatumGetCString(DirectFunctionCall1(jsonb_out, JsonbPGetDatum(job->fd.config))));
 	else
-		elog(DEBUG1, "Executing %s with no parameters", NameStr(job->fd.proc_name));
+		elog(LOG, "Executing %s with no parameters", NameStr(job->fd.proc_name));
 	/* Create a portal if there's no active */
 	if (!PortalIsValid(portal))
 	{

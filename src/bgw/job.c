@@ -1001,7 +1001,7 @@ int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name owner, bool scheduled,
-						   int32 hypertable_id, Jsonb *config)
+						   bool fixed_schedule, int32 hypertable_id, Jsonb *config)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -1034,6 +1034,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 	else
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = JsonbPGetDatum(config);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = BoolGetDatum(fixed_schedule);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 

@@ -10,3 +10,7 @@ CREATE TABLE _timescaledb_catalog.dimension_partition (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_partition', '');
 GRANT SELECT ON _timescaledb_catalog.dimension_partition TO PUBLIC;
 DROP FUNCTION IF EXISTS @extschema@.remove_continuous_aggregate_policy(REGCLASS, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "any", INTERVAL, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, INTERVAL);
