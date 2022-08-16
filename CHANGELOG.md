@@ -15,11 +15,13 @@ accidentally triggering the load of a previous DB version.**
 * #4486 Adding boolean column with default value doesn't work on compressed table
 * #4555 Handle properly default privileges on Continuous Aggregates
 * #4575 Fix use of `get_partition_hash` and `get_partition_for_key` inside an IMMUTABLE function
+* #4416 Handle TRUNCATE TABLE on chunks
 
 **Thanks**
 @janko for reporting
 @AlmiS for reporting error on `get_partition_hash` executed inside an IMMUTABLE function
 @michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
+@jayadevanm for reporting error of TRUNCATE TABLE on compressed chunk
 
 ## 2.7.2 (2022-07-26)
 

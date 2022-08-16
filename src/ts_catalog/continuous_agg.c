@@ -31,6 +31,7 @@
 #include "bgw/job.h"
 #include "ts_catalog/continuous_agg.h"
 #include "cross_module_fn.h"
+#include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "scan_iterator.h"
@@ -1349,6 +1350,17 @@ ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
 		raw_htid = find_raw_hypertable_for_materialization(mat_htid);
 	}
 	return par_dim;
+}
+
+TSDLLEXPORT void
+ts_continuous_agg_invalidate_chunk(Hypertable *ht, Chunk *chunk)
+{
+	int64 start = ts_chunk_primary_dimension_start(chunk);
+	int64 end = ts_chunk_primary_dimension_end(chunk);
+
+	Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
+		   chunk->cube->slices[0]->fd.dimension_id);
+	ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 }
 
 typedef struct Watermark

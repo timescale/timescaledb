@@ -635,6 +635,48 @@ SELECT * FROM hyper_invals;
         2 |    30 |  80
 (2 rows)
 
+-- Pick the first chunk of conditions to TRUNCATE
+SELECT show_chunks AS chunk_to_truncate
+FROM show_chunks('conditions')
+ORDER BY 1
+LIMIT 1 \gset
+-- Show the data before truncating one of the chunks
+SELECT * FROM :chunk_to_truncate
+ORDER BY 1;
+ time | device | temp 
+------+--------+------
+    1 |      4 | 23.7
+    1 |      0 |   16
+    2 |      2 | 23.5
+    2 |      1 |   25
+    3 |      2 | 23.5
+    3 |      0 |   20
+    4 |      2 |   10
+    5 |      2 |   26
+    6 |      1 |   13
+    7 |      3 |   35
+    8 |      1 |   37
+    9 |      3 |    7
+(12 rows)
+
+-- Truncate one chunk
+\if :IS_DISTRIBUTED
+-- There is no TRUNCATE implementation for FOREIGN tables yet
+\set ON_ERROR_STOP 0
+\endif
+TRUNCATE TABLE :chunk_to_truncate;
+psql:include/cagg_invalidation_common.sql:352: ERROR:  cannot truncate foreign table "_dist_hyper_1_1_chunk"
+\if :IS_DISTRIBUTED
+\set ON_ERROR_STOP 1
+\endif
+-- Should see new invalidation entries for conditions for the non-distributed case
+SELECT * FROM hyper_invals;
+ hyper_id | start | end 
+----------+-------+-----
+        2 |    20 |  20
+        2 |    30 |  80
+(2 rows)
+
 -- TRUNCATE the hypertable to invalidate all its continuous aggregates
 TRUNCATE conditions;
 -- Now empty
@@ -732,7 +774,7 @@ ORDER BY 1,2;
 -- TRUNCATE ONLY
 \set ON_ERROR_STOP 0
 TRUNCATE ONLY cond_20;
-psql:include/cagg_invalidation_common.sql:385: ERROR:  cannot truncate only a continuous aggregate
+psql:include/cagg_invalidation_common.sql:408: ERROR:  cannot truncate only a continuous aggregate
 \set ON_ERROR_STOP 1
 TRUNCATE cond_20;
 -- Should now be empty
@@ -980,7 +1022,7 @@ ORDER BY 1,2;
 CREATE table threshold_test (time int, value int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('threshold_test', 'time', chunk_time_interval => 4, replication_factor => 2);
-psql:include/cagg_invalidation_common.sql:542: NOTICE:  adding not-null constraint to column "time"
+psql:include/cagg_invalidation_common.sql:565: NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
  (7,public,threshold_test,t)
@@ -1024,7 +1066,7 @@ SELECT _timescaledb_internal.invalidation_hyper_log_add_entry(:thresh_hyper_id, 
 -- and we specify an infinite end. Note that the min value may differ
 -- depending on time type.
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
-psql:include/cagg_invalidation_common.sql:576: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
+psql:include/cagg_invalidation_common.sql:599: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
@@ -1050,13 +1092,13 @@ ORDER BY 1,2;
 -- Refresh where both the start and end of the window is above the
 -- max data value
 CALL refresh_continuous_aggregate('thresh_2', 14, NULL);
-psql:include/cagg_invalidation_common.sql:596: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
+psql:include/cagg_invalidation_common.sql:619: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 SELECT watermark AS thresh_hyper_id_watermark
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id \gset
 -- Refresh where we start from the current watermark to infinity
 CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_watermark, NULL);
-psql:include/cagg_invalidation_common.sql:603: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
+psql:include/cagg_invalidation_common.sql:626: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 -- Now refresh with max end of the window to test that the
 -- invalidation threshold is capped at the last bucket of data
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
@@ -1258,7 +1300,7 @@ INSERT INTO conditions VALUES(3, 1, 1.0);
 INSERT INTO conditions VALUES(4, 1, 1.0);
 INSERT INTO conditions VALUES(6, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_1', 10, NULL);
-psql:include/cagg_invalidation_common.sql:725: NOTICE:  continuous aggregate "cond_1" is already up-to-date
+psql:include/cagg_invalidation_common.sql:748: NOTICE:  continuous aggregate "cond_1" is already up-to-date
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
  cagg_id | start |         end         
@@ -1284,7 +1326,7 @@ INSERT INTO conditions VALUES (40, 1, 1.0);
 -- Refresh to process invalidations, but outside the range of
 -- invalidations we inserted so that we don't clear them.
 CALL refresh_continuous_aggregate('cond_10', 50, 60);
-psql:include/cagg_invalidation_common.sql:746: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:769: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT mat_hypertable_id AS cond_10_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_10' \gset
@@ -1327,17 +1369,17 @@ CALL refresh_continuous_aggregate('cond_10', 0, 200);
 SET timescaledb.materializations_per_refresh_window='foo';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/cagg_invalidation_common.sql:785: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/cagg_invalidation_common.sql:808: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "foo".
 SET timescaledb.materializations_per_refresh_window='2bar';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/cagg_invalidation_common.sql:788: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/cagg_invalidation_common.sql:811: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "2bar".
 SET timescaledb.materializations_per_refresh_window='-';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/cagg_invalidation_common.sql:792: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/cagg_invalidation_common.sql:815: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "-".
 \set VERBOSITY terse
 -- cleanup
