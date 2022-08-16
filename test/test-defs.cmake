@@ -42,6 +42,13 @@ set(TEST_SCHEDULE_SHARED
 set(ISOLATION_TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/isolation_test_schedule)
 set(TEST_PASSFILE ${TEST_OUTPUT_DIR}/pgpass.conf)
 
+# Windows does not support local connections (unix domain sockets)
+if(WIN32)
+  set(TEST_HBA_LOCAL "#local")
+else()
+  set(TEST_HBA_LOCAL "local")
+endif()
+
 configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
 set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
 
