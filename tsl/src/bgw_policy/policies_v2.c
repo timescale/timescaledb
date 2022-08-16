@@ -77,7 +77,6 @@ bool
 validate_and_create_policies(policies_info all_policies, bool if_exists)
 {
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
-	bool error = false;
 	int64 refresh_interval = 0, compress_after = 0, drop_after = 0, drop_after_HT = 0;
 	int64 start_offset = 0, end_offset = 0, refresh_window_size = 0, refresh_total_interval = 0;
 	List *jobs = NIL;
@@ -167,33 +166,13 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	if (all_policies.refresh && all_policies.compress)
 	{
 		/* Check if refresh policy does not overlap with compression */
-		if (IS_INTEGER_TYPE(all_policies.partition_type))
-		{
-			if (refresh_total_interval > compress_after)
-				error = true;
-		}
-		else
-		{
-			if (refresh_total_interval > compress_after)
-				error = true;
-		}
-		if (error)
+		if (refresh_total_interval > compress_after)
 			emit_error(err_refresh_compress_overlap);
 	}
 	if (all_policies.refresh && all_policies.retention)
 	{
-		/* Check if refresh policy does not overlap with compression */
-		if (IS_INTEGER_TYPE(all_policies.partition_type))
-		{
-			if (refresh_total_interval > drop_after)
-				error = true;
-		}
-		else
-		{
-			if (refresh_total_interval > drop_after)
-				error = true;
-		}
-		if (error)
+		/* Check if refresh policy does not overlap with retention */
+		if (refresh_total_interval > drop_after)
 			emit_error(err_refresh_reten_overlap);
 	}
 	if (all_policies.retention && all_policies.compress)
