@@ -1,8 +1,8 @@
 # TYPE  DATABASE        USER                                ADDRESS                 METHOD
 
 # "local" is for Unix domain socket connections only
-local   all             all                                                         trust
-local   replication     all                                                         trust
+@TEST_HBA_LOCAL@   all             all                                                         trust
+@TEST_HBA_LOCAL@   replication     all                                                         trust
 # IPv4 local connections:
 hostssl  all             @TEST_ROLE_CLUSTER_SUPERUSER@  127.0.0.1/32           cert clientcert=verify-full
 hostssl  all             @TEST_ROLE_1@                  127.0.0.1/32           cert clientcert=verify-full
