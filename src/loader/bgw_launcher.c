@@ -293,12 +293,14 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 static HTAB *
 init_database_htab(void)
 {
-	HASHCTL info = { .keysize = sizeof(Oid), .entrysize = sizeof(DbHashEntry) };
+	HASHCTL info = { .keysize = sizeof(Oid),
+					 .entrysize = sizeof(DbHashEntry),
+					 .hcxt = TopMemoryContext };
 
 	return hash_create("launcher_db_htab",
 					   ts_guc_max_background_workers,
 					   &info,
-					   HASH_BLOBS | HASH_ELEM);
+					   HASH_BLOBS | HASH_CONTEXT | HASH_ELEM);
 }
 
 /* Insert a scheduler entry into the hash table. Correctly set entry values. */
