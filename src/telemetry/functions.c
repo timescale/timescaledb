@@ -187,8 +187,17 @@ ts_function_telemetry_read(const char **visible_extensions, int num_visible_exte
 	fn_telemetry_entry_vec *all_entries;
 	HTAB *allowed_ext_fns;
 
-	if (!function_counts)
-		return NULL;
+	if (function_counts == NULL)
+	{
+		FnTelemetryRendezvous **rendezvous =
+			(FnTelemetryRendezvous **) find_rendezvous_variable(RENDEZVOUS_FUNCTION_TELEMENTRY);
+
+		if (*rendezvous == NULL)
+			return NULL;
+
+		function_counts = (*rendezvous)->function_counts;
+		function_counts_lock = (*rendezvous)->lock;
+	}
 
 	all_entries = read_shared_map();
 	entries_to_send =
