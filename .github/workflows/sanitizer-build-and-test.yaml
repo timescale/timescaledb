@@ -36,15 +36,27 @@ env:
   LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt print_suppressions=0 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   sanitizer:
     name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: config
     strategy:
       fail-fast: false
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
         os: ["ubuntu-20.04"]
-        pg: ["12.11","13.7","14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Install Linux Dependencies
       run: |

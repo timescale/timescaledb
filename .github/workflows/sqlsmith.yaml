@@ -8,13 +8,25 @@ on:
     branches:
       - sqlsmith
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg14_latest: ${{ steps.setter.outputs.PG14_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   regress:
     name: SQLsmith PG${{ matrix.pg }}
     runs-on: ${{ matrix.os }}
+    needs: config
     strategy:
       matrix:
         os: ["ubuntu-20.04"]
-        pg: ["14.4"]
+        pg: [ "${{ fromJson(needs.config.outputs.pg14_latest) }}" ]
         cc: ["gcc"]
         build_type: ["Debug"]
       fail-fast: false

@@ -8,12 +8,24 @@ on:
       - prerelease_test
   pull_request:
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   update_test:
     name: Update test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
+    needs: config
     strategy:
       matrix:
-        pg: ["12.11", "13.7", "14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -42,9 +54,10 @@ jobs:
   downgrade_test:
     name: Downgrade test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
+    needs: config
     strategy:
       matrix:
-        pg: ["12.11", "13.7", "14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}

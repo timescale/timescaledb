@@ -7,13 +7,25 @@ on:
     branches:
       - coverity_scan
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   coverity:
     name: Coverity ${{ matrix.pg }}
     runs-on: ${{ matrix.os }}
+    needs: config
     strategy:
       fail-fast: false
       matrix:
-        pg: ["12.11", "13.7", "14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         os: [ubuntu-20.04]
     env:
       PG_SRC_DIR: pgbuild
