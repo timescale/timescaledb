@@ -53,7 +53,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl_dist_ht.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
-    cagg_invalidation_dist_ht.sql
     cagg_multi.sql
     continuous_aggs.sql
     continuous_aggs_deprecated.sql
@@ -129,8 +128,14 @@ set(TEST_TEMPLATES
     transparent_decompression_ordered_index.sql.in)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES cagg_query.sql.in dist_hypertable.sql.in
-       remote_copy.sql.in dist_grant.sql.in)
+  list(
+    APPEND
+    TEST_TEMPLATES
+    cagg_query.sql.in
+    dist_hypertable.sql.in
+    remote_copy.sql.in
+    dist_grant.sql.in
+    cagg_invalidation_dist_ht.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support

@@ -1001,7 +1001,7 @@ process_truncate(ProcessUtilityArgs *args)
 	List *hypertables = NIL;
 	List *relations = NIL;
 	bool list_changed = false;
-	MemoryContext parsetreectx = GetMemoryChunkContext(args->parsetree);
+	MemoryContext oldctx, parsetreectx = GetMemoryChunkContext(args->parsetree);
 
 	/* For all hypertables, we drop the now empty chunks. We also propagate the
 	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
@@ -1037,7 +1037,6 @@ process_truncate(ProcessUtilityArgs *args)
 					if (cagg)
 					{
 						Hypertable *mat_ht, *raw_ht;
-						MemoryContext oldctx;
 
 						if (!relation_should_recurse(rv))
 							ereport(ERROR,
@@ -1071,13 +1070,14 @@ process_truncate(ProcessUtilityArgs *args)
 					break;
 				}
 				case RELKIND_RELATION:
+				/* TRUNCATE for foreign tables not implemented yet. This will raise an error. */
+				case RELKIND_FOREIGN_TABLE:
 				{
 					Hypertable *ht =
 						ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+					Chunk *chunk;
 
-					if (!ht)
-						list_append = true;
-					else
+					if (ht)
 					{
 						ContinuousAggHypertableStatus agg_status;
 
@@ -1114,6 +1114,38 @@ process_truncate(ProcessUtilityArgs *args)
 							 */
 							list_changed = true;
 					}
+					else if ((chunk = ts_chunk_get_by_relid(relid, false)) != NULL)
+					{ /* this is a chunk */
+						ht = ts_hypertable_cache_get_entry(hcache,
+														   chunk->hypertable_relid,
+														   CACHE_FLAG_NONE);
+
+						Assert(ht != NULL);
+
+						/* If the hypertable has continuous aggregates, then invalidate
+						 * the truncated region. */
+						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+							ts_continuous_agg_invalidate_chunk(ht, chunk);
+						/* Truncate the compressed chunk too. */
+						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+						{
+							Chunk *compressed_chunk =
+								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+							if (compressed_chunk != NULL)
+							{
+								/* Create list item into the same context of the list. */
+								oldctx = MemoryContextSwitchTo(parsetreectx);
+								rv = makeRangeVar(NameStr(compressed_chunk->fd.schema_name),
+												  NameStr(compressed_chunk->fd.table_name),
+												  -1);
+								MemoryContextSwitchTo(oldctx);
+								list_changed = true;
+							}
+						}
+						list_append = true;
+					}
+					else
+						list_append = true;
 					break;
 				}
 			}
@@ -1234,14 +1266,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			/* If the hypertable has continuous aggregates, then invalidate
 			 * the dropped region. */
 			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
-			{
-				int64 start = ts_chunk_primary_dimension_start(chunk);
-				int64 end = ts_chunk_primary_dimension_end(chunk);
-
-				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
-					   chunk->cube->slices[0]->fd.dimension_id);
-				ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
-			}
+				ts_continuous_agg_invalidate_chunk(ht, chunk);
 		}
 	}
 
