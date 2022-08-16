@@ -260,22 +260,22 @@ create_dimension_partition_tuple(Relation rel, const DimensionPartition *dp)
 	}
 	else
 	{
-		Datum *dn_datums = palloc(sizeof(Datum) * list_length(dp->data_nodes));
+		int data_nodes_len = list_length(dp->data_nodes);
+		Datum *dn_datums = palloc(sizeof(Datum) * data_nodes_len);
+		NameData *dn_names = palloc(NAMEDATALEN * data_nodes_len);
 		ArrayType *dn_arr;
 		ListCell *lc;
 
 		foreach (lc, dp->data_nodes)
 		{
 			const char *dn = lfirst(lc);
-			dn_datums[i++] = CStringGetDatum(dn);
+			namestrcpy(&dn_names[i], dn);
+			dn_datums[i] = NameGetDatum(&dn_names[i]);
+			++i;
 		}
 
-		dn_arr = construct_array(dn_datums,
-								 list_length(dp->data_nodes),
-								 NAMEOID,
-								 NAMEDATALEN,
-								 false,
-								 TYPALIGN_CHAR);
+		dn_arr =
+			construct_array(dn_datums, data_nodes_len, NAMEOID, NAMEDATALEN, false, TYPALIGN_CHAR);
 		values[AttrNumberGetAttrOffset(Anum_dimension_partition_data_nodes)] =
 			PointerGetDatum(dn_arr);
 	}
