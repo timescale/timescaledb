@@ -51,7 +51,6 @@
 #include <utils/rel.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
-#include <utils/int8.h>
 #include <utils/regproc.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>

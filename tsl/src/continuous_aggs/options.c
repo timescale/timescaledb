@@ -11,7 +11,6 @@
 #include <nodes/makefuncs.h>
 #include <optimizer/optimizer.h>
 #include <rewrite/rewriteManip.h>
-#include <utils/int8.h>
 #include <utils/builtins.h>
 
 #include "options.h"
