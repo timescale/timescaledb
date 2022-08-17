@@ -1,4 +1,5 @@
 /cagg_ddl-*.sql
+/cagg_invalidation_dist_ht-*.sql
 /cagg_permissions-*.sql
 /cagg_query-*.sql
 /cagg_union_view-*.sql
