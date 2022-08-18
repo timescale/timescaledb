@@ -241,6 +241,33 @@ process_compressed_data_out(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+/*
+ * This function ensures that the TSL library is loaded and the call to
+ * post_update_cagg_try_repair is dispatched to the correct
+ * function.
+ *
+ * The TSL library might not be loaded when post_update_cagg_try_repair is
+ * called during a database upgrade, resulting in an error message about
+ * improper licensing:
+ *
+ * "[..] is not supported under the current "timescale" license
+ *  INT:  Upgrade your license to 'timescale'""
+ *
+ * See also the comment about this problem in the function
+ * process_compressed_data_in.
+ */
+static Datum
+process_cagg_try_repair(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
+		return ts_cm_functions->cagg_try_repair(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
 static void
 hypertable_make_distributed_default_fn(Hypertable *ht, List *data_node_names)
 {
@@ -446,7 +473,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_drop_dist_ht_invalidation_trigger = NULL,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
-	.cagg_try_repair = error_no_default_fn_pg_community,
+	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
