@@ -4454,7 +4454,7 @@ fill_hypercube_for_foreign_table_chunk(Hyperspace *hs)
 		const Dimension *dim = &hs->dimensions[i];
 		Assert(dim->type == DIMENSION_TYPE_OPEN);
 		Oid dimtype = ts_dimension_get_partition_type(dim);
-		Datum val = Int64GetDatum(ts_time_get_min(dimtype));
+		Datum val = ts_time_datum_get_max(dimtype);
 		p->coordinates[p->num_coords++] = ts_time_value_to_internal(val, dimtype);
 		cube->slices[i] = ts_dimension_calculate_default_slice(dim, p->coordinates[i]);
 		cube->num_slices++;

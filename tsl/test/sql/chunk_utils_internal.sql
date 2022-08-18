@@ -358,6 +358,19 @@ SELECT * FROM hyper_constr order by time;
 SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 
+--TEST policy is not applied on OSM chunk
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+
+CALL run_job(:deljob_id);
+CALL run_job(:deljob_id);
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
