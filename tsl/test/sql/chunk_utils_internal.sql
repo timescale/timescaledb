@@ -9,6 +9,23 @@
 -- * drop_chunk
 -- * attach_foreign_table_chunk
 
+CREATE OR REPLACE VIEW chunk_view AS
+  SELECT 
+    ht.table_name AS hypertable_name,
+    srcch.schema_name AS schema_name,
+    srcch.table_name AS chunk_name,
+    _timescaledb_internal.to_timestamp(dimsl.range_start)
+     AS range_start,
+    _timescaledb_internal.to_timestamp(dimsl.range_end)
+     AS range_end
+  FROM _timescaledb_catalog.chunk srcch
+    INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
+    INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id
+    INNER JOIN _timescaledb_catalog.dimension dim ON srcch.hypertable_id = dim.hypertable_id
+    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dim.id = dimsl.dimension_id
+      AND chcons.dimension_slice_id = dimsl.id;
+GRANT SELECT on chunk_view TO PUBLIC;
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
@@ -230,14 +247,20 @@ SELECT * FROM child_fdw_table;
 
 SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table');
 
+-- OSM chunk is not visible in chunks view
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'ht_try' ORDER BY 1;
 
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'ht_try'
+ORDER BY chunk_name;
+
 SELECT * FROM ht_try ORDER BY 1;
 
 SELECT relname, relowner::regrole FROM pg_class
-WHERE relname in ( select chunk_name FROM timescaledb_information.chunks
+WHERE relname in ( select chunk_name FROM chunk_view 
                    WHERE hypertable_name = 'ht_try' );
 
 SELECT inhrelid::regclass
@@ -267,10 +290,11 @@ DROP TABLE ht_try;
 
 SELECT relname FROM pg_class WHERE relname = 'child_fdw_table';
 
-SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks
-WHERE hypertable_name = 'ht_try' ORDER BY 1;
-
+SELECT table_name, status, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
+                        WHERE table_name = 'ht_try')
+ORDER BY table_name;
 
 -- TEST error try freeze/unfreeze on dist hypertable
 -- Add distributed hypertables
@@ -322,9 +346,11 @@ CREATE FOREIGN TABLE child_hyper_constr
 --check constraints are automatically added for the foreign table
 SELECT _timescaledb_internal.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
 
-SELECT chunk_name, range_start, range_end
-FROM timescaledb_information.chunks
-WHERE hypertable_name = 'hyper_constr' ORDER BY 1;
+SELECT table_name, status, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
+                        WHERE table_name = 'hyper_constr')
+ORDER BY table_name;
 
 SELECT * FROM hyper_constr order by time;
 

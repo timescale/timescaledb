@@ -236,7 +236,7 @@ FROM (
       array_agg(node_name ORDER BY node_name) AS node_list
     FROM _timescaledb_catalog.chunk_data_node
     GROUP BY chunk_id) chdn ON srcch.id = chdn.chunk_id
-  WHERE srcch.dropped IS FALSE
+  WHERE srcch.dropped IS FALSE AND srcch.osm_chunk IS FALSE
     AND ht.compression_state != 2 ) finalq
 WHERE chunk_dimension_num = 1;
 
