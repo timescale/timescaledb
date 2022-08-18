@@ -1,6 +1,6 @@
 |Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|
 |:---:|:---:|:---:|:---:|:---:|
-|[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/workflows/Regression/badge.svg?event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3ARegression+branch%3Amain)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/workflows/Regression%20Linux%20i386/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3A%22Regression+Linux+i386%22+branch%3Amain)|[![Windows build status](https://ci.appveyor.com/api/projects/status/15sqkl900t04hywu/branch/main?svg=true)](https://ci.appveyor.com/project/timescale/timescaledb/branch/main)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)
+|[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/workflows/Regression/badge.svg?event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3ARegression+branch%3Amain)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/workflows/Regression%20Linux%20i386/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3A%22Regression+Linux+i386%22+branch%3Amain)|[![Windows build status](https://github.com/timescale/timescaledb/workflows/Regression%20Windows/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3A%22Regression+Windows%22+branch%3Amain)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)
 
 
 ## TimescaleDB
@@ -22,6 +22,7 @@ Below is an introduction to TimescaleDB. For more information, please check out
 these other resources:
 - [Developer Documentation](https://tsdb.co/GitHubTimescaleDocs)
 - [Slack Channel](https://slack-login.timescale.com)
+- [Timescale Community Forum](https://www.timescale.com/forum/)
 - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes)
 
 
