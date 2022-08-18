@@ -2337,6 +2337,7 @@ complete, depending on the size of your database**
 **Thanks**
 * @yadid for reporting a segfault (fixed in 50c8c4c)
 * @ryan-shaw for reporting tuples not being correctly converted to a chunk's rowtype (fixed in 645b530)
+* @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 
 ## 0.4.0 (2017-08-21)
 
@@ -2495,3 +2496,6 @@ the next release.
 * [72f754a] use PostgreSQL's own `hash_any` function as default partfunc (thanks @robin900)
 * [39f4c0f] Remove sample data instructions and point to docs site
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
+
+**Bugfixes**
+* #3481 GROUP BY error when setting compress_segmentby with an enum column
