@@ -7,15 +7,26 @@ on:
     branches:
       - prerelease_test
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   backup_and_restore:
     name: Backup and restore
     runs-on: ubuntu-latest
+    needs: config
     strategy:
       fail-fast: false
       matrix:
-        pg: [12, 13, 14]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     env:
-      PG_MAJOR: ${{ matrix.pg }}
       PG_VERSION: ${{ matrix.pg }}
 
     steps:
