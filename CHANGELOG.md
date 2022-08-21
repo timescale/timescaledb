@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #4374 Remove constified now() constraints from plan
 * #4393 Support intervals with day component when constifying now()
 * #4397 Support intervals with month component when constifying now()
+* #4641 Allow bucketing by month in time_bucket
 
 **Bugfixes**
 * #4486 Adding boolean column with default value doesn't work on compressed table
@@ -18,7 +19,7 @@ accidentally triggering the load of a previous DB version.**
 * #4416 Handle TRUNCATE TABLE on chunks
 
 **Thanks**
-@janko for reporting
+@janko for reporting an issue when adding bool column with default value to compressed hypertable
 @AlmiS for reporting error on `get_partition_hash` executed inside an IMMUTABLE function
 @michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
 @jayadevanm for reporting error of TRUNCATE TABLE on compressed chunk

@@ -3190,3 +3190,30 @@ GROUP BY 1,2;
 (2 rows)
 
 DROP TABLE gapfill_group_toast;
+-- test bucketing by month
+SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Tue Feb 29 16:00:00 2000 PST
+ Sun Apr 30 17:00:00 2000 PDT
+ Fri Jun 30 17:00:00 2000 PDT
+ Thu Aug 31 17:00:00 2000 PDT
+ Tue Oct 31 16:00:00 2000 PST
+ Sun Dec 31 16:00:00 2000 PST
+(7 rows)
+
+SELECT time_bucket_gapfill('1 year'::interval, ts, '2000-01-01','2003-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Sun Dec 31 16:00:00 2000 PST
+ Mon Dec 31 16:00:00 2001 PST
+ Tue Dec 31 16:00:00 2002 PST
+(4 rows)
+
+SELECT time_bucket_gapfill('1 century'::interval, ts, '1900-01-01','2103-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Sun Dec 31 16:00:00 1899 PST
+ Fri Dec 31 16:00:00 1999 PST
+ Thu Dec 31 16:00:00 2099 PST
+(3 rows)
+
