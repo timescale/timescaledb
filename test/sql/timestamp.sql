@@ -598,6 +598,44 @@ FROM unnest(ARRAY[
     ]) AS time;
 \set ON_ERROR_STOP 1
 
+-------------------------------------------
+--- Test time_bucket with month periods ---
+-------------------------------------------
+
+SET datestyle TO ISO;
+
+SELECT
+  time::date,
+  time_bucket('1 month', time::date) AS "1m",
+  time_bucket('2 month', time::date) AS "2m",
+  time_bucket('3 month', time::date) AS "3m",
+  time_bucket('1 month', time::date, '2000-02-01'::date) AS "1m origin",
+  time_bucket('2 month', time::date, '2000-02-01'::date) AS "2m origin",
+  time_bucket('3 month', time::date, '2000-02-01'::date) AS "3m origin"
+FROM generate_series('1990-01-03'::date,'1990-06-03'::date,'1month'::interval) time;
+
+SELECT
+  time,
+  time_bucket('1 month', time) AS "1m",
+  time_bucket('2 month', time) AS "2m",
+  time_bucket('3 month', time) AS "3m",
+  time_bucket('1 month', time, '2000-02-01'::timestamp) AS "1m origin",
+  time_bucket('2 month', time, '2000-02-01'::timestamp) AS "2m origin",
+  time_bucket('3 month', time, '2000-02-01'::timestamp) AS "3m origin"
+FROM generate_series('1990-01-03'::timestamp,'1990-06-03'::timestamp,'1month'::interval) time;
+
+SELECT
+  time,
+  time_bucket('1 month', time) AS "1m",
+  time_bucket('2 month', time) AS "2m",
+  time_bucket('3 month', time) AS "3m",
+  time_bucket('1 month', time, '2000-02-01'::timestamptz) AS "1m origin",
+  time_bucket('2 month', time, '2000-02-01'::timestamptz) AS "2m origin",
+  time_bucket('3 month', time, '2000-02-01'::timestamptz) AS "3m origin"
+FROM generate_series('1990-01-03'::timestamptz,'1990-06-03'::timestamptz,'1month'::interval) time;
+
+RESET datestyle;
+
 ------------------------------------------------------------
 --- Test timescaledb_experimental.time_bucket_ng function --
 ------------------------------------------------------------
