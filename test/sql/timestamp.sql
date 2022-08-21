@@ -181,8 +181,8 @@ FROM unnest(ARRAY[
     ]) AS int_def;
 
 \set ON_ERROR_STOP 0
-SELECT time_bucket(INTERVAL '1 year',TIMESTAMP '2011-01-02 01:01:01.111');
-SELECT time_bucket(INTERVAL '1 month',TIMESTAMP '2011-01-02 01:01:01.111');
+SELECT time_bucket(INTERVAL '1 year 1d',TIMESTAMP '2011-01-02 01:01:01.111');
+SELECT time_bucket(INTERVAL '1 month 1 minute',TIMESTAMP '2011-01-02 01:01:01.111');
 \set ON_ERROR_STOP 1
 
 SELECT time, time_bucket(INTERVAL '5 minute', time)

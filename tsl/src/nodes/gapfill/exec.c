@@ -149,7 +149,7 @@ interval_to_usec(Interval *interval)
 }
 
 static inline int64
-gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg)
+gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg, Interval **interval)
 {
 	switch (timetype)
 	{
@@ -160,7 +160,13 @@ gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg)
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 			Assert(INTERVALOID == argtype);
-			return interval_to_usec(DatumGetIntervalP(arg));
+			Interval *interval_arg = DatumGetIntervalP(arg);
+			if (interval_arg->month)
+			{
+				*interval = interval_arg;
+				return 0;
+			}
+			return interval_to_usec(interval_arg);
 			break;
 		case INT2OID:
 			Assert(INT2OID == argtype);
@@ -585,6 +591,26 @@ make_const_value_for_gapfill_internal(Oid typid, int64 value)
 	return makeConst(typid, -1, InvalidOid, tce->typlen, d, false, tce->typbyval);
 }
 
+static void
+gapfill_get_next_timestamp(GapFillState *state)
+{
+	if (state->gapfill_interval)
+	{
+		/*
+		 * next_timestamp = current_timestamp + interval
+		 */
+		Datum current = TimestampGetDatum(state->next_timestamp);
+		Datum next = DirectFunctionCall2(timestamp_pl_interval,
+										 current,
+										 IntervalPGetDatum(state->gapfill_interval));
+		state->next_timestamp = DatumGetTimestamp(next);
+	}
+	else
+	{
+		state->next_timestamp += state->gapfill_period;
+	}
+}
+
 /*
  * Initialize the scan state
  */
@@ -625,14 +651,16 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
 
-	state->gapfill_period =
-		gapfill_period_get_internal(func->funcresulttype, exprType(linitial(args)), arg_value);
+	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype,
+														exprType(linitial(args)),
+														arg_value,
+														&state->gapfill_interval);
 
 	/*
 	 * this would error when trying to align start and stop to bucket_width as well below
 	 * but checking this explicitly here will make a nicer error message
 	 */
-	if (state->gapfill_period <= 0)
+	if (state->gapfill_period <= 0 && !state->gapfill_interval)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg(
@@ -765,7 +793,7 @@ gapfill_exec(CustomScanState *node)
 		if (FETCHED_ONE == state->state && state->subslot_time == state->next_timestamp)
 		{
 			state->state = FETCHED_NONE;
-			state->next_timestamp += state->gapfill_period;
+			gapfill_get_next_timestamp(state);
 			return gapfill_state_return_subplan_slot(state);
 		}
 
@@ -774,7 +802,7 @@ gapfill_exec(CustomScanState *node)
 		{
 			Assert(state->state != FETCHED_NONE);
 			slot = gapfill_state_gaptuple_create(state, state->next_timestamp);
-			state->next_timestamp += state->gapfill_period;
+			gapfill_get_next_timestamp(state);
 			return slot;
 		}
 

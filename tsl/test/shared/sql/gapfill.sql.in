@@ -1472,3 +1472,11 @@ WHERE time >= '2022-06-01' AND time <= '2022-06-02'
 GROUP BY 1,2;
 
 DROP TABLE gapfill_group_toast;
+
+-- test bucketing by month
+SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+SELECT time_bucket_gapfill('1 year'::interval, ts, '2000-01-01','2003-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+SELECT time_bucket_gapfill('1 century'::interval, ts, '1900-01-01','2103-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+
+
+

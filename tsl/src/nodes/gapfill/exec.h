@@ -95,7 +95,10 @@ typedef struct GapFillState
 	Oid gapfill_typid;
 	int64 gapfill_start;
 	int64 gapfill_end;
+	/* bucket width for fixed-size buckets */
 	int64 gapfill_period;
+	/* bucket width when bucketing by month */
+	Interval *gapfill_interval;
 
 	int64 next_timestamp;
 	int64 subslot_time; /* time of tuple in subslot */

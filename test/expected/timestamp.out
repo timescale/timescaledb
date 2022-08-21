@@ -306,18 +306,10 @@ FROM unnest(ARRAY[
 (10 rows)
 
 \set ON_ERROR_STOP 0
-SELECT time_bucket(INTERVAL '1 year',TIMESTAMP '2011-01-02 01:01:01.111');
-       time_bucket        
---------------------------
- Sat Jan 01 00:00:00 2011
-(1 row)
-
-SELECT time_bucket(INTERVAL '1 month',TIMESTAMP '2011-01-02 01:01:01.111');
-       time_bucket        
---------------------------
- Sat Jan 01 00:00:00 2011
-(1 row)
-
+SELECT time_bucket(INTERVAL '1 year 1d',TIMESTAMP '2011-01-02 01:01:01.111');
+ERROR:  month intervals cannot have day or time component
+SELECT time_bucket(INTERVAL '1 month 1 minute',TIMESTAMP '2011-01-02 01:01:01.111');
+ERROR:  month intervals cannot have day or time component
 \set ON_ERROR_STOP 1
 SELECT time, time_bucket(INTERVAL '5 minute', time)
 FROM unnest(ARRAY[
