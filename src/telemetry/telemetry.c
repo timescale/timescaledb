@@ -442,7 +442,8 @@ add_function_call_telemetry(JsonbParseState *state)
 		for (uint32 i = 0; i < functions->num_elements; i++)
 		{
 			FnTelemetryEntry *entry = fn_telemetry_entry_vec_at(functions, i);
-			ts_jsonb_add_int64(state, format_procedure(entry->fn), entry->count);
+			char *proc_sig = format_procedure_qualified(entry->fn);
+			ts_jsonb_add_int64(state, proc_sig, entry->count);
 		}
 	}
 
