@@ -102,13 +102,27 @@ TRUNCATE disttable;
 
 -- RENAME TO
 ALTER TABLE disttable RENAME TO disttable2;
+
+SELECT true FROM pg_tables WHERE tablename = 'disttable2';
+\c :MY_DB1
+SELECT true FROM pg_tables WHERE tablename = 'disttable2';
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
 ALTER TABLE disttable2 RENAME TO disttable;
+SELECT true FROM pg_tables WHERE tablename = 'disttable';
+\c :MY_DB1
+SELECT true FROM pg_tables WHERE tablename = 'disttable';
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
 
 -- SET SCHEMA
-ALTER TABLE disttable SET SCHEMA some_schema;
-ALTER TABLE some_schema.disttable SET SCHEMA public;
 \set ON_ERROR_STOP 0
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
+\set ON_ERROR_STOP 1
+
+-- some_schema was not created on data nodes
+\set ON_ERROR_STOP 0
+ALTER TABLE disttable SET SCHEMA some_schema;
 \set ON_ERROR_STOP 1
 
 -- OWNER TO
