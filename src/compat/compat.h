@@ -355,6 +355,11 @@ get_reindex_options(ReindexStmt *stmt)
 #define list_make5_int(x1, x2, x3, x4, x5) lappend_int(list_make4_int(x1, x2, x3, x4), x5)
 #endif
 
+/*
+ * define lfifth macro for convenience
+ */
+#define lfifth(l) lfirst(list_nth_cell(l, 4))
+
 /* PG13 removes the natts parameter from map_variable_attnos */
 #if PG13_LT
 #define map_variable_attnos_compat(node, varno, sublevels_up, map, natts, rowtype, found_wholerow) \

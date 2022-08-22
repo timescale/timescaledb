@@ -634,6 +634,44 @@ SELECT
   time_bucket('3 month', time, '2000-02-01'::timestamptz) AS "3m origin"
 FROM generate_series('1990-01-03'::timestamptz,'1990-06-03'::timestamptz,'1month'::interval) time;
 
+---------------------------------------
+--- Test time_bucket with timezones ---
+---------------------------------------
+
+-- test NULL args
+SELECT
+time_bucket(NULL::interval,now(),'Europe/Berlin'),
+time_bucket('1day',NULL::timestamptz,'Europe/Berlin'),
+time_bucket('1day',now(),NULL::text),
+time_bucket('1day','2020-02-03','Europe/Berlin',NULL),
+time_bucket('1day','2020-02-03','Europe/Berlin','2020-04-01',NULL),
+time_bucket('1day','2020-02-03','Europe/Berlin',NULL,NULL),
+time_bucket('1day','2020-02-03','Europe/Berlin',"offset":=NULL::interval),
+time_bucket('1day','2020-02-03','Europe/Berlin',origin:=NULL::timestamptz);
+
+SET datestyle TO ISO;
+SELECT
+  time_bucket('1day', ts) AS "UTC",
+  time_bucket('1day', ts, 'Europe/Berlin') AS "Berlin",
+  time_bucket('1day', ts, 'Europe/London') AS "London",
+  time_bucket('1day', ts, 'America/New_York') AS "New York",
+  time_bucket('1day', ts, 'PST') AS "PST",
+  time_bucket('1day', ts, current_setting('timezone')) AS "current"
+
+FROM generate_series('1999-12-31 17:00'::timestamptz,'2000-01-02 3:00'::timestamptz, '1hour'::interval) ts;
+
+SELECT
+  time_bucket('1month', ts) AS "UTC",
+  time_bucket('1month', ts, 'Europe/Berlin') AS "Berlin",
+  time_bucket('1month', ts, 'America/New_York') AS "New York",
+  time_bucket('1month', ts, current_setting('timezone')) AS "current",
+  time_bucket('2month', ts, current_setting('timezone')) AS "2m",
+  time_bucket('2month', ts, current_setting('timezone'), '2000-02-01'::timestamp) AS "2m origin",
+  time_bucket('2month', ts, current_setting('timezone'), "offset":='14 day'::interval) AS "2m offset",
+  time_bucket('2month', ts, current_setting('timezone'), '2000-02-01'::timestamp, '7 day'::interval) AS "2m offset + origin"
+
+FROM generate_series('1999-12-01'::timestamptz,'2000-09-01'::timestamptz, '9 day'::interval) ts;
+
 RESET datestyle;
 
 ------------------------------------------------------------
