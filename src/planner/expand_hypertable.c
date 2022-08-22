@@ -46,6 +46,7 @@
 #include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "extension.h"
+#include "func_cache.h"
 #include "extension_constants.h"
 #include "guc.h"
 #include "hypertable.h"
@@ -99,9 +100,14 @@ is_chunk_exclusion_func(Expr *node)
 static bool
 is_time_bucket_function(Expr *node)
 {
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
-		return true;
+	if (IsA(node, FuncExpr))
+	{
+		FuncExpr *func = castNode(FuncExpr, node);
+		FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
+
+		if (info != NULL && info->allowed_in_cagg_definition)
+			return true;
+	}
 
 	return false;
 }
@@ -334,7 +340,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 	TypeCacheEntry *tce;
 	int strategy;
 
-	if (list_length(time_bucket->args) != 2 || !IsA(value, Const) || !IsA(width, Const))
+	if (!IsA(value, Const) || !IsA(width, Const))
 		return op;
 
 	/*
@@ -652,12 +658,8 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 			 * check for time_bucket comparisons
 			 * time_bucket(Const, time_colum) > Const
 			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
+			if ((IsA(left, FuncExpr) && IsA(right, Const) && is_time_bucket_function(left)) ||
+				(IsA(left, Const) && IsA(right, FuncExpr) && is_time_bucket_function(right)))
 			{
 				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
@@ -740,12 +742,8 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 			 * check for time_bucket comparisons
 			 * time_bucket(Const, time_colum) > Const
 			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
+			if ((IsA(left, FuncExpr) && IsA(right, Const) && is_time_bucket_function(left)) ||
+				(IsA(left, Const) && IsA(right, FuncExpr) && is_time_bucket_function(right)))
 			{
 				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
