@@ -550,16 +550,16 @@ EXECUTE record_from_prepared;
 
 DEALLOCATE record_from_prepared;
 SELECT get_telemetry_report()->'functions_used';
-                                                                                                        ?column?                                                                                                        
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"abs(integer)": 1, "min(integer)": 1, "sum(integer)": 1, "get_telemetry_report()": 1, "int4eq(integer,integer)": 1, "int4mi(integer,integer)": 11, "int4pl(integer,integer)": 3, "jsonb_object_field(jsonb,text)": 1}
+                                                                                                                                                             ?column?                                                                                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"pg_catalog.abs(integer)": 1, "pg_catalog.min(integer)": 1, "pg_catalog.sum(integer)": 1, "public.get_telemetry_report()": 1, "pg_catalog.int4eq(integer,integer)": 1, "pg_catalog.int4mi(integer,integer)": 11, "pg_catalog.int4pl(integer,integer)": 3, "pg_catalog.jsonb_object_field(pg_catalog.jsonb,pg_catalog.text)": 1}
 (1 row)
 
 -- check the report again to see if resetting works
 SELECT get_telemetry_report()->'functions_used';
-                              ?column?                              
---------------------------------------------------------------------
- {"get_telemetry_report()": 1, "jsonb_object_field(jsonb,text)": 1}
+                                                  ?column?                                                  
+------------------------------------------------------------------------------------------------------------
+ {"public.get_telemetry_report()": 1, "pg_catalog.jsonb_object_field(pg_catalog.jsonb,pg_catalog.text)": 1}
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
