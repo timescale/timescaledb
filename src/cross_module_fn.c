@@ -207,22 +207,35 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+/*
+ * TSL library is not loaded by the replication worker for some reason,
+ * so a call to `compressed_data_in` and `compressed_data_out` functions would
+ * produce a misleading error saying that your license is "timescale" and you
+ * should upgrade to "timescale" license, even if you have already upgraded.
+ *
+ * As a workaround, we try to load the TSL module it in this function.
+ * It will still error out in the "apache" version
+ */
+
 static Datum
 process_compressed_data_in(PG_FUNCTION_ARGS)
 {
-	/*
-	 * TSL library is not loaded by the replication worker for some reason,
-	 * so a call to `compressed_data_in` function would produce a misleading
-	 * error saying that your license is "timescale" and you should upgrade to
-	 * "timescale" license, even if you have already upgraded.
-	 *
-	 * As a workaround, we try to load the TSL module it in this function. It will still
-	 * error out in the "apache" version
-	 */
 	ts_license_enable_module_loading();
 
 	if (ts_cm_functions->compressed_data_in != process_compressed_data_in)
 		return ts_cm_functions->compressed_data_in(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
+static Datum
+process_compressed_data_out(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->compressed_data_in != process_compressed_data_in)
+		return ts_cm_functions->compressed_data_out(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
@@ -439,7 +452,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compressed_data_send = error_no_default_fn_pg_community,
 	.compressed_data_recv = error_no_default_fn_pg_community,
 	.compressed_data_in = process_compressed_data_in,
-	.compressed_data_out = error_no_default_fn_pg_community,
+	.compressed_data_out = process_compressed_data_out,
 	.process_compress_table = process_compress_table_default,
 	.create_compressed_chunk = error_no_default_fn_pg_community,
 	.compress_chunk = error_no_default_fn_pg_community,
