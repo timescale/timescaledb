@@ -1298,7 +1298,11 @@ SELECT timescaledb_experimental.time_bucket_ng('1 month', '2001-02-03' :: date, 
 ERROR:  origin must be the first day of the month
 HINT:  When using timestamptz-version of the function, 'origin' is converted to provided 'timezone'.
 SELECT timescaledb_experimental.time_bucket_ng('1 month', '2000-01-02' :: date, origin => '2001-01-01') AS result;
-ERROR:  origin must be before the given date
+   result   
+------------
+ 01-01-2000
+(1 row)
+
 SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, origin => '2001-01-01') AS result;
 ERROR:  origin must be before the given date
 SELECT timescaledb_experimental.time_bucket_ng('1 month 3 hours', '2021-11-22' :: timestamp) AS result;

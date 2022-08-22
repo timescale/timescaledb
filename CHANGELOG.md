@@ -13,18 +13,20 @@ accidentally triggering the load of a previous DB version.**
 * #4641 Allow bucketing by month in time_bucket
 
 **Bugfixes**
+* #4416 Handle TRUNCATE TABLE on chunks
 * #4486 Adding boolean column with default value doesn't work on compressed table
 * #4555 Handle properly default privileges on Continuous Aggregates
 * #4575 Fix use of `get_partition_hash` and `get_partition_for_key` inside an IMMUTABLE function
-* #4416 Handle TRUNCATE TABLE on chunks
 * #4611 Fix a potential OOM when loading large data sets into a hypertable
+* #4646 Fix time_bucket_ng origin handling
 
 **Thanks**
-@janko for reporting an issue when adding bool column with default value to compressed hypertable
 @AlmiS for reporting error on `get_partition_hash` executed inside an IMMUTABLE function
-@michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
+@janko for reporting an issue when adding bool column with default value to compressed hypertable
 @jayadevanm for reporting error of TRUNCATE TABLE on compressed chunk
+@michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
 @ninjaltd and @mrksngl for reporting a potential OOM when loading large data sets into a hypertable
+@ssmoss for reporting an issue with time_bucket_ng origin handling
 
 ## 2.7.2 (2022-07-26)
 

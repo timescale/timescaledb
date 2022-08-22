@@ -526,20 +526,13 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 		/* Handle months and years */
 
 		j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
+		int32 result;
+		int32 offset = origin_year * 12 + origin_month - 1;
+		int32 timestamp = year * 12 + month - 1;
+		TIME_BUCKET(interval->month, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
 
-		if ((year < origin_year) || ((year == origin_year) && (month < origin_month)))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("origin must be before the given date")));
-		}
-
-		delta = (year * 12 + month) - (origin_year * 12 + origin_month);
-		bucket_number = delta / interval->month;
-		year = origin_year + (origin_month - 1 + bucket_number * interval->month) / 12;
-		month =
-			(((origin_year * 12 + (origin_month - 1)) + (bucket_number * interval->month)) % 12) +
-			1;
+		year = result / 12;
+		month = (result % 12) + 1;
 		day = 1;
 
 		date = date2j(year, month, day) - POSTGRES_EPOCH_JDATE;
