@@ -196,6 +196,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  time_bucket(interval,date,interval)
  time_bucket(interval,timestamp with time zone)
  time_bucket(interval,timestamp with time zone,interval)
+ time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
  time_bucket(interval,timestamp with time zone,timestamp with time zone)
  time_bucket(interval,timestamp without time zone)
  time_bucket(interval,timestamp without time zone,interval)

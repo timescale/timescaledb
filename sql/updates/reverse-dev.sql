@@ -154,7 +154,6 @@ GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.chunk table --
 
-
 ALTER TABLE _timescaledb_internal.bgw_job_stat
       DROP CONSTRAINT bgw_job_stat_job_id_fkey;
 ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
@@ -246,3 +245,6 @@ CREATE FUNCTION @extschema@.alter_job(
 RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ)
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
+
+DROP FUNCTION @extschema@.time_bucket(INTERVAL, TIMESTAMPTZ, TEXT, TIMESTAMPTZ, INTERVAL);
+

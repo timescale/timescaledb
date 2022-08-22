@@ -281,6 +281,64 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	}
 }
 
+TS_FUNCTION_INFO_V1(ts_timestamptz_timezone_bucket);
+
+/*
+ * time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ DEFAULT
+ * NULL, "offset" INTERVAL DEFAULT NULL) RETURNS TIMESTAMPTZ
+ */
+TSDLLEXPORT Datum
+ts_timestamptz_timezone_bucket(PG_FUNCTION_ARGS)
+{
+	Datum period = PG_GETARG_DATUM(0);
+	Datum timestamp = PG_GETARG_DATUM(1);
+	Datum tzname = PG_GETARG_DATUM(2);
+
+	/*
+	 * When called from SQL we will always have 5 args because default values
+	 * will be filled in for missing arguments. When called from C with
+	 * DirectFunctionCall number of arguments might be less than 5.
+	 */
+	bool have_origin = PG_NARGS() > 3 && !PG_ARGISNULL(3);
+	bool have_offset = PG_NARGS() > 4 && !PG_ARGISNULL(4);
+
+	/*
+	 * We need to check for NULL arguments here because the function cannot be
+	 * defined STRICT due to the optional arguments.
+	 */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
+	/* Convert to local timestamp according to timezone */
+	timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
+	if (have_offset)
+	{
+		/* Apply offset. */
+		timestamp = DirectFunctionCall2(timestamp_mi_interval, timestamp, PG_GETARG_DATUM(4));
+	}
+
+	if (have_origin)
+	{
+		Datum origin = DirectFunctionCall2(timestamptz_zone, tzname, PG_GETARG_DATUM(3));
+		timestamp = DirectFunctionCall3(ts_timestamp_bucket, period, timestamp, origin);
+	}
+	else
+	{
+		timestamp = DirectFunctionCall2(ts_timestamp_bucket, period, timestamp);
+	}
+
+	if (have_offset)
+	{
+		/* Remove offset. */
+		timestamp = DirectFunctionCall2(timestamp_pl_interval, timestamp, PG_GETARG_DATUM(4));
+	}
+
+	/* Convert back to timezone */
+	timestamp = DirectFunctionCall2(timestamp_zone, tzname, timestamp);
+
+	PG_RETURN_DATUM(timestamp);
+}
+
 static inline void
 check_period_is_daily(int64 period)
 {

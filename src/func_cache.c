@@ -20,6 +20,7 @@
 #include <utils/selfuncs.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "utils.h"
 #include "cache.h"
 #include "func_cache.h"
@@ -103,6 +104,22 @@ time_bucket_sort_transform(FuncExpr *func)
 		return (Expr *) func;
 
 	if (!time_bucket_has_const_period(func))
+		return (Expr *) func;
+
+	return do_sort_transform(func);
+}
+
+/*
+ * time_bucket with timezone will always have 5 args. For the sort
+ * optimization to apply all args need to be Const except timestamp.
+ */
+static Expr *
+time_bucket_tz_sort_transform(FuncExpr *func)
+{
+	Assert(list_length(func->args) == 5);
+
+	if (!IsA(linitial((func)->args), Const) || !IsA(lthird(func->args), Const) ||
+		!IsA(lfourth(func->args), Const) || !IsA(lfifth(func->args), Const))
 		return (Expr *) func;
 
 	return do_sort_transform(func);
@@ -294,6 +311,16 @@ static FuncInfo funcinfo[] = {
 		.arg_types = { INT8OID, INT8OID, INT8OID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
+		.funcname = "time_bucket",
+		.nargs = 5,
+		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TEXTOID, TIMESTAMPTZOID, INTERVALOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_tz_sort_transform,
 	},
 	{
 		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,

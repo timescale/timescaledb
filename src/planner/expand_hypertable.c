@@ -434,6 +434,9 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			{
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
+				/*
+				 * Optimization can't be applied when interval has month component.
+				 */
 				if (interval->month != 0)
 					return op;
 
@@ -466,7 +469,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				Assert(width->consttype == INTERVALOID);
 
 				/*
-				 * intervals with month component are not supported by time_bucket
+				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
 					return op;
@@ -513,7 +516,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				Assert(width->consttype == INTERVALOID);
 
 				/*
-				 * intervals with month component are not supported by time_bucket
+				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
 					return op;

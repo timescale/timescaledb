@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #4393 Support intervals with day component when constifying now()
 * #4397 Support intervals with month component when constifying now()
 * #4641 Allow bucketing by month in time_bucket
+* #4642 Add timezone support to time_bucket
 
 **Bugfixes**
 * #4416 Handle TRUNCATE TABLE on chunks
