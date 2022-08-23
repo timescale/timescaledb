@@ -189,7 +189,9 @@ TSCopyMultiInsertBufferInit(Point *point)
 	memset(buffer->slots, 0, sizeof(TupleTableSlot *) * MAX_BUFFERED_TUPLES);
 	buffer->bistate = GetBulkInsertState();
 	buffer->nused = 0;
-	buffer->point = point;
+
+	buffer->point = palloc(POINT_SIZE(point->num_coords));
+	memcpy(buffer->point, point, POINT_SIZE(point->num_coords));
 
 	return buffer;
 }
@@ -298,21 +300,17 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	Assert(miinfo != NULL);
 	Assert(buffer != NULL);
 
-#if PG14_GE
-	uint64 save_cur_lineno;
-	bool line_buf_valid = false;
-	CopyFromState cstate = miinfo->ccstate->cstate;
-
-	/* cstate can be NULL in calls that are invoked from timescaledb_move_from_table_to_chunks. */
-	if (cstate != NULL)
-		line_buf_valid = cstate->line_buf_valid;
-#endif
-
 	EState *estate = miinfo->estate;
 	CommandId mycid = miinfo->mycid;
 	int ti_options = miinfo->ti_options;
 	int nused = buffer->nused;
 	TupleTableSlot **slots = buffer->slots;
+
+	/*
+	 * table_multi_insert and reinitialization of the chunk insert state may
+	 * leak memory, so switch to short-lived memory context before calling it.
+	 */
+	oldcontext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
 	/*
 	 * A chunk can be closed while buffering the tuples. Even when the chunk
@@ -337,10 +335,17 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	 * members can be accessed.
 	 */
 #if PG14_GE
+	uint64 save_cur_lineno = 0;
+	bool line_buf_valid = false;
+	CopyFromState cstate = miinfo->ccstate->cstate;
+
+	/* cstate can be NULL in calls that are invoked from timescaledb_move_from_table_to_chunks. */
 	if (cstate != NULL)
 	{
-		cstate->line_buf_valid = false;
+		line_buf_valid = cstate->line_buf_valid;
 		save_cur_lineno = cstate->cur_lineno;
+
+		cstate->line_buf_valid = false;
 	}
 #endif
 
@@ -348,11 +353,6 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	estate->es_result_relation_info = resultRelInfo;
 #endif
 
-	/*
-	 * table_multi_insert may leak memory, so switch to short-lived memory
-	 * context before calling it.
-	 */
-	oldcontext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 	table_multi_insert(resultRelInfo->ri_RelationDesc,
 					   slots,
 					   nused,
@@ -363,6 +363,10 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 
 	for (i = 0; i < nused; i++)
 	{
+#if PG14_GE
+		if (cstate != NULL)
+			cstate->cur_lineno = buffer->linenos[i];
+#endif
 		/*
 		 * If there are any indexes, update them for all the inserted tuples,
 		 * and run AFTER ROW INSERT triggers.
@@ -370,11 +374,6 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 		if (resultRelInfo->ri_NumIndices > 0)
 		{
 			List *recheckIndexes;
-
-#if PG14_GE
-			if (cstate != NULL)
-				cstate->cur_lineno = buffer->linenos[i];
-#endif
 
 			recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
 														 buffer->slots[i],
@@ -400,10 +399,6 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 				 (resultRelInfo->ri_TrigDesc->trig_insert_after_row ||
 				  resultRelInfo->ri_TrigDesc->trig_insert_new_table))
 		{
-#if PG14_GE
-			if (cstate != NULL)
-				cstate->cur_lineno = buffer->linenos[i];
-#endif
 			ExecARInsertTriggers(estate,
 								 resultRelInfo,
 								 slots[i],
@@ -456,6 +451,7 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 
 	table_finish_bulk_insert(result_relation_info->ri_RelationDesc, miinfo->ti_options);
 
+	pfree(buffer->point);
 	pfree(buffer);
 }
 
@@ -887,9 +883,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 
 		ExecStoreVirtualTuple(myslot);
 
-		/* Triggers and stuff need to be invoked in query context. */
-		MemoryContextSwitchTo(oldcontext);
-
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = ts_hyperspace_calculate_point(ht->space, myslot);
 
@@ -900,6 +893,9 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 													   bistate);
 
 		Assert(cis != NULL);
+
+		/* Triggers and stuff need to be invoked in query context. */
+		MemoryContextSwitchTo(oldcontext);
 
 		currentTupleInsertMethod = insertMethod;
 

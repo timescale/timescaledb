@@ -89,6 +89,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     bgw_launcher.sql
     c_unit_tests.sql
+    copy_memory_usage.sql
     guc_options.sql
     loader.sql
     metadata.sql

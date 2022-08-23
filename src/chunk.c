@@ -2675,6 +2675,19 @@ ts_chunk_get_hypertable_id_by_relid(Oid relid)
 }
 
 /*
+ * Returns the compressed chunk id. The original chunk must exist.
+ */
+int32
+ts_chunk_get_compressed_chunk_id(int32 chunk_id)
+{
+	FormData_chunk form;
+	PG_USED_FOR_ASSERTS_ONLY bool result =
+		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
+	Assert(result);
+	return form.compressed_chunk_id;
+}
+
+/*
  * Returns false if there is no chunk with such reloid.
  */
 bool

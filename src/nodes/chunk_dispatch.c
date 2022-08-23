@@ -130,6 +130,13 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	if (NULL == cis)
 	{
 		/*
+		 * The chunk search functions may leak memory, so switch to a temporary
+		 * memory context.
+		 */
+		MemoryContext old_context =
+			MemoryContextSwitchTo(GetPerTupleMemoryContext(dispatch->estate));
+
+		/*
 		 * Normally, for every row of the chunk except the first one, we expect
 		 * the chunk to exist already. The "create" function would take a lock
 		 * on the hypertable to serialize the concurrent chunk creation. Here we
@@ -148,6 +155,8 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 		cis = ts_chunk_insert_state_create(new_chunk, dispatch);
 		ts_subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
+
+		MemoryContextSwitchTo(old_context);
 	}
 	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
 	{

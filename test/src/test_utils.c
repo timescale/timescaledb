@@ -5,15 +5,18 @@
  */
 #include "test_utils.h"
 
+#include <postgres.h>
+
 #include <commands/dbcommands.h>
+#include <compat/compat.h>
 #include <fmgr.h>
 #include <miscadmin.h>
-#include <postgres.h>
 #include <storage/latch.h>
 #include <storage/proc.h>
 #include <storage/procarray.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/memutils.h>
 
 #include "debug_point.h"
 
@@ -214,4 +217,32 @@ ts_bgw_wait(PG_FUNCTION_ARGS)
 					   notherbackends,
 					   npreparedxacts)));
 	pg_unreachable();
+}
+
+/*
+ * Return the number of bytes allocated in a given memory context and its
+ * children.
+ */
+TS_FUNCTION_INFO_V1(ts_debug_allocated_bytes);
+Datum
+ts_debug_allocated_bytes(PG_FUNCTION_ARGS)
+{
+	char *context_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
+	if (strcmp(context_name, "PortalContext") == 0)
+	{
+#if PG13_GE
+		PG_RETURN_UINT64(MemoryContextMemAllocated(PortalContext, /* recurse = */ true));
+#else
+		/* Don't have this function on PG 12. */
+		PG_RETURN_UINT64(1);
+#endif
+	}
+	else
+	{
+		ereport(ERROR,
+				(errmsg("unknown memory context '%s' (search for arbitrary contexts by name is not"
+						"implemented)",
+						context_name)));
+		PG_RETURN_NULL();
+	}
 }
