@@ -2498,4 +2498,4 @@ the next release.
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
 
 **Bugfixes**
-* #3481 GROUP BY error when setting compress_segmentby with an enum column
+* #4619 Improve handling enum columns in compressed hypertables
