@@ -17,12 +17,14 @@ accidentally triggering the load of a previous DB version.**
 * #4555 Handle properly default privileges on Continuous Aggregates
 * #4575 Fix use of `get_partition_hash` and `get_partition_for_key` inside an IMMUTABLE function
 * #4416 Handle TRUNCATE TABLE on chunks
+* #4611 Fix a potential OOM when loading large data sets into a hypertable
 
 **Thanks**
 @janko for reporting an issue when adding bool column with default value to compressed hypertable
 @AlmiS for reporting error on `get_partition_hash` executed inside an IMMUTABLE function
 @michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
 @jayadevanm for reporting error of TRUNCATE TABLE on compressed chunk
+@ninjaltd and @mrksngl for reporting a potential OOM when loading large data sets into a hypertable
 
 ## 2.7.2 (2022-07-26)
 

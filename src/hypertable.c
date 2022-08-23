@@ -1033,6 +1033,12 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 	return ht;
 }
 
+static void
+hypertable_chunk_store_free(void *entry)
+{
+	ts_chunk_free((Chunk *) entry);
+}
+
 /*
  * Add the chunk to the cache that allows fast lookup of chunks
  * for a given hyperspace Point.
@@ -1048,7 +1054,7 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 	ts_subspace_store_add(h->chunk_cache,
 						  cached_chunk->cube,
 						  cached_chunk,
-						  /* object_free = */ NULL);
+						  hypertable_chunk_store_free);
 	MemoryContextSwitchTo(old_mcxt);
 
 	return cached_chunk;
@@ -1075,7 +1081,9 @@ ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point)
 /*
  * Find the chunk containing the given point, locking all its dimension slices
  * for share. NULL if not found.
- * Also uses hypertable chunk cache.
+ * Also uses hypertable chunk cache. The returned chunk is owned by the cache
+ * and may become invalid after some subsequent call to this function.
+ * Leaks memory, so call in a short-lived context.
  */
 Chunk *
 ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point)
