@@ -21,3 +21,5 @@ ALTER TABLE _timescaledb_catalog.chunk
   ALTER COLUMN  osm_chunk SET DEFAULT FALSE;
 
 CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
+
+DROP FUNCTION IF EXISTS @extschema@.decompress_chunk;

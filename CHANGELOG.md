@@ -1592,6 +1592,7 @@ This release contains bugfixes.
 * #1089 Fix compatibility with extensions that define planner_hook
 * #1057 Fix chunk exclusion constraint type inference
 * #1060 Fix sort_transform optimization
+* #4645 Fix decompress_chunk 2nd argument from default false to true
 
 **Thanks**
 * @esatterwhite for reporting a bug when using timescaledb with zombodb
@@ -2340,6 +2341,7 @@ complete, depending on the size of your database**
 **Thanks**
 * @yadid for reporting a segfault (fixed in 50c8c4c)
 * @ryan-shaw for reporting tuples not being correctly converted to a chunk's rowtype (fixed in 645b530)
+* @hardikm10 for reporting issue in decompress_chunk when 1 of the chunk is not compressed
 
 ## 0.4.0 (2017-08-21)
 
