@@ -4,7 +4,7 @@
 
 -- TEST SETUP --
 \set ON_ERROR_STOP 0
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 
 -- START OF USAGE TEST --

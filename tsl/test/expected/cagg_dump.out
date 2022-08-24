@@ -96,7 +96,7 @@ CREATE MATERIALIZED VIEW mat_after
 WITH (timescaledb.continuous)
 AS :QUERY_AFTER WITH NO DATA;
 --materialize mat_before
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 CALL refresh_continuous_aggregate('mat_before', NULL, NULL);
 SELECT count(*) FROM conditions_before;
  count 

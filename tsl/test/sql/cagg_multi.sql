@@ -4,7 +4,7 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 
 CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);

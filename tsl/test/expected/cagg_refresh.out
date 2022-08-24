@@ -121,10 +121,12 @@ ORDER BY day DESC, device;
 -- Refresh the rest (and try DEBUG output)
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
+LOG:  statement: CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
 DEBUG:  refreshing continuous aggregate "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sun May 03 17:00:00 2020 PDT ]
 DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 1588723200000000 1588550400000000
 DEBUG:  invalidation refresh on "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sat May 02 17:00:00 2020 PDT ]
 RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;

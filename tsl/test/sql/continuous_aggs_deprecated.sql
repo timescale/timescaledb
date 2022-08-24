@@ -605,7 +605,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 CALL refresh_continuous_aggregate('mat_drop_test', NULL, NULL);
 
 --force invalidation
