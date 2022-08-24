@@ -342,8 +342,10 @@ SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
 
 set client_min_messages TO LOG;
 CALL run_job(:job_id);
+LOG:  statement: CALL run_job(1004);
 LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
 set client_min_messages TO NOTICE;
+LOG:  statement: set client_min_messages TO NOTICE;
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
  count 

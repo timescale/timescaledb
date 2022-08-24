@@ -51,11 +51,11 @@ session "SV"
 step "SV1"	{ SELECT * FROM continuous_view order by 1; }
 
 session "R"
-setup { SET client_min_messages TO LOG; }
+setup { SET client_min_messages TO NOTICE; }
 step "Refresh"	{ CALL refresh_continuous_aggregate('continuous_view', NULL, 15); }
 
 session "R1"
-setup { SET client_min_messages TO LOG; }
+setup { SET client_min_messages TO NOTICE; }
 step "Refresh1"	{ CALL refresh_continuous_aggregate('continuous_view', NULL, 15); }
 
 session "R2"

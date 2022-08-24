@@ -11,7 +11,7 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "
       format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
 \gset
 \set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
