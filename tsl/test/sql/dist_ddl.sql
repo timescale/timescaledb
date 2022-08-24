@@ -115,6 +115,8 @@ SELECT true FROM pg_tables WHERE tablename = 'disttable';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SET ROLE :ROLE_1;
 
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+
 -- SET SCHEMA
 \set ON_ERROR_STOP 0
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;

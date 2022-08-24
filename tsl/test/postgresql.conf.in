@@ -30,3 +30,8 @@ timescaledb.ssl_dir='@TEST_OUTPUT_DIR@/timescaledb/certs'
 timescaledb.passfile='@TEST_PASSFILE@'
 wal_level='logical'
 timescaledb_experimental.enable_distributed_ddl=on
+log_error_verbosity='VERBOSE'
+log_min_messages='INFO'
+# This breaks isolation tests, not sure why the statements end in
+# the isolation tester output.
+# log_statement='all'

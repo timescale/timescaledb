@@ -43,12 +43,21 @@ set timescaledb.max_cached_chunks_per_hypertable = 3;
 \copy uk_price_paid from program 'bash -c "cat <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz)"';
 \copy uk_price_paid from program 'bash -c "cat <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz)"';
 \copy uk_price_paid from program 'bash -c "cat <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz)"';
--- We'll only compare the third and fourth run because the others have variance
--- due to new chunks being created and other unknown reasons. Allow 1% change of
--- memory usage to account for some randomness.
-select (max(bytes) - min(bytes)) / max(bytes)::float > 0.01 from portal_memory_log where id >= 3;
- ?column? 
-----------
- f
+\copy uk_price_paid from program 'bash -c "cat <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz) <(zcat < data/prices-10k-random-1.tsv.gz)"';
+select count(*) from portal_memory_log;
+ count 
+-------
+     5
 (1 row)
+
+-- We'll only compare the biggest runs, because the smaller ones have variance
+-- due to new chunks being created and other unknown reasons. Allow 5% change of
+-- memory usage to account for some randomness.
+select * from portal_memory_log where (
+    select (max(bytes) - min(bytes)) / max(bytes)::float > 0.05
+    from portal_memory_log where id >= 4
+);
+ id | bytes 
+----+-------
+(0 rows)
 
