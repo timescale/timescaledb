@@ -255,6 +255,16 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 		job->fd.max_retries =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)]);
 
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)])
+		job->fd.fixed_schedule =
+			DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)]);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)])
+	{
+		job->fd.initial_start =
+			DatumGetTimestampTz(values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)]);
+	}
+
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
 		job->fd.retry_period =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)]);
@@ -350,8 +360,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool should_free, isnull;
-		Datum value;
+		bool should_free, isnull, initial_start_isnull;
+		Datum value, initial_start;
 
 		BgwJob *job = MemoryContextAllocZero(mctx, alloc_size);
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
@@ -372,6 +382,12 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		/* handle NULL columns */
 		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
 		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
+
+		initial_start = slot_getattr(ti->slot, Anum_bgw_job_initial_start, &initial_start_isnull);
+		if (!initial_start_isnull)
+			job->fd.initial_start = DatumGetTimestampTz(initial_start);
+		else
+			job->fd.initial_start = DT_NOBEGIN;
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
@@ -1102,6 +1118,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
+
 	CommitTransactionCommand();
 
 	if (job == NULL)
@@ -1274,7 +1291,8 @@ int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
-						   Name owner, bool scheduled, int32 hypertable_id, Jsonb *config)
+						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
+						   Jsonb *config, TimestampTz initial_start)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -1309,6 +1327,24 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = BoolGetDatum(fixed_schedule);
+	/* initial_start must have a value if the schedule is fixed */
+	Assert(!fixed_schedule || !TIMESTAMP_NOT_FINITE(initial_start));
+
+	if (TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] =
+			TimestampTzGetDatum(initial_start);
+	}
+
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = false;
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] =
+			TimestampTzGetDatum(initial_start);
+	}
+
 	if (hypertable_id == 0)
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	else
@@ -1332,4 +1368,26 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 
 	table_close(rel, NoLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
+}
+
+/*
+ * This function ensures the schedule interval is acceptable in the case
+ * of fixed job schedules. Intervals that mix months with day and time
+ * components are not acceptable since internally we use time_bucket and
+ * cannot bucket by such an interval.
+ */
+void
+ts_bgw_job_validate_schedule_interval(Interval *schedule_interval)
+{
+	bool has_month, has_day, has_time;
+	has_month = schedule_interval->month;
+	has_day = schedule_interval->day;
+	has_time = schedule_interval->time;
+
+	if (has_month && (has_day || has_time))
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("month intervals cannot have day or time component"),
+				errdetail("Fixed schedule jobs do not support such schedule intervals."),
+				errhint("Express the interval in terms of days or time instead."));
 }

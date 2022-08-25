@@ -106,7 +106,7 @@ jobs:
         # test seems to fail due to a PostgreSQL bug where AbortStartTime in
         # postmaster.c is not atomic but read/written across signal handlers
         # and ServerLoop.
-        make -k -C build installcheck SKIPS='remote_txn' IGNORES='bgw_db_scheduler debug_notice' | tee installcheck.log
+        make -k -C build installcheck SKIPS='remote_txn' IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed debug_notice' | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

@@ -149,7 +149,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
 
 -- disable recompress in compress job
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false')) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
 
 -- nothing to do
 CALL run_job(:JOB_COMPRESS);
@@ -170,7 +170,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
 
 -- reenable recompress in compress job
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','true')) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','true'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
 
 -- should recompress now
 CALL run_job(:JOB_COMPRESS);

@@ -44,7 +44,7 @@ jobs:
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata"]
         tsl_ignores: ["compression_algos dist_partial_agg remote_connection"]
-        tsl_skips: ["bgw_db_scheduler cagg_ddl_dist_ht data_fetcher dist_compression dist_move_chunk dist_remote_error remote_txn"]
+        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht data_fetcher dist_compression dist_move_chunk dist_remote_error remote_txn"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 12

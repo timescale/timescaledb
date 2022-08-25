@@ -25,6 +25,8 @@
 #include "policy_utils.h"
 #include "time_utils.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -509,7 +511,8 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
-								 Interval refresh_interval, bool if_not_exists)
+								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
+								 TimestampTz initial_start)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -632,8 +635,10 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 										&check_name,
 										&owner,
 										true,
+										fixed_schedule,
 										cagg->data.mat_hypertable_id,
-										config);
+										config,
+										initial_start);
 
 	PG_RETURN_INT32(job_id);
 }
@@ -661,14 +666,32 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	end_offset.isnull = PG_ARGISNULL(2);
 	refresh_interval = *PG_GETARG_INTERVAL_P(3);
 	if_not_exists = PG_GETARG_BOOL(4);
+	TimestampTz initial_start = PG_ARGISNULL(5) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(5);
+	bool fixed_schedule = !PG_ARGISNULL(5);
 
-	return policy_refresh_cagg_add_internal(cagg_oid,
-											start_offset_type,
-											start_offset,
-											end_offset_type,
-											end_offset,
-											refresh_interval,
-											if_not_exists);
+	Datum retval;
+	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
+	if (fixed_schedule)
+	{
+		ts_bgw_job_validate_schedule_interval(&refresh_interval);
+		if (TIMESTAMP_NOT_FINITE(initial_start))
+			initial_start = ts_timer_get_current_timestamp();
+	}
+	retval = policy_refresh_cagg_add_internal(cagg_oid,
+											  start_offset_type,
+											  start_offset,
+											  end_offset_type,
+											  end_offset,
+											  refresh_interval,
+											  if_not_exists,
+											  fixed_schedule,
+											  initial_start);
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		int32 job_id = DatumGetInt32(retval);
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
+	return retval;
 }
 
 Datum
