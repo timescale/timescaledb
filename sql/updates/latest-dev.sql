@@ -149,3 +149,12 @@ CREATE FUNCTION @extschema@.create_distributed_hypertable(
     replication_factor      INTEGER = NULL,
     data_nodes              NAME[] = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
+
+DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "any", "any", INTERVAL, BOOL);
+-- unnecessary, but for clarity
+DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, INTERVAL);
+
+-- add field for fixed_schedule
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN fixed_schedule BOOL;

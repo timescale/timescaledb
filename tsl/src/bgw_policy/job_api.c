@@ -19,6 +19,7 @@
 #include "job.h"
 #include "job_api.h"
 #include "hypertable_cache.h"
+#include "bgw/timer.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -28,7 +29,7 @@
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
-#define ALTER_JOB_NUM_COLS 9
+#define ALTER_JOB_NUM_COLS 10
 
 /*
  * This function ensures that the check function has the required signature
@@ -68,6 +69,7 @@ validate_check_signature(Oid check)
  * 3 initial_start TIMESTAMPTZ DEFAULT NULL,
  * 4 scheduled BOOL DEFAULT true
  * 5 check_config REGPROC DEFAULT NULL
+ * 6 fixed_schedule BOOL DEFAULT TRUE
  * ) RETURNS INTEGER
  */
 Datum
@@ -84,6 +86,7 @@ job_add(PG_FUNCTION_ARGS)
 	int32 job_id;
 	char *func_name = NULL;
 	char *check_name_str = NULL;
+	TimestampTz initial_start = PG_ARGISNULL(3) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(3);
 
 	Oid owner = GetUserId();
 	Oid proc = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
@@ -91,6 +94,10 @@ job_add(PG_FUNCTION_ARGS)
 	Jsonb *config = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
 	Oid check = PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
+	bool fixed_schedule = PG_ARGISNULL(6) ? true : PG_GETARG_BOOL(6);
+
+	// elog(LOG, "inital start is %s, current timestamp is %s", 
+	// DatumGetCString(DirectFunctionCall1(timestamptz_out, initial_start)), DatumGetCString(DirectFunctionCall1(timestamptz_out, current_time)));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -134,6 +141,10 @@ job_add(PG_FUNCTION_ARGS)
 		namestrcpy(&check_name, check_name_str);
 	}
 
+	// if no initial_start was provided for a fixed schedule, use the current time
+	if (fixed_schedule && TIMESTAMP_IS_NOBEGIN(initial_start))
+		initial_start = ts_timer_get_current_timestamp();
+
 	/* Verify that the owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner);
 
@@ -160,13 +171,12 @@ job_add(PG_FUNCTION_ARGS)
 										&check_name,
 										&owner_name,
 										scheduled,
+										fixed_schedule,
 										0,
-										config);
-	if (!PG_ARGISNULL(3))
-	{
-		TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(3);
+										config, initial_start);
+
+	if (!TIMESTAMP_IS_NOBEGIN(initial_start))
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
-	}
 
 	PG_RETURN_INT32(job_id);
 }
@@ -266,6 +276,7 @@ job_alter(PG_FUNCTION_ARGS)
 	TimestampTz next_start;
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
+	bool fixed_schedule = PG_GETARG_BOOL(9);
 	BgwJob *job;
 	NameData check_name = { 0 };
 	NameData check_schema = { 0 };
@@ -303,6 +314,8 @@ job_alter(PG_FUNCTION_ARGS)
 		job->fd.scheduled = PG_GETARG_BOOL(5);
 	if (!PG_ARGISNULL(6))
 		job->fd.config = PG_GETARG_JSONB_P(6);
+	if (!PG_ARGISNULL(9))
+		job->fd.fixed_schedule = PG_GETARG_BOOL(9);
 
 	if (!PG_ARGISNULL(9))
 	{
@@ -373,6 +386,7 @@ job_alter(PG_FUNCTION_ARGS)
 		values[6] = JsonbPGetDatum(job->fd.config);
 
 	values[7] = TimestampTzGetDatum(next_start);
+	values[8] = BoolGetDatum(fixed_schedule);
 
 	if (unregister_check)
 		nulls[8] = true;

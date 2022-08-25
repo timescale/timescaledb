@@ -318,12 +318,15 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool should_free, isnull;
-		Datum value;
+		bool should_free, isnull, isnull1;
+		Datum value, value1;
 
 		BgwJob *job = MemoryContextAllocZero(mctx, alloc_size);
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 		memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
+
+		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
+		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, DatumGetCString(TimestampTzGetDatum(job->fd.initial_start)));
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -340,6 +343,18 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		/* handle NULL columns */
 		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
 		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
+
+		// value1 = slot_getattr(ti->slot, Anum_bgw_job_fixed_schedule, &isnull1);
+		// if (!isnull1)
+		// 	job->fd.fixed_schedule = DatumGetBool(value1);
+		value1 = slot_getattr(ti->slot, Anum_bgw_job_initial_start, &isnull1);
+		if (!isnull1)
+			job->fd.initial_start = DatumGetTimestampTz(value1);
+		else 
+			job->fd.initial_start = DT_NOBEGIN;
+		elog(DEBUG1, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
+		 __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, 
+		 DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
@@ -783,6 +798,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		BoolGetDatum(updated_job->fd.scheduled);
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
 
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] =
+		BoolGetDatum(updated_job->fd.fixed_schedule);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = true;
+
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] =
@@ -1174,7 +1193,8 @@ int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
-						   Name owner, bool scheduled, int32 hypertable_id, Jsonb *config)
+						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id, Jsonb *config,
+						   TimestampTz initial_start)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -1209,6 +1229,15 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = BoolGetDatum(fixed_schedule);
+	/* initial_start must have a value if the schedule is fixed */
+	// Assert((fixed_schedule == true) == TIMESTAMP_IS_NOBEGIN(initial_start));
+	/* initial_start was not provided, will be calculating next_start based on finish time */
+	if (TIMESTAMP_IS_NOBEGIN(initial_start))
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = TimestampTzGetDatum(initial_start);
+	
 	if (hypertable_id == 0)
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	else
