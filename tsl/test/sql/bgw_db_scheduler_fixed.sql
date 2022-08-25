@@ -6,6 +6,7 @@
 -- Setup
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- this mock_start_time doesnt seem to be used anywhere
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
@@ -22,11 +23,13 @@ CREATE OR REPLACE FUNCTION ts_bgw_test_job_sleep(job_id INT, config JSONB) RETUR
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT false) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
+-- we use insert_job instead of add_job because we want to be able to set and use max_retries, max_runtime, retry_period which are not part of the add_job api
+CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT true)
+RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
   INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,
-  retry_period,proc_name,proc_schema,owner,scheduled,fixed_schedule)
-  VALUES($1,$3,$4,5,$5,$2,'public',$6,$7,$8) RETURNING id;
+  retry_period,proc_name,proc_schema,owner,scheduled,fixed_schedule,initial_start)
+  VALUES($1,$3,$4,5,$5,$2,'public',$6,$7,$8,'2000-01-01 00:00:00+00'::timestamptz) RETURNING id;
 $$;
 
 CREATE OR REPLACE FUNCTION test_toggle_scheduled(job_id INTEGER) RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS
@@ -39,6 +42,7 @@ $$;
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 \set WAIT_FOR_STANDARD_WAITLATCH 3
 
+-- simply sets the wait type
 CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
@@ -103,13 +107,16 @@ CREATE TABLE public.bgw_log(
 );
 
 CREATE VIEW sorted_bgw_log AS
-    SELECT msg_no, application_name, regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+    SELECT msg_no, application_name, 
+    regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') 
+    AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
 
 INSERT INTO public.bgw_dsm_handle_store VALUES (0);
+
 SELECT ts_bgw_params_create();
 
 --
@@ -118,10 +125,7 @@ SELECT ts_bgw_params_create();
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
--- turn on extended display to make the many fields of the table easier to parse
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
-\x off
 -- empty
 SELECT * FROM sorted_bgw_log;
 
@@ -130,20 +134,18 @@ SELECT * FROM sorted_bgw_log;
 --
 
 TRUNCATE bgw_log;
+-- this function sets the counter (microseconds) that corresponds to the current time to the 
+-- given value (defalut 0, and the default for setting the latch is false)
 SELECT ts_bgw_params_reset_time();
 SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s',scheduled:= false);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
-\x off
 SELECT * FROM timescaledb_information.job_stats;
 
 SELECT test_toggle_scheduled(1000);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
-\x off
 SELECT * FROM timescaledb_information.job_stats;
 SELECT * FROM sorted_bgw_log;
 
@@ -209,7 +211,6 @@ SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_succ
 FROM _timescaledb_internal.bgw_job_stat;
 
 SELECT * FROM sorted_bgw_log;
-
 --
 -- Test what happens when running a job that throws an error
 --
@@ -218,7 +219,8 @@ TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
-SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', INTERVAL '100ms');
+-- schedule_interval, max_runtime, retry_period
+SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '800ms', INTERVAL '100s', INTERVAL '200ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --Run the first time and error
@@ -229,25 +231,36 @@ SELECT * FROM sorted_bgw_log;
 
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
 
+-- what we aim to verify here is the following: 
+-- 1. that the job is run again on its next scheduled slot, if the next_start calculated based
+-- on failure count would surpass it
+-- the next_start on failure is calculated by adding failure_count * retry_period to finish time
+-- maximum backoff is 5 * schedule interval, but for a fixed job, if we surpass the next_scheduled_slot
+-- for it this way, then we execute again at the next scheduled slot instead
+
 --Scheduler runs the job again, sees another error, and increases the wait time
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
+-- this retry time is before the next scheduled execution, so the job is allowed to retry before then
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225); -- will see 2 failures now
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
---The job runs and fails again a few more times increasing the wait time each time.
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225);
+-- as we have a job on a fixed_schedule, the next_start will not be more than the next scheduled slot
+-- If the calculated next_start is more than the next scheduled execution slot, then
+-- we will execute again at the next scheduled slot. 
+-- again this is before the next scheduled slot so the job retries before then
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425); -- will see 3 failures now
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+SELECT * FROM sorted_bgw_log;
+-- will see 4 failures now 
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(625); 
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425);
-SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
-FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
-
---Once the wait time reaches 500ms it stops increasion
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
+-- will see 5 failures now because job executes again on its next scheduled slot (800ms after its initial start, which is 0)
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
@@ -262,10 +275,9 @@ FROM timescaledb_information.job_stats WHERE job_id = 1001;
 TRUNCATE bgw_log;
 SELECT scheduled FROM alter_job(1001, scheduled => true) AS discard;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 1001;
-SELECT * FROM sorted_bgw_log;
 
 --
 -- Test timeout logic
@@ -620,9 +632,7 @@ SELECT ts_bgw_params_reset_time(150000, true);
 SELECT wait_for_timer_to_run(150000);
 SELECT wait_for_job_1_to_run(2);
 
-\x on
 select * from _timescaledb_internal.bgw_job_stat;
-\x off
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
 
 -- test null handling in delete_job
@@ -653,9 +663,78 @@ SELECT wait_for_job_1_to_run(4);
 
 SELECT ts_bgw_params_reset_time(500000, true);
 SELECT * FROM sorted_bgw_log;
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
-\x off
+
 -- clean up jobs
 SELECT _timescaledb_internal.stop_background_workers();
+select delete_job(:job_id);
+-- test the new API with all its parameters: with timezone, without timezone
+TRUNCATE bgw_log;
 
+TRUNCATE bgw_dsm_handle_store;
+
+INSERT INTO public.bgw_dsm_handle_store VALUES (0);
+
+SELECT ts_bgw_params_create();
+
+CREATE TABLE test_table_scheduler (
+    time timestamptz not null,
+    a int,
+    b int
+);
+
+select '2000-01-01 00:00:00+00' as init \gset
+
+select create_hypertable('test_table_scheduler', 'time', chunk_time_interval => interval '1 month');
+INSERT INTO test_table_scheduler values
+(now() - interval '10 years', 1, 1),
+(now() - interval '8 years', 1, 1),
+(now() - interval '6 years', 1, 1),
+(now() - interval '4 years', 1, 1),
+(now() - interval '2 years', 1, 1),
+(now() - interval '1 years', 2, 2),
+(now() - interval '4 months', 3, 3),
+(now() - interval '3 months', 4, 4);
+
+CREATE MATERIALIZED VIEW cagg_scheduler(time, avg_a)
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 month', time), avg(a)
+FROM test_table_scheduler
+GROUP BY time_bucket('1 month', time)
+WITH NO DATA;
+
+select show_chunks('test_table_scheduler');
+
+alter table test_table_scheduler set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+select add_retention_policy('test_table_scheduler', interval '2 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
+select add_compression_policy('test_table_scheduler', interval '1 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
+select add_continuous_aggregate_policy('cagg_scheduler', interval '1 year', interval '2 months', interval '3 weeks',
+initial_start => :'init'::timestamptz + interval '5 ms', timezone => 'Europe/Athens');
+select * from _timescaledb_config.bgw_job;
+-- now wait for scheduler to run the policies
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * from _timescaledb_internal.bgw_job_stat;
+
+SELECT show_chunks('test_table_scheduler');
+select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;
+select avg_a from cagg_scheduler;
+-- test the API for add_job too
+create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
+begin
+raise NOTICE 'this is job_test_fixed';
+end
+$$;
+
+\set ON_ERROR_STOP 0
+
+select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms');
+select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms', timezone => 'Europe/Athens');
+-- this will fail because the timezone has a bad value
+select add_job('job_test_fixed', interval '8 weeks', timezone => 'EuRoPe/AmEriCa');
+select add_reorder_policy('test_table_scheduler','test_table_scheduler_time_idx',
+initial_start => :'init'::timestamptz + interval '15 ms', timezone => 'Europe/Berlin');
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+select * from _timescaledb_config.bgw_job order by id;
+select job_id, last_start, last_finish, next_start, last_successful_finish from _timescaledb_internal.bgw_job_stat order by job_id;

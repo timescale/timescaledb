@@ -26,6 +26,8 @@
 #include "hypertable.h"
 #include "reorder.h"
 #include "utils.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 
 /*
  * Default scheduled interval for reorder jobs should be 1/2 of the default chunk length.
@@ -137,6 +139,10 @@ policy_reorder_proc(PG_FUNCTION_ARGS)
 Datum
 policy_reorder_add(PG_FUNCTION_ARGS)
 {
+	/* behave like a strict function */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
 	int32 job_id;
@@ -151,8 +157,15 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	Oid partitioning_type;
 	Oid owner_id;
 	List *jobs;
+	TimestampTz initial_start = PG_ARGISNULL(3) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(3);
+	bool fixed_schedule = !PG_ARGISNULL(3);
+	text *timezone = PG_ARGISNULL(4) ? NULL : PG_GETARG_TEXT_PP(4);
+	char *valid_timezone = NULL;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (timezone != NULL)
+		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(4));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 	Assert(ht != NULL);
@@ -233,6 +246,14 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 		PG_RETURN_INT32(-1);
 	}
 
+	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
+	if (fixed_schedule)
+	{
+		ts_bgw_job_validate_schedule_interval(&schedule_interval);
+		if (TIMESTAMP_NOT_FINITE(initial_start))
+			initial_start = ts_timer_get_current_timestamp();
+	}
+
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Reorder Policy");
 	namestrcpy(&proc_name, POLICY_REORDER_PROC_NAME);
@@ -249,6 +270,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
+	/* for the reorder policy, we choose a drifting schedule
+	 since the user does not control the schedule interval either */
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&schedule_interval,
 										DEFAULT_MAX_RUNTIME,
@@ -260,8 +283,14 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										&check_name,
 										&owner,
 										true,
+										fixed_schedule,
 										hypertable_id,
-										config);
+										config,
+										initial_start,
+										valid_timezone);
+
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
 
 	PG_RETURN_INT32(job_id);
 }

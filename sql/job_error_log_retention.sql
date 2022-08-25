@@ -51,7 +51,9 @@ INSERT INTO _timescaledb_config.bgw_job (
     scheduled,
     config,
     check_schema,
-    check_name
+    check_name,
+    fixed_schedule,
+    initial_start
 ) 
 VALUES 
 (
@@ -67,5 +69,7 @@ VALUES
     true,
     '{"drop_after":"1 month"}',
     '_timescaledb_internal',
-    'policy_job_error_retention_check'
+    'policy_job_error_retention_check',
+    true,
+    '2000-01-01 00:00:00+00'::timestamptz
 ) ON CONFLICT (id) DO NOTHING;

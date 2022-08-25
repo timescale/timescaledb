@@ -32,12 +32,15 @@
 #include "params.h"
 #include "test_utils.h"
 #include "cross_module_fn.h"
+#include "time_bucket.h"
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_main);
 TS_FUNCTION_INFO_V1(ts_bgw_job_execute_test);
+/* function for testing the correctness of the next_scheduled_slot calculation */
+TS_FUNCTION_INFO_V1(ts_test_next_scheduled_execution_slot);
 
 typedef enum TestJobType
 {
@@ -54,6 +57,67 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_3_LONG] = "bgw_test_job_3_long",
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
 };
+
+/* this is copied from the job_stat/get_next_scheduled_execution_slot */
+extern Datum
+ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
+{
+	Interval *schedule_interval = PG_GETARG_INTERVAL_P(0);
+	TimestampTz finish_time = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(2);
+	text *timezone = PG_ARGISNULL(3) ? NULL : PG_GETARG_TEXT_PP(3);
+
+	Datum timebucket_fini, result, offset;
+	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
+
+	if (timezone == NULL)
+	{
+		offset = DirectFunctionCall2(ts_timestamptz_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(initial_start));
+
+		timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  TimestampTzGetDatum(initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	}
+	else
+	{
+		char *tz = text_to_cstring(timezone);
+		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  CStringGetTextDatum(tz),
+											  TimestampTzGetDatum(initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(initial_start),
+									 CStringGetTextDatum(tz));
+	}
+
+	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+	/* if we have a month component, the origin doesn't work so we must manually
+	 include the offset */
+	if (schedule_interval->month)
+	{
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
+	}
+	/*
+	 * adding the schedule interval above to get the next bucket might still not hit
+	 * the next bucket if we are crossing DST. So we can end up with a next_start value
+	 * that is actually less than the finish time of the job. Hence, we have to make sure
+	 * the next scheduled slot we compute is in the future and not in the past
+	 */
+	while (DatumGetTimestampTz(result) <= finish_time)
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+
+	return result;
+}
 
 extern Datum
 ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
@@ -113,6 +177,8 @@ start_test_scheduler(int32 ttl, Oid user_oid)
 	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", &bgw_params);
 }
 
+/* this function will start up a bgw for the scheduler and set the ttl to the given value
+ * (microseconds) */
 extern Datum
 ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {

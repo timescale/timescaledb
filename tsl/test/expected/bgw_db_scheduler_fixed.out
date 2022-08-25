@@ -5,6 +5,7 @@
 -- Setup
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- this mock_start_time doesnt seem to be used anywhere
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
@@ -16,11 +17,13 @@ CREATE OR REPLACE FUNCTION ts_bgw_params_destroy() RETURNS VOID AS :MODULE_PATHN
 CREATE OR REPLACE FUNCTION ts_bgw_test_job_sleep(job_id INT, config JSONB) RETURNS VOID AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT false) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
+-- we use insert_job instead of add_job because we want to be able to set and use max_retries, max_runtime, retry_period which are not part of the add_job api
+CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT true)
+RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
   INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,
-  retry_period,proc_name,proc_schema,owner,scheduled,fixed_schedule)
-  VALUES($1,$3,$4,5,$5,$2,'public',$6,$7,$8) RETURNING id;
+  retry_period,proc_name,proc_schema,owner,scheduled,fixed_schedule,initial_start)
+  VALUES($1,$3,$4,5,$5,$2,'public',$6,$7,$8,'2000-01-01 00:00:00+00'::timestamptz) RETURNING id;
 $$;
 CREATE OR REPLACE FUNCTION test_toggle_scheduled(job_id INTEGER) RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS
 $$
@@ -30,6 +33,7 @@ $$;
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 \set WAIT_FOR_STANDARD_WAITLATCH 3
+-- simply sets the wait type
 CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE FUNCTION get_application_pid(app_name TEXT) RETURNS INTEGER LANGUAGE SQL AS
@@ -87,7 +91,9 @@ CREATE TABLE public.bgw_log(
     msg TEXT
 );
 CREATE VIEW sorted_bgw_log AS
-    SELECT msg_no, application_name, regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+    SELECT msg_no, application_name, 
+    regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') 
+    AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -108,12 +114,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 (1 row)
 
 -- empty
--- turn on extended display to make the many fields of the table easier to parse
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+ job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
 (0 rows)
 
-\x off
 -- empty
 SELECT * FROM sorted_bgw_log;
  msg_no | application_name |                        msg                         
@@ -125,6 +130,8 @@ SELECT * FROM sorted_bgw_log;
 -- Test running the scheduler with a job marked as unscheduled
 --
 TRUNCATE bgw_log;
+-- this function sets the counter (microseconds) that corresponds to the current time to the 
+-- given value (defalut 0, and the default for setting the latch is false)
 SELECT ts_bgw_params_reset_time();
  ts_bgw_params_reset_time 
 --------------------------
@@ -144,11 +151,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 (1 row)
 
 -- empty
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+ job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
 (0 rows)
 
-\x off
 SELECT * FROM timescaledb_information.job_stats;
  hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_start | total_runs | total_successes | total_failures 
 -------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+------------+------------+-----------------+----------------
@@ -166,29 +173,16 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
  
 (1 row)
 
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
--[ RECORD 1 ]----------+--------------------------------
-job_id                 | 1000
-last_start             | Fri Dec 31 16:00:00.05 1999 PST
-last_finish            | Fri Dec 31 16:00:00.05 1999 PST
-next_start             | Fri Dec 31 16:00:00.15 1999 PST
-last_successful_finish | Fri Dec 31 16:00:00.05 1999 PST
-last_run_success       | t
-total_runs             | 1
-total_duration         | @ 0
-total_successes        | 1
-total_failures         | 0
-total_crashes          | 0
-consecutive_failures   | 0
-consecutive_crashes    | 0
-flags                  | 0
+ job_id |           last_start            |           last_finish           |           next_start           |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+---------------------------------+---------------------------------+--------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
+   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.1 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0 |     0
+(1 row)
 
-\x off
 SELECT * FROM timescaledb_information.job_stats;
- hypertable_schema | hypertable_name | job_id |       last_run_started_at       |     last_successful_finish      | last_run_status | job_status | last_run_duration |           next_start            | total_runs | total_successes | total_failures 
--------------------+-----------------+--------+---------------------------------+---------------------------------+-----------------+------------+-------------------+---------------------------------+------------+-----------------+----------------
-                   |                 |   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Success         | Scheduled  |                   | Fri Dec 31 16:00:00.15 1999 PST |          1 |               1 |              0
+ hypertable_schema | hypertable_name | job_id |       last_run_started_at       |     last_successful_finish      | last_run_status | job_status | last_run_duration |           next_start           | total_runs | total_successes | total_failures 
+-------------------+-----------------+--------+---------------------------------+---------------------------------+-----------------+------------+-------------------+--------------------------------+------------+-----------------+----------------
+                   |                 |   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Success         | Scheduled  |                   | Fri Dec 31 16:00:00.1 1999 PST |          1 |               1 |              0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -239,7 +233,7 @@ job_status | Running
 SELECT datname, usename, application_name, state, query, wait_event_type, wait_event
   FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 -[ RECORD 1 ]----+------------------------------------
-datname          | db_bgw_db_scheduler
+datname          | db_bgw_db_scheduler_fixed
 usename          | default_perm_user
 application_name | User-Defined Action [1001]
 state            | active
@@ -281,9 +275,9 @@ SELECT insert_job('test_job_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '10
 (1 row)
 
 select * from _timescaledb_config.bgw_job;
-  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
-------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
- 1000 | test_job_1       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_1 | super_user | t         | f              |               |               |        |              |            | 
+  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | fixed_schedule |        initial_start         | hypertable_id | config | check_schema | check_name | timezone 
+------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+----------------+------------------------------+---------------+--------+--------------+------------+----------
+ 1000 | test_job_1       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_1 | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST |               |        |              |            | 
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -403,7 +397,8 @@ SELECT ts_bgw_params_reset_time();
 (1 row)
 
 DELETE FROM _timescaledb_config.bgw_job;
-SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', INTERVAL '100ms');
+-- schedule_interval, max_runtime, retry_period
+SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '800ms', INTERVAL '100s', INTERVAL '200ms');
  insert_job 
 ------------
        1001
@@ -439,8 +434,15 @@ SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_i
  Fri Dec 31 16:00:00 1999 PST | -infinity              | f
 (1 row)
 
+-- what we aim to verify here is the following: 
+-- 1. that the job is run again on its next scheduled slot, if the next_start calculated based
+-- on failure count would surpass it
+-- the next_start on failure is calculated by adding failure_count * retry_period to finish time
+-- maximum backoff is 5 * schedule interval, but for a fixed job, if we surpass the next_scheduled_slot
+-- for it this way, then we execute again at the next scheduled slot instead
 --Scheduler runs the job again, sees another error, and increases the wait time
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
+-- this retry time is before the next scheduled execution, so the job is allowed to retry before then
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225); -- will see 2 failures now
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -467,8 +469,11 @@ SELECT * FROM sorted_bgw_log;
       2 | test_job_2       | Error job 2
 (9 rows)
 
---The job runs and fails again a few more times increasing the wait time each time.
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225);
+-- as we have a job on a fixed_schedule, the next_start will not be more than the next scheduled slot
+-- If the calculated next_start is more than the next scheduled execution slot, then
+-- we will execute again at the next scheduled slot. 
+-- again this is before the next scheduled slot so the job retries before then
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425); -- will see 3 failures now
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -500,7 +505,8 @@ SELECT * FROM sorted_bgw_log;
       2 | test_job_2       | Error job 2
 (14 rows)
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425);
+-- will see 4 failures now 
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(625); 
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -537,8 +543,8 @@ SELECT * FROM sorted_bgw_log;
       2 | test_job_2       | Error job 2
 (19 rows)
 
---Once the wait time reaches 500ms it stops increasion
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
+-- will see 5 failures now because job executes again on its next scheduled slot (800ms after its initial start, which is 0)
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -600,7 +606,7 @@ SELECT scheduled FROM alter_job(1001, scheduled => true) AS discard;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -612,17 +618,6 @@ FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 1001;
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | f                |          6 |               0 |              6 |             0
 (1 row)
-
-SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                            msg                            
---------+------------------+-----------------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 reached max_retries after 6 consecutive failures
-      2 | test_job_2       | job 1001 threw an error
-      3 | test_job_2       | Error job 2
-(6 rows)
 
 --
 -- Test timeout logic
@@ -966,9 +961,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
 
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id |          last_finish           |           next_start           | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
---------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
-   1005 | Fri Dec 31 16:05:00.5 1999 PST | Fri Dec 31 16:05:05.5 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
+ job_id |          last_finish           |          next_start          | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
+--------+--------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
+   1005 | Fri Dec 31 16:05:00.5 1999 PST | Fri Dec 31 16:05:05 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -1160,9 +1155,9 @@ SELECT insert_job('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '10
 (1 row)
 
 select * from _timescaledb_config.bgw_job;
-  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
-------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
- 1012 | test_job_4       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_4 | super_user | t         | f              |               |               |        |              |            | 
+  id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | fixed_schedule |        initial_start         | hypertable_id | config | check_schema | check_name | timezone 
+------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+----------------+------------------------------+---------------+--------+--------------+------------+----------
+ 1012 | test_job_4       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_4 | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST |               |        |              |            | 
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -1449,25 +1444,12 @@ SELECT wait_for_job_1_to_run(2);
  t
 (1 row)
 
-\x on
 select * from _timescaledb_internal.bgw_job_stat;
--[ RECORD 1 ]----------+--------------------------------
-job_id                 | 1024
-last_start             | Fri Dec 31 16:00:00.15 1999 PST
-last_finish            | Fri Dec 31 16:00:00.15 1999 PST
-next_start             | Fri Dec 31 16:00:00.25 1999 PST
-last_successful_finish | Fri Dec 31 16:00:00.15 1999 PST
-last_run_success       | t
-total_runs             | 2
-total_duration         | @ 0
-total_successes        | 2
-total_failures         | 0
-total_crashes          | 0
-consecutive_failures   | 0
-consecutive_crashes    | 0
-flags                  | 0
+ job_id |           last_start            |           last_finish           |           next_start           |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+---------------------------------+---------------------------------+--------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
+   1024 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0 |     0
+(1 row)
 
-\x off
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
  delete_job 
 ------------
@@ -1581,29 +1563,198 @@ SELECT * FROM sorted_bgw_log;
       0 | new_job          | Execute job 1
 (16 rows)
 
-\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
--[ RECORD 1 ]----------+--------------------------------
-job_id                 | 1025
-last_start             | Fri Dec 31 16:00:00.48 1999 PST
-last_finish            | Fri Dec 31 16:00:00.48 1999 PST
-next_start             | Fri Dec 31 16:00:00.49 1999 PST
-last_successful_finish | Fri Dec 31 16:00:00.48 1999 PST
-last_run_success       | t
-total_runs             | 2
-total_duration         | @ 0
-total_successes        | 2
-total_failures         | 0
-total_crashes          | 0
-consecutive_failures   | 0
-consecutive_crashes    | 0
-flags                  | 0
+ job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
+   1025 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0 |     0
+(1 row)
 
-\x off
 -- clean up jobs
 SELECT _timescaledb_internal.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
 (1 row)
+
+select delete_job(:job_id);
+ delete_job 
+------------
+ 
+(1 row)
+
+-- test the new API with all its parameters: with timezone, without timezone
+TRUNCATE bgw_log;
+TRUNCATE bgw_dsm_handle_store;
+INSERT INTO public.bgw_dsm_handle_store VALUES (0);
+SELECT ts_bgw_params_create();
+ ts_bgw_params_create 
+----------------------
+ 
+(1 row)
+
+CREATE TABLE test_table_scheduler (
+    time timestamptz not null,
+    a int,
+    b int
+);
+select '2000-01-01 00:00:00+00' as init \gset
+select create_hypertable('test_table_scheduler', 'time', chunk_time_interval => interval '1 month');
+         create_hypertable         
+-----------------------------------
+ (1,public,test_table_scheduler,t)
+(1 row)
+
+INSERT INTO test_table_scheduler values
+(now() - interval '10 years', 1, 1),
+(now() - interval '8 years', 1, 1),
+(now() - interval '6 years', 1, 1),
+(now() - interval '4 years', 1, 1),
+(now() - interval '2 years', 1, 1),
+(now() - interval '1 years', 2, 2),
+(now() - interval '4 months', 3, 3),
+(now() - interval '3 months', 4, 4);
+CREATE MATERIALIZED VIEW cagg_scheduler(time, avg_a)
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 month', time), avg(a)
+FROM test_table_scheduler
+GROUP BY time_bucket('1 month', time)
+WITH NO DATA;
+select show_chunks('test_table_scheduler');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+(8 rows)
+
+alter table test_table_scheduler set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+select add_retention_policy('test_table_scheduler', interval '2 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
+ add_retention_policy 
+----------------------
+                 1026
+(1 row)
+
+select add_compression_policy('test_table_scheduler', interval '1 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
+ add_compression_policy 
+------------------------
+                   1027
+(1 row)
+
+select add_continuous_aggregate_policy('cagg_scheduler', interval '1 year', interval '2 months', interval '3 weeks',
+initial_start => :'init'::timestamptz + interval '5 ms', timezone => 'Europe/Athens');
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1028
+(1 row)
+
+select * from _timescaledb_config.bgw_job;
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |   owner    | scheduled | fixed_schedule |          initial_start           | hypertable_id |                                     config                                     |     check_schema      |                check_name                 |   timezone    
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+------------+-----------+----------------+----------------------------------+---------------+--------------------------------------------------------------------------------+-----------------------+-------------------------------------------+---------------
+ 1026 | Retention Policy [1026]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"drop_after": "@ 2 years", "hypertable_id": 1}                                | _timescaledb_internal | policy_retention_check                    | Europe/Berlin
+ 1027 | Compression Policy [1027]                  | @ 15 days         | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"hypertable_id": 1, "compress_after": "@ 1 year"}                             | _timescaledb_internal | policy_compression_check                  | Europe/Berlin
+ 1028 | Refresh Continuous Aggregate Policy [1028] | @ 21 days         | @ 0         |          -1 | @ 21 days    | _timescaledb_internal | policy_refresh_continuous_aggregate | super_user | t         | t              | Fri Dec 31 16:00:00.005 1999 PST |             2 | {"end_offset": "@ 2 mons", "start_offset": "@ 1 year", "mat_hypertable_id": 2} | _timescaledb_internal | policy_refresh_continuous_aggregate_check | Europe/Athens
+(3 rows)
+
+-- now wait for scheduler to run the policies
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * from _timescaledb_internal.bgw_job_stat;
+ job_id |            last_start            |           last_finish            |            next_start            |      last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+----------------------------------+----------------------------------+----------------------------------+----------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
+   1026 | Fri Dec 31 16:00:00 1999 PST     | Fri Dec 31 16:00:00 1999 PST     | Sat Jan 01 16:00:00 2000 PST     | Fri Dec 31 16:00:00 1999 PST     | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0 |     0
+   1027 | Fri Dec 31 16:00:00 1999 PST     | Fri Dec 31 16:00:00 1999 PST     | Sat Jan 15 16:00:00 2000 PST     | Fri Dec 31 16:00:00 1999 PST     | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0 |     0
+   1028 | Fri Dec 31 16:00:00.005 1999 PST | Fri Dec 31 16:00:00.005 1999 PST | Fri Jan 21 16:00:00.005 2000 PST | Fri Dec 31 16:00:00.005 1999 PST | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0 |     0
+(3 rows)
+
+SELECT show_chunks('test_table_scheduler');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+(4 rows)
+
+select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;
+   hypertable_schema   |      hypertable_name       |     chunk_schema      |    chunk_name     | is_compressed 
+-----------------------+----------------------------+-----------------------+-------------------+---------------
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_5_chunk  | t
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_6_chunk  | f
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_7_chunk  | f
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_8_chunk  | f
+ _timescaledb_internal | _materialized_hypertable_2 | _timescaledb_internal | _hyper_2_10_chunk | f
+(5 rows)
+
+select avg_a from cagg_scheduler;
+       avg_a        
+--------------------
+ 4.0000000000000000
+ 3.0000000000000000
+(2 rows)
+
+-- test the API for add_job too
+create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
+begin
+raise NOTICE 'this is job_test_fixed';
+end
+$$;
+\set ON_ERROR_STOP 0
+select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms');
+ add_job 
+---------
+    1029
+(1 row)
+
+select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms', timezone => 'Europe/Athens');
+ add_job 
+---------
+    1030
+(1 row)
+
+-- this will fail because the timezone has a bad value
+select add_job('job_test_fixed', interval '8 weeks', timezone => 'EuRoPe/AmEriCa');
+ERROR:  time zone "EuRoPe/AmEriCa" not recognized
+select add_reorder_policy('test_table_scheduler','test_table_scheduler_time_idx',
+initial_start => :'init'::timestamptz + interval '15 ms', timezone => 'Europe/Berlin');
+ add_reorder_policy 
+--------------------
+               1031
+(1 row)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+select * from _timescaledb_config.bgw_job order by id;
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |   owner    | scheduled | fixed_schedule |          initial_start           | hypertable_id |                                     config                                     |     check_schema      |                check_name                 |   timezone    
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+------------+-----------+----------------+----------------------------------+---------------+--------------------------------------------------------------------------------+-----------------------+-------------------------------------------+---------------
+ 1026 | Retention Policy [1026]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"drop_after": "@ 2 years", "hypertable_id": 1}                                | _timescaledb_internal | policy_retention_check                    | Europe/Berlin
+ 1027 | Compression Policy [1027]                  | @ 15 days         | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"hypertable_id": 1, "compress_after": "@ 1 year"}                             | _timescaledb_internal | policy_compression_check                  | Europe/Berlin
+ 1028 | Refresh Continuous Aggregate Policy [1028] | @ 21 days         | @ 0         |          -1 | @ 21 days    | _timescaledb_internal | policy_refresh_continuous_aggregate | super_user | t         | t              | Fri Dec 31 16:00:00.005 1999 PST |             2 | {"end_offset": "@ 2 mons", "start_offset": "@ 1 year", "mat_hypertable_id": 2} | _timescaledb_internal | policy_refresh_continuous_aggregate_check | Europe/Athens
+ 1029 | User-Defined Action [1029]                 | @ 7 mons          | @ 0         |          -1 | @ 5 mins     | public                | job_test_fixed                      | super_user | t         | t              | Fri Dec 31 16:00:00.01 1999 PST  |               |                                                                                |                       |                                           | 
+ 1030 | User-Defined Action [1030]                 | @ 7 mons          | @ 0         |          -1 | @ 5 mins     | public                | job_test_fixed                      | super_user | t         | t              | Fri Dec 31 16:00:00.01 1999 PST  |               |                                                                                |                       |                                           | Europe/Athens
+ 1031 | Reorder Policy [1031]                      | @ 360 hours       | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder                      | super_user | t         | t              | Fri Dec 31 16:00:00.015 1999 PST |             1 | {"index_name": "test_table_scheduler_time_idx", "hypertable_id": 1}            | _timescaledb_internal | policy_reorder_check                      | Europe/Berlin
+(6 rows)
+
+select job_id, last_start, last_finish, next_start, last_successful_finish from _timescaledb_internal.bgw_job_stat order by job_id;
+ job_id |            last_start            |           last_finish            |            next_start            |      last_successful_finish      
+--------+----------------------------------+----------------------------------+----------------------------------+----------------------------------
+   1026 | Fri Dec 31 16:00:00 1999 PST     | Fri Dec 31 16:00:00 1999 PST     | Sat Jan 01 16:00:00 2000 PST     | Fri Dec 31 16:00:00 1999 PST
+   1027 | Fri Dec 31 16:00:00 1999 PST     | Fri Dec 31 16:00:00 1999 PST     | Sat Jan 15 16:00:00 2000 PST     | Fri Dec 31 16:00:00 1999 PST
+   1028 | Fri Dec 31 16:00:00.005 1999 PST | Fri Dec 31 16:00:00.005 1999 PST | Fri Jan 21 16:00:00.005 2000 PST | Fri Dec 31 16:00:00.005 1999 PST
+   1029 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | Mon Jul 31 16:00:00.01 2000 PDT  | Fri Dec 31 16:00:00.025 1999 PST
+   1030 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | Mon Jul 31 16:00:00.01 2000 PDT  | Fri Dec 31 16:00:00.025 1999 PST
+   1031 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | Sat Jan 15 16:00:00.015 2000 PST | Fri Dec 31 16:00:00.025 1999 PST
+(6 rows)
 
