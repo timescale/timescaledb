@@ -24,7 +24,9 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
-  INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,retry_period,proc_name,proc_schema,owner,scheduled) VALUES($1,$3,$4,5,$5,$2,'public',$6,$7) RETURNING id;
+  INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,
+  retry_period,proc_name,proc_schema,owner,scheduled,initial_start)
+  VALUES($1,$3,$4,5,$5,$2,'public',$6,$7,'2000-01-01 00:00:00+00'::timestamptz) RETURNING id;
 $$;
 
 CREATE OR REPLACE FUNCTION test_toggle_scheduled(job_id INTEGER) RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS

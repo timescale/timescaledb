@@ -36,6 +36,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES_postgresql
     bgw_reorder_drop_chunks.sql
+    scheduler_fixed.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
     chunk_utils_compression.sql
@@ -102,6 +103,7 @@ endif()
 
 set(SOLO_TESTS_postgresql
     bgw_reorder_drop_chunks
+    scheduler_fixed
     compress_bgw_reorder_drop_chunks
     compression_ddl
     cagg_bgw

@@ -571,7 +571,7 @@ $$
   VALUES($1, $2, 'custom_func');
 $$;
  -- inject custom job
-SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb) AS job_id \gset
+SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS job_id \gset
 SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id, 'max_mat_view_date'::regclass);
  alter_job_set_hypertable_id 
 -----------------------------
@@ -579,9 +579,9 @@ SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id, 'max_mat_view
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
- job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |  proc_name  |       owner       | scheduled |        config        | next_start |   hypertable_schema   |      hypertable_name       | check_schema | check_name 
---------+----------------------------+-------------------+-------------+-------------+--------------+-------------+-------------+-------------------+-----------+----------------------+------------+-----------------------+----------------------------+--------------+------------
-   1026 | User-Defined Action [1026] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | {"type": "function"} |            | _timescaledb_internal | _materialized_hypertable_5 |              | 
+ job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |  proc_name  |       owner       | scheduled | fixed_schedule |        config        |          next_start          |        initial_start         |   hypertable_schema   |      hypertable_name       | check_schema | check_name 
+--------+----------------------------+-------------------+-------------+-------------+--------------+-------------+-------------+-------------------+-----------+----------------+----------------------+------------------------------+------------------------------+-----------------------+----------------------------+--------------+------------
+   1026 | User-Defined Action [1026] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | _timescaledb_internal | _materialized_hypertable_5 |              | 
 (1 row)
 
 SELECT timescaledb_experimental.remove_all_policies('max_mat_view_date', true); -- ignore custom job
