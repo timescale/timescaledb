@@ -260,8 +260,10 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										&check_name,
 										&owner,
 										true,
+										false,
 										hypertable_id,
-										config);
+										config,
+										DT_NOBEGIN);
 
 	PG_RETURN_INT32(job_id);
 }
