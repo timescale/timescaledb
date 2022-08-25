@@ -44,16 +44,24 @@ SELECT add_job('custom_func', NULL);
 SELECT add_job('custom_func', 'invalid interval');
 \set ON_ERROR_STOP 1
 
-SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb);
-SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb);
-SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
+select '2000-01-01 00:00:00+00' as time_zero \gset
 
-SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
-SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
+SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+
+SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
 
 -- exclude the telemetry[1] and job error retention[2] jobs
 -- job 2 may have already run which will set its next_start field thus making the test flaky
 SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
+
+-- -- don't select * because that will fetch the initial_start, or replace the initial start
+-- SELECT job_id, application_name,  schedule_interval, max_runtime, max_retries, retry_period, 
+-- proc_schema, proc_name, owner, 
+-- schedule, fixed_schedule, config, hypertable_schema, hypertable_name, check_schema, check_name 
+-- FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
 
@@ -434,7 +442,8 @@ BEGIN
     RETURN LEAST(1, 2);
 END
 $$ LANGUAGE PLPGSQL;
-select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc) as job_id_int \gset
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc,
+initial_start => :'time_zero'::timestamptz) as job_id_int \gset
 
 -- drop the registered check function, verify that alter_job will work and print a warning that 
 -- the check is being skipped due to the check function missing
@@ -487,7 +496,8 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- check that alter_job rejects a check function with invalid signature
-select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func',
+initial_start => :'time_zero'::timestamptz) as job_id_alter \gset
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
 -- test that we can unregister the check function

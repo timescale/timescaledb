@@ -32,12 +32,15 @@
 #include "params.h"
 #include "test_utils.h"
 #include "cross_module_fn.h"
+#include "time_bucket.h"
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_main);
 TS_FUNCTION_INFO_V1(ts_bgw_job_execute_test);
+/* function for testing the correctness of the next_scheduled_slot calculation */
+TS_FUNCTION_INFO_V1(ts_test_next_scheduled_execution_slot);
 
 typedef enum TestJobType
 {
@@ -54,6 +57,34 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_3_LONG] = "bgw_test_job_3_long",
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
 };
+
+/* this is copied from the job_stat/get_next_scheduled_execution_slot */
+extern Datum
+ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
+{
+	Interval *schedule_interval = PG_GETARG_INTERVAL_P(0);
+	TimestampTz finish_time = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(2);
+
+	Datum timebucket_fini, result;
+	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
+
+	Datum offset = DirectFunctionCall2(ts_timestamptz_bucket,
+									   schedint_datum,
+									   TimestampTzGetDatum(initial_start));
+	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+	timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+										  schedint_datum,
+										  TimestampTzGetDatum(finish_time),
+										  TimestampTzGetDatum(initial_start));
+	// always the next time_bucket
+	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	if (schedule_interval->month)
+	{
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
+	}
+	return result;
+}
 
 extern Datum
 ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
@@ -113,6 +144,8 @@ start_test_scheduler(int32 ttl, Oid user_oid)
 	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", &bgw_params);
 }
 
+/* this function will start up a bgw for the scheduler and set the ttl to the given value
+ * (microseconds) */
 extern Datum
 ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {

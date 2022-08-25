@@ -19,6 +19,7 @@
 #include "job.h"
 #include "job_api.h"
 #include "hypertable_cache.h"
+#include "bgw/timer.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -28,7 +29,7 @@
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
-#define ALTER_JOB_NUM_COLS 9
+#define ALTER_JOB_NUM_COLS 10
 
 /*
  * This function ensures that the check function has the required signature
@@ -68,6 +69,7 @@ validate_check_signature(Oid check)
  * 3 initial_start TIMESTAMPTZ DEFAULT NULL,
  * 4 scheduled BOOL DEFAULT true
  * 5 check_config REGPROC DEFAULT NULL
+ * 6 fixed_schedule BOOL DEFAULT TRUE
  * ) RETURNS INTEGER
  */
 Datum
@@ -84,6 +86,7 @@ job_add(PG_FUNCTION_ARGS)
 	int32 job_id;
 	char *func_name = NULL;
 	char *check_name_str = NULL;
+	TimestampTz initial_start = PG_ARGISNULL(3) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(3);
 
 	Oid owner = GetUserId();
 	Oid proc = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
@@ -91,6 +94,7 @@ job_add(PG_FUNCTION_ARGS)
 	Jsonb *config = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
 	Oid check = PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
+	bool fixed_schedule = PG_ARGISNULL(6) ? true : PG_GETARG_BOOL(6);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -103,6 +107,11 @@ job_add(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("schedule interval cannot be NULL")));
+
+	/* for fixed schedules, we use time_bucket in the calculation of next_start
+	 Therefore, we cannot allow schedule intervals containing both month and day components */
+	if (fixed_schedule)
+		ts_bgw_job_validate_schedule_interval(schedule_interval);
 
 	func_name = get_func_name(proc);
 	if (func_name == NULL)
@@ -134,6 +143,16 @@ job_add(PG_FUNCTION_ARGS)
 		namestrcpy(&check_name, check_name_str);
 	}
 
+	/* if no initial_start was provided for a fixed schedule, use the current time */
+	if (fixed_schedule && TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		initial_start = ts_timer_get_current_timestamp();
+		elog(DEBUG1,
+			 "Using current time [%s] as initial start",
+			 DatumGetCString(
+				 DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(initial_start))));
+	}
+
 	/* Verify that the owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner);
 
@@ -160,13 +179,13 @@ job_add(PG_FUNCTION_ARGS)
 										&check_name,
 										&owner_name,
 										scheduled,
+										fixed_schedule,
 										0,
-										config);
-	if (!PG_ARGISNULL(3))
-	{
-		TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(3);
+										config,
+										initial_start);
+
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
-	}
 
 	PG_RETURN_INT32(job_id);
 }

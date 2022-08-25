@@ -26,6 +26,8 @@
 #include "jsonb_utils.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -147,7 +149,8 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 
 Datum
 policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
-							  Interval default_schedule_interval, bool if_not_exists)
+							  Interval default_schedule_interval, bool if_not_exists,
+							  bool fixed_schedule, TimestampTz initial_start)
 {
 	NameData application_name;
 	int32 job_id;
@@ -287,8 +290,10 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										&check_name,
 										&owner,
 										true,
+										fixed_schedule,
 										hypertable->fd.id,
-										config);
+										config,
+										initial_start);
 
 	ts_cache_release(hcache);
 
@@ -308,14 +313,32 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	Interval default_schedule_interval =
 		PG_ARGISNULL(3) ? (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
+	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
+	bool fixed_schedule = !PG_ARGISNULL(4);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	return policy_retention_add_internal(ht_oid,
-										 window_type,
-										 window_datum,
-										 default_schedule_interval,
-										 if_not_exists);
+	Datum retval;
+	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
+	if (fixed_schedule)
+	{
+		ts_bgw_job_validate_schedule_interval(&default_schedule_interval);
+		if (TIMESTAMP_NOT_FINITE(initial_start))
+			initial_start = ts_timer_get_current_timestamp();
+	}
+	retval = policy_retention_add_internal(ht_oid,
+										   window_type,
+										   window_datum,
+										   default_schedule_interval,
+										   if_not_exists,
+										   fixed_schedule,
+										   initial_start);
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		int32 job_id = DatumGetInt32(retval);
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
+	return retval;
 }
 
 Datum

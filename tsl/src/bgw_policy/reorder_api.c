@@ -249,6 +249,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
+	/* for the reorder policy, we choose a drifting schedule
+	 since the user does not control the schedule interval either */
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&schedule_interval,
 										DEFAULT_MAX_RUNTIME,
@@ -260,8 +262,10 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										&check_name,
 										&owner,
 										true,
+										false, /*fixed_schedule*/
 										hypertable_id,
-										config);
+										config,
+										DT_NOBEGIN);
 
 	PG_RETURN_INT32(job_id);
 }

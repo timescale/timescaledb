@@ -703,6 +703,8 @@ enum Anum_bgw_job
 	Anum_bgw_job_proc_name,
 	Anum_bgw_job_owner,
 	Anum_bgw_job_scheduled,
+	Anum_bgw_job_fixed_schedule,
+	Anum_bgw_job_initial_start,
 	Anum_bgw_job_hypertable_id,
 	Anum_bgw_job_config,
 	Anum_bgw_job_check_schema,
@@ -712,6 +714,8 @@ enum Anum_bgw_job
 
 #define Natts_bgw_job (_Anum_bgw_job_max - 1)
 
+/* fixed_schedule needs to come before the varlen fields
+ for GETSTRUCT to work */
 typedef struct FormData_bgw_job
 {
 	int32 id;
@@ -724,6 +728,8 @@ typedef struct FormData_bgw_job
 	NameData proc_name;
 	NameData owner;
 	bool scheduled;
+	bool fixed_schedule;
+	TimestampTz initial_start;
 	int32 hypertable_id;
 	Jsonb *config;
 	NameData check_schema;
