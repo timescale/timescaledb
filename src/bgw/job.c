@@ -226,7 +226,20 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)])
 		job->fd.fixed_schedule =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)]);
-	elog(LOG, "in %s, job_id %d, fixed_schedule: %d", __func__, job->fd.id, job->fd.fixed_schedule);
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)])
+	{
+		job->fd.initial_start =
+			DatumGetTimestampTz(values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)]);
+			elog(DEBUG1, "IN %s, initial_start was not null", __func__);
+	}
+	else
+	{
+		elog(DEBUG1, "IN %s, initial_start was null", __func__);
+	}
+
+	elog(DEBUG1, "in %s, job_id %d, fixed_schedule: %d", __func__, job->fd.id, job->fd.fixed_schedule);
+	elog(DEBUG1, "in %s, job_id %d, initial_start: %s", __func__, job->fd.id, DatumGetCString(DirectFunctionCall1(timestamptz_out, job->fd.initial_start)));
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
 		job->fd.retry_period =
@@ -330,8 +343,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 		memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
 
-		elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d",
-		 __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule);
+		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d",
+		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule);
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -357,9 +370,9 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 			job->fd.initial_start = DatumGetTimestampTz(value1);
 		else 
 			job->fd.initial_start = DT_NOBEGIN;
-		elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
-		 __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, 
-		 DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
+		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
+		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, 
+		//  DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
@@ -1055,7 +1068,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
-	elog(LOG, "job %d, fixed_schedule: %d", job->fd.id, job->fd.fixed_schedule);
+	elog(DEBUG1, "in %s, job %d, fixed_schedule: %d, initial_start: %s", __func__, job->fd.id, job->fd.fixed_schedule, 
+	DatumGetCString(DirectFunctionCall1(timestamptz_out, job->fd.initial_start)));
 	CommitTransactionCommand();
 
 	if (job == NULL)

@@ -186,7 +186,7 @@ calculate_next_start_on_success_fixed(TimestampTz finish_time, Interval *duratio
 	// TimestampTz ts;
 	TimestampTz current_time;
 	TimestampTz next_slot;
-	elog(DEBUG1, "fixed schedule, calculating next_start for job_id %d", job->fd.id);
+	// elog(DEBUG1, "fixed schedule, calculating next_start for job_id %d", job->fd.id);
 	/* start_time */
 	// ts = DirectFunctionCall2(timestamptz_mi_interval, finish_time, IntervalPGetDatum(duration));
 	// /* plus schedule_interval */
@@ -205,12 +205,12 @@ calculate_next_start_on_success_fixed(TimestampTz finish_time, Interval *duratio
 
 	current_time = ts_timer_get_current_timestamp(); 
 	next_slot = job->fd.initial_start;
-	elog(LOG, "next_slot initial value is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
-	elog(LOG, "job.initial_start is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
+	// elog(LOG, "next_slot initial value is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
+	// elog(LOG, "job.initial_start is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
 	/* naive implementation */
 	// DatumGetBool(DirectFunctionCall2(timestamp_lt,TimestampTzGetDatum(next_slot), TimestampTzGetDatum(current_time)))
 	next_slot = get_next_scheduled_execution_slot(job, current_time);
-	elog(LOG, "calculated next_slot is %s",  DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
+	// elog(LOG, "calculated next_slot is %s",  DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
 	return next_slot;
 }
 
@@ -218,7 +218,7 @@ static TimestampTz
 calculate_next_start_on_success_drifting(TimestampTz last_finish, BgwJob *job)
 {
 	TimestampTz ts;
-	elog(LOG, "next_start drifting for job_id %d", job->fd.id);
+	// elog(LOG, "next_start drifting for job_id %d", job->fd.id);
 	ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
 												 TimestampTzGetDatum(last_finish),
 												 IntervalPGetDatum(&job->fd.schedule_interval)));
@@ -235,7 +235,7 @@ calculate_next_start_on_success(TimestampTz finish_time, Interval *duration, Bgw
 	{
 		last_finish = ts_timer_get_current_timestamp();
 	}
-	elog(LOG, "contents of job %d in %s are: max_retries %d, fixed schedule %d", job->fd.id, __func__, job->fd.max_retries, job->fd.fixed_schedule);
+	// elog(LOG, "contents of job %d in %s are: max_retries %d, fixed schedule %d", job->fd.id, __func__, job->fd.max_retries, job->fd.fixed_schedule);
 
 	/* calculate next_start differently depending on drift/no drift */
 	if (job->fd.fixed_schedule)

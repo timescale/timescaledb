@@ -422,7 +422,7 @@ SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
                            time                           | device |                                                                       temp                                                                       | _ts_meta_count | _ts_meta_sequence_num |      _ts_meta_min_1      |      _ts_meta_max_1      
 ----------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------+--------------------------+--------------------------
  BAAAAgna9rUEAAACCdr2tQQAAAAAAQAAAAEAAAAAAAAADgAEE7XtaggA |      1 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 01:00:00 2018 | Thu Mar 08 01:00:00 2018
- BAAAAgnaICFgAAACCdogIWAAAAAAAQAAAAEAAAAAAAAADgAEE7RAQsAA |     10 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 00:00:00 2018 | Thu Mar 08 00:00:00 2018
+ BAAAAgnaICFgAAACCdogIWAAAAAAAQAAAAEAAAAAAAAADgAEE7RAQsAA |     10 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    20 | Thu Mar 08 00:00:00 2018 | Thu Mar 08 00:00:00 2018
 (2 rows)
 
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
@@ -466,7 +466,7 @@ SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
                            time                           | device |                                                                       temp                                                                       | _ts_meta_count | _ts_meta_sequence_num |      _ts_meta_min_1      |      _ts_meta_max_1      
 ----------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------+--------------------------+--------------------------
  BAAAAgna9rUEAAACCdr2tQQAAAAAAQAAAAEAAAAAAAAADgAEE7XtaggA |      1 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 01:00:00 2018 | Thu Mar 08 01:00:00 2018
- BAAAAgnaICFgAAACCdogIWAAAAAAAQAAAAEAAAAAAAAADgAEE7RAQsAA |     10 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 00:00:00 2018 | Thu Mar 08 00:00:00 2018
+ BAAAAgnaICFgAAACCdogIWAAAAAAAQAAAAEAAAAAAAAADgAEE7RAQsAA |     10 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    20 | Thu Mar 08 00:00:00 2018 | Thu Mar 08 00:00:00 2018
 (2 rows)
 
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
@@ -586,7 +586,7 @@ SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
                            time                           | device |                                                                       temp                                                                       | _ts_meta_count | _ts_meta_sequence_num |      _ts_meta_min_1      |      _ts_meta_max_1      
 ----------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------+--------------------------+--------------------------
  BAAAAgna9rUEAAACCdr2tQQAAAAAAQAAAAEAAAAAAAAADgAEE7XtaggA |      1 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 01:00:00 2018 | Thu Mar 08 01:00:00 2018
- BAAAAgnaICFgAAACCdogIWAAAAAAAQAAAAEAAAAAAAAADgAEE7RAQsAA |     10 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 00:00:00 2018 | Thu Mar 08 00:00:00 2018
+ BAAAAgnaICFgAAACCdogIWAAAAAAAQAAAAEAAAAAAAAADgAEE7RAQsAA |     10 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    20 | Thu Mar 08 00:00:00 2018 | Thu Mar 08 00:00:00 2018
 (2 rows)
 
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
