@@ -223,6 +223,11 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 		job->fd.max_retries =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)]);
 
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)])
+		job->fd.fixed_schedule =
+			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)]);
+	elog(LOG, "in %s, job_id %d, fixed_schedule: %d", __func__, job->fd.id, job->fd.fixed_schedule);
+
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
 		job->fd.retry_period =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)]);
@@ -325,8 +330,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 		memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
 
-		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
-		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, DatumGetCString(TimestampTzGetDatum(job->fd.initial_start)));
+		elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d",
+		 __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule);
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -352,7 +357,7 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 			job->fd.initial_start = DatumGetTimestampTz(value1);
 		else 
 			job->fd.initial_start = DT_NOBEGIN;
-		elog(DEBUG1, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
+		elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
 		 __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, 
 		 DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
 
@@ -1050,6 +1055,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
+	elog(LOG, "job %d, fixed_schedule: %d", job->fd.id, job->fd.fixed_schedule);
 	CommitTransactionCommand();
 
 	if (job == NULL)

@@ -253,6 +253,7 @@ job_run(PG_FUNCTION_ARGS)
  * 7    next_start TIMESTAMPTZ = NULL
  * 8    if_exists BOOL = FALSE,
  * 9    check_config REGPROC = NULL
+ * 10   fixed_schedule BOOL = NULL
  * ) RETURNS TABLE (
  *      job_id INTEGER,
  *      schedule_interval INTERVAL,
@@ -263,6 +264,7 @@ job_run(PG_FUNCTION_ARGS)
  *      config JSONB,
  *      next_start TIMESTAMPTZ
  *      check_config TEXT
+ *      fixed_schedule BOOL
  * )
  */
 Datum
@@ -276,7 +278,6 @@ job_alter(PG_FUNCTION_ARGS)
 	TimestampTz next_start;
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
-	bool fixed_schedule = PG_GETARG_BOOL(9);
 	BgwJob *job;
 	NameData check_name = { 0 };
 	NameData check_schema = { 0 };
@@ -314,8 +315,8 @@ job_alter(PG_FUNCTION_ARGS)
 		job->fd.scheduled = PG_GETARG_BOOL(5);
 	if (!PG_ARGISNULL(6))
 		job->fd.config = PG_GETARG_JSONB_P(6);
-	if (!PG_ARGISNULL(9))
-		job->fd.fixed_schedule = PG_GETARG_BOOL(9);
+	if (!PG_ARGISNULL(10))
+		job->fd.fixed_schedule = PG_GETARG_BOOL(10);
 
 	if (!PG_ARGISNULL(9))
 	{
@@ -386,7 +387,6 @@ job_alter(PG_FUNCTION_ARGS)
 		values[6] = JsonbPGetDatum(job->fd.config);
 
 	values[7] = TimestampTzGetDatum(next_start);
-	values[8] = BoolGetDatum(fixed_schedule);
 
 	if (unregister_check)
 		nulls[8] = true;
@@ -394,6 +394,7 @@ job_alter(PG_FUNCTION_ARGS)
 		values[8] = CStringGetTextDatum(schema_qualified_check_name);
 	else
 		nulls[8] = true;
+	values[9] = BoolGetDatum(job->fd.fixed_schedule);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);

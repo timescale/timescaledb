@@ -31,6 +31,7 @@ BEGIN
 END
 $BODY$;
 
+set client_min_messages TO NOTICE;
 -- follow exactly cagg_bgw_drop_chunks
 
 -- Remove any default jobs, e.g., telemetry
@@ -60,6 +61,9 @@ select add_job('job_5', schedule_interval => INTERVAL '15 seconds', initial_star
 SELECT _timescaledb_internal.start_background_workers();
 
 select initial_start as initial_start_given from timescaledb_information.jobs where job_id = :short_job_fixed \gset
+
+select * from timescaledb_information.jobs;
+select * from timescaledb_information.job_stats;
 
 -- wait for the job to run
 SELECT wait_for_job_to_run(:short_job_fixed, 1);
