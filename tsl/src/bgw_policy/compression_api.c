@@ -20,6 +20,8 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 
 /* Default max runtime is unlimited for compress chunks */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -175,7 +177,8 @@ policy_compression_check(PG_FUNCTION_ARGS)
 Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 								Oid compress_after_type, Interval *default_schedule_interval,
-								bool user_defined_schedule_interval, bool if_not_exists)
+								bool user_defined_schedule_interval, bool if_not_exists,
+								bool fixed_schedule, TimestampTz initial_start)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_schema, check_name, owner;
@@ -318,8 +321,10 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										&check_name,
 										&owner,
 										true,
+										fixed_schedule,
 										hypertable->fd.id,
-										config);
+										config,
+										initial_start);
 
 	ts_cache_release(hcache);
 	PG_RETURN_INT32(job_id);
@@ -343,15 +348,34 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
 	Interval *default_schedule_interval =
 		PG_ARGISNULL(3) ? DEFAULT_COMPRESSION_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
+	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
+	// if not providing initial_start, then we still get the old behavior
+	bool fixed_schedule = !PG_ARGISNULL(4);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	return policy_compression_add_internal(user_rel_oid,
-										   compress_after_datum,
-										   compress_after_type,
-										   default_schedule_interval,
-										   user_defined_schedule_interval,
-										   if_not_exists);
+	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
+	if (fixed_schedule)
+	{
+		ts_bgw_job_validate_schedule_interval(default_schedule_interval);
+		if (TIMESTAMP_NOT_FINITE(initial_start))
+			initial_start = ts_timer_get_current_timestamp();
+	}
+	Datum retval;
+	retval = policy_compression_add_internal(user_rel_oid,
+											 compress_after_datum,
+											 compress_after_type,
+											 default_schedule_interval,
+											 user_defined_schedule_interval,
+											 if_not_exists,
+											 fixed_schedule,
+											 initial_start);
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		int32 job_id = DatumGetInt32(retval);
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
+	return retval;
 }
 
 bool

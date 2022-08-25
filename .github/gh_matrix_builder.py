@@ -42,7 +42,7 @@ def build_debug_config(overrides):
     "build_type": "Debug",
     "pg_build_args": "--enable-debug --enable-cassert",
     "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
-    "installcheck_args": "IGNORES='bgw_db_scheduler'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed'",
     "coverage": True,
     "extra_packages": "clang-9 llvm-9 llvm-9-dev llvm-9-tools",
     "llvm_config": "llvm-config-9",
@@ -105,7 +105,7 @@ def macos_config(overrides):
     "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
-    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher pg_dump remote_connection compressed_collation'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed bgw_launcher pg_dump remote_connection compressed_collation'",
     "extra_packages": "",
   })
   base_config.update(overrides)

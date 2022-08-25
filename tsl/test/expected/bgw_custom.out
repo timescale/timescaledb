@@ -43,31 +43,32 @@ ERROR:  schedule interval cannot be NULL
 SELECT add_job('custom_func', 'invalid interval');
 ERROR:  invalid input syntax for type interval: "invalid interval" at character 31
 \set ON_ERROR_STOP 1
-SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb);
+select '2000-01-01 00:00:00+00' as time_zero \gset
+SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1000
 (1 row)
 
-SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb);
+SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1001
 (1 row)
 
-SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
+SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1002
 (1 row)
 
-SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
+SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1003
 (1 row)
 
-SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1004
@@ -76,15 +77,20 @@ SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb
 -- exclude the telemetry[1] and job error retention[2] jobs
 -- job 2 may have already run which will set its next_start field thus making the test flaky
 SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
- job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled |        config         | next_start | hypertable_schema | hypertable_name | check_schema | check_name 
---------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+-----------------------+------------+-------------------+-----------------+--------------+------------
-   1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   |                 |              | 
-   1001 | User-Defined Action [1001] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc         | default_perm_user | t         | {"type": "procedure"} |            |                   |                 |              | 
-   1002 | User-Defined Action [1002] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | {"type": "procedure"} |            |                   |                 |              | 
-   1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   |                 |              | 
-   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | {"type": "function"}  |            |                   |                 |              | 
+ job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled | fixed_schedule |        config         |          next_start          |        initial_start         | hypertable_schema | hypertable_name | check_schema | check_name 
+--------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+----------------+-----------------------+------------------------------+------------------------------+-------------------+-----------------+--------------+------------
+   1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1001 | User-Defined Action [1001] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc         | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1002 | User-Defined Action [1002] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
 (5 rows)
 
+-- -- don't select * because that will fetch the initial_start, or replace the initial start
+-- SELECT job_id, application_name,  schedule_interval, max_runtime, max_retries, retry_period, 
+-- proc_schema, proc_name, owner, 
+-- schedule, fixed_schedule, config, hypertable_schema, hypertable_name, check_schema, check_name 
+-- FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
  count 
 -------
@@ -640,10 +646,10 @@ as job_with_func_check_id \gset
 --- test alter_job
 select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
 ERROR:  invalid input syntax for type interval: "chicken"
-select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
-                                                    alter_job                                                    
------------------------------------------------------------------------------------------------------------------
- (1006,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""5 years""}",-infinity,public.test_config_check_func)
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}', next_start => :'time_zero'::timestamptz);
+                                                              alter_job                                                               
+--------------------------------------------------------------------------------------------------------------------------------------
+ (1006,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""5 years""}","Fri Dec 31 16:00:00 1999 PST",public.test_config_check_func)
 (1 row)
 
 -- test that jobs with an incorrect check function signature will not be registered
@@ -705,7 +711,8 @@ BEGIN
     RETURN LEAST(1, 2);
 END
 $$ LANGUAGE PLPGSQL;
-select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc) as job_id_int \gset
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc,
+initial_start => :'time_zero'::timestamptz) as job_id_int \gset
 NOTICE:  I print a message, and then I return least(1,2)
 -- drop the registered check function, verify that alter_job will work and print a warning that 
 -- the check is being skipped due to the check function missing
@@ -720,9 +727,9 @@ WARNING:  function public.test_config_check_func(config jsonb) not found, skippi
 DROP FUNCTION test_config_check_func_returns_int;
 select alter_job(:job_id_int, config => '{"field":"value"}');
 WARNING:  function public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1009
-                                                      alter_job                                                       
-----------------------------------------------------------------------------------------------------------------------
- (1009,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""field"": ""value""}",-infinity,public.test_config_check_func_returns_int)
+                                                                 alter_job                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ (1009,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""field"": ""value""}","Fri Dec 31 16:00:00 1999 PST",public.test_config_check_func_returns_int)
 (1 row)
 
 -- rename the check function and then call alter_job to register the new name
@@ -792,29 +799,30 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 ERROR:  permission denied for function "test_config_check_func_privileges"
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- check that alter_job rejects a check function with invalid signature
-select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func',
+initial_start => :'time_zero'::timestamptz) as job_id_alter \gset
 NOTICE:  This message will get printed for both NULL and not NULL config
 select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 ERROR:  function or procedure public.test_config_check_func_0args(config jsonb) not found
 select alter_job(:job_id_alter);
 NOTICE:  This message will get printed for both NULL and not NULL config
-                                alter_job                                 
---------------------------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+                                           alter_job                                           
+-----------------------------------------------------------------------------------------------
+ (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},"Fri Dec 31 16:00:00 1999 PST",public.renamed_func)
 (1 row)
 
 -- test that we can unregister the check function
 select alter_job(:job_id_alter, check_config => 0);
-                       alter_job                       
--------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+                                 alter_job                                  
+----------------------------------------------------------------------------
+ (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},"Fri Dec 31 16:00:00 1999 PST",)
 (1 row)
 
 -- no message printed now
 select alter_job(:job_id_alter, config => '{}'); 
-                       alter_job                       
--------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+                                 alter_job                                  
+----------------------------------------------------------------------------
+ (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},"Fri Dec 31 16:00:00 1999 PST",)
 (1 row)
 
 -- test the case where we have a background job that registers jobs with a check fn

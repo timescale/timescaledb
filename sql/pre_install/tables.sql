@@ -276,6 +276,8 @@ CREATE TABLE _timescaledb_config.bgw_job (
   proc_name name NOT NULL,
   owner name NOT NULL DEFAULT CURRENT_ROLE,
   scheduled bool NOT NULL DEFAULT TRUE,
+  fixed_schedule bool not null default true,
+  initial_start timestamptz,
   hypertable_id integer,
   config jsonb,
   check_schema name,

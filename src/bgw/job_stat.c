@@ -16,6 +16,7 @@
 #include "utils.h"
 #include "jsonb_utils.h"
 #include <utils/builtins.h>
+#include "time_bucket.h"
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -168,18 +169,75 @@ typedef struct
 	BgwJob *job;
 } JobResultCtx;
 
+/*
+ * time_bucket(schedule_interval, finish_time, origin => initial_start)
+ * therefore, if initial_start is not provided, the time_bucket will be calculated
+ * using the default origin which is Monday 2000-01-03, or 2000-01-01 for month buckets
+ */
+static TimestampTz
+get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
+{
+	Assert(job->fd.fixed_schedule == true);
+	Datum timebucket_fini, result;
+	Datum schedint_datum = IntervalPGetDatum(&job->fd.schedule_interval);
+
+	/* if we have a month component, the origin doesn't work so we must manually
+	 include the offset */
+	Datum offset = DirectFunctionCall2(ts_timestamptz_bucket,
+									   schedint_datum,
+									   TimestampTzGetDatum(job->fd.initial_start));
+	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
+	timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+										  schedint_datum,
+										  TimestampTzGetDatum(finish_time),
+										  TimestampTzGetDatum(job->fd.initial_start));
+	// always the next time_bucket
+	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	if (job->fd.schedule_interval.month)
+	{
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
+	}
+	return DatumGetTimestampTz(result);
+}
+
+static TimestampTz
+calculate_next_start_on_success_fixed(TimestampTz finish_time, BgwJob *job)
+{
+	TimestampTz next_slot;
+
+	next_slot = job->fd.initial_start;
+	next_slot = get_next_scheduled_execution_slot(job, finish_time);
+
+	return next_slot;
+}
+
+static TimestampTz
+calculate_next_start_on_success_drifting(TimestampTz last_finish, BgwJob *job)
+{
+	TimestampTz ts;
+	ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
+												 TimestampTzGetDatum(last_finish),
+												 IntervalPGetDatum(&job->fd.schedule_interval)));
+	return ts;
+}
+
 static TimestampTz
 calculate_next_start_on_success(TimestampTz finish_time, BgwJob *job)
 {
+	// next_start is the previously calculated next_start for this job
 	TimestampTz ts;
 	TimestampTz last_finish = finish_time;
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
 		last_finish = ts_timer_get_current_timestamp();
 	}
-	ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
-												 TimestampTzGetDatum(last_finish),
-												 IntervalPGetDatum(&job->fd.schedule_interval)));
+
+	/* calculate next_start differently depending on drift/no drift */
+	if (job->fd.fixed_schedule)
+		ts = calculate_next_start_on_success_fixed(last_finish, job);
+	else
+		ts = calculate_next_start_on_success_drifting(last_finish, job);
+
 	return ts;
 }
 
@@ -199,14 +257,14 @@ calculate_jitter_percent()
  * put off the next start time for the job indefinitely
  */
 static TimestampTz
-calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job)
+calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job,
+								bool launch_failure)
 {
 	float8 jitter = calculate_jitter_percent();
 	/* consecutive failures includes this failure */
 	TimestampTz res = 0;
 	volatile bool res_set = false;
 	TimestampTz last_finish = finish_time;
-	bool launch_failure = (job == NULL);
 	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
 																		  consecutive_failures);
 	MemoryContext oldctx;
@@ -284,15 +342,24 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 													  TimestampTzGetDatum(nowt),
 													  IntervalPGetDatum(&job->fd.retry_period)));
 	}
+	/* for fixed_schedules, we make sure that if the calculated next_start time
+	 * surpasses the next scheduled slot, then next_start will be set to the value
+	 * of the next scheduled slot, so we don't get off track */
+	if (job->fd.fixed_schedule)
+	{
+		TimestampTz next_slot = get_next_scheduled_execution_slot(job, finish_time);
+		if (res > next_slot)
+			res = next_slot;
+	}
 	return res;
 }
 
 static TimestampTz
-calculate_next_start_on_failed_launch(int consecutive_failed_launches)
+calculate_next_start_on_failed_launch(int consecutive_failed_launches, BgwJob *job)
 {
 	TimestampTz now = ts_timer_get_current_timestamp();
 	TimestampTz failure_calc =
-		calculate_next_start_on_failure(now, consecutive_failed_launches, NULL);
+		calculate_next_start_on_failure(now, consecutive_failed_launches, job, true);
 
 	return failure_calc;
 }
@@ -305,7 +372,8 @@ static TimestampTz
 calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
 {
 	TimestampTz now = ts_timer_get_current_timestamp();
-	TimestampTz failure_calc = calculate_next_start_on_failure(now, consecutive_crashes, job);
+	TimestampTz failure_calc =
+		calculate_next_start_on_failure(now, consecutive_crashes, job, false);
 	TimestampTz min_time = TimestampTzPlusMilliseconds(now, MIN_WAIT_AFTER_CRASH_MS);
 
 	if (min_time > failure_calc)
@@ -366,8 +434,22 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		if (!bgw_job_stat_next_start_was_set(fd) && result_ctx->result != JOB_FAILURE_TO_START)
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
 															 fd->consecutive_failures,
-															 result_ctx->job);
+															 result_ctx->job,
+															 false);
 	}
+
+static ScanTupleResult
+bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
@@ -592,7 +674,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 {
 	/* give the system some room to breathe, wait before trying to launch again */
 	if (consecutive_failed_launches > 0)
-		return calculate_next_start_on_failed_launch(consecutive_failed_launches);
+		return calculate_next_start_on_failed_launch(consecutive_failed_launches, job);
 	if (jobstat == NULL)
 		/* Never previously run - run right away */
 		return DT_NOBEGIN;
