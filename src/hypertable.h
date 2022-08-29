@@ -162,9 +162,6 @@ extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(const
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(const Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(const Hypertable *ht,
 															  FunctionCallInfo fcinfo);
-extern TSDLLEXPORT int16 ts_validate_replication_factor(int32 replication_factor, bool is_null,
-														bool is_dist_call, int num_data_nodes,
-														const char *hypertable_name);
 extern TSDLLEXPORT Datum ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
@@ -173,6 +170,9 @@ extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, con
 extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
 												   const char *name);
 extern TSDLLEXPORT bool ts_hypertable_update_dimension_partitions(const Hypertable *ht);
+extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_name,
+														int32 replication_factor,
+														int num_data_nodes);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

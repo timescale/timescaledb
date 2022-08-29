@@ -55,6 +55,13 @@ static const struct config_enum_entry remote_data_fetchers[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry hypertable_distributed_types[] = {
+	{ "auto", HYPERTABLE_DIST_AUTO, false },
+	{ "local", HYPERTABLE_DIST_LOCAL, false },
+	{ "distributed", HYPERTABLE_DIST_DISTRIBUTED, false },
+	{ NULL, 0, false }
+};
+
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
 bool ts_guc_enable_constraint_aware_append = true;
@@ -88,6 +95,8 @@ TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
 TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
+TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
+TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -486,6 +495,33 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 #endif
+
+	DefineCustomEnumVariable("timescaledb.hypertable_distributed_default",
+							 "Set distributed hypertables default creation policy",
+							 "Set default policy to create local or distributed hypertables "
+							 "(auto, local or distributed)",
+							 (int *) &ts_guc_hypertable_distributed_default,
+							 HYPERTABLE_DIST_AUTO,
+							 hypertable_distributed_types,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomIntVariable("timescaledb.hypertable_replication_factor_default",
+							"Default replication factor value to use with a hypertables",
+							"Global default value for replication factor to use with hypertables "
+							"when the `replication_factor` argument is not provided",
+							&ts_guc_hypertable_replication_factor_default,
+							1,
+							1,
+							65536,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 }
 
 void

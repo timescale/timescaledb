@@ -105,3 +105,47 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_
 GRANT SELECT ON _timescaledb_catalog.continuous_agg_migrate_plan TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.continuous_agg_migrate_plan_step TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO PUBLIC;
+
+-- add distributed argument
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable;
+DROP FUNCTION IF EXISTS @extschema@.create_distributed_hypertable;
+
+CREATE FUNCTION @extschema@.create_hypertable(
+    relation                REGCLASS,
+    time_column_name        NAME,
+    partitioning_column     NAME = NULL,
+    number_partitions       INTEGER = NULL,
+    associated_schema_name  NAME = NULL,
+    associated_table_prefix NAME = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL,
+    replication_factor      INTEGER = NULL,
+    data_nodes              NAME[] = NULL,
+    distributed             BOOLEAN = NULL
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
+
+-- change replication_factor to NULL by default
+CREATE FUNCTION @extschema@.create_distributed_hypertable(
+    relation                REGCLASS,
+    time_column_name        NAME,
+    partitioning_column     NAME = NULL,
+    number_partitions       INTEGER = NULL,
+    associated_schema_name  NAME = NULL,
+    associated_table_prefix NAME = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL,
+    replication_factor      INTEGER = NULL,
+    data_nodes              NAME[] = NULL
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
