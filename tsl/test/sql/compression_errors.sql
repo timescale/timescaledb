@@ -313,3 +313,38 @@ ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
 -- also add one without IF NOT EXISTS 
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
+
+--github issue 3481
+--GROUP BY error when setting compress_segmentby with an enum column
+
+CREATE TYPE an_enum_type AS ENUM ('home', 'school');
+
+CREATE TABLE test (
+	time timestamp NOT NULL,
+	enum_col an_enum_type NOT NULL
+);
+
+SELECT create_hypertable(
+    'test', 'time'
+);
+INSERT INTO test VALUES ('2001-01-01 00:00', 'home'),
+                        ('2001-01-01 01:00', 'school'),
+                        ('2001-01-01 02:00', 'home');
+
+--enable compression on enum_col
+ALTER TABLE test SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'enum_col',
+	timescaledb.compress_orderby = 'time'
+);
+
+--below queries will pass before chunks are compressed
+SELECT 1 FROM test GROUP BY enum_col;
+EXPLAIN SELECT DISTINCT 1 FROM test;
+
+--compress chunks
+SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
+
+--below query should pass after chunks are compressed
+SELECT 1 FROM test GROUP BY enum_col;
+EXPLAIN SELECT DISTINCT 1 FROM test;
