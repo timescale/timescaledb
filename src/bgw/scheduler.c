@@ -477,7 +477,10 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 		else if (cur_sjob->job.fd.id > new_sjob->job.fd.id)
 		{
 			scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
-			elog(DEBUG1, "sjob %d was new, its fixed_schedule is %d", new_sjob->job.fd.id, new_sjob->job.fd.fixed_schedule);
+			elog(DEBUG1,
+				 "sjob %d was new, its fixed_schedule is %d",
+				 new_sjob->job.fd.id,
+				 new_sjob->job.fd.fixed_schedule);
 
 			/* Advance the new_job list until we catch up to cur_list */
 			new_ptr = lnext_compat(new_jobs, new_ptr);

@@ -231,15 +231,23 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 	{
 		job->fd.initial_start =
 			DatumGetTimestampTz(values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)]);
-			elog(DEBUG1, "IN %s, initial_start was not null", __func__);
+		elog(DEBUG1, "IN %s, initial_start was not null", __func__);
 	}
 	else
 	{
 		elog(DEBUG1, "IN %s, initial_start was null", __func__);
 	}
 
-	elog(DEBUG1, "in %s, job_id %d, fixed_schedule: %d", __func__, job->fd.id, job->fd.fixed_schedule);
-	elog(DEBUG1, "in %s, job_id %d, initial_start: %s", __func__, job->fd.id, DatumGetCString(DirectFunctionCall1(timestamptz_out, job->fd.initial_start)));
+	elog(DEBUG1,
+		 "in %s, job_id %d, fixed_schedule: %d",
+		 __func__,
+		 job->fd.id,
+		 job->fd.fixed_schedule);
+	elog(DEBUG1,
+		 "in %s, job_id %d, initial_start: %s",
+		 __func__,
+		 job->fd.id,
+		 DatumGetCString(DirectFunctionCall1(timestamptz_out, job->fd.initial_start)));
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
 		job->fd.retry_period =
@@ -343,7 +351,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 		memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
 
-		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d",
+		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule:
+		// %d",
 		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule);
 
 		if (should_free)
@@ -368,11 +377,13 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		value1 = slot_getattr(ti->slot, Anum_bgw_job_initial_start, &isnull1);
 		if (!isnull1)
 			job->fd.initial_start = DatumGetTimestampTz(value1);
-		else 
+		else
 			job->fd.initial_start = DT_NOBEGIN;
-		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule: %d,initial_start %s",
-		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule, 
-		//  DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
+		// elog(LOG, "in %s, job has following contents: \n id: %d, scheduled: %d, fixed_schedule:
+		// %d,initial_start %s",
+		//  __func__, job->fd.id, job->fd.scheduled, job->fd.fixed_schedule,
+		//  DatumGetCString(DirectFunctionCall1(timestamptz_out,
+		//  TimestampTzGetDatum(job->fd.initial_start))));
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
@@ -1068,8 +1079,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
-	elog(DEBUG1, "in %s, job %d, fixed_schedule: %d, initial_start: %s", __func__, job->fd.id, job->fd.fixed_schedule, 
-	DatumGetCString(DirectFunctionCall1(timestamptz_out, job->fd.initial_start)));
+	elog(DEBUG1,
+		 "in %s, job %d, fixed_schedule: %d, initial_start: %s",
+		 __func__,
+		 job->fd.id,
+		 job->fd.fixed_schedule,
+		 DatumGetCString(DirectFunctionCall1(timestamptz_out, job->fd.initial_start)));
 	CommitTransactionCommand();
 
 	if (job == NULL)
@@ -1213,8 +1228,8 @@ int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
-						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id, Jsonb *config,
-						   TimestampTz initial_start)
+						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
+						   Jsonb *config, TimestampTz initial_start)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -1256,8 +1271,9 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	if (TIMESTAMP_IS_NOBEGIN(initial_start))
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
 	else
-		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = TimestampTzGetDatum(initial_start);
-	
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] =
+			TimestampTzGetDatum(initial_start);
+
 	if (hypertable_id == 0)
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	else

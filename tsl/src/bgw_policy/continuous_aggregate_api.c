@@ -523,7 +523,8 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
-								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule, TimestampTz initial_start)
+								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
+								 TimestampTz initial_start)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -648,7 +649,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 										true,
 										fixed_schedule,
 										cagg->data.mat_hypertable_id,
-										config, initial_start);
+										config,
+										initial_start);
 
 	PG_RETURN_INT32(job_id);
 }
@@ -687,7 +689,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  end_offset,
 											  refresh_interval,
 											  if_not_exists,
-											  fixed_schedule, initial_start);
+											  fixed_schedule,
+											  initial_start);
 	if (!TIMESTAMP_IS_NOBEGIN(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

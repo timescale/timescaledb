@@ -322,7 +322,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										true,
 										fixed_schedule,
 										hypertable->fd.id,
-										config, initial_start);
+										config,
+										initial_start);
 
 	ts_cache_release(hcache);
 	PG_RETURN_INT32(job_id);
@@ -358,7 +359,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 											 default_schedule_interval,
 											 user_defined_schedule_interval,
 											 if_not_exists,
-											 fixed_schedule, initial_start);
+											 fixed_schedule,
+											 initial_start);
 	if (!TIMESTAMP_IS_NOBEGIN(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

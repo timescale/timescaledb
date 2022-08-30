@@ -96,8 +96,9 @@ job_add(PG_FUNCTION_ARGS)
 	Oid check = PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
 	bool fixed_schedule = PG_ARGISNULL(6) ? true : PG_GETARG_BOOL(6);
 
-	// elog(LOG, "inital start is %s, current timestamp is %s", 
-	// DatumGetCString(DirectFunctionCall1(timestamptz_out, initial_start)), DatumGetCString(DirectFunctionCall1(timestamptz_out, current_time)));
+	// elog(LOG, "inital start is %s, current timestamp is %s",
+	// DatumGetCString(DirectFunctionCall1(timestamptz_out, initial_start)),
+	// DatumGetCString(DirectFunctionCall1(timestamptz_out, current_time)));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -173,7 +174,8 @@ job_add(PG_FUNCTION_ARGS)
 										scheduled,
 										fixed_schedule,
 										0,
-										config, initial_start);
+										config,
+										initial_start);
 
 	if (!TIMESTAMP_IS_NOBEGIN(initial_start))
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);

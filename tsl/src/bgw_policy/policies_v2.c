@@ -194,7 +194,8 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 														  all_policies.refresh->end_offset,
 														  all_policies.refresh->schedule_interval,
 														  false,
-														  false, DT_NOBEGIN);
+														  false,
+														  DT_NOBEGIN);
 	}
 	if (all_policies.compress && all_policies.compress->create_policy)
 	{
@@ -207,7 +208,8 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 											DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
 											false,
 											if_exists,
-											false, DT_NOBEGIN);
+											false,
+											DT_NOBEGIN);
 	}
 	if (all_policies.retention && all_policies.retention->create_policy)
 	{
@@ -219,7 +221,8 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 										  all_policies.retention->drop_after,
 										  (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL,
 										  false,
-										  false, DT_NOBEGIN);
+										  false,
+										  DT_NOBEGIN);
 	}
 	return (refresh_job_id || compression_job_id || retention_job_id);
 }

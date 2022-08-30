@@ -713,7 +713,7 @@ enum Anum_bgw_job
 
 #define Natts_bgw_job (_Anum_bgw_job_max - 1)
 
-/* fixed_schedule needs to come before the varlen fields 
+/* fixed_schedule needs to come before the varlen fields
  for GETSTRUCT to work */
 typedef struct FormData_bgw_job
 {

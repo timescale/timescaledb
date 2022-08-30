@@ -14,6 +14,7 @@
 #include "scanner.h"
 #include "timer.h"
 #include "utils.h"
+#include "time_bucket.h"
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -161,56 +162,41 @@ typedef struct
 	BgwJob *job;
 } JobResultCtx;
 
-
 static TimestampTz
 get_next_scheduled_execution_slot(BgwJob *job, TimestampTz current_time)
 {
-	// Ideally we'd want something as simple as: (current_time - initial_start)/interval + (mod>0)*schedule_interval
-	// to calculate the next_start, but that is complicated by the fact that months are not of fixed width
-	// so instead one option is to cache the next_start calculated, which is guaranteed to be a "correct" multiple 
-	// of the schedule wrt months
 	Assert(job->fd.fixed_schedule == true);
-	TimestampTz next_slot = job->fd.initial_start;
-	while (next_slot <= current_time)
-	{
-		next_slot = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
-												 TimestampTzGetDatum(next_slot),
-												 IntervalPGetDatum(&job->fd.schedule_interval)));
-	}
-	return next_slot;
+	Datum timebucket_fini, result;
+	Datum schedint_datum = IntervalPGetDatum(&job->fd.schedule_interval);
+
+	timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+										  schedint_datum,
+										  current_time,
+										  job->fd.initial_start);
+	// always the next time_bucket
+	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+	return result;
 }
 
 static TimestampTz
-calculate_next_start_on_success_fixed(TimestampTz finish_time, Interval *duration, BgwJob *job)
+calculate_next_start_on_success_fixed(TimestampTz finish_time, BgwJob *job)
 {
-	// TimestampTz ts;
 	TimestampTz current_time;
 	TimestampTz next_slot;
-	// elog(DEBUG1, "fixed schedule, calculating next_start for job_id %d", job->fd.id);
-	/* start_time */
-	// ts = DirectFunctionCall2(timestamptz_mi_interval, finish_time, IntervalPGetDatum(duration));
-	// /* plus schedule_interval */
-	// ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
-	// 											 TimestampTzGetDatum(ts),
-	// 											 IntervalPGetDatum(&job->fd.schedule_interval)));
 
-	// /* this is needed for jobs that execute for longer than their schedule interval */
-	// while (finish_time >= ts)
-	// {
-	// 	ts =
-	// 		DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
-	// 												TimestampTzGetDatum(ts),
-	// 												IntervalPGetDatum(&job->fd.schedule_interval)));
-	// }
-
-	current_time = ts_timer_get_current_timestamp(); 
+	current_time = ts_timer_get_current_timestamp();
 	next_slot = job->fd.initial_start;
-	// elog(LOG, "next_slot initial value is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
-	// elog(LOG, "job.initial_start is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(job->fd.initial_start))));
+	// elog(LOG, "next_slot initial value is %s",
+	// DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
+	// elog(LOG, "job.initial_start is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out,
+	// TimestampTzGetDatum(job->fd.initial_start))));
 	/* naive implementation */
-	// DatumGetBool(DirectFunctionCall2(timestamp_lt,TimestampTzGetDatum(next_slot), TimestampTzGetDatum(current_time)))
+	// DatumGetBool(DirectFunctionCall2(timestamp_lt,TimestampTzGetDatum(next_slot),
+	// TimestampTzGetDatum(current_time)))
 	next_slot = get_next_scheduled_execution_slot(job, current_time);
-	// elog(LOG, "calculated next_slot is %s",  DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_slot))));
+	// elog(LOG, "calculated next_slot is %s",  DatumGetCString(DirectFunctionCall1(timestamptz_out,
+	// TimestampTzGetDatum(next_slot))));
 	return next_slot;
 }
 
@@ -226,7 +212,7 @@ calculate_next_start_on_success_drifting(TimestampTz last_finish, BgwJob *job)
 }
 
 static TimestampTz
-calculate_next_start_on_success(TimestampTz finish_time, Interval *duration, BgwJob *job)
+calculate_next_start_on_success(TimestampTz finish_time, BgwJob *job)
 {
 	// next_start is the previously calculated next_start for this job
 	TimestampTz ts;
@@ -235,11 +221,12 @@ calculate_next_start_on_success(TimestampTz finish_time, Interval *duration, Bgw
 	{
 		last_finish = ts_timer_get_current_timestamp();
 	}
-	// elog(LOG, "contents of job %d in %s are: max_retries %d, fixed schedule %d", job->fd.id, __func__, job->fd.max_retries, job->fd.fixed_schedule);
+	// elog(LOG, "contents of job %d in %s are: max_retries %d, fixed schedule %d", job->fd.id,
+	// __func__, job->fd.max_retries, job->fd.fixed_schedule);
 
 	/* calculate next_start differently depending on drift/no drift */
 	if (job->fd.fixed_schedule)
-		ts = calculate_next_start_on_success_fixed(last_finish, duration, job);
+		ts = calculate_next_start_on_success_fixed(last_finish, job);
 	else
 		ts = calculate_next_start_on_success_drifting(last_finish, job);
 
@@ -325,7 +312,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 													  TimestampTzGetDatum(nowt),
 													  IntervalPGetDatum(&job->fd.retry_period)));
 	}
-	/* for fixed_schedules, we make sure that if the calculated next_start time 
+	/* for fixed_schedules, we make sure that if the calculated next_start time
 	 * surpasses the next scheduled slot, then next_start will be set to the value
 	 * of the next scheduled slot, so we don't get off track */
 	if (job->fd.fixed_schedule)
@@ -388,8 +375,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		fd->last_successful_finish = fd->last_finish;
 		/* Mark the next start at the end if the job itself hasn't */
 		if (!bgw_job_stat_next_start_was_set(fd))
-			fd->next_start =
-				calculate_next_start_on_success(fd->last_finish, duration, result_ctx->job);
+			fd->next_start = calculate_next_start_on_success(fd->last_finish, result_ctx->job);
 	}
 	else
 	{

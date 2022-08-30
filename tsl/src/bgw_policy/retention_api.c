@@ -291,7 +291,8 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										true,
 										fixed_schedule,
 										hypertable->fd.id,
-										config, initial_start);
+										config,
+										initial_start);
 
 	ts_cache_release(hcache);
 
@@ -323,7 +324,8 @@ policy_retention_add(PG_FUNCTION_ARGS)
 										   window_datum,
 										   default_schedule_interval,
 										   if_not_exists,
-										   fixed_schedule, initial_start);
+										   fixed_schedule,
+										   initial_start);
 	if (!TIMESTAMP_IS_NOBEGIN(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

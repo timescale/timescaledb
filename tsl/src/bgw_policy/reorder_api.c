@@ -262,7 +262,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										true,
 										false,
 										hypertable_id,
-										config, DT_NOBEGIN);
+										config,
+										DT_NOBEGIN);
 
 	PG_RETURN_INT32(job_id);
 }
