@@ -156,62 +156,30 @@ DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "a
 DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL);
 DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, INTERVAL);
 
+DROP VIEW IF EXISTS timescaledb_information.jobs;
+DROP VIEW IF EXISTS timescaledb_information.job_stats;
+
 -- rebuild _timescaledb_config.bgw_job
--- add fields for fixed_schedule, initial_start (they need to come before the varlen fields)
--- CREATE TABLE new_cols (fixed_schedule BOOL, initial_start TIMESTAMPTZ);
 
-CREATE TABLE  _timescaledb_config.bgw_job_tmp (
-  id integer NOT NULL,
-  application_name name NOT NULL,
-  schedule_interval interval NOT NULL,
-  max_runtime interval NOT NULL,
-  max_retries integer NOT NULL,
-  retry_period interval NOT NULL,
-  proc_schema name NOT NULL,
-  proc_name name NOT NULL,
-  owner name NOT NULL DEFAULT CURRENT_ROLE,
-  scheduled bool NOT NULL DEFAULT TRUE,
-  fixed_schedule bool not null default true,
-  initial_start timestamptz,
-  hypertable_id integer,
-  config jsonb,
-  check_schema NAME,
-  check_name NAME
-);
--- CREATE TABLE _timescaledb_config.bgw_job_tmp as 
--- SELECT bgj.id, bgj.application_name, bgj.schedule_interval, bgj.max_runtime, bgj.max_retries, bgj.retry_period, 
--- bgj.proc_schema, bgj.proc_name, bgj.owner, bgj.scheduled, nc.fixed_schedule, nc.initial_start, bgj.hypertable_id, bgj.config
--- FROM _timescaledb_config.bgw_job bgj, new_cols nc;
-
-CREATE TABLE _timescaledb_internal.tmp_bgw_job_seq_value AS
-SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
-
--- the fields from bgw_job
-UPDATE _timescaledb_config.bgw_job_tmp SET id = _timescaledb_config.id, 
-application_name = _timescaledb_config.application_name, schedule_interval = _timescaledb_config.schedule_interval,
-max_runtime = _timescaledb_config.bgw_job.max_runtime, max_retries = _timescaledb_config.bgw_job.max_retries,
-retry_period = _timescaledb_config.bgw_job.retry_period, proc_schema = _timescaledb_config.bgw_job.proc_schema, 
-proc_name = _timescaledb_config.bgw_job.proc_name, owner = _timescaledb_config.bgw_job.owner, 
-scheduled = _timescaledb_config.bgw_job.scheduled, hypertable_id = _timescaledb_config.bgw_job.hypertable_id, 
-config = _timescaledb_config.bgw_job.config;
--- all previously existing jobs will remain on a drifting schedule, and no initial_start provided
-UPDATE _timescaledb_config.bgw_job_tmp SET fixed_schedule = FALSE;
-
-ALTER EXTENSION timescaledb
-      DROP TABLE _timescaledb_config.bgw_job;
-DROP TABLE _timescaledb_config.bgw_job;
--- DROP THE SEQ
+-- rebuild bgw_job table
+CREATE TABLE _timescaledb_config.bgw_job_tmp AS SELECT * FROM _timescaledb_config.bgw_job;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_job;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_config.bgw_job_id_seq;
--- recreate the seq
+ALTER TABLE _timescaledb_internal.bgw_job_stat DROP CONSTRAINT IF EXISTS bgw_job_stat_job_id_fkey;
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT IF EXISTS bgw_policy_chunk_stats_job_id_fkey;
+
+CREATE TABLE _timescaledb_internal.tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
+
+DROP TABLE _timescaledb_config.bgw_job;
+
 CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
-SELECT pg_catalog.setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called)
-FROM _timescaledb_internal.tmp_bgw_job_seq_value;
+SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM _timescaledb_internal.tmp_bgw_job_seq_value;
 DROP TABLE _timescaledb_internal.tmp_bgw_job_seq_value;
 
--- recreate the table with the appropriate fields and constraints
+-- new table as we want it
 CREATE TABLE _timescaledb_config.bgw_job (
-  id integer NOT NULL DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
+  id INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
   application_name name NOT NULL,
   schedule_interval interval NOT NULL,
   max_runtime interval NOT NULL,
@@ -229,18 +197,115 @@ CREATE TABLE _timescaledb_config.bgw_job (
   check_name NAME 
 );
 
-INSERT INTO _timescaledb_config.bgw_job SELECT * FROM _timescaledb_config.bgw_job_tmp ORDER BY id;
-DROP TABLE _timescaledb_config.bgw_job_tmp;
--- add the constraints
-ALTER TABLE _timescaledb_config.bgw_job
-  ADD CONSTRAINT bgw_job_pkey PRIMARY KEY (id),
-  ADD CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) 
-  REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE;
-
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
+CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
 
-CREATE INDEX bgw_job_proc_hypertable_id_idx
-       ON _timescaledb_config.bgw_job (proc_schema, proc_name, hypertable_id);
+INSERT INTO _timescaledb_config.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config)
+SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config FROM _timescaledb_config.bgw_job_tmp ORDER BY id;
+UPDATE _timescaledb_config.bgw_job SET fixed_schedule = FALSE;
+DROP TABLE _timescaledb_config.bgw_job_tmp;
+ALTER TABLE _timescaledb_internal.bgw_job_stat ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY(job_id) REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats ADD CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY(job_id) REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE;
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
 GRANT SELECT ON _timescaledb_config.bgw_job TO PUBLIC;
 GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
+
+
+
+
+
+
+
+
+
+
+
+
+-- CREATE TABLE  _timescaledb_config.bgw_job_tmp (
+--   id integer NOT NULL,
+--   application_name name NOT NULL,
+--   schedule_interval interval NOT NULL,
+--   max_runtime interval NOT NULL,
+--   max_retries integer NOT NULL,
+--   retry_period interval NOT NULL,
+--   proc_schema name NOT NULL,
+--   proc_name name NOT NULL,
+--   owner name NOT NULL DEFAULT CURRENT_ROLE,
+--   scheduled bool NOT NULL DEFAULT TRUE,
+--   fixed_schedule bool not null default true,
+--   initial_start timestamptz,
+--   hypertable_id integer,
+--   config jsonb,
+--   check_schema NAME,
+--   check_name NAME
+-- );
+-- -- CREATE TABLE _timescaledb_config.bgw_job_tmp as 
+-- -- SELECT bgj.id, bgj.application_name, bgj.schedule_interval, bgj.max_runtime, bgj.max_retries, bgj.retry_period, 
+-- -- bgj.proc_schema, bgj.proc_name, bgj.owner, bgj.scheduled, nc.fixed_schedule, nc.initial_start, bgj.hypertable_id, bgj.config
+-- -- FROM _timescaledb_config.bgw_job bgj, new_cols nc;
+
+-- CREATE TABLE _timescaledb_internal.tmp_bgw_job_seq_value AS
+-- SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
+
+-- -- the fields from bgw_job
+-- UPDATE _timescaledb_config.bgw_job_tmp SET id = old_bgw_job.id, 
+-- application_name = old_bgw_job.application_name, schedule_interval = old_bgw_job.schedule_interval,
+-- max_runtime = old_bgw_job.max_runtime, max_retries = old_bgw_job.max_retries,
+-- retry_period = old_bgw_job.retry_period, proc_schema = old_bgw_job.proc_schema, 
+-- proc_name = old_bgw_job.proc_name, owner = old_bgw_job.owner, 
+-- scheduled = old_bgw_job.scheduled, hypertable_id = old_bgw_job.hypertable_id, 
+-- config = old_bgw_job.config FROM _timescaledb_config.bgw_job old_bgw_job;
+-- -- all previously existing jobs will remain on a drifting schedule, and no initial_start provided
+-- UPDATE _timescaledb_config.bgw_job_tmp SET fixed_schedule = FALSE;
+-- -- required in order to rebuild the table bgw_job
+-- ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_job;
+-- ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_config.bgw_job_id_seq;
+-- ALTER TABLE _timescaledb_internal.bgw_job_stat DROP CONSTRAINT IF EXISTS bgw_job_stat_job_id_fkey;
+-- ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT IF EXISTS bgw_policy_chunk_stats_job_id_fkey;
+
+-- DROP TABLE _timescaledb_config.bgw_job;
+-- DROP SEQUENCE _timescaledb_config.bgw_job_id_seq;
+
+-- -- recreate the seq
+-- CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
+-- SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
+-- SELECT pg_catalog.setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called)
+-- FROM _timescaledb_internal.tmp_bgw_job_seq_value;
+-- DROP TABLE _timescaledb_internal.tmp_bgw_job_seq_value;
+
+-- -- recreate the table with the appropriate fields and constraints
+-- CREATE TABLE _timescaledb_config.bgw_job (
+--   id integer NOT NULL DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
+--   application_name name NOT NULL,
+--   schedule_interval interval NOT NULL,
+--   max_runtime interval NOT NULL,
+--   max_retries integer NOT NULL,
+--   retry_period interval NOT NULL,
+--   proc_schema name NOT NULL,
+--   proc_name name NOT NULL,
+--   owner name NOT NULL DEFAULT CURRENT_ROLE,
+--   scheduled bool NOT NULL DEFAULT TRUE,
+--   fixed_schedule bool not null default true,
+--   initial_start timestamptz,
+--   hypertable_id  integer REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+--   config jsonb ,
+--   check_schema NAME,
+--   check_name NAME 
+-- );
+
+-- ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
+-- CREATE INDEX bgw_job_proc_hypertable_id_idx
+--        ON _timescaledb_config.bgw_job (proc_schema, proc_name, hypertable_id);
+
+-- INSERT INTO _timescaledb_config.bgw_job SELECT * FROM _timescaledb_config.bgw_job_tmp ORDER BY id;
+-- DROP TABLE _timescaledb_config.bgw_job_tmp;
+-- -- add the constraints
+-- ALTER TABLE _timescaledb_config.bgw_job
+--   ADD CONSTRAINT bgw_job_pkey PRIMARY KEY (id),
+--   ADD CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) 
+--   REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE;
+
+-- SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
+-- GRANT SELECT ON _timescaledb_config.bgw_job TO PUBLIC;
+-- GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
