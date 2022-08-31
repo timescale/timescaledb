@@ -337,7 +337,7 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 static bool
 can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints, List *clauses,
-									  PlannerInfo root, PlanState *ps)
+									  PlannerInfo *root, PlanState *ps)
 {
 	bool can_exclude;
 	ListCell *lc;
@@ -350,7 +350,7 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 		ri->clause = lfirst(lc);
 		restrictinfos = lappend(restrictinfos, ri);
 	}
-	restrictinfos = constify_restrictinfo_params(&root, ps->state, restrictinfos);
+	restrictinfos = constify_restrictinfo_params(root, ps->state, restrictinfos);
 
 	can_exclude = can_exclude_chunk(constraints, restrictinfos);
 
@@ -394,7 +394,7 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 		if (can_exclude_constraints_using_clauses(state,
 												  list_make1(makeBoolConst(true, false)),
 												  state->initial_parent_clauses,
-												  root,
+												  &root,
 												  &state->csstate.ss.ps))
 		{
 			state->runtime_number_exclusions_parent++;
@@ -433,7 +433,7 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 			bool can_exclude = can_exclude_constraints_using_clauses(state,
 																	 lfirst(lc_constraints),
 																	 lfirst(lc_clauses),
-																	 root,
+																	 &root,
 																	 ps);
 
 			if (!can_exclude)
