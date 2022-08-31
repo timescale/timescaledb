@@ -26,6 +26,7 @@ set(TEST_FILES
     information_views.sql
     insert_many.sql
     insert_single.sql
+    insert_returning.sql
     lateral.sql
     misc.sql
     parallel.sql

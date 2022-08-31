@@ -111,6 +111,11 @@ policy_reorder_check(PG_FUNCTION_ARGS)
 {
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+	}
+
 	policy_reorder_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
 
 	PG_RETURN_VOID();

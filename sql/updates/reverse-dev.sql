@@ -268,3 +268,44 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migra
 DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
 DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc,integer,name[],boolean);
+DROP FUNCTION IF EXISTS @extschema@.create_distributed_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc,integer,name[]);
+
+CREATE FUNCTION @extschema@.create_hypertable(
+    relation                REGCLASS,
+    time_column_name        NAME,
+    partitioning_column     NAME = NULL,
+    number_partitions       INTEGER = NULL,
+    associated_schema_name  NAME = NULL,
+    associated_table_prefix NAME = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL,
+    replication_factor      INTEGER = NULL,
+    data_nodes              NAME[] = NULL
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.create_distributed_hypertable(
+    relation                REGCLASS,
+    time_column_name        NAME,
+    partitioning_column     NAME = NULL,
+    number_partitions       INTEGER = NULL,
+    associated_schema_name  NAME = NULL,
+    associated_table_prefix NAME = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL,
+    replication_factor      INTEGER = 1,
+    data_nodes              NAME[] = NULL
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;

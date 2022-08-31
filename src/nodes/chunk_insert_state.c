@@ -160,7 +160,7 @@ get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_cla
 	return ExecBuildProjectionInfo(returning_clauses,
 								   orig->pi_exprContext,
 								   orig->pi_state.resultslot,
-								   NULL,
+								   orig->pi_state.parent,
 								   chunk_desc);
 }
 

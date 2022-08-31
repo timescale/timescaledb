@@ -719,3 +719,14 @@ select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_sche
  1010 | Compression Policy [1010] | @ 1 day            | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |            10 | {"hypertable_id": 10, "compress_after": 600000}     | _timescaledb_internal | policy_compression_check
 (3 rows)
 
+-- test policy check functions with NULL args
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.policy_compression_check(NULL);
+ERROR:  config must not be NULL
+SELECT _timescaledb_internal.policy_refresh_continuous_aggregate_check(NULL);
+ERROR:  config must not be NULL
+SELECT _timescaledb_internal.policy_reorder_check(NULL);
+ERROR:  config must not be NULL
+SELECT _timescaledb_internal.policy_retention_check(NULL);
+ERROR:  config must not be NULL
+\set ON_ERROR_STOP 1
