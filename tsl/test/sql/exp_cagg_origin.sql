@@ -30,33 +30,11 @@ INSERT INTO conditions (day, city, temperature) VALUES
 
 \set ON_ERROR_STOP 0
 
--- Make sure NULL can't be specified as an origin
-CREATE MATERIALIZED VIEW conditions_summary_weekly
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT city,
-       timescaledb_experimental.time_bucket_ng('7 days', day, null) AS bucket,
-       MIN(temperature),
-       MAX(temperature)
-FROM conditions
-GROUP BY city, bucket
-WITH NO DATA;
-
 -- Make sure 'infinity' can't be specified as an origin
 CREATE MATERIALIZED VIEW conditions_summary_weekly
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT city,
        timescaledb_experimental.time_bucket_ng('7 days', day, 'infinity' :: date) AS bucket,
-       MIN(temperature),
-       MAX(temperature)
-FROM conditions
-GROUP BY city, bucket
-WITH NO DATA;
-
--- For monthly buckets origin should be the first day of the month
-CREATE MATERIALIZED VIEW conditions_summary_weekly
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT city,
-       timescaledb_experimental.time_bucket_ng('1 month', day, '2021-06-03') AS bucket,
        MIN(temperature),
        MAX(temperature)
 FROM conditions
@@ -94,16 +72,6 @@ SELECT mat_hypertable_id AS cagg_id, raw_hypertable_id AS ht_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'conditions_summary_weekly'
 \gset
-
--- Make sure this is treated as a variable-sized bucket case
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id;
-
--- Make sure the origin is saved in the catalog table
-SELECT experimental, name, bucket_width, origin, timezone
-FROM _timescaledb_catalog.continuous_aggs_bucket_function
-WHERE mat_hypertable_id = :cagg_id;
 
 -- Make sure truncating of the refresh window works
 \set ON_ERROR_STOP 0

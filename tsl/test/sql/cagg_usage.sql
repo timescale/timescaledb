@@ -4,7 +4,7 @@
 
 -- TEST SETUP --
 \set ON_ERROR_STOP 0
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 
 -- START OF USAGE TEST --
@@ -268,3 +268,30 @@ SELECT relname FROM pg_class WHERE oid = :mat_table;
 DROP TABLE whatever;
 
 -- END OF BASIC USAGE TESTS --
+
+CREATE TABLE metrics(time timestamptz, device TEXT, value float);
+SELECT table_name FROM create_hypertable('metrics','time');
+INSERT INTO metrics SELECT generate_series('1999-12-20'::timestamptz,'2000-02-01'::timestamptz,'12 day'::interval), 'dev1', 0.25;
+
+SELECT current_setting('timezone');
+
+-- should be blocked because non-immutable expression
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 day', time, current_setting('timezone')) FROM metrics GROUP BY 1;
+\set ON_ERROR_STOP 1
+
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 day', time, 'PST8PDT') FROM metrics GROUP BY 1;
+SELECT * FROM cagg1;
+
+CREATE MATERIALIZED VIEW cagg2 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT') FROM metrics GROUP BY 1;
+SELECT * FROM cagg2;
+
+-- custom origin
+CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
+SELECT * FROM cagg3;
+
+-- offset not supported atm
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
+\set ON_ERROR_STOP 1
+

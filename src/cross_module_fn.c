@@ -28,14 +28,18 @@
 CROSSMODULE_WRAPPER(policy_compression_add);
 CROSSMODULE_WRAPPER(policy_compression_remove);
 CROSSMODULE_WRAPPER(policy_recompression_proc);
+CROSSMODULE_WRAPPER(policy_compression_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_add);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_proc);
+CROSSMODULE_WRAPPER(policy_refresh_cagg_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_remove);
 CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
+CROSSMODULE_WRAPPER(policy_reorder_check);
 CROSSMODULE_WRAPPER(policy_reorder_remove);
 CROSSMODULE_WRAPPER(policy_retention_add);
 CROSSMODULE_WRAPPER(policy_retention_proc);
+CROSSMODULE_WRAPPER(policy_retention_check);
 CROSSMODULE_WRAPPER(policy_retention_remove);
 
 CROSSMODULE_WRAPPER(job_add);
@@ -179,13 +183,6 @@ job_execute_default_fn(BgwJob *job)
 	pg_unreachable();
 }
 
-static void
-job_config_check_default_fn(Name proc_schema, Name proc_name, Jsonb *config)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 static bool
 process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
 							   WithClauseResult *with_clause_options)
@@ -236,6 +233,33 @@ process_compressed_data_out(PG_FUNCTION_ARGS)
 
 	if (ts_cm_functions->compressed_data_in != process_compressed_data_in)
 		return ts_cm_functions->compressed_data_out(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
+/*
+ * This function ensures that the TSL library is loaded and the call to
+ * post_update_cagg_try_repair is dispatched to the correct
+ * function.
+ *
+ * The TSL library might not be loaded when post_update_cagg_try_repair is
+ * called during a database upgrade, resulting in an error message about
+ * improper licensing:
+ *
+ * "[..] is not supported under the current "timescale" license
+ *  INT:  Upgrade your license to 'timescale'""
+ *
+ * See also the comment about this problem in the function
+ * process_compressed_data_in.
+ */
+static Datum
+process_cagg_try_repair(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
+		return ts_cm_functions->cagg_try_repair(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
@@ -398,14 +422,18 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_compression_add = error_no_default_fn_pg_community,
 	.policy_compression_remove = error_no_default_fn_pg_community,
 	.policy_recompression_proc = error_no_default_fn_pg_community,
+	.policy_compression_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_add = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_proc = error_no_default_fn_pg_community,
+	.policy_refresh_cagg_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_remove = error_no_default_fn_pg_community,
 	.policy_reorder_add = error_no_default_fn_pg_community,
 	.policy_reorder_proc = error_no_default_fn_pg_community,
+	.policy_reorder_check = error_no_default_fn_pg_community,
 	.policy_reorder_remove = error_no_default_fn_pg_community,
 	.policy_retention_add = error_no_default_fn_pg_community,
 	.policy_retention_proc = error_no_default_fn_pg_community,
+	.policy_retention_check = error_no_default_fn_pg_community,
 	.policy_retention_remove = error_no_default_fn_pg_community,
 
 	.job_add = error_no_default_fn_pg_community,
@@ -414,7 +442,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.job_delete = error_no_default_fn_pg_community,
 	.job_run = error_no_default_fn_pg_community,
 	.job_execute = job_execute_default_fn,
-	.job_config_check = job_config_check_default_fn,
 
 	.move_chunk = error_no_default_fn_pg_community,
 	.move_chunk_proc = error_no_default_fn_pg_community,
@@ -446,7 +473,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_drop_dist_ht_invalidation_trigger = NULL,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
-	.cagg_try_repair = error_no_default_fn_pg_community,
+	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

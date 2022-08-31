@@ -53,6 +53,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl_dist_ht.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
+    cagg_migrate_integer.sql
+    cagg_migrate_integer_dist_ht.sql
+    cagg_migrate_timestamp.sql
+    cagg_migrate_timestamp_dist_ht.sql
     cagg_multi.sql
     continuous_aggs.sql
     continuous_aggs_deprecated.sql

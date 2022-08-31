@@ -81,15 +81,15 @@ SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescale
 (1 row)
 
 SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');
-                                                  alter_job                                                   
---------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 1}",-infinity)
+                                                                         alter_job                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 1}",-infinity,_timescaledb_internal.policy_retention_check)
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
-  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                     config                     
-------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+------------------------------------------------
- 1000 | Retention Policy [1000] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             1 | {"drop_after": "@ 4 mons", "hypertable_id": 1}
+  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                     config                     |     check_schema      |       check_name       
+------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+------------------------------------------------+-----------------------+------------------------
+ 1000 | Retention Policy [1000] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             1 | {"drop_after": "@ 4 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
 (1 row)
 
 --turn on compression and compress all chunks

@@ -50,6 +50,7 @@
 #define CONFIG_KEY_INDEX_NAME "index_name"
 
 #define POLICY_REORDER_PROC_NAME "policy_reorder"
+#define POLICY_REORDER_CHECK_NAME "policy_reorder_check"
 
 int32
 policy_reorder_get_hypertable_id(const Jsonb *config)
@@ -106,6 +107,21 @@ check_valid_index(Hypertable *ht, Name index_name)
 }
 
 Datum
+policy_reorder_check(PG_FUNCTION_ARGS)
+{
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+	}
+
+	policy_reorder_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
+
+	PG_RETURN_VOID();
+}
+
+Datum
 policy_reorder_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
@@ -122,7 +138,7 @@ Datum
 policy_reorder_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name, proc_schema, check_name, check_schema, owner;
 	int32 job_id;
 	const Dimension *dim;
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
@@ -221,6 +237,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	namestrcpy(&application_name, "Reorder Policy");
 	namestrcpy(&proc_name, POLICY_REORDER_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_name, POLICY_REORDER_CHECK_NAME);
+	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	JsonbParseState *parse_state = NULL;
@@ -238,6 +256,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										DEFAULT_RETRY_PERIOD,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner,
 										true,
 										hypertable_id,

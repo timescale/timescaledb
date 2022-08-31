@@ -2790,7 +2790,7 @@ WHERE time = (
 ORDER BY time;
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
-   Chunks excluded during runtime: 1
+   Chunks excluded during runtime: 2
    InitPlan 1 (returns $0)
      ->  Aggregate (actual rows=1 loops=1)
            ->  Append (actual rows=68370 loops=1)
@@ -2800,11 +2800,10 @@ QUERY PLAN
                        ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
                  ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=25190 loops=1)
                        ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
          Filter: ("time" = $0)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
-               Rows Removed by Filter: 20
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
          Filter: ("time" = $0)
          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
@@ -2815,7 +2814,7 @@ QUERY PLAN
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
                Rows Removed by Filter: 25
-(26 rows)
+(25 rows)
 
 -- test ordered append with limit expression
 :PREFIX

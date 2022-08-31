@@ -405,10 +405,10 @@ SELECT chunk_name, range_start, range_end
 FROM chunk_view
 WHERE hypertable_name = 'ht_try'
 ORDER BY chunk_name;
-    chunk_name    |           range_start           |            range_end            
-------------------+---------------------------------+---------------------------------
- _hyper_5_9_chunk | Wed May 04 17:00:00 2022 PDT    | Thu May 05 17:00:00 2022 PDT
- child_fdw_table  | Tue Nov 23 16:00:00 4684 PST BC | Wed Nov 24 16:00:00 4684 PST BC
+    chunk_name    |          range_start           |          range_end           
+------------------+--------------------------------+------------------------------
+ _hyper_5_9_chunk | Wed May 04 17:00:00 2022 PDT   | Thu May 05 17:00:00 2022 PDT
+ child_fdw_table  | Thu Dec 31 16:00:00 294246 PST | infinity
 (2 rows)
 
 SELECT * FROM ht_try ORDER BY 1;
@@ -588,6 +588,26 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
          conname         
 -------------------------
  hyper_constr_temp_check
+(1 row)
+
+--TEST policy is not applied on OSM chunk
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+CALL run_job(:deljob_id);
+CALL run_job(:deljob_id);
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+     chunk_name     |             range_start             | range_end 
+--------------------+-------------------------------------+-----------
+ child_hyper_constr | Sat Jan 09 20:00:54.7758 294247 PST | infinity
 (1 row)
 
 -- clean up databases created

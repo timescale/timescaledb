@@ -317,3 +317,248 @@ FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 -- Stop Background Workers
 SELECT _timescaledb_internal.stop_background_workers();
+
+SELECT _timescaledb_internal.restart_background_workers();
+
+\set ON_ERROR_STOP 0
+-- add test for custom jobs with custom check functions
+-- create the functions/procedures to be used as checking functions
+CREATE OR REPLACE PROCEDURE test_config_check_proc(config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config must be not NULL and have drop_after';
+    END IF ;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    IF config IS NULL THEN
+        RETURN;
+    END IF;
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config can be NULL but must have drop_after if not';
+    END IF ;
+END
+$$ LANGUAGE PLPGSQL;
+
+-- step 2, create a procedure to run as a custom job
+CREATE OR REPLACE PROCEDURE test_proc_with_check(job_id int, config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  RAISE NOTICE 'Will only print this if config passes checks, my config is %', config; 
+END
+$$;
+
+-- step 3, add the job with the config check function passed as argument
+-- test procedures
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_proc'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_proc'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_proc'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_proc'::regproc)
+as job_with_proc_check_id \gset
+
+-- test functions
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_func'::regproc) 
+as job_with_func_check_id \gset
+
+
+--- test alter_job
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
+
+select alter_job(:job_with_proc_check_id, config => '{"drop_after":"4 days"}');
+
+
+-- test that jobs with an incorrect check function signature will not be registered
+-- these are all incorrect function signatures 
+
+CREATE OR REPLACE FUNCTION test_config_check_func_0args() RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'I take no arguments and will validate anything you give me!';
+END
+$$ LANGUAGE PLPGSQL;
+
+CREATE OR REPLACE FUNCTION test_config_check_func_2args(config jsonb, intarg int) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'I take two arguments (jsonb, int) and I should fail to run!';
+END
+$$ LANGUAGE PLPGSQL;
+
+CREATE OR REPLACE FUNCTION test_config_check_func_intarg(config int) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'I take one argument which is an integer and I should fail to run!';
+END
+$$ LANGUAGE PLPGSQL;
+
+-- -- this should fail, it has an incorrect check function 
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_0args'::regproc);
+-- -- so should this
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_2args'::regproc);
+-- and this
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_intarg'::regproc);
+-- and this fails as it calls a nonexistent function
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_nonexistent_check_func'::regproc);
+
+-- when called with a valid check function and a NULL config no check should occur
+CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'This message will get printed for both NULL and not NULL config';
+END
+$$ LANGUAGE PLPGSQL;
+
+SET client_min_messages = NOTICE;
+-- check done for both NULL and non-NULL config
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
+-- check done
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc) as job_id \gset
+
+-- check function not returning void
+CREATE OR REPLACE FUNCTION test_config_check_func_returns_int(config jsonb) RETURNS INT
+AS $$
+BEGIN 
+    raise notice 'I print a message, and then I return least(1,2)';
+    RETURN LEAST(1, 2);
+END
+$$ LANGUAGE PLPGSQL;
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc) as job_id_int \gset
+
+-- drop the registered check function, verify that alter_job will work and print a warning that 
+-- the check is being skipped due to the check function missing
+ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
+select alter_job(:job_id, schedule_interval => '1 hour');
+DROP FUNCTION test_config_check_func_returns_int;
+select alter_job(:job_id_int, config => '{"field":"value"}');
+
+-- rename the check function and then call alter_job to register the new name
+select alter_job(:job_id, check_config => 'renamed_func'::regproc);
+-- run alter again, should get a config check
+select alter_job(:job_id, config => '{}');
+-- do not drop the current check function but register a new one
+CREATE OR REPLACE FUNCTION substitute_check_func(config jsonb) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'This message is a substitute of the previously printed one';
+END
+$$ LANGUAGE PLPGSQL;
+-- register the new check
+select alter_job(:job_id, check_config => 'substitute_check_func');
+select alter_job(:job_id, config => '{}');
+
+RESET client_min_messages;
+
+-- test an oid that doesn't exist
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 17424217::regproc);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test a function with insufficient privileges
+create schema test_schema;
+create role user_noexec with login;
+grant usage on schema test_schema to user_noexec;
+
+CREATE OR REPLACE FUNCTION test_schema.test_config_check_func_privileges(config jsonb) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'This message will only get printed if privileges suffice';
+END
+$$ LANGUAGE PLPGSQL;
+
+revoke execute on function test_schema.test_config_check_func_privileges from public;
+-- verify the user doesn't have execute permissions on the function
+select has_function_privilege('user_noexec', 'test_schema.test_config_check_func_privileges(jsonb)', 'execute');
+
+\c :TEST_DBNAME user_noexec
+-- user_noexec should not have exec permissions on this function
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_schema.test_config_check_func_privileges'::regproc);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- check that alter_job rejects a check function with invalid signature
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
+select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
+select alter_job(:job_id_alter);
+-- test that we can unregister the check function
+select alter_job(:job_id_alter, check_config => 0);
+-- no message printed now
+select alter_job(:job_id_alter, config => '{}'); 
+
+-- test what happens if the check function contains a COMMIT
+-- procedure with transaction handling
+CREATE OR REPLACE PROCEDURE custom_proc2_jsonb(config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+--   RAISE NOTICE 'Starting some transactions inside procedure';
+  INSERT INTO custom_log VALUES(1, $1, 'custom_proc 1 COMMIT');
+  COMMIT;
+END
+$$;
+
+select add_job('test_proc_with_check', '5 secs', config => '{}') as job_id_err \gset
+select alter_job(:job_id_err, check_config => 'custom_proc2_jsonb');
+select alter_job(:job_id_err, schedule_interval => '3 minutes');
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'custom_proc2_jsonb') as job_id_commit \gset
+
+-- test the case where we have a background job that registers jobs with a check fn
+CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
+$$
+BEGIN
+    perform add_job('test_proc_with_check', schedule_interval => '10 secs', config => '{}', check_config => 'renamed_func');
+END
+$$;
+
+select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
+-- wait for enough time
+SELECT wait_for_job_to_run(:last_job_id, 1);
+select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
+
+-- test coverage for alter_job
+-- registering an invalid oid
+select alter_job(:job_id_alter, check_config => 123456789::regproc);
+-- registering a function with insufficient privileges
+\c :TEST_DBNAME user_noexec
+select * from add_job('test_proc_with_check', '5 secs', config => '{}') as job_id_owner \gset
+select * from alter_job(:job_id_owner, check_config => 'test_schema.test_config_check_func_privileges'::regproc);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP SCHEMA test_schema CASCADE;
+DROP ROLE user_noexec;
+
+-- test with aggregate check proc
+create function jsonb_add (j1 jsonb, j2 jsonb) returns jsonb
+AS $$
+BEGIN 
+    RETURN j1 || j2;
+END
+$$ LANGUAGE PLPGSQL;
+
+create table jsonb_values (j jsonb, i int);
+insert into jsonb_values values ('{"refresh_after":"2 weeks"}', 1), ('{"compress_after":"2 weeks"}', 2), ('{"drop_after":"2 weeks"}', 3);
+
+CREATE AGGREGATE sum_jsb (jsonb)
+(
+    sfunc = jsonb_add,
+    stype = jsonb,
+    initcond = '{}'
+);
+
+-- for test coverage, check unsupported aggregate type
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
+
+

@@ -98,7 +98,9 @@ SELECT j.id AS job_id,
   j.config,
   js.next_start,
   ht.schema_name AS hypertable_schema,
-  ht.table_name AS hypertable_name
+  ht.table_name AS hypertable_name,
+  j.check_schema,
+  j.check_name
 FROM _timescaledb_config.bgw_job j
   LEFT JOIN _timescaledb_catalog.hypertable ht ON ht.id = j.hypertable_id
   LEFT JOIN _timescaledb_internal.bgw_job_stat js ON js.job_id = j.id;

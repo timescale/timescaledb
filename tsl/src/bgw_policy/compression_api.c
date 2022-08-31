@@ -156,12 +156,29 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 }
 
 Datum
+policy_compression_check(PG_FUNCTION_ARGS)
+{
+	PolicyCompressionData policy_data;
+
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+	}
+
+	policy_compression_read_and_validate_config(PG_GETARG_JSONB_P(0), &policy_data);
+	ts_cache_release(policy_data.hcache);
+
+	PG_RETURN_VOID();
+}
+
+/* compression policies are added to hypertables or continuous aggregates */
+Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 								Oid compress_after_type, Interval *default_schedule_interval,
 								bool user_defined_schedule_interval, bool if_not_exists)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name, proc_schema, check_schema, check_name, owner;
 	int32 job_id;
 	Hypertable *hypertable;
 	Cache *hcache;
@@ -233,6 +250,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	namestrcpy(&application_name, "Compression Policy");
 	namestrcpy(&proc_name, POLICY_COMPRESSION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_name, POLICY_COMPRESSION_CHECK_NAME);
+	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	JsonbParseState *parse_state = NULL;
@@ -295,6 +314,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										DEFAULT_RETRY_PERIOD,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner,
 										true,
 										hypertable->fd.id,

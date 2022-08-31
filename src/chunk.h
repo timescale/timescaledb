@@ -164,6 +164,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_foun
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_relid(Oid relid);
+extern TSDLLEXPORT int32 ts_chunk_get_compressed_chunk_id(int32 chunk_id);
 extern bool ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id,
 														   int32 *chunk_status);
 extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);

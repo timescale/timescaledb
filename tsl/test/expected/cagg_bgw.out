@@ -58,8 +58,8 @@ SELECT ts_bgw_params_create();
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config | check_schema | check_name 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------+--------------+------------
 (0 rows)
 
 SELECT * FROM timescaledb_information.job_stats;
@@ -121,9 +121,9 @@ SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
 -- job was created
 SELECT * FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id;
-  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                             config                              
-------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+-----------------------------------------------------------------
- 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_offset": 4, "start_offset": null, "mat_hypertable_id": 2}
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                             config                              |     check_schema      |                check_name                 
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+-----------------------------------------------------------------+-----------------------+-------------------------------------------
+ 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_offset": 4, "start_offset": null, "mat_hypertable_id": 2} | _timescaledb_internal | policy_refresh_continuous_aggregate_check
 (1 row)
 
 -- create 10 time buckets
@@ -160,9 +160,9 @@ SELECT * FROM sorted_bgw_log;
 (3 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                             config                              
-------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+-----------------------------------------------------------------
- 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_offset": 4, "start_offset": null, "mat_hypertable_id": 2}
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                             config                              |     check_schema      |                check_name                 
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+-----------------------------------------------------------------+-----------------------+-------------------------------------------
+ 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_offset": 4, "start_offset": null, "mat_hypertable_id": 2} | _timescaledb_internal | policy_refresh_continuous_aggregate_check
 (1 row)
 
 -- job ran once, successfully
@@ -269,9 +269,9 @@ SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint 
 
 --alter the refresh interval and check if next_start is altered
 SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
-                                                                  alter_job                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_offset"": 4, ""start_offset"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:01:00 2000 PST")
+                                                                                                  alter_job                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_offset"": 4, ""start_offset"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:01:00 2000 PST",_timescaledb_internal.policy_refresh_continuous_aggregate_check)
 (1 row)
 
 SELECT job_id, next_start - last_finish as until_next, total_runs
@@ -309,9 +309,9 @@ SELECT (next_start - '30s'::interval) AS "NEW_NEXT_START"
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id \gset
 SELECT alter_job(:job_id, next_start => :'NEW_NEXT_START');
-                                                                  alter_job                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_offset"": 4, ""start_offset"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:02:30 2000 PST")
+                                                                                                  alter_job                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_offset"": 4, ""start_offset"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:02:30 2000 PST",_timescaledb_internal.policy_refresh_continuous_aggregate_check)
 (1 row)
 
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute 30 seconds')::bigint * 1000000), true);

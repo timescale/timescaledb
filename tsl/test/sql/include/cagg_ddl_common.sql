@@ -132,7 +132,7 @@ SELECT current_user;
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -307,7 +307,7 @@ ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 
 SELECT * FROM new_name;
 

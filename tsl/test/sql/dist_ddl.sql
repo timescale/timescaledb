@@ -115,6 +115,8 @@ SELECT true FROM pg_tables WHERE tablename = 'disttable';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SET ROLE :ROLE_1;
 
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+
 -- SET SCHEMA
 \set ON_ERROR_STOP 0
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
@@ -725,6 +727,147 @@ SELECT create_distributed_hypertable('hyper', 'time', 'device', 4, chunk_time_in
 INSERT INTO hyper SELECT t, ceil((random() * 5))::int, random() * 80
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-05'::timestamptz, '1 minute') as t;
 ANALYZE hyper;
+
+--
+-- Test hypertable distributed defaults
+--
+SHOW timescaledb.hypertable_distributed_default;
+SHOW timescaledb.hypertable_replication_factor_default;
+
+/* CASE1: create_hypertable(distributed, replication_factor) */
+
+-- defaults are not applied
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('drf_test', 'time', distributed=>false, replication_factor=>1);
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('drf_test', 'time', distributed=>true, replication_factor=>1);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+/* CASE2: create_hypertable(distributed) */
+
+-- auto
+SET timescaledb.hypertable_distributed_default TO 'auto';
+
+-- create regular hypertable by default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>false);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- create distributed hypertable using replication factor default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>true);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- distributed (same as auto)
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- create regular hypertable by default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>false);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- create distributed hypertable using replication factor default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>true);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- local
+SET timescaledb.hypertable_distributed_default TO 'local';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>false);
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+-- create distributed hypertable using replication factor default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>true);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+/* CASE3: create_hypertable(replication_factor) */
+
+-- auto
+SET timescaledb.hypertable_distributed_default TO 'auto';
+
+-- create distributed hypertable when replication_factor > 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- distributed
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- create distributed hypertable
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- local
+SET timescaledb.hypertable_distributed_default TO 'local';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+-- distributed hypertable member: replication_factor=>-1
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=> -1);
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+/* CASE4: create_hypertable() */
+
+-- auto
+SET timescaledb.hypertable_distributed_default TO 'auto';
+
+-- regular by default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time');
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- distributed
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- distributed hypertable with using default replication factor
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time');
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- local
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time');
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+/* CASE5: create_distributed_hypertable() default replication factor */
+SET timescaledb.hypertable_distributed_default TO 'auto';
+SET timescaledb.hypertable_replication_factor_default TO 3;
+
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_distributed_hypertable('drf_test', 'time');
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
 
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;

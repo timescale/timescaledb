@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- TEST SETUP --
 \set ON_ERROR_STOP 0
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 -- START OF USAGE TEST --
 --First create your hypertable
@@ -101,9 +101,9 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
 SELECT alter_job(1000, schedule_interval := '1h');
-                                                               alter_job                                                                
-----------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity)
+                                                                                               alter_job                                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
@@ -410,3 +410,58 @@ SELECT relname FROM pg_class WHERE oid = :mat_table;
 -- Cleanup
 DROP TABLE whatever;
 -- END OF BASIC USAGE TESTS --
+CREATE TABLE metrics(time timestamptz, device TEXT, value float);
+SELECT table_name FROM create_hypertable('metrics','time');
+NOTICE:  adding not-null constraint to column "time"
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics SELECT generate_series('1999-12-20'::timestamptz,'2000-02-01'::timestamptz,'12 day'::interval), 'dev1', 0.25;
+SELECT current_setting('timezone');
+ current_setting 
+-----------------
+ PST8PDT
+(1 row)
+
+-- should be blocked because non-immutable expression
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 day', time, current_setting('timezone')) FROM metrics GROUP BY 1;
+ERROR:  only immutable expressions allowed in time bucket function
+\set ON_ERROR_STOP 1
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 day', time, 'PST8PDT') FROM metrics GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg1"
+SELECT * FROM cagg1;
+         time_bucket          
+------------------------------
+ Mon Dec 20 00:00:00 1999 PST
+ Sat Jan 01 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST
+ Tue Jan 25 00:00:00 2000 PST
+(4 rows)
+
+CREATE MATERIALIZED VIEW cagg2 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT') FROM metrics GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg2"
+SELECT * FROM cagg2;
+         time_bucket          
+------------------------------
+ Wed Dec 01 00:00:00 1999 PST
+ Sat Jan 01 00:00:00 2000 PST
+(2 rows)
+
+-- custom origin
+CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg3"
+SELECT * FROM cagg3;
+         time_bucket          
+------------------------------
+ Wed Dec 01 00:00:00 1999 PST
+ Sat Jan 01 00:00:00 2000 PST
+(2 rows)
+
+-- offset not supported atm
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
+ERROR:  continuous aggregate view must include a valid time bucket function
+\set ON_ERROR_STOP 1

@@ -363,3 +363,13 @@ alter table test_missing_schedint_integer set (timescaledb.compress);
 select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
 
 select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
+
+-- test policy check functions with NULL args
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.policy_compression_check(NULL);
+SELECT _timescaledb_internal.policy_refresh_continuous_aggregate_check(NULL);
+SELECT _timescaledb_internal.policy_reorder_check(NULL);
+SELECT _timescaledb_internal.policy_retention_check(NULL);
+\set ON_ERROR_STOP 1
+
+

@@ -16,6 +16,7 @@ extern Datum policy_compression_add(PG_FUNCTION_ARGS);
 extern Datum policy_compression_remove(PG_FUNCTION_ARGS);
 
 extern Datum policy_recompression_proc(PG_FUNCTION_ARGS);
+extern Datum policy_compression_check(PG_FUNCTION_ARGS);
 
 int32 policy_compression_get_hypertable_id(const Jsonb *config);
 int64 policy_compression_get_compress_after_int(const Jsonb *config);

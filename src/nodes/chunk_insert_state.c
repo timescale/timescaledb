@@ -553,18 +553,19 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 static Relation
 lock_associated_compressed_chunk(int32 chunk_id, bool *has_compressed_chunk)
 {
-	Relation compress_rel = NULL;
-	Chunk *orig_chunk = ts_chunk_get_by_id(chunk_id, true);
-	Oid compress_chunk_relid = InvalidOid;
-	*has_compressed_chunk = false;
-	if (orig_chunk->fd.compressed_chunk_id)
-		compress_chunk_relid = ts_chunk_get_relid(orig_chunk->fd.compressed_chunk_id, false);
-	if (compress_chunk_relid != InvalidOid)
+	int32 compressed_chunk_id = ts_chunk_get_compressed_chunk_id(chunk_id);
+	if (compressed_chunk_id)
 	{
+		Oid compress_chunk_relid =
+			ts_chunk_get_relid(compressed_chunk_id, /* missing_ok = */ false);
+		Assert(compress_chunk_relid != InvalidOid);
+
 		*has_compressed_chunk = true;
-		compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+		return table_open(compress_chunk_relid, RowExclusiveLock);
 	}
-	return compress_rel;
+
+	*has_compressed_chunk = false;
+	return NULL;
 }
 
 /*
@@ -580,7 +581,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	int32 cagg_trig_args[2] = { 0, 0 };
 	ChunkInsertState *state;
 	Relation rel, parent_rel, compress_rel = NULL;
-	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
@@ -608,12 +608,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 				 errmsg("insert with ON CONFLICT or RETURNING clause is not supported on "
 						"compressed chunks")));
 
-	/*
-	 * We must allocate the range table entry on the executor's per-query
-	 * context
-	 */
-	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
-
 	rel = table_open(chunk->table_id, RowExclusiveLock);
 	if (has_compressed_chunk && ts_indexing_relation_has_primary_or_unique_index(rel))
 	{
@@ -625,7 +619,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	}
 	compress_rel = lock_associated_compressed_chunk(chunk->fd.id, &has_compressed_chunk);
 
-	MemoryContextSwitchTo(cis_context);
+	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
 	if (!has_compressed_chunk)
 		resrelinfo = relinfo;

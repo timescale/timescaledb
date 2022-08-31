@@ -490,16 +490,19 @@ GROUP BY 1 WITH NO DATA;
 SELECT add_job(
        '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
        '1 hour'::interval,
+       check_config => '_timescaledb_internal.policy_refresh_continuous_aggregate_check'::regproc,
        config => '{"end_offset": null, "start_offset": null}');
 -- ... this one because it has a bad value for start_offset
 SELECT add_job(
        '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
        '1 hour'::interval,
+       check_config => '_timescaledb_internal.policy_refresh_continuous_aggregate_check'::regproc,
        config => '{"end_offset": null, "start_offset": "1 fortnight", "mat_hypertable_id": 11}');
 -- ... this one because it has a bad value for end_offset
 SELECT add_job(
        '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
        '1 hour'::interval,
+       check_config => '_timescaledb_internal.policy_refresh_continuous_aggregate_check'::regproc,
        config => '{"end_offset": "chicken", "start_offset": null, "mat_hypertable_id": 11}');
 \set ON_ERROR_STOP 1
 

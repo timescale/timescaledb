@@ -6,16 +6,32 @@ CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_retention(job_id INTEGE
 AS '@MODULE_PATHNAME@', 'ts_policy_retention_proc'
 LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_retention_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_retention_check'
+LANGUAGE C;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_reorder(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_proc'
+LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_reorder_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_reorder_check'
 LANGUAGE C;
 
 CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_recompression(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_recompression_proc'
 LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_compression_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_compression_check'
+LANGUAGE C;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_refresh_continuous_aggregate(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_proc'
+LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_refresh_continuous_aggregate_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_check'
 LANGUAGE C;
 
 CREATE OR REPLACE PROCEDURE

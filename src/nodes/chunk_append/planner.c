@@ -89,6 +89,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 							List *clauses, List *custom_plans)
 {
 	ListCell *lc_child;
+	List *parent_clauses = NIL;
 	List *chunk_ri_clauses = NIL;
 	List *chunk_rt_indexes = NIL;
 	List *sort_options = NIL;
@@ -244,7 +245,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 * If we do either startup or runtime exclusion, we need to pass restrictinfo
 	 * clauses into executor.
 	 */
-	if (capath->startup_exclusion || capath->runtime_exclusion)
+	if (capath->startup_exclusion || capath->runtime_exclusion_children)
 	{
 		foreach (lc_child, cscan->custom_plans)
 		{
@@ -272,20 +273,33 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				chunk_rt_indexes = lappend_oid(chunk_rt_indexes, scan->scanrelid);
 			}
 		}
+
 		Assert(list_length(cscan->custom_plans) == list_length(chunk_ri_clauses));
 		Assert(list_length(chunk_ri_clauses) == list_length(chunk_rt_indexes));
+	}
+
+	/* pass down the parent clauses if doing parent exclusion */
+	if (capath->runtime_exclusion_parent)
+	{
+		ListCell *lc;
+		foreach (lc, clauses)
+		{
+			parent_clauses = lappend(parent_clauses, castNode(RestrictInfo, lfirst(lc))->clause);
+		}
 	}
 
 	if (capath->pushdown_limit && capath->limit_tuples > 0)
 		limit = capath->limit_tuples;
 
-	custom_private = list_make1(list_make4_int(capath->startup_exclusion,
-											   capath->runtime_exclusion,
+	custom_private = list_make1(list_make5_int(capath->startup_exclusion,
+											   capath->runtime_exclusion_parent,
+											   capath->runtime_exclusion_children,
 											   limit,
 											   capath->first_partial_path));
 	custom_private = lappend(custom_private, chunk_ri_clauses);
 	custom_private = lappend(custom_private, chunk_rt_indexes);
 	custom_private = lappend(custom_private, sort_options);
+	custom_private = lappend(custom_private, parent_clauses);
 
 	cscan->custom_private = custom_private;
 

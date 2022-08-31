@@ -13,6 +13,7 @@
 extern Datum policy_reorder_add(PG_FUNCTION_ARGS);
 extern Datum policy_reorder_remove(PG_FUNCTION_ARGS);
 extern Datum policy_reorder_proc(PG_FUNCTION_ARGS);
+extern Datum policy_reorder_check(PG_FUNCTION_ARGS);
 
 extern int32 policy_reorder_get_hypertable_id(const Jsonb *config);
 extern char *policy_reorder_get_index_name(const Jsonb *config);

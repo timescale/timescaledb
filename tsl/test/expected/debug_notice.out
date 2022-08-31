@@ -65,14 +65,22 @@ SET client_min_messages TO DEBUG2;
 -- Turning on show_rel should show a message
 -- But disable the code which avoids dist chunk planning
 SET timescaledb.debug_allow_datanode_only_path = 'off';
+LOG:  statement: SET timescaledb.debug_allow_datanode_only_path = 'off';
 SET timescaledb.debug_optimizer_flags = 'show_rel';
+LOG:  statement: SET timescaledb.debug_optimizer_flags = 'show_rel';
 SHOW timescaledb.debug_optimizer_flags;
+LOG:  statement: SHOW timescaledb.debug_optimizer_flags;
  timescaledb.debug_optimizer_flags 
 -----------------------------------
  show_rel
 (1 row)
 
 SELECT time, device, avg(temp) AS temp
+FROM hyper
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+LOG:  statement: SELECT time, device, avg(temp) AS temp
 FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
@@ -178,16 +186,24 @@ Path list:
 -- Enable session level datanode only path parameter which doesn't
 -- plan distributed chunk scans unnecessarily
 SET timescaledb.debug_allow_datanode_only_path = 'on';
+LOG:  statement: SET timescaledb.debug_allow_datanode_only_path = 'on';
 -- Turning off the show_rel (and turning on another flag) should not
 -- show a notice on the relations, but show the upper paths.
 SET timescaledb.debug_optimizer_flags = 'show_upper=*';
+LOG:  statement: SET timescaledb.debug_optimizer_flags = 'show_upper=*';
 SHOW timescaledb.debug_optimizer_flags;
+LOG:  statement: SHOW timescaledb.debug_optimizer_flags;
  timescaledb.debug_optimizer_flags 
 -----------------------------------
  show_upper=*
 (1 row)
 
 SELECT time, device, avg(temp) AS temp
+FROM hyper
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+LOG:  statement: SELECT time, device, avg(temp) AS temp
 FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
@@ -228,13 +244,20 @@ Pruned paths:
 
 -- Turning off both relations should not show anything.
 RESET timescaledb.debug_optimizer_flags;
+LOG:  statement: RESET timescaledb.debug_optimizer_flags;
 SHOW timescaledb.debug_optimizer_flags;
+LOG:  statement: SHOW timescaledb.debug_optimizer_flags;
  timescaledb.debug_optimizer_flags 
 -----------------------------------
  
 (1 row)
 
 SELECT time, device, avg(temp) AS temp
+FROM hyper
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+LOG:  statement: SELECT time, device, avg(temp) AS temp
 FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
@@ -250,6 +273,7 @@ DEBUG:  avoiding per chunk append paths
 (5 rows)
 
 SET client_min_messages TO ERROR;
+LOG:  statement: SET client_min_messages TO ERROR;
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;
 DROP DATABASE :DN_DBNAME_3;

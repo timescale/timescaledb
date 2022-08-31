@@ -20,8 +20,9 @@
 -- chunk_target_size - (Optional) The target size for chunks (e.g., '1000MB', 'estimate', or 'off')
 -- chunk_sizing_func - (Optional) A function to calculate the chunk time interval for new chunks
 -- time_partitioning_func - (Optional) The partitioning function to use for "time" partitioning
--- replication_factor - (Optional) A value of 1 or greater makes this hypertable distributed
+-- replication_factor - (Optional) Set replication_factor to use with the new hypertable
 -- data_nodes - (Optional) The specific data nodes to distribute this hypertable across
+-- distributed - (Optional) Create distributed hypertable
 CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     relation                REGCLASS,
     time_column_name        NAME,
@@ -38,10 +39,10 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = NULL,
-    data_nodes              NAME[] = NULL
+    data_nodes              NAME[] = NULL,
+    distributed             BOOLEAN = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
--- Same functionality as create_hypertable, only must have a replication factor > 0 (defaults to 1)
 CREATE OR REPLACE FUNCTION @extschema@.create_distributed_hypertable(
     relation                REGCLASS,
     time_column_name        NAME,
@@ -57,7 +58,7 @@ CREATE OR REPLACE FUNCTION @extschema@.create_distributed_hypertable(
     chunk_target_size       TEXT = NULL,
     chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
-    replication_factor      INTEGER = 1,
+    replication_factor      INTEGER = NULL,
     data_nodes              NAME[] = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
 

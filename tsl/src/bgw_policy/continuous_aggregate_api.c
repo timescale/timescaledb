@@ -217,6 +217,19 @@ policy_refresh_cagg_proc(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+Datum
+policy_refresh_cagg_check(PG_FUNCTION_ARGS)
+{
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+	}
+
+	policy_refresh_cagg_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
+
+	PG_RETURN_VOID();
+}
+
 static Oid
 ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {
@@ -512,7 +525,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 								 Interval refresh_interval, bool if_not_exists)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name, proc_schema, check_name, check_schema, owner;
 	ContinuousAgg *cagg;
 	CaggPolicyConfig policyconf;
 	int32 job_id;
@@ -596,6 +609,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	namestrcpy(&application_name, "Refresh Continuous Aggregate Policy");
 	namestrcpy(&proc_name, POLICY_REFRESH_CAGG_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_name, POLICY_REFRESH_CAGG_CHECK_NAME);
+	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
@@ -626,6 +641,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 										&refresh_interval,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner,
 										true,
 										cagg->data.mat_hypertable_id,

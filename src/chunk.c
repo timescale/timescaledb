@@ -2675,6 +2675,19 @@ ts_chunk_get_hypertable_id_by_relid(Oid relid)
 }
 
 /*
+ * Returns the compressed chunk id. The original chunk must exist.
+ */
+int32
+ts_chunk_get_compressed_chunk_id(int32 chunk_id)
+{
+	FormData_chunk form;
+	PG_USED_FOR_ASSERTS_ONLY bool result =
+		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
+	Assert(result);
+	return form.compressed_chunk_id;
+}
+
+/*
  * Returns false if there is no chunk with such reloid.
  */
 bool
@@ -4441,7 +4454,7 @@ fill_hypercube_for_foreign_table_chunk(Hyperspace *hs)
 		const Dimension *dim = &hs->dimensions[i];
 		Assert(dim->type == DIMENSION_TYPE_OPEN);
 		Oid dimtype = ts_dimension_get_partition_type(dim);
-		Datum val = Int64GetDatum(ts_time_get_min(dimtype));
+		Datum val = ts_time_datum_get_max(dimtype);
 		p->coordinates[p->num_coords++] = ts_time_value_to_internal(val, dimtype);
 		cube->slices[i] = ts_dimension_calculate_default_slice(dim, p->coordinates[i]);
 		cube->num_slices++;
