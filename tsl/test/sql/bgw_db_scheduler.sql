@@ -456,9 +456,10 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
 
---but after the first batch finishes and 1 second (START_RETRY_MS) passes, the last job will run.
-SELECT ts_bgw_params_reset_time(1000000, true); --set to second 1
-SELECT wait_for_timer_to_run(1000000);
+--but after the first batch finishes and 1 second (START_RETRY_MS) plus 2 seconds
+-- backoff pass, the last job will run.
+SELECT ts_bgw_params_reset_time(3000000, true); --set to second 3
+SELECT wait_for_timer_to_run(3000000);
 SELECT wait_for_job_3_to_finish(8);
 
 SELECT ts_bgw_params_reset_time(30000000, true); --set to second 30, which causes a quit.
@@ -469,7 +470,7 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
 
-SELECT * FROM bgw_log WHERE application_name = 'DB Scheduler' ORDER BY mock_time, application_name, msg_no;
+SELECT * FROM sorted_bgw_log WHERE application_name = 'DB Scheduler' ORDER BY application_name, msg_no;
 
 SELECT ts_bgw_params_destroy();
 
