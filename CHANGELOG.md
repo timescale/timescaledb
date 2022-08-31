@@ -20,6 +20,7 @@ accidentally triggering the load of a previous DB version.**
 * #4575 Fix use of `get_partition_hash` and `get_partition_for_key` inside an IMMUTABLE function
 * #4611 Fix a potential OOM when loading large data sets into a hypertable
 * #4646 Fix time_bucket_ng origin handling
+* #4647 Fix the error "SubPlan found with no parent plan" that occurred if using joins in RETURNING clause.
 * #3114 Fix upgrade from 1.6.0 to later by dropping FK constraints from compressed hypertable
 
 **Thanks**
@@ -29,6 +30,7 @@ accidentally triggering the load of a previous DB version.**
 @michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
 @ninjaltd and @mrksngl for reporting a potential OOM when loading large data sets into a hypertable
 @ssmoss for reporting an issue with time_bucket_ng origin handling
+@mwahlhuetter for reporting error in joins in RETURNING clause
 @Mohammad-matini for reporting an upgrade issue from 1.6.1 to later versions
 
 ## 2.7.2 (2022-07-26)

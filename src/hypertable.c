@@ -37,6 +37,8 @@
 
 #include "hypertable.h"
 #include "ts_catalog/hypertable_data_node.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/metadata.h"
 #include "hypercube.h"
 #include "dimension.h"
 #include "chunk.h"
@@ -1661,38 +1663,10 @@ ts_hypertable_check_partitioning(const Hypertable *ht, int32 id_of_updated_dimen
 }
 
 extern int16
-ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call,
-							   int num_data_nodes, const char *hypertable_name)
+ts_validate_replication_factor(const char *hypertable_name, int32 replication_factor,
+							   int num_data_nodes)
 {
 	bool valid = replication_factor >= 1 && replication_factor <= PG_INT16_MAX;
-
-	/*
-	 * In case of create_distributed_hypertable(replication_factor => NULL) call,
-	 * replication_factor is equal to 0 and in invalid range.
-	 */
-
-	/* create_hypertable() call */
-	if (!is_dist_call)
-	{
-		if (is_null)
-		{
-			/* create_hypertable(replication_factor => NULL) */
-			Assert(replication_factor == 0);
-			valid = true;
-		}
-		else
-		{
-			/*
-			 * Special replication_factor case for hypertables created on remote
-			 * data nodes. Used to distinguish them from regular hypertables.
-			 *
-			 * Such argument is only allowed to be use by access node session.
-			 */
-			if (replication_factor == -1)
-				valid = ts_cm_functions->is_access_node_session &&
-						ts_cm_functions->is_access_node_session();
-		}
-	}
 
 	if (num_data_nodes < replication_factor)
 		ereport(ERROR,
@@ -1712,11 +1686,110 @@ ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_d
 				 errhint("A hypertable's replication factor must be between 1 and %d.",
 						 PG_INT16_MAX)));
 
-	/*
-	 * replication_factor is within bounds, so it is now safe to convert it to
-	 * a smallint/int16, which is the format in the catalog table
-	 */
 	return (int16)(replication_factor & 0xFFFF);
+}
+
+static int16
+hypertable_validate_create_call(const char *hypertable_name, bool distributed,
+								bool distributed_is_null, int32 replication_factor,
+								bool replication_factor_is_null, ArrayType *data_node_arr,
+								List **data_nodes)
+{
+	bool distributed_local_error = false;
+
+	if (!distributed_is_null && !replication_factor_is_null)
+	{
+		/* create_hypertable(distributed, replication_factor) */
+		if (!distributed)
+			distributed_local_error = true;
+	}
+	else if (!distributed_is_null)
+	{
+		/* create_hypertable(distributed) */
+		switch (ts_guc_hypertable_distributed_default)
+		{
+			case HYPERTABLE_DIST_AUTO:
+			case HYPERTABLE_DIST_DISTRIBUTED:
+				if (distributed)
+					replication_factor = ts_guc_hypertable_replication_factor_default;
+				else
+				{
+					/* creating regular hypertable according to the policy */
+				}
+				break;
+			case HYPERTABLE_DIST_LOCAL:
+				if (distributed)
+					replication_factor = ts_guc_hypertable_replication_factor_default;
+				else
+					distributed_local_error = true;
+				break;
+		}
+	}
+	else if (!replication_factor_is_null)
+	{
+		/* create_hypertable(replication_factor) */
+		switch (ts_guc_hypertable_distributed_default)
+		{
+			case HYPERTABLE_DIST_AUTO:
+			case HYPERTABLE_DIST_DISTRIBUTED:
+				/* distributed and distributed member */
+				distributed = true;
+				break;
+			case HYPERTABLE_DIST_LOCAL:
+				distributed_local_error = true;
+				break;
+		}
+	}
+	else
+	{
+		/* create_hypertable() */
+		switch (ts_guc_hypertable_distributed_default)
+		{
+			case HYPERTABLE_DIST_AUTO:
+				distributed = false;
+				break;
+			case HYPERTABLE_DIST_LOCAL:
+				distributed_local_error = true;
+				break;
+			case HYPERTABLE_DIST_DISTRIBUTED:
+				replication_factor = ts_guc_hypertable_replication_factor_default;
+				distributed = true;
+				break;
+		}
+	}
+
+	if (distributed_local_error)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("local hypertables cannot set replication_factor"),
+				 errhint("Set distributed=>true or use create_distributed_hypertable() to create a "
+						 "distributed hypertable.")));
+
+	if (!distributed)
+		return 0;
+
+	/*
+	 * Special replication_factor case for hypertables created on remote
+	 * data nodes. Used to distinguish them from regular hypertables.
+	 *
+	 * Such argument is only allowed to be use by access node session.
+	 */
+	if (replication_factor == -1)
+	{
+		bool an_session_on_dn =
+			ts_cm_functions->is_access_node_session && ts_cm_functions->is_access_node_session();
+		if (an_session_on_dn)
+			return -1;
+	}
+
+	/* Validate data nodes and check permissions on them */
+	if (replication_factor > 0)
+		*data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
+
+	/* Check replication_factor value and the number of nodes */
+	return ts_validate_replication_factor(hypertable_name,
+										  replication_factor,
+										  list_length(*data_nodes));
 }
 
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
@@ -1726,7 +1799,7 @@ TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
  * Create a hypertable from an existing table.
  *
  * Arguments:
- * relation              REGCLASS
+ * relation                REGCLASS
  * time_column_name        NAME
  * partitioning_column     NAME = NULL
  * number_partitions       INTEGER = NULL
@@ -1742,6 +1815,7 @@ TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
  * time_partitioning_func  REGPROC = NULL
  * replication_factor      INTEGER = NULL
  * data nodes              NAME[] = NULL
+ * distributed             BOOLEAN = NULL (not present for dist call)
  */
 static Datum
 ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
@@ -1778,6 +1852,22 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1),
 		.check_for_index = !create_default_indexes,
 	};
+	bool distributed_is_null;
+	bool distributed;
+
+	/* create_distributed_hypertable() does not have explicit
+	 * distributed argument */
+	if (!is_dist_call)
+	{
+		distributed_is_null = PG_ARGISNULL(16);
+		distributed = distributed_is_null ? false : PG_GETARG_BOOL(16);
+	}
+	else
+	{
+		distributed_is_null = false;
+		distributed = true;
+	}
+
 	Cache *hcache;
 	Hypertable *ht;
 	Datum retval;
@@ -1825,20 +1915,21 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		/* Release previously pinned cache */
 		ts_cache_release(hcache);
 
-		/* Validate data nodes and check permissions on them if this is a
-		 * distributed hypertable. */
-		if (replication_factor_in > 0)
-			data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
-
 		/*
-		 * Ensure replication factor is a valid value and convert it to
-		 * catalog table format
+		 * Validate create_hypertable arguments and use defaults accoring to the
+		 * hypertable_distributed_default guc.
+		 *
+		 * Validate data nodes and check permissions on them if this is a
+		 * distributed hypertable.
 		 */
-		replication_factor = ts_validate_replication_factor(replication_factor_in,
-															replication_factor_is_null,
-															is_dist_call,
-															list_length(data_nodes),
-															get_rel_name(table_relid));
+		replication_factor = hypertable_validate_create_call(get_rel_name(table_relid),
+															 distributed,
+															 distributed_is_null,
+															 replication_factor_in,
+															 replication_factor_is_null,
+															 data_node_arr,
+															 &data_nodes);
+
 		if (NULL != space_dim_name)
 		{
 			int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);

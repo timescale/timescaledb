@@ -56,6 +56,16 @@ typedef enum DataFetcherType
 
 extern TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher;
 
+typedef enum HypertableDistType
+{
+	HYPERTABLE_DIST_AUTO,
+	HYPERTABLE_DIST_LOCAL,
+	HYPERTABLE_DIST_DISTRIBUTED
+} HypertableDistType;
+
+extern TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default;
+extern TSDLLEXPORT int ts_guc_hypertable_replication_factor_default;
+
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;

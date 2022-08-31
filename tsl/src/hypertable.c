@@ -230,11 +230,9 @@ static void
 update_replication_factor(Hypertable *const ht, const int32 replication_factor_in)
 {
 	const int16 replication_factor =
-		ts_validate_replication_factor(replication_factor_in,
-									   false,
-									   true,
-									   list_length(ht->data_nodes),
-									   get_rel_name(ht->main_table_relid));
+		ts_validate_replication_factor(get_rel_name(ht->main_table_relid),
+									   replication_factor_in,
+									   list_length(ht->data_nodes));
 
 	ht->fd.replication_factor = replication_factor;
 	ts_hypertable_update(ht);
