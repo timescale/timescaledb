@@ -1077,14 +1077,15 @@ ORDER BY job_id;
    1012 | t                |          1 |               1 |              0 |             0 |                   0
 (7 rows)
 
---but after the first batch finishes and 1 second (START_RETRY_MS) passes, the last job will run.
-SELECT ts_bgw_params_reset_time(1000000, true); --set to second 1
+--but after the first batch finishes and 1 second (START_RETRY_MS) plus 2 seconds
+-- backoff pass, the last job will run.
+SELECT ts_bgw_params_reset_time(3000000, true); --set to second 3
  ts_bgw_params_reset_time 
 --------------------------
  
 (1 row)
 
-SELECT wait_for_timer_to_run(1000000);
+SELECT wait_for_timer_to_run(3000000);
  wait_for_timer_to_run 
 -----------------------
  t
@@ -1124,20 +1125,20 @@ ORDER BY job_id;
    1013 | t                |          1 |               1 |              0 |             0 |                   0
 (8 rows)
 
-SELECT * FROM bgw_log WHERE application_name = 'DB Scheduler' ORDER BY mock_time, application_name, msg_no;
- msg_no | mock_time | application_name |                                   msg                                    
---------+-----------+------------------+--------------------------------------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      2 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      3 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      4 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      5 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      6 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      7 |         0 | DB Scheduler     | failed to launch job 1013 "test_job_3_long_8": out of background workers
-      8 |         0 | DB Scheduler     | [TESTING] Wait until 1000000, started at 0
-      9 |   1000000 | DB Scheduler     | [TESTING] Registered new background worker
-     10 |   1000000 | DB Scheduler     | [TESTING] Wait until 5000000, started at 1000000
+SELECT * FROM sorted_bgw_log WHERE application_name = 'DB Scheduler' ORDER BY application_name, msg_no;
+ msg_no | application_name |                                   msg                                    
+--------+------------------+--------------------------------------------------------------------------
+      0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | [TESTING] Registered new background worker
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | [TESTING] Registered new background worker
+      5 | DB Scheduler     | [TESTING] Registered new background worker
+      6 | DB Scheduler     | [TESTING] Registered new background worker
+      7 | DB Scheduler     | failed to launch job 1013 "test_job_3_long_8": out of background workers
+      8 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      9 | DB Scheduler     | [TESTING] Registered new background worker
+     10 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
 (11 rows)
 
 SELECT ts_bgw_params_destroy();

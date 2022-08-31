@@ -36,6 +36,7 @@ extern TSDLLEXPORT void ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, Time
 
 extern bool ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job);
 
-extern TimestampTz ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job);
+extern TimestampTz ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job,
+											  int32 consecutive_failed_starts);
 
 #endif /* BGW_JOB_STAT_H */
