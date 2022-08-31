@@ -132,3 +132,34 @@ FROM _timescaledb_catalog.hypertable h
 INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
 WHERE d.interval_length IS NULL; 
 DROP FUNCTION _timescaledb_internal.update_dimension_partition;
+
+-- upgrade from 1.6.0 to later requires FK constraints to be dropped
+DO $$
+DECLARE
+ fk_constraint_row RECORD;
+BEGIN
+  FOR fk_constraint_row IN
+    SELECT chunk.schema_name AS schema_name, chunk.table_name AS table_name,
+       chunk_con.constraint_name AS constraint_name
+    FROM _timescaledb_catalog.chunk_constraint chunk_con
+       INNER JOIN _timescaledb_catalog.chunk chunk ON (
+          chunk_con.chunk_id = chunk.id
+          AND chunk.compressed_chunk_id <> 0)
+       INNER JOIN _timescaledb_catalog.hypertable hypertable ON
+          (chunk.hypertable_id = hypertable.id)
+       INNER JOIN pg_constraint pg_chunk_con ON (
+          pg_chunk_con.conrelid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass
+          AND pg_chunk_con.conname = chunk_con.constraint_name
+          AND pg_chunk_con.contype = 'f'
+          )
+    INNER JOIN pg_class pg_chunk_index_class ON (
+            pg_chunk_con.conindid = pg_chunk_index_class.oid
+    )
+    LOOP
+        EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT %I',
+            fk_constraint_row.schema_name,
+            fk_constraint_row.table_name,
+            fk_constraint_row.constraint_name);
+    END LOOP;
+END
+$$;
