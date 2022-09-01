@@ -123,6 +123,7 @@ CROSSMODULE_WRAPPER(dist_remote_hypertable_index_info);
 CROSSMODULE_WRAPPER(distributed_exec);
 CROSSMODULE_WRAPPER(create_distributed_restore_point);
 CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
+CROSSMODULE_WRAPPER(health_check);
 
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 Datum
@@ -540,6 +541,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_replica_table = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
+	.health_check = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

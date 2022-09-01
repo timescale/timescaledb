@@ -224,3 +224,5 @@ ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
       ADD CONSTRAINT bgw_policy_chunk_stats_job_id_fkey
           FOREIGN KEY(job_id) REFERENCES _timescaledb_config.bgw_job(id)
           ON DELETE CASCADE;
+
+DROP FUNCTION _timescaledb_internal.health;

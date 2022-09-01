@@ -172,9 +172,17 @@ CALL distributed_exec('SELECT 1');
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- Test health check function output on access node
+SELECT * FROM _timescaledb_internal.health() ORDER BY 1 NULLS FIRST;
+
 SELECT * FROM delete_data_node(:'DATA_NODE_1');
 SELECT * FROM delete_data_node(:'DATA_NODE_2');
 SELECT * FROM delete_data_node(:'DATA_NODE_3');
+
+-- Test health check when no longer an access node (no data nodes)
+SELECT * FROM _timescaledb_internal.health() ORDER BY 1 NULLS FIRST;
+
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;

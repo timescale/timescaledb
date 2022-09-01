@@ -202,6 +202,7 @@ typedef struct CrossModuleFunctions
 	TupleTableSlot *(*compress_row_exec)(CompressSingleRowState *cr, TupleTableSlot *slot);
 	void (*compress_row_end)(CompressSingleRowState *cr);
 	void (*compress_row_destroy)(CompressSingleRowState *cr);
+	PGFunction health_check;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
