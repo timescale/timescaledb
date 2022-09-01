@@ -177,6 +177,8 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		ListCell *lc;
 		char *column_name;
 		Oid sortop;
+		Oid opfamily, opcintype;
+		int16 strategy;
 
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
@@ -210,6 +212,20 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 
 			sortop =
 				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_strategy);
+			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			{
+				if (type_is_enum(var->vartype))
+				{
+					sortop = get_opfamily_member(pk->pk_opfamily,
+												 ANYENUMOID,
+												 ANYENUMOID,
+												 pk->pk_strategy);
+				}
+				else
+				{
+					elog(ERROR, "sort operator lookup failed for column \"%s\"", column_name);
+				}
+			}
 			pk = make_pathkey_from_compressed(root,
 											  info->compressed_rel->relid,
 											  (Expr *) var,

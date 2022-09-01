@@ -555,3 +555,67 @@ NOTICE:  column "medium" of relation "metric" already exists, skipping
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
 ERROR:  column "medium_1" of relation "metric" already exists
+--github issue 3481
+--GROUP BY error when setting compress_segmentby with an enum column
+CREATE TYPE an_enum_type AS ENUM ('home', 'school');
+CREATE TABLE test (
+	time timestamp NOT NULL,
+	enum_col an_enum_type NOT NULL
+);
+SELECT create_hypertable(
+    'test', 'time'
+);
+ create_hypertable  
+--------------------
+ (29,public,test,t)
+(1 row)
+
+INSERT INTO test VALUES ('2001-01-01 00:00', 'home'),
+                        ('2001-01-01 01:00', 'school'),
+                        ('2001-01-01 02:00', 'home');
+--enable compression on enum_col
+ALTER TABLE test SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'enum_col',
+	timescaledb.compress_orderby = 'time'
+);
+--below queries will pass before chunks are compressed
+SELECT 1 FROM test GROUP BY enum_col;
+ ?column? 
+----------
+        1
+        1
+(2 rows)
+
+EXPLAIN SELECT DISTINCT 1 FROM test;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Unique  (cost=0.00..50.80 rows=1 width=4)
+   ->  Result  (cost=0.00..50.80 rows=2040 width=4)
+         ->  Seq Scan on _hyper_29_19_chunk  (cost=0.00..30.40 rows=2040 width=0)
+(3 rows)
+
+--compress chunks
+SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_29_19_chunk
+(1 row)
+
+--below query should pass after chunks are compressed
+SELECT 1 FROM test GROUP BY enum_col;
+ ?column? 
+----------
+        1
+        1
+(2 rows)
+
+EXPLAIN SELECT DISTINCT 1 FROM test;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Unique  (cost=0.51..21.02 rows=1 width=4)
+   ->  Result  (cost=0.51..21.02 rows=2000 width=4)
+         ->  Custom Scan (DecompressChunk) on _hyper_29_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
+               ->  Seq Scan on compress_hyper_30_20_chunk  (cost=0.00..1.02 rows=2 width=4)
+(4 rows)
+
