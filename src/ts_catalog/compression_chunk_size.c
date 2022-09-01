@@ -116,9 +116,16 @@ ts_compression_chunk_size_row_count(int32 uncompressed_chunk_id)
 		found_cnt++;
 	}
 	if (found_cnt != 1)
-		elog(ERROR,
-			 "missing record for chunk with id %d in %s",
+	{
+		/* We do not want to error here because this runs as part of VACUUM
+		 * and we want that to successfully finish even if metadata for a
+		 * chunk is incomplete here.
+		 */
+		rowcnt = 0;
+		elog(WARNING,
+			 "no unique record for chunk with id %d in %s",
 			 uncompressed_chunk_id,
 			 COMPRESSION_CHUNK_SIZE_TABLE_NAME);
+	}
 	return rowcnt;
 }
