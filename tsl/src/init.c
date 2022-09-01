@@ -50,6 +50,7 @@
 #include "remote/dist_commands.h"
 #include "remote/dist_copy.h"
 #include "remote/dist_txn.h"
+#include "remote/healthcheck.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "reorder.h"
@@ -230,6 +231,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats,
+	.health_check = ts_dist_health_check,
 };
 
 static void

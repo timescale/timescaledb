@@ -81,6 +81,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.get_partition_for_key(anyelement)
  _timescaledb_internal.get_partition_hash(anyelement)
  _timescaledb_internal.get_time_type(integer)
+ _timescaledb_internal.health()
  _timescaledb_internal.hist_combinefunc(internal,internal)
  _timescaledb_internal.hist_deserializefunc(bytea,internal)
  _timescaledb_internal.hist_finalfunc(internal,double precision,double precision,double precision,integer)

@@ -10,6 +10,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/dist_copy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/dist_ddl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/copy_fetcher.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/healthcheck.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stmt_params.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tuplefactory.c
     ${CMAKE_CURRENT_SOURCE_DIR}/txn.c
