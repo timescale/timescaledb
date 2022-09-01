@@ -348,3 +348,55 @@ SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
 --below query should pass after chunks are compressed
 SELECT 1 FROM test GROUP BY enum_col;
 EXPLAIN SELECT DISTINCT 1 FROM test;
+
+--github issue 3376
+
+CREATE TABLE sensor_data( 
+    time timestamptz not null, 
+    sensor_id integer not null, 
+    cpu double precision null,
+    temperature double precision null
+);
+
+SELECT * FROM create_hypertable('sensor_data', 'time');
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 50 AS temperature
+	FROM
+		generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(1, 50, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+
+-- enable compression
+ALTER TABLE sensor_data SET (
+	timescaledb.compress,
+	timescaledb.compress_orderby = 'time DESC'
+);
+
+-- compress all chunks
+SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
+-- check status of compressed chunks
+SELECT chunk_name, is_compressed from timescaledb_information.chunks where hypertable_name = 'sensor_data';
+
+-- decompress 2 of the chunks
+SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) FROM 
+    _timescaledb_catalog.chunk ch1,
+    _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
+        and ht.table_name like 'sensor_data'
+        and ch1.status = 1
+        ORDER BY ch1.id DESC limit 2;
+
+-- decompress all chunks
+SELECT decompress_chunk(i) FROM show_chunks('sensor_data') i;
+-- check size of decompressed chunks
+SELECT total_bytes as chunk_size_after_decompression_1 FROM chunks_detailed_size('sensor_data') order by chunk_name limit 1 \gset
+-- decompress all chunks
+SELECT decompress_chunk(i) FROM show_chunks('sensor_data') i;
+-- size of decompressed chunks should not increase
+SELECT total_bytes as chunk_size_after_decompression_2 FROM chunks_detailed_size('sensor_data') order by chunk_name limit 1 \gset
+-- size should be same
+SELECT :chunk_size_after_decompression_2 = :chunk_size_after_decompression_1;
