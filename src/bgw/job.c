@@ -1202,7 +1202,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	else
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
 
-	if (strlen(NameStr(*check_schema)) > 0)
+	if (strlen(NameStr(*check_name)) > 0)
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = NameGetDatum(check_name);
 	else
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
