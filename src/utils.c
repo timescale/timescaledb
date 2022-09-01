@@ -1001,7 +1001,10 @@ ts_get_node_name(Node *node)
 		NODE_CASE(RangeVar);
 		NODE_CASE(TableFunc);
 		NODE_CASE(IntoClause);
+#if PG15_LT
+		/* PG15 removed T_Expr nodetag because it's an abstract type. */
 		NODE_CASE(Expr);
+#endif
 		NODE_CASE(Var);
 		NODE_CASE(Const);
 		NODE_CASE(Param);
