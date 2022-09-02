@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #4619 Improve handling enum columns in compressed hypertables
+
+**Thanks**
+* @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
+
 ## 2.8.0 (2022-08-30)
 
 This release adds major new features since the 2.7.2 release.

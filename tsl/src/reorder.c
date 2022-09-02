@@ -611,7 +611,7 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	CheckTableNotInUse(OldHeap, "CLUSTER");
 
 	/* Check heap and index are valid to cluster on */
-	check_index_is_clusterable(OldHeap, indexOid, true, ExclusiveLock);
+	check_index_is_clusterable_compat(OldHeap, indexOid, ExclusiveLock);
 
 	/* rebuild_relation does all the dirty work */
 	rebuild_relation(OldHeap, indexOid, verbose, wait_id, destination_tablespace, index_tablespace);
@@ -799,16 +799,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	 * Since we're going to rewrite the whole table anyway, there's no reason
 	 * not to be aggressive about this.
 	 */
-	vacuum_set_xid_limits(OldHeap,
-						  0,
-						  0,
-						  0,
-						  0,
-						  &OldestXmin,
-						  &FreezeXid,
-						  NULL,
-						  &MultiXactCutoff,
-						  NULL);
+	vacuum_set_xid_limits_compat(OldHeap, 0, 0, 0, 0, &OldestXmin, &FreezeXid, &MultiXactCutoff);
 
 	/*
 	 * FreezeXid will become the table's new relfrozenxid, and that mustn't go

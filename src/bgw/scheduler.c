@@ -106,6 +106,7 @@ typedef struct ScheduledBgwJob
 	 * perform the mark_end
 	 */
 	bool may_need_mark_end;
+	int32 consecutive_failed_launches;
 } ScheduledBgwJob;
 
 static void on_failure_to_start_job(ScheduledBgwJob *sjob);
@@ -156,6 +157,7 @@ static void
 mark_job_as_started(ScheduledBgwJob *sjob)
 {
 	Assert(!sjob->may_need_mark_end);
+	sjob->consecutive_failed_launches = 0;
 	ts_bgw_job_stat_mark_start(sjob->job.fd.id);
 	sjob->may_need_mark_end = true;
 }
@@ -260,7 +262,8 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
 			Assert(!sjob->reserved_worker);
-			sjob->next_start = ts_bgw_job_stat_next_start(job_stat, &sjob->job);
+			sjob->next_start =
+				ts_bgw_job_stat_next_start(job_stat, &sjob->job, sjob->consecutive_failed_launches);
 			break;
 		case JOB_STATE_STARTED:
 			Assert(prev_state == JOB_STATE_SCHEDULED);
@@ -288,6 +291,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 					 "failed to launch job %d \"%s\": out of background workers",
 					 sjob->job.fd.id,
 					 NameStr(sjob->job.fd.application_name));
+				sjob->consecutive_failed_launches++;
 				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
