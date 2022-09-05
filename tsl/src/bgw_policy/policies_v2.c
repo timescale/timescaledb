@@ -630,7 +630,12 @@ policies_show(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	lc = (ListCell *) funcctx->user_fctx;
 
-	if (lc == NULL)
+	/*
+	 * clang doesn't understand that jobs won't be NIL due to the above FIRSTCALL. However
+	 * it's also possible that the ts_bgw_job_find_by_hypertable_id function above doesn't
+	 * find a job for this hypertable
+	 */
+	if (lc == NULL || jobs == NULL)
 		SRF_RETURN_DONE(funcctx);
 	else
 	{
@@ -681,6 +686,10 @@ policies_show(PG_FUNCTION_ARGS)
 								  SHOW_POLICY_KEY_RETENTION_INTERVAL,
 								  &(job->fd.schedule_interval));
 		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("\"%s\" unsupported proc", NameStr(job->fd.proc_name))));
 
 		JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
