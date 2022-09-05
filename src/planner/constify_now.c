@@ -36,9 +36,9 @@
  * Interval needs to be Const in those expressions.
  */
 static const Dimension *
-get_hypertable_dimension(Oid relid)
+get_hypertable_dimension(Oid relid, int flags)
 {
-	Hypertable *ht = ts_planner_get_hypertable(relid, CACHE_FLAG_CHECK);
+	Hypertable *ht = ts_planner_get_hypertable(relid, flags);
 	if (!ht)
 		return NULL;
 	return hyperspace_get_open_dimension(ht->space, 0);
@@ -47,6 +47,7 @@ get_hypertable_dimension(Oid relid)
 static bool
 is_valid_now_expr(OpExpr *op, List *rtable)
 {
+	int flags = CACHE_FLAG_MISSING_OK | CACHE_FLAG_NOCREATE;
 	/* Var > or Var >= */
 	if ((op->opfuncid != F_TIMESTAMPTZ_GT && op->opfuncid != F_TIMESTAMPTZ_GE) ||
 		!IsA(linitial(op->args), Var))
@@ -63,7 +64,29 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	Assert(var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 
-	const Dimension *dim = get_hypertable_dimension(rte->relid);
+	/*
+	 * If this query on a view we might have a subquery here
+	 * and need to peek into the subquery range table to check
+	 * if the constraints are on a hypertable.
+	 */
+	if (rte->rtekind == RTE_SUBQUERY)
+	{
+		/*
+		 * Unfortunately the mechanism used to warm up the
+		 * hypertable cache does not apply to hypertables
+		 * referenced indirectly eg through VIEWs. So we
+		 * have to do the lookup for this hypertable without
+		 * CACHE_FLAG_NOCREATE flag.
+		 */
+		flags = CACHE_FLAG_MISSING_OK;
+		TargetEntry *tle = list_nth(rte->subquery->targetList, var->varattno - 1);
+		if (!IsA(tle->expr, Var))
+			return false;
+		var = castNode(Var, tle->expr);
+		rte = list_nth(rte->subquery->rtable, var->varno - 1);
+	}
+
+	const Dimension *dim = get_hypertable_dimension(rte->relid, flags);
 	if (!dim || dim->fd.column_type != TIMESTAMPTZOID || dim->column_attno != var->varattno)
 		return false;
 
