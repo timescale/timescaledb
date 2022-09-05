@@ -203,9 +203,9 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
 																		  consecutive_failures);
 	MemoryContext oldctx;
-	Assert(consecutive_failures > 0 && consecutive_failures < 63);
+	Assert(consecutive_failures > 0 && multiplier < 63);
 	/* 2^(consecutive_failures) - 1, at most 2^20 */
-	int64 max_slots = (INT64CONST(1) << consecutive_failures) - INT64CONST(1);
+	int64 max_slots = (INT64CONST(1) << (int64) multiplier) - INT64CONST(1);
 	int64 rand_backoff = random() % (max_slots * USECS_PER_SEC);
 
 	if (!IS_VALID_TIMESTAMP(finish_time))
