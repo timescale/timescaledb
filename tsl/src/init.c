@@ -40,7 +40,7 @@
 #include "license_guc.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/skip_scan/skip_scan.h"
-#include "nodes/gapfill/gapfill.h"
+#include "nodes/gapfill/gapfill_functions.h"
 #include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"

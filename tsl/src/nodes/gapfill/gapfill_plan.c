@@ -18,9 +18,8 @@
 
 #include "compat/compat.h"
 
-#include "nodes/gapfill/gapfill.h"
-#include "nodes/gapfill/planner.h"
-#include "nodes/gapfill/exec.h"
+#include "gapfill.h"
+#include "gapfill_internal.h"
 
 static CustomScanMethods gapfill_plan_methods = {
 	.CustomName = "GapFill",

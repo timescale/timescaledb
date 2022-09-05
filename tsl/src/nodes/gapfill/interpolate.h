@@ -6,7 +6,7 @@
 #ifndef TIMESCALEDB_TSL_NODES_GAPFILL_INTERPOLATE_H
 #define TIMESCALEDB_TSL_NODES_GAPFILL_INTERPOLATE_H
 
-#include "nodes/gapfill/exec.h"
+#include "gapfill_internal.h"
 
 typedef struct GapFillInterpolateSample
 {
