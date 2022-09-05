@@ -219,6 +219,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  time_bucket_gapfill(bigint,bigint,bigint,bigint)
  time_bucket_gapfill(integer,integer,integer,integer)
  time_bucket_gapfill(interval,date,date,date)
+ time_bucket_gapfill(interval,timestamp with time zone,text,timestamp with time zone,timestamp with time zone)
  time_bucket_gapfill(interval,timestamp with time zone,timestamp with time zone,timestamp with time zone)
  time_bucket_gapfill(interval,timestamp without time zone,timestamp without time zone,timestamp without time zone)
  time_bucket_gapfill(smallint,smallint,smallint,smallint)

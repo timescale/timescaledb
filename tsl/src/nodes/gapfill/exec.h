@@ -93,6 +93,9 @@ typedef struct GapFillState
 	Plan *subplan;
 
 	Oid gapfill_typid;
+	/* arguments of the gapfill function call */
+	List *args;
+	bool have_timezone;
 	int64 gapfill_start;
 	int64 gapfill_end;
 	/* bucket width for fixed-size buckets */

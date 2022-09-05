@@ -126,6 +126,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_date_time_bucket = gapfill_date_time_bucket,
 	.gapfill_timestamp_time_bucket = gapfill_timestamp_time_bucket,
 	.gapfill_timestamptz_time_bucket = gapfill_timestamptz_time_bucket,
+	.gapfill_timestamptz_timezone_time_bucket = gapfill_timestamptz_timezone_time_bucket,
 
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,

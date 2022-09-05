@@ -417,6 +417,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.gapfill_date_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_timestamptz_timezone_time_bucket = error_no_default_fn_pg_community,
 
 	/* bgw policies */
 	.policy_compression_add = error_no_default_fn_pg_community,

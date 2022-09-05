@@ -6,7 +6,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+SELECT time_bucket_gapfill('3 hours', time, start:='2017-01-01 06:00', finish:='2017-01-02 18:00'),
        first(value, time),
        avg(value)
 FROM :CONDITIONS
@@ -31,7 +31,7 @@ GROUP BY 1;
  Mon Jul 02 08:00:00 2018 PDT |     0 |       0
 (16 rows)
 
-SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+SELECT time_bucket_gapfill('3 hours', time, start:='2017-01-01 06:00', finish:='2017-01-01 18:00'),
        device,
        first(value, time),
        avg(value)
@@ -81,7 +81,7 @@ GROUP BY 1,2;
  Sun Jul 01 08:00:00 2018 PDT |     90 | 10303.12 | 10303.12
 (40 rows)
 
-SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+SELECT time_bucket_gapfill('3 hours', time, start:='2017-01-01 06:00', finish:='2017-01-01 18:00'),
        device,
        first(value, time),
        avg(value)
@@ -132,7 +132,7 @@ GROUP BY 2,1;
 (40 rows)
 
 SELECT
-  time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+  time_bucket_gapfill('3 hours', time, start:='2017-01-01 06:00', finish:='2017-01-01 18:00'),
   lag(min(time)) OVER ()
 FROM :CONDITIONS
 GROUP BY 1;

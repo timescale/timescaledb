@@ -86,6 +86,7 @@ typedef struct CrossModuleFunctions
 	PGFunction gapfill_date_time_bucket;
 	PGFunction gapfill_timestamp_time_bucket;
 	PGFunction gapfill_timestamptz_time_bucket;
+	PGFunction gapfill_timestamptz_timezone_time_bucket;
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
