@@ -64,6 +64,7 @@ date_trunc_sort_transform(FuncExpr *func)
 	(list_length((func)->args) == 2 || IsA(lthird((func)->args), Const))
 
 #define time_bucket_has_const_period(func) IsA(linitial((func)->args), Const)
+#define time_bucket_has_const_timezone(func) IsA(lthird((func)->args), Const)
 
 static Expr *
 do_sort_transform(FuncExpr *func)
@@ -85,9 +86,10 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
 	 * > time2
 	 */
-	Assert(list_length(func->args) == 4);
+	Assert(list_length(func->args) == 4 || list_length(func->args) == 5);
 
-	if (!time_bucket_has_const_period(func))
+	if (!time_bucket_has_const_period(func) ||
+		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func)))
 		return (Expr *) func;
 
 	return do_sort_transform(func);
@@ -399,6 +401,16 @@ static FuncInfo funcinfo[] = {
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
+		.nargs = 5,
+		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TEXTOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},

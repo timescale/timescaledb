@@ -39,3 +39,18 @@ GAPFILL_TIMEBUCKET_WRAPPER(int64);
 GAPFILL_TIMEBUCKET_WRAPPER(date);
 GAPFILL_TIMEBUCKET_WRAPPER(timestamp);
 GAPFILL_TIMEBUCKET_WRAPPER(timestamptz);
+
+Datum
+gapfill_timestamptz_timezone_time_bucket(PG_FUNCTION_ARGS)
+{
+	/*
+	 * since time_bucket is STRICT and time_bucket_gapfill
+	 * is not we need to add explicit checks for NULL here
+	 */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+	return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+							   PG_GETARG_DATUM(0),
+							   PG_GETARG_DATUM(1),
+							   PG_GETARG_DATUM(2));
+}

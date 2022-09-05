@@ -6,6 +6,16 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+This version adds time_bucket_gapfill function that allows
+specifying the timezone to bucket for. Unfortunately this introduces
+an ambiguity with some previous call variations when an untyped
+start/finish argument is passed to time_bucket_gapfill. Some queries
+might need to be adjusted and either explicitly name the positional
+argument or resolve the type ambiguity by casting to the intended type.
+
+**Features**
+* #4670 Add timezone support to time_bucket_gapfill
+
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables
 
@@ -2563,5 +2573,3 @@ the next release.
 * [39f4c0f] Remove sample data instructions and point to docs site
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
 
-**Bugfixes**
-* #4619 Improve handling enum columns in compressed hypertables
