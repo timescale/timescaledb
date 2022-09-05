@@ -1284,6 +1284,10 @@ chunk_update_relstats(Chunk *chunk, int32 num_pages, float num_tuples, int32 num
 						true,
 						InvalidTransactionId,
 						InvalidMultiXactId,
+#if PG15_GE
+						NULL,
+						NULL,
+#endif
 						false);
 
 	relation_close(rel, ShareUpdateExclusiveLock);
