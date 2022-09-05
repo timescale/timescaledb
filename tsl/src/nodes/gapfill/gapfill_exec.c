@@ -28,10 +28,10 @@
 
 #include <annotations.h>
 #include <compat/compat.h>
-#include "nodes/gapfill/gapfill.h"
-#include "nodes/gapfill/locf.h"
-#include "nodes/gapfill/interpolate.h"
-#include "nodes/gapfill/exec.h"
+#include "gapfill.h"
+#include "gapfill_internal.h"
+#include "locf.h"
+#include "interpolate.h"
 #include "time_bucket.h"
 
 typedef enum GapFillBoundary

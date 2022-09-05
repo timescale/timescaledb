@@ -78,7 +78,7 @@
 #include "scan_plan.h"
 #include "extension_constants.h"
 #include "partialize_finalize.h"
-#include "nodes/gapfill/planner.h"
+#include "nodes/gapfill/gapfill.h"
 #include "planner/planner.h"
 
 /*

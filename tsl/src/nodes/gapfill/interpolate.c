@@ -13,8 +13,8 @@
 #include <utils/numeric.h>
 
 #include "compat/compat.h"
-#include "nodes/gapfill/interpolate.h"
-#include "nodes/gapfill/exec.h"
+#include "gapfill_internal.h"
+#include "interpolate.h"
 
 #define INTERPOLATE(x, x0, x1, y0, y1) (((y0) * ((x1) - (x)) + (y1) * ((x) - (x0))) / ((x1) - (x0)))
 

@@ -21,7 +21,7 @@ The locf and interpolate function calls serve as markers in the plan to
 trigger locf or interpolate behaviour. In the targetlist of the gapfill node
 those functions will be toplevel function calls.
 
-The gapfill state transitions are described in exec.h
+The gapfill state transitions are described in gapfill_internal.h
 
 ## Usage
 
