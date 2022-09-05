@@ -157,3 +157,17 @@ set timezone to 'utc-1';
 
 DROP TABLE const_now_dst;
 
+-- test now constification with VIEWs
+SET timescaledb.current_timestamp_mock TO '2003-01-01 0:30:00+00';
+CREATE TABLE now_view_test(time timestamptz,device text, value float);
+SELECT table_name FROM create_hypertable('now_view_test','time');
+-- create 5 chunks
+INSERT INTO now_view_test SELECT generate_series('2000-01-01'::timestamptz,'2004-01-01'::timestamptz,'1year'::interval), 'a', 0.5;
+CREATE VIEW now_view AS SELECT time, device, avg(value) from now_view_test GROUP BY 1,2;
+-- should have all 5 chunks in EXPLAIN
+:PREFIX SELECT * FROM now_view;
+-- should have 2 chunks in EXPLAIN
+:PREFIX SELECT * FROM now_view WHERE time > now() - '168h'::interval;
+DROP TABLE now_view_test CASCADE;
+
+

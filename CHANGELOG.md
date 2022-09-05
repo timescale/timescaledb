@@ -8,11 +8,12 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables
+* #4673 Fix now() constification for VIEWs
 * #4681 Fix compression_chunk_size primary key
-* #4685 Improve chunk exclusion for space partitions
+* #4685 Improve chunk exclusion for space dimensions
 
 **Thanks**
-* @maxtwardowski for reporting problems with chunk exclusion and space partitions
+* @maxtwardowski for reporting problems with chunk exclusion and space dimensions
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 
 ## 2.8.0 (2022-08-30)
