@@ -656,8 +656,7 @@ SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
  _timescaledb_internal._hyper_31_22_chunk
  _timescaledb_internal._hyper_31_23_chunk
  _timescaledb_internal._hyper_31_24_chunk
- _timescaledb_internal._hyper_31_25_chunk
-(5 rows)
+(4 rows)
 
 -- check status of compressed chunks
 SELECT chunk_name, is_compressed from timescaledb_information.chunks where hypertable_name = 'sensor_data';
@@ -667,8 +666,7 @@ SELECT chunk_name, is_compressed from timescaledb_information.chunks where hyper
  _hyper_31_22_chunk | t
  _hyper_31_23_chunk | t
  _hyper_31_24_chunk | t
- _hyper_31_25_chunk | t
-(5 rows)
+(4 rows)
 
 -- decompress 2 of the chunks
 SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) FROM 
@@ -679,22 +677,21 @@ SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) FROM
         ORDER BY ch1.id DESC limit 2;
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_31_25_chunk
  _timescaledb_internal._hyper_31_24_chunk
+ _timescaledb_internal._hyper_31_23_chunk
 (2 rows)
 
 -- decompress all chunks
 SELECT decompress_chunk(i) FROM show_chunks('sensor_data') i;
+NOTICE:  chunk "_hyper_31_23_chunk" is not compressed
 NOTICE:  chunk "_hyper_31_24_chunk" is not compressed
-NOTICE:  chunk "_hyper_31_25_chunk" is not compressed
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_31_21_chunk
  _timescaledb_internal._hyper_31_22_chunk
- _timescaledb_internal._hyper_31_23_chunk
  
  
-(5 rows)
+(4 rows)
 
 -- check size of decompressed chunks
 SELECT total_bytes as chunk_size_after_decompression_1 FROM chunks_detailed_size('sensor_data') order by chunk_name limit 1 \gset
@@ -704,15 +701,13 @@ NOTICE:  chunk "_hyper_31_21_chunk" is not compressed
 NOTICE:  chunk "_hyper_31_22_chunk" is not compressed
 NOTICE:  chunk "_hyper_31_23_chunk" is not compressed
 NOTICE:  chunk "_hyper_31_24_chunk" is not compressed
-NOTICE:  chunk "_hyper_31_25_chunk" is not compressed
  decompress_chunk 
 ------------------
  
  
  
  
- 
-(5 rows)
+(4 rows)
 
 -- size of decompressed chunks should not increase
 SELECT total_bytes as chunk_size_after_decompression_2 FROM chunks_detailed_size('sensor_data') order by chunk_name limit 1 \gset
