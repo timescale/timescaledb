@@ -2256,12 +2256,29 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 			if (flush_result == 1)
 			{
 				/*
+				 * In some rare cases, flush might report that it's busy, but
+				 * actually there was an error and the socket became invalid.
+				 * Check for it. This is something we have observed in COPY
+				 * queries used for performance testing with tsbench, but not
+				 * sure how it happens exactly, must be in the depths of
+				 * pqReadData called by pqFlush.
+				 */
+				int socket = PQsocket(conn->pg_conn);
+				if (socket == PGINVALID_SOCKET)
+				{
+					return fill_connection_error(err,
+												 ERRCODE_CONNECTION_EXCEPTION,
+												 "failed to flush the COPY connection",
+												 conn);
+				}
+
+				/*
 				 * The socket is busy, wait. We don't care about the wait result
 				 * here, because whether it is a timeout or the socket became
 				 * writeable, we just retry.
 				 */
 				(void) WaitLatchOrSocket(MyLatch,
-										 PQsocket(conn->pg_conn),
+										 socket,
 										 WL_TIMEOUT | WL_SOCKET_WRITEABLE,
 										 /* timeout = */ 1000,
 										 /* wait_event_info = */ 0);
@@ -2274,20 +2291,20 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 			else
 			{
 				/* Error. */
-				return fill_simple_error(err,
-										 ERRCODE_CONNECTION_EXCEPTION,
-										 "failed to flush the COPY connection",
-										 conn);
+				return fill_connection_error(err,
+											 ERRCODE_CONNECTION_EXCEPTION,
+											 "failed to flush the COPY connection",
+											 conn);
 			}
 		}
 
 		/* Switch the connection into blocking mode. */
 		if (PQsetnonblocking(conn->pg_conn, 0) != 0)
 		{
-			return fill_simple_error(err,
-									 ERRCODE_CONNECTION_EXCEPTION,
-									 "failed to set the connection into blocking mode",
-									 conn);
+			return fill_connection_error(err,
+										 ERRCODE_CONNECTION_EXCEPTION,
+										 "failed to set the connection into blocking mode",
+										 conn);
 		}
 	}
 
@@ -2318,10 +2335,10 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		return false;
 
 	if (PQputCopyEnd(conn->pg_conn, NULL) != 1)
-		return fill_simple_error(err,
-								 ERRCODE_CONNECTION_EXCEPTION,
-								 "could not end remote COPY",
-								 conn);
+		return fill_connection_error(err,
+									 ERRCODE_CONNECTION_EXCEPTION,
+									 "could not end remote COPY",
+									 conn);
 
 	success = true;
 	remote_connection_set_status(conn, CONN_PROCESSING);
