@@ -37,5 +37,6 @@ extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(const Jsonb *json, const char 
 												  bool *field_found);
 extern TSDLLEXPORT int64 ts_jsonb_get_int64_field(const Jsonb *json, const char *key,
 												  bool *field_found);
+extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata);
 
 #endif /* TIMESCALEDB_JSONB_UTILS_H */

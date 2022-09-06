@@ -45,3 +45,9 @@ BEGIN
     WHERE mat_hypertable_id OPERATOR(pg_catalog.=) _cagg_data.mat_hypertable_id;
 END;
 $BODY$;
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.job_errors;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_internal.job_errors;
+
+DROP VIEW timescaledb_information.job_errors;
+DROP TABLE _timescaledb_internal.job_errors;
+

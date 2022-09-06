@@ -239,3 +239,45 @@ ts_jsonb_get_interval_field(const Jsonb *json, const char *key)
 
 	return DatumGetIntervalP(interval_datum);
 }
+
+Jsonb *
+ts_errdata_to_jsonb(ErrorData *edata)
+{
+	JsonbParseState *parse_state = NULL;
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	// this returns an int and not the errcode, why is that?
+	if (edata->sqlerrcode)
+		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
+	if (edata->message)
+		ts_jsonb_add_str(parse_state, "message", edata->message);
+	if (edata->detail)
+		ts_jsonb_add_str(parse_state, "detail", edata->detail);
+	if (edata->hint)
+		ts_jsonb_add_str(parse_state, "hint", edata->hint);
+	if (edata->filename)
+		ts_jsonb_add_str(parse_state, "filename", edata->filename);
+	if (edata->lineno)
+		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
+	if (edata->funcname)
+		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
+	if (edata->domain)
+		ts_jsonb_add_str(parse_state, "domain", edata->domain);
+	if (edata->context_domain)
+		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
+	if (edata->context)
+		ts_jsonb_add_str(parse_state, "context", edata->context);
+	if (edata->schema_name)
+		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
+	if (edata->table_name)
+		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
+	if (edata->column_name)
+		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
+	if (edata->datatype_name)
+		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
+	if (edata->constraint_name)
+		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
+	if (edata->internalquery)
+		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
+	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	return JsonbValueToJsonb(result);
+}

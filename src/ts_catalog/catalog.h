@@ -56,6 +56,7 @@ typedef enum CatalogTable
 	REMOTE_TXN,
 	CHUNK_COPY_OPERATION,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
+	JOB_ERRORS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -1378,6 +1379,31 @@ typedef struct CatalogSecurityContext
 	Oid saved_uid;
 	int saved_security_context;
 } CatalogSecurityContext;
+
+#define JOB_ERRORS_TABLE_NAME "job_errors"
+
+enum Anum_job_error
+{
+	Anum_job_error_job_id = 1,
+	Anum_job_error_pid,
+	Anum_job_error_start_time,
+	Anum_job_error_finish_time,
+	Anum_job_error_error_data,
+	_Anum_job_error_max,
+};
+
+#define Natts_job_error (_Anum_job_error_max - 1)
+
+typedef struct FormData_job_error
+{
+	int32 job_id;
+	int64 pid;
+	TimestampTz start_time;
+	TimestampTz finish_time;
+	Jsonb *error_data;
+} FormData_job_error;
+
+typedef FormData_job_error *Form_job_error;
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,
