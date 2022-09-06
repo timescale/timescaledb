@@ -29,7 +29,8 @@ set(TEST_FILES
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
-    TEST_FILES
+    TEST_FILES_postgresql
+    troubleshooting_job_errors.sql
     bgw_db_scheduler.sql
     bgw_reorder_drop_chunks.sql
     compress_bgw_reorder_drop_chunks.sql

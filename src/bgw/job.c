@@ -44,6 +44,8 @@
 #include "bgw/scheduler.h"
 
 #include <cross_module_fn.h>
+#include "jsonb_utils.h"
+#include "unistd.h"
 
 #define TELEMETRY_INITIAL_NUM_RUNS 12
 
@@ -975,6 +977,48 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
+bool
+ts_job_errors_insert_relation(FormData_job_error *job_err)
+{
+	Catalog *catalog = ts_catalog_get();
+	Relation rel = table_open(catalog_get_table_id(catalog, JOB_ERRORS), RowExclusiveLock);
+	TupleDesc desc = RelationGetDescr(rel);
+	Datum values[Natts_job_error];
+	bool nulls[Natts_job_error] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	values[AttrNumberGetAttrOffset(Anum_job_error_job_id)] = Int32GetDatum(job_err->job_id);
+	if (job_err->start_time)
+		values[AttrNumberGetAttrOffset(Anum_job_error_start_time)] =
+			TimestampTzGetDatum(job_err->start_time);
+	else
+		values[AttrNumberGetAttrOffset(Anum_job_error_start_time)] =
+			TimestampTzGetDatum(DT_NOBEGIN);
+	if (job_err->finish_time)
+		values[AttrNumberGetAttrOffset(Anum_job_error_finish_time)] =
+			TimestampTzGetDatum(job_err->finish_time);
+	else
+		values[AttrNumberGetAttrOffset(Anum_job_error_finish_time)] =
+			TimestampTzGetDatum(DT_NOBEGIN);
+	if (job_err->pid > 0)
+		values[AttrNumberGetAttrOffset(Anum_job_error_pid)] = Int64GetDatum(job_err->pid);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_job_error_pid)] = true;
+	if (job_err->error_data)
+		values[AttrNumberGetAttrOffset(Anum_job_error_error_data)] =
+			JsonbPGetDatum(job_err->error_data);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_job_error_error_data)] = true;
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+
+	table_close(rel, RowExclusiveLock);
+
+	return true;
+}
+
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
@@ -1016,6 +1060,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
+	MemoryContext oldcontext = CurrentMemoryContext;
+	TimestampTz start_time = DT_NOBEGIN, finish_time = DT_NOBEGIN;
 
 	PG_TRY();
 	{
@@ -1065,6 +1111,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 										&got_lock);
 		if (job != NULL)
 		{
+			// elog(LOG, "job id %d marking the end itself", params.job_id);
 			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
 			ts_bgw_job_check_max_retries(job);
 			pfree(job);
@@ -1077,7 +1124,35 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * error
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
-		PG_RE_THROW();
+
+		ErrorData *edata;
+		FormData_job_error jerr = { 0 };
+		// switch away from error context to not lose the data
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+
+		StartTransactionCommand();
+		BgwJobStat *job_stat = ts_bgw_job_stat_find(params.job_id);
+		if (job_stat != NULL)
+		{
+			start_time = job_stat->fd.last_start;
+			finish_time = job_stat->fd.last_finish;
+		}
+		CommitTransactionCommand();
+
+		jerr.error_data = ts_errdata_to_jsonb(edata);
+		jerr.job_id = params.job_id;
+		jerr.start_time = start_time;
+		jerr.finish_time = finish_time;
+		jerr.pid = MyProcPid;
+
+		StartTransactionCommand();
+
+		ts_job_errors_insert_relation(&jerr);
+
+		CommitTransactionCommand();
+		FlushErrorState();
+		ReThrowError(edata);
 	}
 	PG_END_TRY();
 

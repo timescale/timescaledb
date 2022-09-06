@@ -565,7 +565,21 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		return DT_NOBEGIN;
 
 	if (jobstat->fd.consecutive_crashes > 0)
+	{
+		// update the errors table regarding the crash
+		FormData_job_error jerr = { 0 };
+		jerr.error_data = NULL;
+		jerr.start_time = jobstat->fd.last_start;
+		// what should this be? maybe -infinity to indicate the job never finished, crashed instead?
+		// or now? (jobstat will set it to now in a bit)
+		jerr.finish_time = ts_timer_get_current_timestamp();
+		jerr.pid = -1;
+		jerr.job_id = jobstat->fd.id;
+
+		ts_job_errors_insert_relation(&jerr);
+
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+	}
 
 	return jobstat->fd.next_start;
 }

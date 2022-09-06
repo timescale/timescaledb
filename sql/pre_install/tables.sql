@@ -547,6 +547,15 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.continuous_agg_migrate_plan_step', 'step_id'), '');
 
+CREATE TABLE _timescaledb_internal.job_errors (
+  job_id integer not null, 
+  pid bigint, -- is int enough? what's the max pid on a system
+  start_time timestamptz,
+  finish_time timestamptz,
+  error_data jsonb
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
