@@ -74,9 +74,9 @@ ts_event_trigger_ddl_commands(void)
 		}
 	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	FreeExprContext(rsinfo.econtext, false);
 	FreeExecutorState(estate);
-	ExecDropSingleTupleTableSlot(slot);
 
 	return objects;
 }
@@ -319,9 +319,9 @@ ts_event_trigger_dropped_objects(void)
 			heap_freetuple(tuple);
 	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	FreeExprContext(rsinfo.econtext, false);
 	FreeExecutorState(estate);
-	ExecDropSingleTupleTableSlot(slot);
 
 	return objects;
 }
