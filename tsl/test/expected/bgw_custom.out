@@ -73,7 +73,9 @@ SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb
     1004
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
+-- exclude the telemetry[1] and job error retention[2] jobs
+-- job 2 may have already run which will set its next_start field thus making the test flaky
+SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
  job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled |        config         | next_start | hypertable_schema | hypertable_name | check_schema | check_name 
 --------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+-----------------------+------------+-------------------+-----------------+--------------+------------
    1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   |                 |              | 

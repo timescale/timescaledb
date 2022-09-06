@@ -299,4 +299,31 @@ ORDER BY table_name,
   segmentby_column_index,
   orderby_column_index;
 
+-- troubleshooting job errors view
+CREATE OR REPLACE VIEW timescaledb_information.job_errors AS 
+SELECT
+    job_id,
+    error_data ->> 'proc_schema' as proc_schema,
+    error_data ->> 'proc_name' as proc_name,
+    pid,
+    start_time,
+    finish_time,
+    error_data ->> 'sqlerrcode' AS sqlerrcode,
+    CASE WHEN error_data ->>'message' IS NOT NULL THEN 
+      CASE WHEN error_data ->>'detail' IS NOT NULL THEN 
+        CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data ->>'detail', '. ', error_data->>'hint')
+        ELSE concat(error_data ->>'message', ' ', error_data ->>'detail')
+        END
+      ELSE
+        CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data->>'hint')
+        ELSE error_data ->>'message'
+        END
+      END
+    ELSE
+      'job crash detected, see server logs'
+    END
+    AS err_message
+FROM
+    _timescaledb_internal.job_errors;
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

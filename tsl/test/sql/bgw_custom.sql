@@ -51,7 +51,9 @@ SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
 SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
+-- exclude the telemetry[1] and job error retention[2] jobs
+-- job 2 may have already run which will set its next_start field thus making the test flaky
+SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
 

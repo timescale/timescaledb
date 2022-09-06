@@ -106,11 +106,12 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 (1 row)
 
 -- empty
+-- turn on extended display to make the many fields of the table easier to parse
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
- job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
 (0 rows)
 
+\x off
 -- empty
 SELECT * FROM sorted_bgw_log;
  msg_no | application_name |                        msg                         
@@ -141,11 +142,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 (1 row)
 
 -- empty
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
- job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
 (0 rows)
 
+\x off
 SELECT * FROM timescaledb_information.job_stats;
  hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_start | total_runs | total_successes | total_failures 
 -------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+------------+------------+-----------------+----------------
@@ -163,12 +164,25 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
  
 (1 row)
 
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
- job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0
-(1 row)
+-[ RECORD 1 ]----------+--------------------------------
+job_id                 | 1000
+last_start             | Fri Dec 31 16:00:00.05 1999 PST
+last_finish            | Fri Dec 31 16:00:00.05 1999 PST
+next_start             | Fri Dec 31 16:00:00.15 1999 PST
+last_successful_finish | Fri Dec 31 16:00:00.05 1999 PST
+last_run_success       | t
+total_runs             | 1
+total_duration         | @ 0
+total_successes        | 1
+total_failures         | 0
+total_crashes          | 0
+consecutive_failures   | 0
+consecutive_crashes    | 0
+flags                  | 0
 
+\x off
 SELECT * FROM timescaledb_information.job_stats;
  hypertable_schema | hypertable_name | job_id |       last_run_started_at       |     last_successful_finish      | last_run_status | job_status | last_run_duration |           next_start            | total_runs | total_successes | total_failures 
 -------------------+-----------------+--------+---------------------------------+---------------------------------+-----------------+------------+-------------------+---------------------------------+------------+-----------------+----------------
@@ -1433,12 +1447,25 @@ SELECT wait_for_job_1_to_run(2);
  t
 (1 row)
 
+\x on
 select * from _timescaledb_internal.bgw_job_stat;
- job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1024 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
-(1 row)
+-[ RECORD 1 ]----------+--------------------------------
+job_id                 | 1024
+last_start             | Fri Dec 31 16:00:00.15 1999 PST
+last_finish            | Fri Dec 31 16:00:00.15 1999 PST
+next_start             | Fri Dec 31 16:00:00.25 1999 PST
+last_successful_finish | Fri Dec 31 16:00:00.15 1999 PST
+last_run_success       | t
+total_runs             | 2
+total_duration         | @ 0
+total_successes        | 2
+total_failures         | 0
+total_crashes          | 0
+consecutive_failures   | 0
+consecutive_crashes    | 0
+flags                  | 0
 
+\x off
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
  delete_job 
 ------------
@@ -1552,12 +1579,25 @@ SELECT * FROM sorted_bgw_log;
       0 | new_job          | Execute job 1
 (16 rows)
 
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
- job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1025 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
-(1 row)
+-[ RECORD 1 ]----------+--------------------------------
+job_id                 | 1025
+last_start             | Fri Dec 31 16:00:00.48 1999 PST
+last_finish            | Fri Dec 31 16:00:00.48 1999 PST
+next_start             | Fri Dec 31 16:00:00.49 1999 PST
+last_successful_finish | Fri Dec 31 16:00:00.48 1999 PST
+last_run_success       | t
+total_runs             | 2
+total_duration         | @ 0
+total_successes        | 2
+total_failures         | 0
+total_crashes          | 0
+consecutive_failures   | 0
+consecutive_crashes    | 0
+flags                  | 0
 
+\x off
 -- clean up jobs
 SELECT _timescaledb_internal.stop_background_workers();
  stop_background_workers 

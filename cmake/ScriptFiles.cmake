@@ -59,7 +59,8 @@ set(SOURCE_FILES
     policy_api.sql
     policy_internal.sql
     cagg_utils.sql
-    cagg_migrate.sql)
+    cagg_migrate.sql
+    job_error_log_retention.sql)
 
 if(USE_TELEMETRY)
   list(APPEND SOURCE_FILES with_telemetry.sql)
