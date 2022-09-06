@@ -224,6 +224,8 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 * Usually the job process will mark the end, but if the job gets
 			 * a signal (cancel or terminate), it won't be able to so we
 			 * should.
+			 * TODO: Insert a record in the job_errors table informing of this failure
+			 * Currently the SIGTERM case is not handled, there might be other cases as well
 			 */
 			elog(LOG, "job %d failed", sjob->job.fd.id);
 			mark_job_as_ended(sjob, JOB_FAILURE);

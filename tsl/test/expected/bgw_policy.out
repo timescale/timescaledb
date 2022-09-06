@@ -616,11 +616,12 @@ SELECT proc_name, count(*)
 FROM _timescaledb_config.bgw_job
 WHERE proc_name NOT LIKE '%telemetry%'
 GROUP BY proc_name;
-    proc_name     | count 
-------------------+-------
- policy_reorder   |     1
- policy_retention |     2
-(2 rows)
+         proc_name          | count 
+----------------------------+-------
+ policy_job_error_retention |     1
+ policy_reorder             |     1
+ policy_retention           |     2
+(3 rows)
 
 -- test that the behavior is strict when providing NULL required arguments
 create table test_strict (time timestamptz not null, a int, b int);

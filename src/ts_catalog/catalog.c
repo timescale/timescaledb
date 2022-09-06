@@ -116,6 +116,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME,
 	},
+	[JOB_ERRORS] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.table_name = JOB_ERRORS_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",

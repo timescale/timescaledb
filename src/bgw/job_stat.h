@@ -9,6 +9,9 @@
 #include "ts_catalog/catalog.h"
 #include "job.h"
 
+#define JOB_STAT_FLAGS_DEFAULT 0
+#define LAST_CRASH_REPORTED 1
+
 typedef struct BgwJobStat
 {
 	FormData_bgw_job_stat fd;
@@ -38,5 +41,6 @@ extern bool ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job);
 
 extern TimestampTz ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job,
 											  int32 consecutive_failed_starts);
+extern TSDLLEXPORT void ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id);
 
 #endif /* BGW_JOB_STAT_H */
