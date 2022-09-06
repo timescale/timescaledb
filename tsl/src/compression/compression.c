@@ -38,6 +38,7 @@
 
 #include "array.h"
 #include "chunk.h"
+#include "debug_point.h"
 #include "deltadelta.h"
 #include "dictionary.h"
 #include "gorilla.h"
@@ -1134,7 +1135,15 @@ decompress_chunk(Oid in_table, Oid out_table)
 	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
 #endif
+
+	/* The reindex_relation() function creates an AccessExclusiveLock on the
+	 * chunk index (if present). After calling this function, concurrent
+	 * SELECTs have to wait until the index lock is released. When no
+	 * index is present concurrent SELECTs can be still performed in
+	 * parallel. */
+	DEBUG_WAITPOINT("decompress_chunk_impl_before_reindex");
 	reindex_relation(out_table, 0, options);
+	DEBUG_WAITPOINT("decompress_chunk_impl_after_reindex");
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);

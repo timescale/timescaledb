@@ -396,12 +396,20 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	/* Recreate FK constraints, since they were dropped during compression. */
 	ts_chunk_create_fks(uncompressed_chunk);
 
-	/* Prevent readers from using the compressed chunk that is going to be deleted */
-	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
-
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+
+	/*
+	 * Lock the compressed chunk that is going to be deleted. At this point,
+	 * the reference to the compressed chunk is already removed from the
+	 * catalog. So, new readers do not include it in their operations.
+	 *
+	 * Note: Calling performMultipleDeletions in chunk_index_tuple_delete
+	 * also requests an AccessExclusiveLock on the compressed_chunk. However,
+	 * this call makes the lock on the chunk explicit.
+	 */
+	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 
 	/* reenable autovacuum if necessary */

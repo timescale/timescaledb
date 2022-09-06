@@ -12,6 +12,7 @@ accidentally triggering the load of a previous DB version.**
 * #4681 Fix compression_chunk_size primary key
 * #4685 Improve chunk exclusion for space dimensions
 * #4696 Report warning when enabling compression on hypertable
+* #4676 Fix a deadlock when decompressing chunks and performing SELECTs
 
 **Thanks**
 * @maxtwardowski for reporting problems with chunk exclusion and space dimensions
