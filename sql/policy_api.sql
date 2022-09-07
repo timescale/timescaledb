@@ -15,8 +15,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_retention_policy(
        drop_after "any",
        if_not_exists BOOL = false,
        schedule_interval INTERVAL = NULL,
-       initial_start TIMESTAMPTZ = NULL,
-       fixed_schedule BOOL = true
+       initial_start TIMESTAMPTZ = NULL
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
 LANGUAGE C VOLATILE;
@@ -42,8 +41,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
         hypertable REGCLASS, compress_after "any", 
         if_not_exists BOOL = false,
         schedule_interval INTERVAL = NULL, 
-        initial_start TIMESTAMPTZ = NULL,
-        fixed_schedule BOOL = true
+        initial_start TIMESTAMPTZ = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
@@ -58,7 +56,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_policy(
 continuous_aggregate REGCLASS, start_offset "any", 
 end_offset "any", schedule_interval INTERVAL, 
 if_not_exists BOOL = false, 
-initial_start TIMESTAMPTZ = NULL, fixed_schedule BOOL = true)
+initial_start TIMESTAMPTZ = NULL)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;

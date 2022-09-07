@@ -347,8 +347,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
 	Interval *default_schedule_interval =
 		PG_ARGISNULL(3) ? DEFAULT_COMPRESSION_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
-	bool fixed_schedule = PG_ARGISNULL(5) ? true : PG_GETARG_BOOL(5);
 	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
+	// if not providing initial_start, then we still get the old behavior
+	bool fixed_schedule = !PG_ARGISNULL(4); 
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 

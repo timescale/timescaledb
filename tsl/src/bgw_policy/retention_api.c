@@ -312,8 +312,8 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	Interval default_schedule_interval =
 		PG_ARGISNULL(3) ? (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
-	bool fixed_schedule = PG_ARGISNULL(5) ? true : PG_GETARG_BOOL(5);
 	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
+	bool fixed_schedule = !PG_ARGISNULL(4); 
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 

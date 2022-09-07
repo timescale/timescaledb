@@ -678,8 +678,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	end_offset.isnull = PG_ARGISNULL(2);
 	refresh_interval = *PG_GETARG_INTERVAL_P(3);
 	if_not_exists = PG_GETARG_BOOL(4);
-	bool fixed_schedule = PG_ARGISNULL(6) ? true : PG_GETARG_BOOL(6);
 	TimestampTz initial_start = PG_ARGISNULL(5) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(5);
+	bool fixed_schedule = !PG_ARGISNULL(5); 
 
 	Datum retval;
 	retval = policy_refresh_cagg_add_internal(cagg_oid,

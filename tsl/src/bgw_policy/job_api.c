@@ -140,6 +140,10 @@ job_add(PG_FUNCTION_ARGS)
 
 	// if no initial_start was provided for a fixed schedule, use the current time
 	if (fixed_schedule && TIMESTAMP_IS_NOBEGIN(initial_start))
+		// ereport(ERROR, 
+		// errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+		// errmsg("initial_start cannot be NULL"),
+		// errhint("Must specify initial_start for jobs with a fixed schedule"));
 		initial_start = ts_timer_get_current_timestamp();
 
 	/* Verify that the owner can create a background worker */
