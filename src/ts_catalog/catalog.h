@@ -1227,7 +1227,6 @@ enum
 typedef enum Anum_compression_chunk_size_pkey
 {
 	Anum_compression_chunk_size_pkey_chunk_id = 1,
-	Anum_compression_chunk_size_pkey_compressed_chunk_id,
 	_Anum_compression_chunk_size_pkey_max,
 } Anum_compression_chunk_size_pkey;
 

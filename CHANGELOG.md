@@ -18,6 +18,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables
+* #4681 Fix compression_chunk_size primary key
 
 **Thanks**
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
