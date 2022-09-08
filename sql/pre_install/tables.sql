@@ -458,7 +458,7 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   numrows_pre_compression bigint,
   numrows_post_compression bigint,
   -- table constraints
-  CONSTRAINT compression_chunk_size_pkey PRIMARY KEY (chunk_id, compressed_chunk_id),
+  CONSTRAINT compression_chunk_size_pkey PRIMARY KEY (chunk_id),
   CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
