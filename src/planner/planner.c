@@ -341,11 +341,12 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 					ts_constify_now(context->root, context->current_query->rtable, from->quals);
 			}
 			/*
-			 * We only amend space constraints for UPDATE/DELETE as for SELECT
-			 * we use our own hypertable expansion which can handle constraints on
-			 * space dimensions without further help.
+			 * We only amend space constraints for UPDATE/DELETE and SELECT FOR UPDATE
+			 * as for normal SELECT we use our own hypertable expansion which can handle
+			 * constraints on hashed space dimensions without further help.
 			 */
-			if (context->current_query->commandType != CMD_SELECT)
+			if (context->current_query->commandType != CMD_SELECT ||
+				context->current_query->rowMarks != NIL)
 			{
 				from->quals = ts_add_space_constraints(context->root,
 													   context->current_query->rtable,
