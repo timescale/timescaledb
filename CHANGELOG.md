@@ -19,8 +19,10 @@ argument or resolve the type ambiguity by casting to the intended type.
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables
 * #4681 Fix compression_chunk_size primary key
+* #4685 Improve chunk exclusion for space partitions
 
 **Thanks**
+* @maxtwardowski for reporting problems with chunk exclusion and space partitions
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 
 ## 2.8.0 (2022-08-30)
