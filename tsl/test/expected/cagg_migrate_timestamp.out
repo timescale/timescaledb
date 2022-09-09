@@ -397,3 +397,81 @@ psql:include/cagg_migrate_common.sql:237: ERROR:  relation "conditions_summary_d
 SELECT * FROM conditions_summary_daily_old;
 psql:include/cagg_migrate_common.sql:239: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
 \set ON_ERROR_STOP 1
+-- permissions test
+DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+DROP MATERIALIZED VIEW conditions_summary_daily;
+psql:include/cagg_migrate_common.sql:245: NOTICE:  drop cascades to 6 other objects
+GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+CREATE MATERIALIZED VIEW conditions_summary_daily
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 day', "time") AS bucket,
+\else
+    time_bucket(INTEGER '24', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+psql:include/cagg_migrate_common.sql:264: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:268: ERROR:  permission denied for table continuous_agg_migrate_plan
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:278: ERROR:  permission denied for table continuous_agg_migrate_plan_step
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:288: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- all necessary permissions granted
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:297: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+-- check migrated data. should return 0 (zero) rows
+SELECT * FROM conditions_summary_daily
+EXCEPT
+SELECT * FROM conditions_summary_daily_new;
+ bucket | min | max | avg | sum 
+--------+-----+-----+-----+-----
+(0 rows)
+
+SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
+ mat_hypertable_id | step_id |  status  |       type       |                                                                                                          config                                                                                                           
+-------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                 7 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Sat Dec 31 16:00:00 2022 PST"}
+                 7 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
+                 7 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
+                 7 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sat Dec 31 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
+                 7 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 16:00:00 2022 PST", "start_ts": "Fri Dec 31 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 7 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 16:00:00 2022 PDT", "start_ts": "Fri Mar 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 7 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 16:00:00 2022 PDT", "start_ts": "Fri May 20 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 7 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 16:00:00 2022 PDT", "start_ts": "Fri Jul 29 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 7 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 16:00:00 2022 PST", "start_ts": "Fri Oct 07 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 7 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 16:00:00 2023 PST", "start_ts": "Fri Dec 16 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 7 |      11 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      12 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      13 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      14 | FINISHED | ENABLE POLICIES  | 
+(14 rows)
+

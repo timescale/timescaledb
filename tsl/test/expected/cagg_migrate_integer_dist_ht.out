@@ -442,6 +442,88 @@ psql:include/cagg_migrate_common.sql:237: ERROR:  relation "conditions_summary_d
 SELECT * FROM conditions_summary_daily_old;
 psql:include/cagg_migrate_common.sql:239: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
 \set ON_ERROR_STOP 1
+-- permissions test
+DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+DROP MATERIALIZED VIEW conditions_summary_daily;
+psql:include/cagg_migrate_common.sql:245: NOTICE:  drop cascades to 10 other objects
+GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+CREATE MATERIALIZED VIEW conditions_summary_daily
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 day', "time") AS bucket,
+\else
+    time_bucket(INTEGER '24', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+psql:include/cagg_migrate_common.sql:264: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:268: ERROR:  permission denied for table continuous_agg_migrate_plan
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:278: ERROR:  permission denied for table continuous_agg_migrate_plan_step
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:288: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+\set ON_ERROR_STOP 1
+RESET ROLE;
+GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- all necessary permissions granted
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:297: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+-- check migrated data. should return 0 (zero) rows
+SELECT * FROM conditions_summary_daily
+EXCEPT
+SELECT * FROM conditions_summary_daily_new;
+ bucket | min | max | avg | sum 
+--------+-----+-----+-----+-----
+(0 rows)
+
+SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
+ mat_hypertable_id | step_id |  status  |       type       |                                                                         config                                                                          
+-------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
+                 7 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "1008"}
+                 7 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
+                 7 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
+                 7 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
+                 7 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |       7 | FINISHED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |       8 | FINISHED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |       9 | FINISHED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |      10 | FINISHED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |      11 | FINISHED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |      14 | FINISHED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 7 |      15 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      16 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      17 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      18 | FINISHED | ENABLE POLICIES  | 
+(18 rows)
+
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DATA_NODE_1;
