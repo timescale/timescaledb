@@ -238,3 +238,67 @@ SELECT * FROM conditions_summary_daily_new;
 -- should fail because the old cagg was removed
 SELECT * FROM conditions_summary_daily_old;
 \set ON_ERROR_STOP 1
+
+-- permissions test
+DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+DROP MATERIALIZED VIEW conditions_summary_daily;
+GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 day', "time") AS bucket,
+\else
+    time_bucket(INTEGER '24', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
+CALL cagg_migrate('conditions_summary_daily');
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
+GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
+CALL cagg_migrate('conditions_summary_daily');
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
+GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+\set ON_ERROR_STOP 0
+-- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
+CALL cagg_migrate('conditions_summary_daily');
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
+GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+-- all necessary permissions granted
+CALL cagg_migrate('conditions_summary_daily');
+
+-- check migrated data. should return 0 (zero) rows
+SELECT * FROM conditions_summary_daily
+EXCEPT
+SELECT * FROM conditions_summary_daily_new;
+
+SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
