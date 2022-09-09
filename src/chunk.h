@@ -147,6 +147,7 @@ extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
 extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p);
 extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
 										const char *prefix);
+List *ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs);
 
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
