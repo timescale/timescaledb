@@ -552,6 +552,45 @@ get_reindex_options(ReindexStmt *stmt)
 #endif
 
 /*
+ * List sorting functions differ between the PG versions.
+ */
+#if PG13_LT
+inline static int
+list_int_cmp_compat(const void *p1, const void *p2)
+{
+	int v1 = *((int *) p1);
+	int v2 = *((int *) p2);
+
+	if (v1 < v2)
+		return -1;
+	if (v1 > v2)
+		return 1;
+	return 0;
+}
+#elif PG13
+inline static int
+list_int_cmp_compat(const ListCell *p1, const ListCell *p2)
+{
+	int v1 = lfirst_int(p1);
+	int v2 = lfirst_int(p2);
+
+	if (v1 < v2)
+		return -1;
+	if (v1 > v2)
+		return 1;
+	return 0;
+}
+#elif PG14_GE
+#define list_int_cmp_compat list_int_cmp
+#endif
+
+#if PG13_LT
+#define list_sort_compat(list, comparator) list_qsort((list), (comparator))
+#else
+#define list_sort_compat(list, comparator) (list_sort((list), (comparator)), (list))
+#endif
+
+/*
  * PostgreSQL 15 removed "utils/int8.h" header and change the "scanint8"
  * function to "pg_strtoint64" in "utils/builtins.h".
  *

@@ -4,67 +4,68 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <catalog/pg_class.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_trigger.h>
-#include <catalog/indexing.h>
-#include <catalog/pg_inherits.h>
-#include <catalog/toasting.h>
-#include <commands/trigger.h>
-#include <commands/tablecmds.h>
-#include <commands/defrem.h>
-#include <tcop/tcopprot.h>
+
 #include <access/htup.h>
 #include <access/htup_details.h>
-#include <access/xact.h>
 #include <access/reloptions.h>
+#include <access/tupdesc.h>
+#include <access/xact.h>
+#include <catalog/indexing.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_class.h>
+#include <catalog/pg_inherits.h>
+#include <catalog/pg_trigger.h>
+#include <catalog/pg_type.h>
+#include <catalog/toasting.h>
+#include <commands/defrem.h>
+#include <commands/tablecmds.h>
+#include <commands/trigger.h>
+#include <executor/executor.h>
+#include <fmgr.h>
+#include <funcapi.h>
+#include <miscadmin.h>
+#include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
+#include <storage/lmgr.h>
+#include <tcop/tcopprot.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/datum.h>
+#include <utils/hsearch.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
-#include <utils/hsearch.h>
-#include <storage/lmgr.h>
-#include <miscadmin.h>
-#include <funcapi.h>
-#include <fmgr.h>
-#include <utils/datum.h>
-#include <catalog/pg_type.h>
-#include <utils/acl.h>
 #include <utils/timestamp.h>
-#include <nodes/execnodes.h>
-#include <executor/executor.h>
-#include <access/tupdesc.h>
 
-#include "export.h"
-#include "debug_point.h"
 #include "chunk.h"
+
+#include "bgw_policy/chunk_stats.h"
+#include "cache.h"
 #include "chunk_index.h"
-#include "ts_catalog/chunk_data_node.h"
+#include "chunk_scan.h"
+#include "compat/compat.h"
 #include "cross_module_fn.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/continuous_agg.h"
-#include "cross_module_fn.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "errors.h"
-#include "partitioning.h"
-#include "hypertable.h"
-#include "ts_catalog/hypertable_data_node.h"
+#include "export.h"
+#include "extension.h"
 #include "hypercube.h"
-#include "scanner.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
+#include "partitioning.h"
 #include "process_utility.h"
+#include "scan_iterator.h"
+#include "scanner.h"
 #include "time_utils.h"
 #include "trigger.h"
-#include "compat/compat.h"
-#include "utils.h"
-#include "hypertable_cache.h"
-#include "cache.h"
-#include "bgw_policy/chunk_stats.h"
-#include "scan_iterator.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_data_node.h"
 #include "ts_catalog/compression_chunk_size.h"
-#include "extension.h"
-#include "chunk_scan.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/hypertable_data_node.h"
+#include "utils.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
@@ -124,7 +125,7 @@ chunk_stub_is_valid(const ChunkStub *stub, unsigned int expected_slices)
 }
 
 typedef ChunkResult (*on_chunk_stub_func)(ChunkScanCtx *ctx, ChunkStub *stub);
-static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *p);
+static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *point);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
@@ -1471,6 +1472,84 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *sche
 	return chunk;
 }
 
+/*
+ * Find the chunks that belong to the subspace identified by the given dimension
+ * vectors. We might be restricting only some dimensions, so this subspace is
+ * not a hypercube, but a hyperplane of some order.
+ * Returns a list of matching chunk ids.
+ */
+List *
+ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
+{
+	List *chunk_ids = NIL;
+
+	ChunkScanCtx ctx;
+	chunk_scan_ctx_init(&ctx, ht->space, /* point = */ NULL);
+
+	ScanIterator iterator = ts_chunk_constraint_scan_iterator_create(CurrentMemoryContext);
+
+	ListCell *lc;
+	foreach (lc, dimension_vecs)
+	{
+		const DimensionVec *vec = lfirst(lc);
+		/*
+		 * We shouldn't see a dimension with zero matching dimension slices.
+		 * That would mean that no chunks match at all, this should have been
+		 * handled earlier by gather_restriction_dimension_vectors().
+		 */
+		Assert(vec->num_slices > 0);
+		for (int i = 0; i < vec->num_slices; i++)
+		{
+			const DimensionSlice *slice = vec->slices[i];
+
+			ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
+			ts_scan_iterator_start_or_restart_scan(&iterator);
+
+			while (ts_scan_iterator_next(&iterator) != NULL)
+			{
+				TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+				bool PG_USED_FOR_ASSERTS_ONLY isnull = true;
+				Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
+				Assert(!isnull);
+				int32 current_chunk_id = DatumGetInt32(datum);
+				Assert(current_chunk_id != 0);
+
+				bool found = false;
+				ChunkScanEntry *entry =
+					hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
+				if (!found)
+				{
+					entry->stub = NULL;
+					entry->num_dimension_constraints = 0;
+				}
+
+				/*
+				 * We have only the dimension constraints here, because we're searching
+				 * by dimension slice id.
+				 */
+				Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
+									   Anum_chunk_constraint_dimension_slice_id));
+				entry->num_dimension_constraints++;
+
+				/*
+				 * A chunk is complete when we've found slices for all required dimensions,
+				 * i.e., a complete subspace.
+				 */
+				if (entry->num_dimension_constraints == list_length(dimension_vecs))
+				{
+					chunk_ids = lappend_int(chunk_ids, entry->chunk_id);
+				}
+			}
+		}
+	}
+
+	ts_scan_iterator_close(&iterator);
+
+	chunk_scan_ctx_destroy(&ctx);
+
+	return chunk_ids;
+}
+
 ChunkStub *
 ts_chunk_stub_create(int32 id, int16 num_constraints)
 {
@@ -1668,7 +1747,7 @@ chunk_create_from_stub(ChunkStubScanCtx *stubctx)
  * tables during scans.
  */
 static void
-chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *p)
+chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *point)
 {
 	struct HASHCTL hctl = {
 		.keysize = sizeof(int32),
@@ -1679,7 +1758,7 @@ chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *p)
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->htab = hash_create("chunk-scan-context", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 	ctx->space = hs;
-	ctx->point = p;
+	ctx->point = point;
 	ctx->lockmode = NoLock;
 }
 
@@ -1932,16 +2011,17 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 	}
 
 	/* Find constraints matching dimension slices. */
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, CurrentMemoryContext);
+	ScanIterator iterator = ts_chunk_constraint_scan_iterator_create(CurrentMemoryContext);
 
 	ListCell *lc;
 	foreach (lc, all_slices)
 	{
 		DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
-		ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
 
-		ts_scanner_foreach(&iterator)
+		ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
+		ts_scan_iterator_start_or_restart_scan(&iterator);
+
+		while (ts_scan_iterator_next(&iterator) != NULL)
 		{
 			TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 			bool PG_USED_FOR_ASSERTS_ONLY isnull = true;
