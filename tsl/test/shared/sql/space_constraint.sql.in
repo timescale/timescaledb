@@ -14,6 +14,14 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (1) FOR UPDATE;
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (1,3) FOR UPDATE;
 
+-- check mismatching datatypes
+:PREFIX SELECT FROM metrics_space WHERE device_id = smallint '2' FOR UPDATE;
+:PREFIX SELECT FROM metrics_space WHERE device_id = int '2' FOR UPDATE;
+:PREFIX SELECT FROM metrics_space WHERE device_id = bigint '3' FOR UPDATE;
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (smallint '1', smallint '1') FOR UPDATE;
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (int '1', int '1') FOR UPDATE;
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (bigint '1', bigint '1') FOR UPDATE;
+
 -- test valid variants we are optimizing
 :PREFIX DELETE FROM metrics_space WHERE device_id = 1;
 :PREFIX DELETE FROM metrics_space WHERE device_id IN (1);
