@@ -12,6 +12,7 @@
 #include <optimizer/optimizer.h>
 #include <parser/parse_func.h>
 #include <utils/fmgroids.h>
+#include <utils/typcache.h>
 
 #include "cache.h"
 #include "dimension.h"
@@ -43,6 +44,43 @@ get_space_dimension(Oid relid, Index varattno)
 }
 
 /*
+ * Check if this operator is compatible with the constraints on
+ * the space dimension. This is the equality operator between
+ * left and right in the btree operator family.
+ */
+static bool
+is_valid_space_operator(Oid opno, Oid left, Oid right)
+{
+	TypeCacheEntry *tce;
+
+	if (left == right)
+	{
+		/*
+		 * When left and right match lookup_type_cache can
+		 * directly return the equality operator saving us
+		 * one roundtrip.
+		 */
+		tce = lookup_type_cache(left, TYPECACHE_EQ_OPR);
+
+		return tce && opno == tce->eq_opr;
+	}
+	else
+	{
+		/*
+		 * The left and right type might not match when comparing
+		 * different integer types eg comparing int2 or int8
+		 * columns with integer literals which default to int4.
+		 */
+		tce = lookup_type_cache(left, TYPECACHE_BTREE_OPFAMILY);
+		if (!tce)
+			return false;
+
+		Oid eqop = get_opfamily_member(tce->btree_opf, left, right, BTEqualStrategyNumber);
+		return opno == eqop;
+	}
+}
+
+/*
  * Valid constraints are: Var = Const
  * Var has to refer to a space partitioning column
  */
@@ -54,9 +92,11 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 		return false;
 
 	Var *var = linitial_node(Var, op->args);
-	TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
+	if (var->varlevelsup != 0)
+		return false;
 
-	if (op->opno != tce->eq_opr || var->varlevelsup != 0)
+	Const *value = lsecond_node(Const, op->args);
+	if (!is_valid_space_operator(op->opno, var->vartype, value->consttype))
 		return false;
 
 	/*
@@ -85,16 +125,12 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	if (!IsA(linitial(op->args), Var) || !IsA(lsecond(op->args), ArrayExpr))
 		return false;
 
-	ArrayExpr *arr = castNode(ArrayExpr, lsecond(op->args));
-	if (arr->multidims || !op->useOr)
-		return false;
-
 	Var *var = linitial_node(Var, op->args);
-	TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
-	if (var->vartype != arr->element_typeid || op->opno != tce->eq_opr)
+	ArrayExpr *arr = castNode(ArrayExpr, lsecond(op->args));
+	if (arr->multidims || !op->useOr || var->varlevelsup != 0)
 		return false;
 
-	if (var->varlevelsup != 0)
+	if (!is_valid_space_operator(op->opno, var->vartype, arr->element_typeid))
 		return false;
 
 	/*
@@ -110,8 +146,23 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	ListCell *lc;
 	foreach (lc, arr->elements)
 	{
-		if (!IsA(lfirst(lc), Const) || lfirst_node(Const, lc)->consttype != var->vartype)
-			return false;
+		switch (nodeTag(lfirst(lc)))
+		{
+			case T_Const:
+				break;
+			case T_FuncExpr:
+			{
+				FuncExpr *element = lfirst_node(FuncExpr, lc);
+				if (element->funcformat != COERCE_IMPLICIT_CAST ||
+					!IsA(linitial(element->args), Const))
+					return false;
+
+				break;
+			}
+			default:
+				return false;
+				break;
+		}
 	}
 	return true;
 }
@@ -194,18 +245,21 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 
 	foreach (lc, lsecond_node(ArrayExpr, op->args)->elements)
 	{
-		Const *value = lfirst_node(Const, lc);
+		Assert(IsA(lfirst(lc), Const) ||
+			   (IsA(lfirst(lc), FuncExpr) &&
+				lfirst_node(FuncExpr, lc)->funcformat == COERCE_IMPLICIT_CAST));
+
 		/*
 		 * We can skip NULL here as elements are ORed and partitioning dimensions
 		 * have NOT NULL constraint.
 		 */
-		if (!value->constisnull)
-		{
-			List *args = list_make1(value);
-			partcall->args = args;
-			part_values = lappend(part_values,
-								  castNode(Const, eval_const_expressions(root, (Node *) partcall)));
-		}
+		if (IsA(lfirst(lc), Const) && lfirst_node(Const, lc)->constisnull)
+			continue;
+
+		List *args = list_make1(lfirst(lc));
+		partcall->args = args;
+		part_values =
+			lappend(part_values, castNode(Const, eval_const_expressions(root, (Node *) partcall)));
 	}
 	/* build FuncExpr with column reference to use in constraint */
 	partcall->args = list_make1(copyObject(var));
