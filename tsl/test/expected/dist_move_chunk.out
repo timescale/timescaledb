@@ -4,31 +4,22 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
--------------+-----------+-------+----------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_dist_move_chunk_1 | t            | t                | t
-(1 row)
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+      node_name       |       database       | node_created | database_created | extension_created 
+----------------------+----------------------+--------------+------------------+-------------------
+ db_dist_move_chunk_1 | db_dist_move_chunk_1 | t            | t                | t
+ db_dist_move_chunk_2 | db_dist_move_chunk_2 | t            | t                | t
+ db_dist_move_chunk_3 | db_dist_move_chunk_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
--------------+-----------+-------+----------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_dist_move_chunk_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
--------------+-----------+-------+----------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_dist_move_chunk_3 | t            | t                | t
-(1 row)
-
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 SET ROLE :ROLE_1;
 CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
@@ -49,8 +40,8 @@ SELECT * from show_chunks('dist_test');
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
-NOTICE:  [data_node_1]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_1_chunk
@@ -58,16 +49,16 @@ _timescaledb_internal._dist_hyper_1_4_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_2_chunk
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_3_chunk
@@ -85,9 +76,9 @@ SELECT sum(device) FROM dist_test;
  846
 (1 row)
 
-SELECT * FROM test.remote_exec(ARRAY['data_node_1'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
-NOTICE:  [data_node_1]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
-NOTICE:  [data_node_1]:
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
+NOTICE:  [db_dist_move_chunk_1]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
+NOTICE:  [db_dist_move_chunk_1]:
 sum
 ---
 406
@@ -101,48 +92,48 @@ sum
 
 -- ensure data node name is provided and has proper type
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> null, destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> null, destination_node => :'DATA_NODE_2');
 ERROR:  invalid source or destination node
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => null);
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => null);
 ERROR:  invalid source or destination node
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 2);
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => 2);
 ERROR:  procedure timescaledb_experimental.copy_chunk(chunk => unknown, source_node => unknown, destination_node => integer) does not exist at character 6
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node => 'data_node_1');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node => :'DATA_NODE_1');
 ERROR:  invalid source or destination node
 \set ON_ERROR_STOP 1
 -- ensure functions can't be run in read only mode
 SET default_transaction_read_only TO on;
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  cannot execute move_chunk() in a read-only transaction
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  cannot execute copy_chunk() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
 -- ensure functions can't be run in an active multi-statement transaction
 \set ON_ERROR_STOP 0
 BEGIN;
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  move_chunk cannot run inside a transaction block
 ROLLBACK;
 BEGIN;
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  copy_chunk cannot run inside a transaction block
 ROLLBACK;
 \set ON_ERROR_STOP 1
 -- must be superuser to copy/move chunks
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  must be superuser, replication role, or hypertable owner to copy/move chunk to data node
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_1;
 -- can't run copy/move chunk on a data node
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  function must be run on the access node only
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  function must be run on the access node only
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -166,21 +157,21 @@ SELECT * from show_chunks('nondist_test');
 (4 rows)
 
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._hyper_2_5_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._hyper_2_5_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  "_hyper_2_5_chunk" is not a valid remote chunk
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._hyper_2_5_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._hyper_2_5_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 ERROR:  "_hyper_2_5_chunk" is not a valid remote chunk
 \set ON_ERROR_STOP 1
 -- ensure that chunk exists on a source data node
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_2_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
-ERROR:  chunk "_dist_hyper_1_2_chunk" does not exist on source data node "data_node_1"
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_2_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
+ERROR:  chunk "_dist_hyper_1_2_chunk" does not exist on source data node "db_dist_move_chunk_1"
 \set ON_ERROR_STOP 1
 -- do actualy copy
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
-NOTICE:  [data_node_1]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_1_chunk
@@ -188,8 +179,8 @@ _timescaledb_internal._dist_hyper_1_4_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_2_chunk
@@ -197,8 +188,8 @@ _timescaledb_internal._dist_hyper_1_1_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_3]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_3_chunk
@@ -210,9 +201,9 @@ _timescaledb_internal._dist_hyper_1_3_chunk
  
 (1 row)
 
-SELECT * FROM test.remote_exec(ARRAY['data_node_2'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
-NOTICE:  [data_node_2]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
-NOTICE:  [data_node_2]:
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_2'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
+NOTICE:  [db_dist_move_chunk_2]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
+NOTICE:  [db_dist_move_chunk_2]:
 sum
 ---
 406
@@ -226,14 +217,14 @@ sum
 
 -- ensure that chunk exists on a destination data node
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
-ERROR:  chunk "_dist_hyper_1_1_chunk" already exists on destination data node "data_node_2"
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
+ERROR:  chunk "_dist_hyper_1_1_chunk" already exists on destination data node "db_dist_move_chunk_2"
 \set ON_ERROR_STOP 1
 -- now try to move the same chunk from data node 2 to 3
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
-NOTICE:  [data_node_1]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_1_chunk
@@ -241,16 +232,16 @@ _timescaledb_internal._dist_hyper_1_4_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_2_chunk
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_3_chunk
@@ -263,9 +254,9 @@ _timescaledb_internal._dist_hyper_1_1_chunk
  
 (1 row)
 
-SELECT * FROM test.remote_exec(ARRAY['data_node_3'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
-NOTICE:  [data_node_3]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
-NOTICE:  [data_node_3]:
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
+NOTICE:  [db_dist_move_chunk_3]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
+NOTICE:  [db_dist_move_chunk_3]:
 sum
 ---
 406
@@ -301,24 +292,24 @@ $$
 LANGUAGE PLPGSQL;
 SELECT chunk_name, replica_nodes, non_replica_nodes
 FROM timescaledb_experimental.chunk_replication_status;
-      chunk_name       |       replica_nodes       |     non_replica_nodes     
------------------------+---------------------------+---------------------------
- _dist_hyper_1_1_chunk | {data_node_1,data_node_3} | {data_node_2}
- _dist_hyper_1_2_chunk | {data_node_2}             | {data_node_1,data_node_3}
- _dist_hyper_1_3_chunk | {data_node_3}             | {data_node_1,data_node_2}
- _dist_hyper_1_4_chunk | {data_node_1}             | {data_node_2,data_node_3}
+      chunk_name       |                replica_nodes                |              non_replica_nodes              
+-----------------------+---------------------------------------------+---------------------------------------------
+ _dist_hyper_1_1_chunk | {db_dist_move_chunk_1,db_dist_move_chunk_3} | {db_dist_move_chunk_2}
+ _dist_hyper_1_2_chunk | {db_dist_move_chunk_2}                      | {db_dist_move_chunk_1,db_dist_move_chunk_3}
+ _dist_hyper_1_3_chunk | {db_dist_move_chunk_3}                      | {db_dist_move_chunk_1,db_dist_move_chunk_2}
+ _dist_hyper_1_4_chunk | {db_dist_move_chunk_1}                      | {db_dist_move_chunk_2,db_dist_move_chunk_3}
 (4 rows)
 
-CALL copy_wrapper('_timescaledb_internal._dist_hyper_1_3_chunk', 'data_node_3', 'data_node_2');
-CALL move_wrapper('_timescaledb_internal._dist_hyper_1_2_chunk', 'data_node_2', 'data_node_1');
+CALL copy_wrapper('_timescaledb_internal._dist_hyper_1_3_chunk', :'DATA_NODE_3', :'DATA_NODE_2');
+CALL move_wrapper('_timescaledb_internal._dist_hyper_1_2_chunk', :'DATA_NODE_2', :'DATA_NODE_1');
 SELECT chunk_name, replica_nodes, non_replica_nodes
 FROM timescaledb_experimental.chunk_replication_status;
-      chunk_name       |       replica_nodes       |     non_replica_nodes     
------------------------+---------------------------+---------------------------
- _dist_hyper_1_1_chunk | {data_node_1,data_node_3} | {data_node_2}
- _dist_hyper_1_2_chunk | {data_node_1}             | {data_node_2,data_node_3}
- _dist_hyper_1_3_chunk | {data_node_3,data_node_2} | {data_node_1}
- _dist_hyper_1_4_chunk | {data_node_1}             | {data_node_2,data_node_3}
+      chunk_name       |                replica_nodes                |              non_replica_nodes              
+-----------------------+---------------------------------------------+---------------------------------------------
+ _dist_hyper_1_1_chunk | {db_dist_move_chunk_1,db_dist_move_chunk_3} | {db_dist_move_chunk_2}
+ _dist_hyper_1_2_chunk | {db_dist_move_chunk_1}                      | {db_dist_move_chunk_2,db_dist_move_chunk_3}
+ _dist_hyper_1_3_chunk | {db_dist_move_chunk_3,db_dist_move_chunk_2} | {db_dist_move_chunk_1}
+ _dist_hyper_1_4_chunk | {db_dist_move_chunk_1}                      | {db_dist_move_chunk_2,db_dist_move_chunk_3}
 (4 rows)
 
 DROP PROCEDURE copy_wrapper;
@@ -355,8 +346,8 @@ SELECT * from show_chunks('dist_test');
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
-NOTICE:  [data_node_1]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_3_9_chunk 
@@ -364,16 +355,16 @@ _timescaledb_internal._dist_hyper_3_12_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_3_10_chunk
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_3_11_chunk
@@ -388,12 +379,12 @@ _timescaledb_internal._dist_hyper_3_11_chunk
 SELECT chunk_schema || '.' ||  chunk_name, data_nodes
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'dist_test';
-                   ?column?                   |  data_nodes   
-----------------------------------------------+---------------
- _timescaledb_internal._dist_hyper_3_9_chunk  | {data_node_1}
- _timescaledb_internal._dist_hyper_3_10_chunk | {data_node_2}
- _timescaledb_internal._dist_hyper_3_11_chunk | {data_node_3}
- _timescaledb_internal._dist_hyper_3_12_chunk | {data_node_1}
+                   ?column?                   |       data_nodes       
+----------------------------------------------+------------------------
+ _timescaledb_internal._dist_hyper_3_9_chunk  | {db_dist_move_chunk_1}
+ _timescaledb_internal._dist_hyper_3_10_chunk | {db_dist_move_chunk_2}
+ _timescaledb_internal._dist_hyper_3_11_chunk | {db_dist_move_chunk_3}
+ _timescaledb_internal._dist_hyper_3_12_chunk | {db_dist_move_chunk_1}
 (4 rows)
 
 -- Compress a chunk
@@ -411,7 +402,7 @@ SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
 (2 rows)
 
 -- Get compressed chunk name on the source data node and show its content
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 SELECT c2.table_name
 FROM _timescaledb_catalog.chunk c1
 JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
@@ -444,7 +435,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE  chunk_name = '
 
 -- Move compressed chunk from data node 1 to data node 2
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 SELECT count(*) FROM  _timescaledb_catalog.chunk_copy_operation;
  count 
 -------
@@ -452,7 +443,7 @@ SELECT count(*) FROM  _timescaledb_catalog.chunk_copy_operation;
 (1 row)
 
 -- Make sure same compressed chunk hash been created on the destination data node
-\c :DN_DBNAME_2 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
 -- Chunk created on data node has different id but the same name, make sure
 -- compressed_chunk_id is correctly set
 SELECT c2.table_name
@@ -487,7 +478,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE chunk_name = '_
 (1 row)
 
 -- Ensure moved chunks are no longer present on the source data node
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 SELECT c2.table_name
 FROM _timescaledb_catalog.chunk c1
 JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
@@ -514,16 +505,16 @@ SELECT * FROM show_chunks('dist_test');
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
-NOTICE:  [data_node_1]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_3_9_chunk
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_3_10_chunk
@@ -531,8 +522,8 @@ _timescaledb_internal._dist_hyper_3_12_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_3]:  SELECT * from show_chunks('dist_test')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_3_11_chunk
@@ -547,12 +538,12 @@ _timescaledb_internal._dist_hyper_3_11_chunk
 SELECT chunk_schema || '.' ||  chunk_name, data_nodes
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'dist_test';
-                   ?column?                   |  data_nodes   
-----------------------------------------------+---------------
- _timescaledb_internal._dist_hyper_3_9_chunk  | {data_node_1}
- _timescaledb_internal._dist_hyper_3_10_chunk | {data_node_2}
- _timescaledb_internal._dist_hyper_3_11_chunk | {data_node_3}
- _timescaledb_internal._dist_hyper_3_12_chunk | {data_node_2}
+                   ?column?                   |       data_nodes       
+----------------------------------------------+------------------------
+ _timescaledb_internal._dist_hyper_3_9_chunk  | {db_dist_move_chunk_1}
+ _timescaledb_internal._dist_hyper_3_10_chunk | {db_dist_move_chunk_2}
+ _timescaledb_internal._dist_hyper_3_11_chunk | {db_dist_move_chunk_3}
+ _timescaledb_internal._dist_hyper_3_12_chunk | {db_dist_move_chunk_2}
 (4 rows)
 
 -- Query distributed hypertable again to query newly moved chunk, make
@@ -565,16 +556,16 @@ SELECT sum(device) FROM dist_test;
 
 -- Test operation_id name validation
 \set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(operation_id => ' move chunk id ', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+CALL timescaledb_experimental.move_chunk(operation_id => ' move chunk id ', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
 ERROR:  operation_id name " move chunk id " is not valid
-CALL timescaledb_experimental.move_chunk(operation_id => 'ChUnK_MoVe_Op', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+CALL timescaledb_experimental.move_chunk(operation_id => 'ChUnK_MoVe_Op', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
 ERROR:  operation_id name "ChUnK_MoVe_Op" is not valid
-CALL timescaledb_experimental.move_chunk(operation_id => '_ID123', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+CALL timescaledb_experimental.move_chunk(operation_id => '_ID123', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
 ERROR:  operation_id name "_ID123" is not valid
 \set ON_ERROR_STOP 1
 -- Now copy chunk from data node 2 to data node 3
-CALL timescaledb_experimental.move_chunk(operation_id => 'id123', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
-\c :DN_DBNAME_3 :ROLE_CLUSTER_SUPERUSER;
+CALL timescaledb_experimental.move_chunk(operation_id => 'id123', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER;
 -- Validate chunk on data node 3
 SELECT c2.table_name
 FROM _timescaledb_catalog.chunk c1
@@ -610,15 +601,15 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE chunk_name = '_
 SELECT chunk_schema || '.' ||  chunk_name, data_nodes
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'dist_test';
-                   ?column?                   |  data_nodes   
-----------------------------------------------+---------------
- _timescaledb_internal._dist_hyper_3_9_chunk  | {data_node_1}
- _timescaledb_internal._dist_hyper_3_10_chunk | {data_node_2}
- _timescaledb_internal._dist_hyper_3_11_chunk | {data_node_3}
- _timescaledb_internal._dist_hyper_3_12_chunk | {data_node_3}
+                   ?column?                   |       data_nodes       
+----------------------------------------------+------------------------
+ _timescaledb_internal._dist_hyper_3_9_chunk  | {db_dist_move_chunk_1}
+ _timescaledb_internal._dist_hyper_3_10_chunk | {db_dist_move_chunk_2}
+ _timescaledb_internal._dist_hyper_3_11_chunk | {db_dist_move_chunk_3}
+ _timescaledb_internal._dist_hyper_3_12_chunk | {db_dist_move_chunk_3}
 (4 rows)
 
 RESET ROLE;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

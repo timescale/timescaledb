@@ -6,28 +6,22 @@
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
--------------+-----------+-------+------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_dist_backup_1 | t            | t                | t
-(1 row)
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+    node_name     |     database     | node_created | database_created | extension_created 
+------------------+------------------+--------------+------------------+-------------------
+ db_dist_backup_1 | db_dist_backup_1 | t            | t                | t
+ db_dist_backup_2 | db_dist_backup_2 | t            | t                | t
+ db_dist_backup_3 | db_dist_backup_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
--------------+-----------+-------+------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_dist_backup_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
--------------+-----------+-------+------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_dist_backup_3 | t            | t                | t
-(1 row)
-
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 -- test NULL (STRICT function)
@@ -87,7 +81,7 @@ ERROR:  distributed restore point must be created on the access node
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE dist_rp_test;
 -- test on data node
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('test');
 ERROR:  distributed restore point must be created on the access node
@@ -98,26 +92,26 @@ ERROR:  distributed restore point must be created on the access node
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 CALL distributed_exec('SELECT create_distributed_restore_point(''test'')')
 $$);
-ERROR:  [data_node_x]: distributed restore point must be created on the access node
+ERROR:  [db_dist_backup_x]: distributed restore point must be created on the access node
 \set ON_ERROR_STOP 1
 -- test on access node
 SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('dist_rp') ORDER BY node_name;
-  node_name  |  node_type  | valid_lsn 
--------------+-------------+-----------
- data_node_1 | data_node   | t
- data_node_2 | data_node   | t
- data_node_3 | data_node   | t
-             | access_node | t
+    node_name     |  node_type  | valid_lsn 
+------------------+-------------+-----------
+ db_dist_backup_1 | data_node   | t
+ db_dist_backup_2 | data_node   | t
+ db_dist_backup_3 | data_node   | t
+                  | access_node | t
 (4 rows)
 
 -- restore point can be have duplicates
 SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('dist_rp') ORDER BY node_name;
-  node_name  |  node_type  | valid_lsn 
--------------+-------------+-----------
- data_node_1 | data_node   | t
- data_node_2 | data_node   | t
- data_node_3 | data_node   | t
-             | access_node | t
+    node_name     |  node_type  | valid_lsn 
+------------------+-------------+-----------
+ db_dist_backup_1 | data_node   | t
+ db_dist_backup_2 | data_node   | t
+ db_dist_backup_3 | data_node   | t
+                  | access_node | t
 (4 rows)
 
 -- make sure each new restore point have lsn greater then previous one (access node lsn)
@@ -137,6 +131,6 @@ SELECT pg_lsn(:'lsn_3') > pg_lsn(:'lsn_2') as valid_lsn;
  t
 (1 row)
 
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

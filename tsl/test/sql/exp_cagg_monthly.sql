@@ -413,8 +413,11 @@ RESET timescaledb.materializations_per_refresh_window;
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
 
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 

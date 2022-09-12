@@ -12,25 +12,27 @@
 \o
 \set ECHO all
 
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c :DN_DBNAME_3
+\c :DATA_NODE_3
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -80,7 +82,7 @@ SELECT create_distributed_restore_point('test');
 DROP DATABASE dist_rp_test;
 
 -- test on data node
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('test');
 \set ON_ERROR_STOP 1
@@ -108,6 +110,6 @@ SELECT pg_lsn(:'lsn_2') > pg_lsn(:'lsn_1') as valid_lsn;
 SELECT pg_create_restore_point('dist_rp') as lsn_3 \gset
 SELECT pg_lsn(:'lsn_3') > pg_lsn(:'lsn_2') as valid_lsn;
 
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

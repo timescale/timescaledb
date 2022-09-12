@@ -12,16 +12,18 @@
 \o
 \set ECHO all
 
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
-\des+
+\des
 
 RESET ROLE;
 CREATE FUNCTION _timescaledb_internal.invoke_distributed_commands()
@@ -37,13 +39,13 @@ SET ROLE :ROLE_1;
 
 SELECT _timescaledb_internal.invoke_distributed_commands();
 
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 \dt
 SELECT * FROM disttable1;
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 \dt
 SELECT * FROM disttable1;
-\c :DN_DBNAME_3
+\c :DATA_NODE_3
 \dt
 SELECT * FROM disttable1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -54,9 +56,9 @@ SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
 \set ON_ERROR_STOP 1
 
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 SELECT * from disttable2;
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 SELECT * from disttable2;
 
 -- Test connection session identity
@@ -74,19 +76,19 @@ CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
 
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
 SELECT is_access_node_session_on_data_node();
 
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
 SELECT is_access_node_session_on_data_node();
 
-\c :DN_DBNAME_3
+\c :DATA_NODE_3
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
@@ -98,7 +100,7 @@ SELECT is_access_node_session_on_data_node();
 
 -- Ensure peer dist id is already set and can be set only once
 \set ON_ERROR_STOP 0
-SELECT * FROM test.remote_exec('{data_node_1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
 \set ON_ERROR_STOP 1
 
 -- Repeat is_access_node_session_on_data_node() test again, but this time using connections openned from
@@ -124,13 +126,13 @@ BEGIN;
 CALL distributed_exec_direct_function_call('CREATE TABLE dist_test(id int)', NULL, false);
 ROLLBACK;
 -- multi-dimensional array of data nodes
-CALL distributed_exec('CREATE TABLE dist_test(id int)', '{{data_node_1}}');
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{{db_data_node_1}}');
 -- Specified, but empty data node array
 CALL distributed_exec('CREATE TABLE dist_test(id int)', '{}');
 -- Specified, but contains null values
-CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1, NULL}');
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{db_data_node_1, NULL}');
 -- Specified, but not a data node
-CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1928}');
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{db_data_node_1928}');
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
@@ -144,7 +146,7 @@ CALL distributed_exec('INSERT INTO dist_test values (7)');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from dist_test; $$);
 CALL distributed_exec('DROP TABLE dist_test');
 \set ON_ERROR_STOP 0
-CALL distributed_exec('INSERT INTO dist_test VALUES (8)', '{data_node_1}');
+CALL distributed_exec('INSERT INTO dist_test VALUES (8)', ARRAY[:'DATA_NODE_1']);
 \set ON_ERROR_STOP 1
 
 -- Test creating and dropping a role
@@ -164,18 +166,18 @@ $$);
 \set ON_ERROR_STOP 1
 
 -- Do not allow to run distributed_exec() on a data nodes
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 \set ON_ERROR_STOP 0
 CALL distributed_exec('SELECT 1');
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM delete_data_node('data_node_1');
-SELECT * FROM delete_data_node('data_node_2');
-SELECT * FROM delete_data_node('data_node_3');
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+SELECT * FROM delete_data_node(:'DATA_NODE_1');
+SELECT * FROM delete_data_node(:'DATA_NODE_2');
+SELECT * FROM delete_data_node(:'DATA_NODE_3');
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
 
 \set ON_ERROR_STOP 0
 -- Calling distributed_exec without data nodes should fail
@@ -204,8 +206,8 @@ DROP EXTENSION postgres_fdw;
 -- parallelize the test. Not possible right now because there are
 -- other databases above that prevents this.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DATA_NODE_1');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DATA_NODE_2');
 GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
 
 \set ON_ERROR_STOP 0
@@ -229,7 +231,7 @@ CALL distributed_exec($$
   CREATE TABLE my_table (key INT, value TEXT, PRIMARY KEY (key));
 $$);
 
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 INSERT INTO my_table VALUES (1, 'foo');
 
 \c :TEST_DBNAME :ROLE_1
@@ -266,5 +268,5 @@ COMMIT;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM my_table; $$);
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;

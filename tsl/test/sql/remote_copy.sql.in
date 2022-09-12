@@ -4,15 +4,17 @@
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
 -- Start out testing text copy code
 SET timescaledb.enable_connection_binary_data=false;
@@ -118,13 +120,13 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1, 3;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node ORDER BY 3;
 select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 SELECT * FROM "+ri(k33_')" ORDER BY 1;
 select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 SELECT * FROM "+ri(k33_')" ORDER BY 1;
 select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
-\c :DN_DBNAME_3
+\c :DATA_NODE_3
 SELECT * FROM "+ri(k33_')" ORDER BY 1;
 select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -132,9 +134,9 @@ SET ROLE :ROLE_1;
 
 DROP TABLE "+ri(k33_')" CASCADE;
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM delete_data_node('data_node_1');
-SELECT * FROM delete_data_node('data_node_2');
-SELECT * FROM delete_data_node('data_node_3');
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+SELECT * FROM delete_data_node(:'DATA_NODE_1');
+SELECT * FROM delete_data_node(:'DATA_NODE_2');
+SELECT * FROM delete_data_node(:'DATA_NODE_3');
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

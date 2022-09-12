@@ -63,7 +63,7 @@ step "s2_create_dist_rp" { SELECT restore_point > pg_lsn('0/0') as valid_lsn FRO
 step "s2_insert"         { INSERT INTO disttable VALUES ('2019-08-02 10:45', 0, 0.0); }
 step "s2_begin"          { BEGIN; }
 step "s2_commit"         { COMMIT; }
-step "s2_add_dn"         { SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'cdrp_4'); }
+step "s2_add_dn"         { SELECT node_name FROM add_data_node('data_node_4', host => 'localhost', database => 'cdrp_4'); }
 step "s2_del_dn"         { SELECT * FROM delete_data_node('data_node_4'); }
 step "s2_create_dist_ht" {
 	CREATE TABLE disttable2(time timestamptz NOT NULL, device int, temp float);

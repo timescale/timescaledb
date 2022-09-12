@@ -14,13 +14,16 @@ SELECT
     test.make_tablespace_path(:'TEST_TABLESPACE1_PREFIX', :'TEST_DBNAME') AS spc1path,
     test.make_tablespace_path(:'TEST_TABLESPACE2_PREFIX', :'TEST_DBNAME') AS spc2path
 \gset
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-     node_name      |   host    | port  |      database      | node_created | database_created | extension_created 
---------------------+-----------+-------+--------------------+--------------+------------------+-------------------
- db_dist_triggers_1 | localhost | 55432 | db_dist_triggers_1 | t            | t                | t
- db_dist_triggers_2 | localhost | 55432 | db_dist_triggers_2 | t            | t                | t
- db_dist_triggers_3 | localhost | 55432 | db_dist_triggers_3 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+     node_name      |      database      | node_created | database_created | extension_created 
+--------------------+--------------------+--------------+------------------+-------------------
+ db_dist_triggers_1 | db_dist_triggers_1 | t            | t                | t
+ db_dist_triggers_2 | db_dist_triggers_2 | t            | t                | t
+ db_dist_triggers_3 | db_dist_triggers_3 | t            | t                | t
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
