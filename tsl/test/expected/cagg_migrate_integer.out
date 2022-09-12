@@ -301,7 +301,7 @@ DROP MATERIALIZED VIEW conditions_summary_daily_new;
 psql:include/cagg_migrate_common.sql:214: NOTICE:  drop cascades to 10 other objects
 DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
 ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
-CALL cagg_migrate('conditions_summary_daily', TRUE);
+CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:217: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -371,7 +371,7 @@ ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq
 DROP MATERIALIZED VIEW conditions_summary_daily;
 psql:include/cagg_migrate_common.sql:230: NOTICE:  drop cascades to 10 other objects
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
-CALL cagg_migrate('conditions_summary_daily', TRUE, TRUE);
+CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:232: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 psql:include/cagg_migrate_common.sql:232: NOTICE:  drop cascades to 10 other objects
 -- cagg with the new format because it was overriden
