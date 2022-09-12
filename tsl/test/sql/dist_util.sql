@@ -37,7 +37,8 @@ SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 UPDATE _timescaledb_catalog.metadata SET value = '87c235e9-d857-4f16-b59f-7fbac9b87664' WHERE key = 'uuid';
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1_1');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1_1');
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
 SET client_min_messages TO NOTICE;
 
@@ -47,7 +48,8 @@ SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 UPDATE _timescaledb_catalog.metadata SET value = '77348176-09da-4a80-bc78-e31bdf5e63ec' WHERE key = 'uuid';
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_2_1');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_2_1');
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
 SET client_min_messages TO NOTICE;
 
@@ -83,7 +85,8 @@ SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database =
 -- Test that a data node can be moved to a different frontend if it is
 -- removed first.
 \c frontend_1 :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => true);
 
 -- dist_uuid should be added to the metadata on the data node
 \c backend_x_2 :ROLE_CLUSTER_SUPERUSER
@@ -102,7 +105,8 @@ DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 
 -- Add the data node to the second frontend without bootstrapping
 \c frontend_2 :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => false);
 
 -- dist_uuid should be added to the metadata on the data node
 \c backend_x_2 :ROLE_CLUSTER_SUPERUSER

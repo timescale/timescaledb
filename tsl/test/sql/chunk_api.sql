@@ -3,8 +3,8 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
 
 \ir include/remote_exec.sql
 GRANT CREATE ON DATABASE :"TEST_DBNAME" TO :ROLE_DEFAULT_PERM_USER;
@@ -140,13 +140,14 @@ ORDER BY tablename, attname;
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2')) v(name)
+) a;
 
 GRANT USAGE
-   ON FOREIGN SERVER data_node_1, data_node_2
+   ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2
    TO :ROLE_1, :ROLE_DEFAULT_PERM_USER;
 
 SET ROLE :ROLE_1;
@@ -173,7 +174,7 @@ SELECT * FROM pg_stats WHERE tablename IN
 ORDER BY 1,2,3;
 
 -- Run ANALYZE on data node 1
-CALL distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
+CALL distributed_exec('ANALYZE disttable', ARRAY[:'DATA_NODE_1']);
 
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
@@ -249,10 +250,10 @@ $$);
 -- Clean up
 RESET ROLE;
 TRUNCATE disttable;
-SELECT * FROM delete_data_node('data_node_1', force => true);
-SELECT * FROM delete_data_node('data_node_2', force => true);
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
+SELECT * FROM delete_data_node(:'DATA_NODE_1', force => true);
+SELECT * FROM delete_data_node(:'DATA_NODE_2', force => true);
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
 
 -- Test create_chunk_table to recreate the chunk table and show dimension slices
 SET ROLE :ROLE_DEFAULT_PERM_USER;

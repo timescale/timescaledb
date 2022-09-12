@@ -7,18 +7,17 @@
 ---------------------------------------------------
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS view_node_1;
-DROP DATABASE IF EXISTS view_node_2;
-DROP DATABASE IF EXISTS view_node_3;
-SELECT * FROM add_data_node('view_node_1', host => 'localhost',
-                            database => 'view_node_1');
-SELECT * FROM add_data_node('view_node_2', host => 'localhost',
-                            database => 'view_node_2');
-SELECT * FROM add_data_node('view_node_3', host => 'localhost',
-                            database => 'view_node_3');
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 
-GRANT USAGE ON FOREIGN SERVER view_node_1, view_node_2, view_node_3 TO :ROLE_1;
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
+
 SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_1;
 SELECT setseed(1);
@@ -89,7 +88,7 @@ ORDER BY
     chunk_schema, chunk_name;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE view_node_1;
-DROP DATABASE view_node_2;
-DROP DATABASE view_node_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
 

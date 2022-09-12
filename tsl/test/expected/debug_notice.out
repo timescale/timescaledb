@@ -9,29 +9,23 @@
 -- and `get_foreign_upper_paths` respectively, but if that changes,
 -- they might need to be changed.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
--------------+-----------+-------+-------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_debug_notice_1 | t            | t                | t
-(1 row)
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+     node_name     |     database      | node_created | database_created | extension_created 
+-------------------+-------------------+--------------+------------------+-------------------
+ db_debug_notice_1 | db_debug_notice_1 | t            | t                | t
+ db_debug_notice_2 | db_debug_notice_2 | t            | t                | t
+ db_debug_notice_3 | db_debug_notice_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
--------------+-----------+-------+-------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_debug_notice_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
--------------+-----------+-------+-------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_debug_notice_3 | t            | t                | t
-(1 row)
-
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device');
 NOTICE:  adding not-null constraint to column "time"
@@ -274,6 +268,6 @@ DEBUG:  avoiding per chunk append paths
 
 SET client_min_messages TO ERROR;
 LOG:  statement: SET client_min_messages TO ERROR;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
