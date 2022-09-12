@@ -5,43 +5,22 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
--- Add data nodes
-\x on
-SELECT * FROM add_data_node('dist_policy_data_node_1', host => 'localhost',
-                            database => 'dist_policy_data_node_1');
--[ RECORD 1 ]-----+------------------------
-node_name         | dist_policy_data_node_1
-host              | localhost
-port              | 55432
-database          | dist_policy_data_node_1
-node_created      | t
-database_created  | t
-extension_created | t
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+    node_name     |     database     | node_created | database_created | extension_created 
+------------------+------------------+--------------+------------------+-------------------
+ db_dist_policy_1 | db_dist_policy_1 | t            | t                | t
+ db_dist_policy_2 | db_dist_policy_2 | t            | t                | t
+ db_dist_policy_3 | db_dist_policy_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('dist_policy_data_node_2', host => 'localhost',
-                            database => 'dist_policy_data_node_2');
--[ RECORD 1 ]-----+------------------------
-node_name         | dist_policy_data_node_2
-host              | localhost
-port              | 55432
-database          | dist_policy_data_node_2
-node_created      | t
-database_created  | t
-extension_created | t
-
-SELECT * FROM add_data_node('dist_policy_data_node_3', host => 'localhost',
-                            database => 'dist_policy_data_node_3');
--[ RECORD 1 ]-----+------------------------
-node_name         | dist_policy_data_node_3
-host              | localhost
-port              | 55432
-database          | dist_policy_data_node_3
-node_created      | t
-database_created  | t
-extension_created | t
-
-\x off
-GRANT USAGE ON FOREIGN SERVER dist_policy_data_node_1, dist_policy_data_node_2, dist_policy_data_node_3 TO PUBLIC;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
 -- Create a fake clock that we can use below and make sure that it is
 -- defined on the data nodes as well.
 CREATE TABLE time_table (time BIGINT);
@@ -60,38 +39,38 @@ SELECT * FROM test.remote_exec(NULL, $$
        STABLE AS 'SELECT time FROM time_table';
        GRANT ALL ON TABLE time_table TO PUBLIC;
 $$);
-NOTICE:  [dist_policy_data_node_1]: 
+NOTICE:  [db_dist_policy_1]: 
        CREATE TABLE time_table (time BIGINT)
-NOTICE:  [dist_policy_data_node_1]: 
+NOTICE:  [db_dist_policy_1]: 
        INSERT INTO time_table VALUES (1)
-NOTICE:  [dist_policy_data_node_1]: 
+NOTICE:  [db_dist_policy_1]: 
        CREATE OR REPLACE FUNCTION dummy_now()
        RETURNS BIGINT
        LANGUAGE SQL
        STABLE AS 'SELECT time FROM time_table'
-NOTICE:  [dist_policy_data_node_1]: 
+NOTICE:  [db_dist_policy_1]: 
        GRANT ALL ON TABLE time_table TO PUBLIC
-NOTICE:  [dist_policy_data_node_2]: 
+NOTICE:  [db_dist_policy_2]: 
        CREATE TABLE time_table (time BIGINT)
-NOTICE:  [dist_policy_data_node_2]: 
+NOTICE:  [db_dist_policy_2]: 
        INSERT INTO time_table VALUES (1)
-NOTICE:  [dist_policy_data_node_2]: 
+NOTICE:  [db_dist_policy_2]: 
        CREATE OR REPLACE FUNCTION dummy_now()
        RETURNS BIGINT
        LANGUAGE SQL
        STABLE AS 'SELECT time FROM time_table'
-NOTICE:  [dist_policy_data_node_2]: 
+NOTICE:  [db_dist_policy_2]: 
        GRANT ALL ON TABLE time_table TO PUBLIC
-NOTICE:  [dist_policy_data_node_3]: 
+NOTICE:  [db_dist_policy_3]: 
        CREATE TABLE time_table (time BIGINT)
-NOTICE:  [dist_policy_data_node_3]: 
+NOTICE:  [db_dist_policy_3]: 
        INSERT INTO time_table VALUES (1)
-NOTICE:  [dist_policy_data_node_3]: 
+NOTICE:  [db_dist_policy_3]: 
        CREATE OR REPLACE FUNCTION dummy_now()
        RETURNS BIGINT
        LANGUAGE SQL
        STABLE AS 'SELECT time FROM time_table'
-NOTICE:  [dist_policy_data_node_3]: 
+NOTICE:  [db_dist_policy_3]: 
        GRANT ALL ON TABLE time_table TO PUBLIC
  remote_exec 
 -------------
@@ -158,8 +137,8 @@ SELECT show_chunks('conditions');
 (27 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('conditions'); $$);
-NOTICE:  [dist_policy_data_node_1]:  SELECT show_chunks('conditions')
-NOTICE:  [dist_policy_data_node_1]:
+NOTICE:  [db_dist_policy_1]:  SELECT show_chunks('conditions')
+NOTICE:  [db_dist_policy_1]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_1_1_chunk 
@@ -174,8 +153,8 @@ _timescaledb_internal._dist_hyper_1_25_chunk
 (9 rows)
 
 
-NOTICE:  [dist_policy_data_node_2]:  SELECT show_chunks('conditions')
-NOTICE:  [dist_policy_data_node_2]:
+NOTICE:  [db_dist_policy_2]:  SELECT show_chunks('conditions')
+NOTICE:  [db_dist_policy_2]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_1_2_chunk 
@@ -190,8 +169,8 @@ _timescaledb_internal._dist_hyper_1_26_chunk
 (9 rows)
 
 
-NOTICE:  [dist_policy_data_node_3]:  SELECT show_chunks('conditions')
-NOTICE:  [dist_policy_data_node_3]:
+NOTICE:  [db_dist_policy_3]:  SELECT show_chunks('conditions')
+NOTICE:  [db_dist_policy_3]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_1_3_chunk 
@@ -213,9 +192,9 @@ _timescaledb_internal._dist_hyper_1_27_chunk
 
 UPDATE time_table SET time = 20;
 SELECT * FROM test.remote_exec(NULL, $$ UPDATE time_table SET time = 20; $$);
-NOTICE:  [dist_policy_data_node_1]:  UPDATE time_table SET time = 20
-NOTICE:  [dist_policy_data_node_2]:  UPDATE time_table SET time = 20
-NOTICE:  [dist_policy_data_node_3]:  UPDATE time_table SET time = 20
+NOTICE:  [db_dist_policy_1]:  UPDATE time_table SET time = 20
+NOTICE:  [db_dist_policy_2]:  UPDATE time_table SET time = 20
+NOTICE:  [db_dist_policy_3]:  UPDATE time_table SET time = 20
  remote_exec 
 -------------
  
@@ -246,8 +225,8 @@ SELECT show_chunks('conditions');
 (18 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('conditions'); $$);
-NOTICE:  [dist_policy_data_node_1]:  SELECT show_chunks('conditions')
-NOTICE:  [dist_policy_data_node_1]:
+NOTICE:  [db_dist_policy_1]:  SELECT show_chunks('conditions')
+NOTICE:  [db_dist_policy_1]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_1_10_chunk
@@ -259,8 +238,8 @@ _timescaledb_internal._dist_hyper_1_25_chunk
 (6 rows)
 
 
-NOTICE:  [dist_policy_data_node_2]:  SELECT show_chunks('conditions')
-NOTICE:  [dist_policy_data_node_2]:
+NOTICE:  [db_dist_policy_2]:  SELECT show_chunks('conditions')
+NOTICE:  [db_dist_policy_2]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_1_11_chunk
@@ -272,8 +251,8 @@ _timescaledb_internal._dist_hyper_1_26_chunk
 (6 rows)
 
 
-NOTICE:  [dist_policy_data_node_3]:  SELECT show_chunks('conditions')
-NOTICE:  [dist_policy_data_node_3]:
+NOTICE:  [db_dist_policy_3]:  SELECT show_chunks('conditions')
+NOTICE:  [db_dist_policy_3]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_1_12_chunk
@@ -309,6 +288,6 @@ SELECT add_reorder_policy('conditions', 'conditions_time_idx');
 ERROR:  reorder policies not supported on a distributed hypertables
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE dist_policy_data_node_1;
-DROP DATABASE dist_policy_data_node_2;
-DROP DATABASE dist_policy_data_node_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

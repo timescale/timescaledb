@@ -132,7 +132,8 @@ SELECT r -> 'num_data_nodes' AS num_data_nodes,
 FROM telemetry_report;
 
 -- Become an access node by adding a data node
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
 
 -- Telemetry should show one data node and "acces node" status
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -148,7 +149,8 @@ SELECT test.remote_exec(NULL, $$
 	   FROM get_telemetry_report() t;
 $$);
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
 CREATE TABLE disthyper (LIKE normal);
 SELECT create_distributed_hypertable('disthyper', 'time', 'device');
 

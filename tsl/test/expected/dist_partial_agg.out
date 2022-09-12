@@ -41,38 +41,32 @@ CREATE TABLE :TEST_TABLE (
       good_life   boolean
     );
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |       database        | node_created | database_created | extension_created 
--------------+-----------+-------+-----------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_dist_partial_agg_1 | t            | t                | t
-(1 row)
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+       node_name       |       database        | node_created | database_created | extension_created 
+-----------------------+-----------------------+--------------+------------------+-------------------
+ db_dist_partial_agg_1 | db_dist_partial_agg_1 | t            | t                | t
+ db_dist_partial_agg_2 | db_dist_partial_agg_2 | t            | t                | t
+ db_dist_partial_agg_3 | db_dist_partial_agg_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |       database        | node_created | database_created | extension_created 
--------------+-----------+-------+-----------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_dist_partial_agg_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |       database        | node_created | database_created | extension_created 
--------------+-----------+-------+-----------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_dist_partial_agg_3 | t            | t                | t
-(1 row)
-
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
+SELECT * FROM test.remote_exec('{ db_dist_partial_agg_1, db_dist_partial_agg_2, db_dist_partial_agg_3}',
 $$
        CREATE TYPE custom_type AS (high int, low int);
 $$);
-NOTICE:  [data_node_1]: 
+NOTICE:  [db_dist_partial_agg_1]: 
        CREATE TYPE custom_type AS (high int, low int)
-NOTICE:  [data_node_2]: 
+NOTICE:  [db_dist_partial_agg_2]: 
        CREATE TYPE custom_type AS (high int, low int)
-NOTICE:  [data_node_3]: 
+NOTICE:  [db_dist_partial_agg_3]: 
        CREATE TYPE custom_type AS (high int, low int)
  remote_exec 
 -------------
@@ -181,19 +175,19 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          ->  Custom Scan (DataNodeScan)
                Output: conditions.location, (min(conditions.allnull)), (max(conditions.temperature)), ((sum(conditions.temperature) + sum(conditions.humidity))), (avg(conditions.humidity)), (round(stddev((conditions.humidity)::integer), 5)), (bit_and(conditions.bit_int)), (bit_or(conditions.bit_int)), (bool_and(conditions.good_life)), (every((conditions.temperature > '0'::double precision))), (bool_or(conditions.good_life)), (count(*)), (count(conditions.temperature)), (count(conditions.allnull)), (round((corr(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((covar_pop(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((covar_samp(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_avgx(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_avgy(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_count(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_intercept(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_r2(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_slope(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_sxx(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_sxy(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round((regr_syy(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision))::numeric, 5)), (round(stddev((conditions.temperature)::integer), 5)), (round(stddev_pop((conditions.temperature)::integer), 5)), (round(stddev_samp((conditions.temperature)::integer), 5)), (round(variance((conditions.temperature)::integer), 5)), (round(var_pop((conditions.temperature)::integer), 5)), (round(var_samp((conditions.temperature)::integer), 5)), (last(conditions.temperature, conditions.timec)), (histogram(conditions.temperature, '0'::double precision, '100'::double precision, 1)), conditions.timec
                Relations: Aggregate on (public.conditions)
-               Data node: data_node_1
+               Data node: db_dist_partial_agg_1
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                Remote SQL: SELECT location, min(allnull), max(temperature), (sum(temperature) + sum(humidity)), avg(humidity), round(stddev(humidity::integer), 5), bit_and(bit_int), bit_or(bit_int), bool_and(good_life), every((temperature > 0::double precision)), bool_or(good_life), count(*), count(temperature), count(allnull), round(corr(temperature::integer, humidity::integer)::numeric, 5), round(covar_pop(temperature::integer, humidity::integer)::numeric, 5), round(covar_samp(temperature::integer, humidity::integer)::numeric, 5), round(regr_avgx(temperature::integer, humidity::integer)::numeric, 5), round(regr_avgy(temperature::integer, humidity::integer)::numeric, 5), round(regr_count(temperature::integer, humidity::integer)::numeric, 5), round(regr_intercept(temperature::integer, humidity::integer)::numeric, 5), round(regr_r2(temperature::integer, humidity::integer)::numeric, 5), round(regr_slope(temperature::integer, humidity::integer)::numeric, 5), round(regr_sxx(temperature::integer, humidity::integer)::numeric, 5), round(regr_sxy(temperature::integer, humidity::integer)::numeric, 5), round(regr_syy(temperature::integer, humidity::integer)::numeric, 5), round(stddev(temperature::integer), 5), round(stddev_pop(temperature::integer), 5), round(stddev_samp(temperature::integer), 5), round(variance(temperature::integer), 5), round(var_pop(temperature::integer), 5), round(var_samp(temperature::integer), 5), public.last(temperature, timec), public.histogram(temperature, 0::double precision, 100::double precision, 1), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 35 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
          ->  Custom Scan (DataNodeScan)
                Output: conditions_1.location, (min(conditions_1.allnull)), (max(conditions_1.temperature)), ((sum(conditions_1.temperature) + sum(conditions_1.humidity))), (avg(conditions_1.humidity)), (round(stddev((conditions_1.humidity)::integer), 5)), (bit_and(conditions_1.bit_int)), (bit_or(conditions_1.bit_int)), (bool_and(conditions_1.good_life)), (every((conditions_1.temperature > '0'::double precision))), (bool_or(conditions_1.good_life)), (count(*)), (count(conditions_1.temperature)), (count(conditions_1.allnull)), (round((corr(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((covar_pop(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((covar_samp(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_avgx(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_avgy(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_count(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_intercept(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_r2(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_slope(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_sxx(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_sxy(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round((regr_syy(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision))::numeric, 5)), (round(stddev((conditions_1.temperature)::integer), 5)), (round(stddev_pop((conditions_1.temperature)::integer), 5)), (round(stddev_samp((conditions_1.temperature)::integer), 5)), (round(variance((conditions_1.temperature)::integer), 5)), (round(var_pop((conditions_1.temperature)::integer), 5)), (round(var_samp((conditions_1.temperature)::integer), 5)), (last(conditions_1.temperature, conditions_1.timec)), (histogram(conditions_1.temperature, '0'::double precision, '100'::double precision, 1)), conditions_1.timec
                Relations: Aggregate on (public.conditions)
-               Data node: data_node_2
+               Data node: db_dist_partial_agg_2
                Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                Remote SQL: SELECT location, min(allnull), max(temperature), (sum(temperature) + sum(humidity)), avg(humidity), round(stddev(humidity::integer), 5), bit_and(bit_int), bit_or(bit_int), bool_and(good_life), every((temperature > 0::double precision)), bool_or(good_life), count(*), count(temperature), count(allnull), round(corr(temperature::integer, humidity::integer)::numeric, 5), round(covar_pop(temperature::integer, humidity::integer)::numeric, 5), round(covar_samp(temperature::integer, humidity::integer)::numeric, 5), round(regr_avgx(temperature::integer, humidity::integer)::numeric, 5), round(regr_avgy(temperature::integer, humidity::integer)::numeric, 5), round(regr_count(temperature::integer, humidity::integer)::numeric, 5), round(regr_intercept(temperature::integer, humidity::integer)::numeric, 5), round(regr_r2(temperature::integer, humidity::integer)::numeric, 5), round(regr_slope(temperature::integer, humidity::integer)::numeric, 5), round(regr_sxx(temperature::integer, humidity::integer)::numeric, 5), round(regr_sxy(temperature::integer, humidity::integer)::numeric, 5), round(regr_syy(temperature::integer, humidity::integer)::numeric, 5), round(stddev(temperature::integer), 5), round(stddev_pop(temperature::integer), 5), round(stddev_samp(temperature::integer), 5), round(variance(temperature::integer), 5), round(var_pop(temperature::integer), 5), round(var_samp(temperature::integer), 5), public.last(temperature, timec), public.histogram(temperature, 0::double precision, 100::double precision, 1), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 35 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
          ->  Custom Scan (DataNodeScan)
                Output: conditions_2.location, (min(conditions_2.allnull)), (max(conditions_2.temperature)), ((sum(conditions_2.temperature) + sum(conditions_2.humidity))), (avg(conditions_2.humidity)), (round(stddev((conditions_2.humidity)::integer), 5)), (bit_and(conditions_2.bit_int)), (bit_or(conditions_2.bit_int)), (bool_and(conditions_2.good_life)), (every((conditions_2.temperature > '0'::double precision))), (bool_or(conditions_2.good_life)), (count(*)), (count(conditions_2.temperature)), (count(conditions_2.allnull)), (round((corr(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((covar_pop(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((covar_samp(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_avgx(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_avgy(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_count(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_intercept(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_r2(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_slope(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_sxx(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_sxy(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round((regr_syy(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision))::numeric, 5)), (round(stddev((conditions_2.temperature)::integer), 5)), (round(stddev_pop((conditions_2.temperature)::integer), 5)), (round(stddev_samp((conditions_2.temperature)::integer), 5)), (round(variance((conditions_2.temperature)::integer), 5)), (round(var_pop((conditions_2.temperature)::integer), 5)), (round(var_samp((conditions_2.temperature)::integer), 5)), (last(conditions_2.temperature, conditions_2.timec)), (histogram(conditions_2.temperature, '0'::double precision, '100'::double precision, 1)), conditions_2.timec
                Relations: Aggregate on (public.conditions)
-               Data node: data_node_3
+               Data node: db_dist_partial_agg_3
                Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                Remote SQL: SELECT location, min(allnull), max(temperature), (sum(temperature) + sum(humidity)), avg(humidity), round(stddev(humidity::integer), 5), bit_and(bit_int), bit_or(bit_int), bool_and(good_life), every((temperature > 0::double precision)), bool_or(good_life), count(*), count(temperature), count(allnull), round(corr(temperature::integer, humidity::integer)::numeric, 5), round(covar_pop(temperature::integer, humidity::integer)::numeric, 5), round(covar_samp(temperature::integer, humidity::integer)::numeric, 5), round(regr_avgx(temperature::integer, humidity::integer)::numeric, 5), round(regr_avgy(temperature::integer, humidity::integer)::numeric, 5), round(regr_count(temperature::integer, humidity::integer)::numeric, 5), round(regr_intercept(temperature::integer, humidity::integer)::numeric, 5), round(regr_r2(temperature::integer, humidity::integer)::numeric, 5), round(regr_slope(temperature::integer, humidity::integer)::numeric, 5), round(regr_sxx(temperature::integer, humidity::integer)::numeric, 5), round(regr_sxy(temperature::integer, humidity::integer)::numeric, 5), round(regr_syy(temperature::integer, humidity::integer)::numeric, 5), round(stddev(temperature::integer), 5), round(stddev_pop(temperature::integer), 5), round(stddev_samp(temperature::integer), 5), round(variance(temperature::integer), 5), round(var_pop(temperature::integer), 5), round(var_samp(temperature::integer), 5), public.last(temperature, timec), public.histogram(temperature, 0::double precision, 100::double precision, 1), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 35 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
 (22 rows)
@@ -214,7 +208,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          Group Key: conditions.location, conditions.timec
          ->  Custom Scan (DataNodeScan) on public.conditions
                Output: conditions.location, conditions.timec, conditions.highlow
-               Data node: data_node_1
+               Data node: db_dist_partial_agg_1
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                Remote SQL: SELECT timec, location, highlow FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
    ->  GroupAggregate
@@ -222,7 +216,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          Group Key: conditions_1.location, conditions_1.timec
          ->  Custom Scan (DataNodeScan) on public.conditions conditions_1
                Output: conditions_1.location, conditions_1.timec, conditions_1.highlow
-               Data node: data_node_2
+               Data node: db_dist_partial_agg_2
                Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                Remote SQL: SELECT timec, location, highlow FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
    ->  GroupAggregate
@@ -230,7 +224,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          Group Key: conditions_2.location, conditions_2.timec
          ->  Custom Scan (DataNodeScan) on public.conditions conditions_2
                Output: conditions_2.location, conditions_2.timec, conditions_2.highlow
-               Data node: data_node_3
+               Data node: db_dist_partial_agg_3
                Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                Remote SQL: SELECT timec, location, highlow FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
 (26 rows)
@@ -260,7 +254,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          Group Key: conditions.location, conditions.timec
          ->  Custom Scan (DataNodeScan) on public.conditions
                Output: conditions.location, conditions.timec, conditions.allnull, conditions.temperature, conditions.humidity, conditions.bit_int, conditions.good_life, conditions.highlow
-               Data node: data_node_1
+               Data node: db_dist_partial_agg_1
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                Remote SQL: SELECT timec, location, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
    ->  GroupAggregate
@@ -268,7 +262,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          Group Key: conditions_1.location, conditions_1.timec
          ->  Custom Scan (DataNodeScan) on public.conditions conditions_1
                Output: conditions_1.location, conditions_1.timec, conditions_1.allnull, conditions_1.temperature, conditions_1.humidity, conditions_1.bit_int, conditions_1.good_life, conditions_1.highlow
-               Data node: data_node_2
+               Data node: db_dist_partial_agg_2
                Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                Remote SQL: SELECT timec, location, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
    ->  GroupAggregate
@@ -276,7 +270,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          Group Key: conditions_2.location, conditions_2.timec
          ->  Custom Scan (DataNodeScan) on public.conditions conditions_2
                Output: conditions_2.location, conditions_2.timec, conditions_2.allnull, conditions_2.temperature, conditions_2.humidity, conditions_2.bit_int, conditions_2.good_life, conditions_2.highlow
-               Data node: data_node_3
+               Data node: db_dist_partial_agg_3
                Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                Remote SQL: SELECT timec, location, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
 (26 rows)
@@ -296,19 +290,19 @@ SET timescaledb.remote_data_fetcher = 'cursor';
          ->  Custom Scan (DataNodeScan)
                Output: conditions.location, ((sum(conditions.temperature) + sum(conditions.humidity))), conditions.timec
                Relations: Aggregate on (public.conditions)
-               Data node: data_node_1
+               Data node: db_dist_partial_agg_1
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                Remote SQL: SELECT location, (sum(temperature) + sum(humidity)), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 3 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
          ->  Custom Scan (DataNodeScan)
                Output: conditions_1.location, ((sum(conditions_1.temperature) + sum(conditions_1.humidity))), conditions_1.timec
                Relations: Aggregate on (public.conditions)
-               Data node: data_node_2
+               Data node: db_dist_partial_agg_2
                Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                Remote SQL: SELECT location, (sum(temperature) + sum(humidity)), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 3 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
          ->  Custom Scan (DataNodeScan)
                Output: conditions_2.location, ((sum(conditions_2.temperature) + sum(conditions_2.humidity))), conditions_2.timec
                Relations: Aggregate on (public.conditions)
-               Data node: data_node_3
+               Data node: db_dist_partial_agg_3
                Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                Remote SQL: SELECT location, (sum(temperature) + sum(humidity)), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 3 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
 (22 rows)
@@ -330,19 +324,19 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                ->  Custom Scan (DataNodeScan)
                      Output: conditions.location, conditions.timec
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_1
+                     Data node: db_dist_partial_agg_1
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                      Remote SQL: SELECT location, timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 HAVING ((avg(temperature) > 20::double precision))
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_1.location, conditions_1.timec
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_2
+                     Data node: db_dist_partial_agg_2
                      Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                      Remote SQL: SELECT location, timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 HAVING ((avg(temperature) > 20::double precision))
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_2.location, conditions_2.timec
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_3
+                     Data node: db_dist_partial_agg_3
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT location, timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 HAVING ((avg(temperature) > 20::double precision))
 (24 rows)
@@ -403,19 +397,19 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                ->  Custom Scan (DataNodeScan)
                      Output: conditions.region, conditions.temperature, conditions.timec, (PARTIAL min(conditions.allnull)), (PARTIAL max(conditions.temperature)), (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity)), (PARTIAL avg(conditions.humidity)), (PARTIAL stddev((conditions.humidity)::integer)), (PARTIAL bit_and(conditions.bit_int)), (PARTIAL bit_or(conditions.bit_int)), (PARTIAL bool_and(conditions.good_life)), (PARTIAL every((conditions.temperature > '0'::double precision))), (PARTIAL bool_or(conditions.good_life)), (PARTIAL count(*)), (PARTIAL count(conditions.temperature)), (PARTIAL count(conditions.allnull)), (PARTIAL corr(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL covar_pop(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL covar_samp(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_avgx(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_avgy(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_count(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_intercept(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_r2(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_slope(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_sxx(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_sxy(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL regr_syy(((conditions.temperature)::integer)::double precision, ((conditions.humidity)::integer)::double precision)), (PARTIAL stddev((conditions.temperature)::integer)), (PARTIAL stddev_pop((conditions.temperature)::integer)), (PARTIAL stddev_samp((conditions.temperature)::integer)), (PARTIAL variance((conditions.temperature)::integer)), (PARTIAL var_pop((conditions.temperature)::integer)), (PARTIAL var_samp((conditions.temperature)::integer)), (PARTIAL last(conditions.temperature, conditions.timec)), (PARTIAL histogram(conditions.temperature, '0'::double precision, '100'::double precision, 1))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_1
+                     Data node: db_dist_partial_agg_1
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(min(allnull)), _timescaledb_internal.partialize_agg(max(temperature)), _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)), _timescaledb_internal.partialize_agg(avg(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity::integer)), _timescaledb_internal.partialize_agg(bit_and(bit_int)), _timescaledb_internal.partialize_agg(bit_or(bit_int)), _timescaledb_internal.partialize_agg(bool_and(good_life)), _timescaledb_internal.partialize_agg(every((temperature > 0::double precision))), _timescaledb_internal.partialize_agg(bool_or(good_life)), _timescaledb_internal.partialize_agg(count(*)), _timescaledb_internal.partialize_agg(count(temperature)), _timescaledb_internal.partialize_agg(count(allnull)), _timescaledb_internal.partialize_agg(corr(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(covar_pop(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(covar_samp(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_avgx(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_avgy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_count(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_intercept(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_r2(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_slope(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_sxx(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_sxy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_syy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(stddev(temperature::integer)), _timescaledb_internal.partialize_agg(stddev_pop(temperature::integer)), _timescaledb_internal.partialize_agg(stddev_samp(temperature::integer)), _timescaledb_internal.partialize_agg(variance(temperature::integer)), _timescaledb_internal.partialize_agg(var_pop(temperature::integer)), _timescaledb_internal.partialize_agg(var_samp(temperature::integer)), _timescaledb_internal.partialize_agg(public.last(temperature, timec)), _timescaledb_internal.partialize_agg(public.histogram(temperature, 0::double precision, 100::double precision, 1)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, (PARTIAL min(conditions_1.allnull)), (PARTIAL max(conditions_1.temperature)), (PARTIAL sum(conditions_1.temperature)), (PARTIAL sum(conditions_1.humidity)), (PARTIAL avg(conditions_1.humidity)), (PARTIAL stddev((conditions_1.humidity)::integer)), (PARTIAL bit_and(conditions_1.bit_int)), (PARTIAL bit_or(conditions_1.bit_int)), (PARTIAL bool_and(conditions_1.good_life)), (PARTIAL every((conditions_1.temperature > '0'::double precision))), (PARTIAL bool_or(conditions_1.good_life)), (PARTIAL count(*)), (PARTIAL count(conditions_1.temperature)), (PARTIAL count(conditions_1.allnull)), (PARTIAL corr(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL covar_pop(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL covar_samp(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_avgx(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_avgy(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_count(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_intercept(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_r2(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_slope(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_sxx(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_sxy(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL regr_syy(((conditions_1.temperature)::integer)::double precision, ((conditions_1.humidity)::integer)::double precision)), (PARTIAL stddev((conditions_1.temperature)::integer)), (PARTIAL stddev_pop((conditions_1.temperature)::integer)), (PARTIAL stddev_samp((conditions_1.temperature)::integer)), (PARTIAL variance((conditions_1.temperature)::integer)), (PARTIAL var_pop((conditions_1.temperature)::integer)), (PARTIAL var_samp((conditions_1.temperature)::integer)), (PARTIAL last(conditions_1.temperature, conditions_1.timec)), (PARTIAL histogram(conditions_1.temperature, '0'::double precision, '100'::double precision, 1))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_2
+                     Data node: db_dist_partial_agg_2
                      Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(min(allnull)), _timescaledb_internal.partialize_agg(max(temperature)), _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)), _timescaledb_internal.partialize_agg(avg(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity::integer)), _timescaledb_internal.partialize_agg(bit_and(bit_int)), _timescaledb_internal.partialize_agg(bit_or(bit_int)), _timescaledb_internal.partialize_agg(bool_and(good_life)), _timescaledb_internal.partialize_agg(every((temperature > 0::double precision))), _timescaledb_internal.partialize_agg(bool_or(good_life)), _timescaledb_internal.partialize_agg(count(*)), _timescaledb_internal.partialize_agg(count(temperature)), _timescaledb_internal.partialize_agg(count(allnull)), _timescaledb_internal.partialize_agg(corr(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(covar_pop(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(covar_samp(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_avgx(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_avgy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_count(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_intercept(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_r2(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_slope(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_sxx(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_sxy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_syy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(stddev(temperature::integer)), _timescaledb_internal.partialize_agg(stddev_pop(temperature::integer)), _timescaledb_internal.partialize_agg(stddev_samp(temperature::integer)), _timescaledb_internal.partialize_agg(variance(temperature::integer)), _timescaledb_internal.partialize_agg(var_pop(temperature::integer)), _timescaledb_internal.partialize_agg(var_samp(temperature::integer)), _timescaledb_internal.partialize_agg(public.last(temperature, timec)), _timescaledb_internal.partialize_agg(public.histogram(temperature, 0::double precision, 100::double precision, 1)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, (PARTIAL min(conditions_2.allnull)), (PARTIAL max(conditions_2.temperature)), (PARTIAL sum(conditions_2.temperature)), (PARTIAL sum(conditions_2.humidity)), (PARTIAL avg(conditions_2.humidity)), (PARTIAL stddev((conditions_2.humidity)::integer)), (PARTIAL bit_and(conditions_2.bit_int)), (PARTIAL bit_or(conditions_2.bit_int)), (PARTIAL bool_and(conditions_2.good_life)), (PARTIAL every((conditions_2.temperature > '0'::double precision))), (PARTIAL bool_or(conditions_2.good_life)), (PARTIAL count(*)), (PARTIAL count(conditions_2.temperature)), (PARTIAL count(conditions_2.allnull)), (PARTIAL corr(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL covar_pop(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL covar_samp(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_avgx(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_avgy(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_count(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_intercept(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_r2(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_slope(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_sxx(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_sxy(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL regr_syy(((conditions_2.temperature)::integer)::double precision, ((conditions_2.humidity)::integer)::double precision)), (PARTIAL stddev((conditions_2.temperature)::integer)), (PARTIAL stddev_pop((conditions_2.temperature)::integer)), (PARTIAL stddev_samp((conditions_2.temperature)::integer)), (PARTIAL variance((conditions_2.temperature)::integer)), (PARTIAL var_pop((conditions_2.temperature)::integer)), (PARTIAL var_samp((conditions_2.temperature)::integer)), (PARTIAL last(conditions_2.temperature, conditions_2.timec)), (PARTIAL histogram(conditions_2.temperature, '0'::double precision, '100'::double precision, 1))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_3
+                     Data node: db_dist_partial_agg_3
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(min(allnull)), _timescaledb_internal.partialize_agg(max(temperature)), _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)), _timescaledb_internal.partialize_agg(avg(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity::integer)), _timescaledb_internal.partialize_agg(bit_and(bit_int)), _timescaledb_internal.partialize_agg(bit_or(bit_int)), _timescaledb_internal.partialize_agg(bool_and(good_life)), _timescaledb_internal.partialize_agg(every((temperature > 0::double precision))), _timescaledb_internal.partialize_agg(bool_or(good_life)), _timescaledb_internal.partialize_agg(count(*)), _timescaledb_internal.partialize_agg(count(temperature)), _timescaledb_internal.partialize_agg(count(allnull)), _timescaledb_internal.partialize_agg(corr(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(covar_pop(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(covar_samp(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_avgx(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_avgy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_count(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_intercept(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_r2(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_slope(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_sxx(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_sxy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(regr_syy(temperature::integer, humidity::integer)), _timescaledb_internal.partialize_agg(stddev(temperature::integer)), _timescaledb_internal.partialize_agg(stddev_pop(temperature::integer)), _timescaledb_internal.partialize_agg(stddev_samp(temperature::integer)), _timescaledb_internal.partialize_agg(variance(temperature::integer)), _timescaledb_internal.partialize_agg(var_pop(temperature::integer)), _timescaledb_internal.partialize_agg(var_samp(temperature::integer)), _timescaledb_internal.partialize_agg(public.last(temperature, timec)), _timescaledb_internal.partialize_agg(public.histogram(temperature, 0::double precision, 100::double precision, 1)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
 (25 rows)
@@ -439,7 +433,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                Group Key: conditions.region, conditions.temperature, conditions.timec
                ->  Custom Scan (DataNodeScan) on public.conditions
                      Output: conditions.region, conditions.temperature, conditions.timec, conditions.highlow
-                     Data node: data_node_1
+                     Data node: db_dist_partial_agg_1
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                      Remote SQL: SELECT timec, region, temperature, highlow FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
          ->  Partial GroupAggregate
@@ -447,7 +441,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                Group Key: conditions_1.region, conditions_1.temperature, conditions_1.timec
                ->  Custom Scan (DataNodeScan) on public.conditions conditions_1
                      Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, conditions_1.highlow
-                     Data node: data_node_2
+                     Data node: db_dist_partial_agg_2
                      Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                      Remote SQL: SELECT timec, region, temperature, highlow FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
          ->  Partial GroupAggregate
@@ -455,7 +449,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                Group Key: conditions_2.region, conditions_2.temperature, conditions_2.timec
                ->  Custom Scan (DataNodeScan) on public.conditions conditions_2
                      Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, conditions_2.highlow
-                     Data node: data_node_3
+                     Data node: db_dist_partial_agg_3
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT timec, region, temperature, highlow FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
 (29 rows)
@@ -488,7 +482,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                Group Key: conditions.region, conditions.temperature, conditions.timec
                ->  Custom Scan (DataNodeScan) on public.conditions
                      Output: conditions.region, conditions.temperature, conditions.timec, conditions.allnull, conditions.humidity, conditions.bit_int, conditions.good_life, conditions.highlow
-                     Data node: data_node_1
+                     Data node: db_dist_partial_agg_1
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                      Remote SQL: SELECT timec, region, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
          ->  Partial GroupAggregate
@@ -496,7 +490,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                Group Key: conditions_1.region, conditions_1.temperature, conditions_1.timec
                ->  Custom Scan (DataNodeScan) on public.conditions conditions_1
                      Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, conditions_1.allnull, conditions_1.humidity, conditions_1.bit_int, conditions_1.good_life, conditions_1.highlow
-                     Data node: data_node_2
+                     Data node: db_dist_partial_agg_2
                      Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                      Remote SQL: SELECT timec, region, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
          ->  Partial GroupAggregate
@@ -504,7 +498,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                Group Key: conditions_2.region, conditions_2.temperature, conditions_2.timec
                ->  Custom Scan (DataNodeScan) on public.conditions conditions_2
                      Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, conditions_2.allnull, conditions_2.humidity, conditions_2.bit_int, conditions_2.good_life, conditions_2.highlow
-                     Data node: data_node_3
+                     Data node: db_dist_partial_agg_3
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT timec, region, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
 (29 rows)
@@ -527,19 +521,19 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                ->  Custom Scan (DataNodeScan)
                      Output: conditions.region, conditions.temperature, conditions.timec, (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_1
+                     Data node: db_dist_partial_agg_1
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, (PARTIAL sum(conditions_1.temperature)), (PARTIAL sum(conditions_1.humidity))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_2
+                     Data node: db_dist_partial_agg_2
                      Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, (PARTIAL sum(conditions_2.temperature)), (PARTIAL sum(conditions_2.humidity))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_3
+                     Data node: db_dist_partial_agg_3
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
 (25 rows)
@@ -563,19 +557,19 @@ SET timescaledb.remote_data_fetcher = 'cursor';
                ->  Custom Scan (DataNodeScan)
                      Output: conditions.region, conditions.temperature, conditions.timec, (PARTIAL avg(conditions.temperature))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_1
+                     Data node: db_dist_partial_agg_1
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(avg(temperature)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, (PARTIAL avg(conditions_1.temperature))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_2
+                     Data node: db_dist_partial_agg_2
                      Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(avg(temperature)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, (PARTIAL avg(conditions_2.temperature))
                      Relations: Aggregate on (public.conditions)
-                     Data node: data_node_3
+                     Data node: db_dist_partial_agg_3
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(avg(temperature)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
 (26 rows)
@@ -601,6 +595,6 @@ SELECT format('\! diff %s %s', :'RESULTS_CONTROL2', :'RESULTS_TEST2') as "DIFF_C
 \set ECHO errors
 :DIFF_CMD2
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

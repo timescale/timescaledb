@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE OR REPLACE FUNCTION show_data_nodes()
-RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
+RETURNS TABLE(data_node_name NAME, host TEXT, dbname NAME)
 AS :TSL_MODULE_PATHNAME, 'ts_test_data_node_show' LANGUAGE C;
 -- Fetch the encoding, collation, and ctype as quoted strings into
 -- variables.
@@ -14,10 +14,11 @@ SELECT QUOTE_LITERAL(PG_ENCODING_TO_CHAR(encoding)) AS enc
  WHERE datname = current_database()
  \gset
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | t                | t
 (1 row)
 
 -- Ensure database and extensions are installed and have the correct
@@ -49,8 +50,8 @@ SELECT * FROM delete_data_node('bootstrap_test');
 (1 row)
 
 SELECT * FROM show_data_nodes();
- data_node_name | host | port | dbname 
-----------------+------+------+--------
+ data_node_name | host | dbname 
+----------------+------+--------
 (0 rows)
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
@@ -64,9 +65,9 @@ SELECT extname, extnamespace::regnamespace FROM pg_extension e WHERE extname = '
 \set ON_ERROR_STOP 0
 -- Trying to add the data node again should fail, with or without
 -- bootstrapping.
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
+SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
 ERROR:  cannot add "bootstrap_test" as a data node
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
 ERROR:  cannot add "bootstrap_test" as a data node
@@ -76,17 +77,17 @@ DROP DATABASE bootstrap_test;
 -- Bootstrap the database and check that calling it without
 -- bootstrapping does not find any problems.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM show_data_nodes();
- data_node_name |   host    | port  |     dbname     
-----------------+-----------+-------+----------------
- bootstrap_test | localhost | 55432 | bootstrap_test
+ data_node_name |   host    |     dbname     
+----------------+-----------+----------------
+ bootstrap_test | localhost | bootstrap_test
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -108,11 +109,11 @@ SELECT key FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 -- bootstrapping.
 DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | f                | f
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -153,11 +154,11 @@ DROP DATABASE bootstrap_test;
 ERROR:  database "bootstrap_test" does not exist
 \set ON_ERROR_STOP 1
 -- Adding the data node again should work
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | t                | t
 (1 row)
 
 -- Now drop the database manually before using the drop_database option
@@ -185,11 +186,11 @@ SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -210,13 +211,13 @@ SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -237,8 +238,8 @@ CREATE DATABASE bootstrap_test
    TEMPLATE template0
       OWNER :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 ERROR:  database exists but has wrong encoding
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
@@ -271,8 +272,8 @@ CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 ERROR:  database exists but has wrong encoding
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
@@ -288,8 +289,8 @@ CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 ERROR:  database exists but has wrong collation
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
@@ -305,8 +306,8 @@ CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 ERROR:  database exists but has wrong LC_CTYPE
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
@@ -314,17 +315,17 @@ DROP DATABASE bootstrap_test;
 -- Bootstrap the database and remove it. Check that the missing
 -- database is caught when adding the node and not bootstrapping.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM show_data_nodes();
- data_node_name |   host    | port  |     dbname     
-----------------+-----------+-------+----------------
- bootstrap_test | localhost | 55432 | bootstrap_test
+ data_node_name |   host    |     dbname     
+----------------+-----------+----------------
+ bootstrap_test | localhost | bootstrap_test
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -335,8 +336,8 @@ SELECT * FROM delete_data_node('bootstrap_test');
 
 DROP DATABASE bootstrap_test;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 ERROR:  could not connect to "bootstrap_test"
 \set ON_ERROR_STOP 1
 -----------------------------------------------------------------------
@@ -345,11 +346,11 @@ ERROR:  could not connect to "bootstrap_test"
 -- Check that adding the data node and not bootstrapping will fail
 -- indicating that the extension is missing.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ bootstrap_test | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -373,8 +374,8 @@ SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
 
 \set ON_ERROR_STOP 0
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 ERROR:  cannot add "bootstrap_test" as a data node
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
@@ -407,7 +408,8 @@ SET client_min_messages TO NOTICE;
 -- Add data node and delete it under error suppression. We want to
 -- avoid later tests to have random failures because the add succeeds.
 \set ON_ERROR_STOP 0
-SELECT * FROM ts_non_default.add_data_node(
+SELECT node_name, database, node_created, database_created, extension_created
+FROM ts_non_default.add_data_node(
        'bootstrap_test', host => 'localhost',
        database => 'bootstrap_test', bootstrap => true);
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
@@ -423,13 +425,14 @@ DROP DATABASE access_node;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 BEGIN;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 ERROR:  add_data_node() cannot run inside a transaction block
 \set ON_ERROR_STOP 1
 COMMIT;
 SELECT * FROM show_data_nodes();
- data_node_name | host | port | dbname 
-----------------+------+------+--------
+ data_node_name | host | dbname 
+----------------+------+--------
 (0 rows)
 
 ---------------------------------------------------------------------
@@ -477,10 +480,11 @@ SELECT label FROM pg_shseclabel
 -------
 (0 rows)
 
-SELECT * FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
-    node_name    |   host    | port  |    database     | node_created | database_created | extension_created 
------------------+-----------+-------+-----------------+--------------+------------------+-------------------
- drop_db_test_dn | localhost | 55432 | drop_db_test_dn | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
+    node_name    |    database     | node_created | database_created | extension_created 
+-----------------+-----------------+--------------+------------------+-------------------
+ drop_db_test_dn | drop_db_test_dn | t            | t                | t
 (1 row)
 
 -- Make sure security label is created

@@ -77,10 +77,11 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
  uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | backend_1_1 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1_1');
+  node_name  |  database   | node_created | database_created | extension_created 
+-------------+-------------+--------------+------------------+-------------------
+ data_node_1 | backend_1_1 | t            | t                | t
 (1 row)
 
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
@@ -102,10 +103,11 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
  uuid | 77348176-09da-4a80-bc78-e31bdf5e63ec
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_2_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | backend_2_1 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_2_1');
+  node_name  |  database   | node_created | database_created | extension_created 
+-------------+-------------+--------------+------------------+-------------------
+ data_node_1 | backend_2_1 | t            | t                | t
 (1 row)
 
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
@@ -156,10 +158,11 @@ ERROR:  cannot add "invalid_data_node" as a data node
 -- Test that a data node can be moved to a different frontend if it is
 -- removed first.
 \c frontend_1 :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => true);
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | backend_x_2 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => true);
+  node_name  |  database   | node_created | database_created | extension_created 
+-------------+-------------+--------------+------------------+-------------------
+ data_node_2 | backend_x_2 | t            | t                | t
 (1 row)
 
 -- dist_uuid should be added to the metadata on the data node
@@ -191,10 +194,11 @@ SELECT key FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 -- Add the data node to the second frontend without bootstrapping
 \c frontend_2 :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => false);
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | backend_x_2 | t            | f                | f
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => false);
+  node_name  |  database   | node_created | database_created | extension_created 
+-------------+-------------+--------------+------------------+-------------------
+ data_node_2 | backend_x_2 | t            | f                | f
 (1 row)
 
 -- dist_uuid should be added to the metadata on the data node

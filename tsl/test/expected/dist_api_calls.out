@@ -7,29 +7,23 @@
 -- Support for execute_sql_and_filter_server_name_on_error()
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 -- Add data nodes
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |      database       | node_created | database_created | extension_created 
--------------+-----------+-------+---------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_dist_api_calls_1 | t            | t                | t
-(1 row)
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+      node_name      |      database       | node_created | database_created | extension_created 
+---------------------+---------------------+--------------+------------------+-------------------
+ db_dist_api_calls_1 | db_dist_api_calls_1 | t            | t                | t
+ db_dist_api_calls_2 | db_dist_api_calls_2 | t            | t                | t
+ db_dist_api_calls_3 | db_dist_api_calls_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |      database       | node_created | database_created | extension_created 
--------------+-----------+-------+---------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_dist_api_calls_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |      database       | node_created | database_created | extension_created 
--------------+-----------+-------+---------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_dist_api_calls_3 | t            | t                | t
-(1 row)
-
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 -- Create a distributed hypertable with data
 SET ROLE :ROLE_1;
 CREATE TABLE disttable(
@@ -66,8 +60,8 @@ SELECT * FROM disttable ORDER BY time;
 (8 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
-NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_1_chunk
@@ -75,8 +69,8 @@ _timescaledb_internal._dist_hyper_1_4_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_api_calls_2]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_2]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_3_chunk
@@ -84,8 +78,8 @@ _timescaledb_internal._dist_hyper_1_5_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_3]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_api_calls_3]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_3]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_2_chunk
@@ -118,24 +112,24 @@ SELECT * FROM disttable ORDER BY time;
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
-NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_4_chunk
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_api_calls_2]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_2]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_5_chunk
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_api_calls_3]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_3]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_6_chunk
@@ -178,8 +172,8 @@ SELECT * FROM show_chunks('disttable');
 (6 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
-NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_4_chunk
@@ -187,8 +181,8 @@ _timescaledb_internal._dist_hyper_1_7_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_api_calls_2]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_2]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_5_chunk
@@ -196,8 +190,8 @@ _timescaledb_internal._dist_hyper_1_9_chunk
 (2 rows)
 
 
-NOTICE:  [data_node_3]:  SELECT show_chunks('disttable')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_api_calls_3]:  SELECT show_chunks('disttable')
+NOTICE:  [db_dist_api_calls_3]:
 show_chunks                                
 -------------------------------------------
 _timescaledb_internal._dist_hyper_1_6_chunk
@@ -253,24 +247,24 @@ SELECT approximate_row_count('disttable');
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT approximate_row_count('disttable'); $$);
-NOTICE:  [data_node_1]:  SELECT approximate_row_count('disttable')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_api_calls_1]:  SELECT approximate_row_count('disttable')
+NOTICE:  [db_dist_api_calls_1]:
 approximate_row_count
 ---------------------
                     3
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT approximate_row_count('disttable')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_api_calls_2]:  SELECT approximate_row_count('disttable')
+NOTICE:  [db_dist_api_calls_2]:
 approximate_row_count
 ---------------------
                     2
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT approximate_row_count('disttable')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_api_calls_3]:  SELECT approximate_row_count('disttable')
+NOTICE:  [db_dist_api_calls_3]:
 approximate_row_count
 ---------------------
                     3
@@ -329,8 +323,8 @@ SELECT * FROM show_chunks('disttable_repl');
 (6 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable_repl'); $$);
-NOTICE:  [data_node_1]:  SELECT show_chunks('disttable_repl')
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable_repl')
+NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_2_10_chunk
@@ -340,8 +334,8 @@ _timescaledb_internal._dist_hyper_2_15_chunk
 (4 rows)
 
 
-NOTICE:  [data_node_2]:  SELECT show_chunks('disttable_repl')
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_api_calls_2]:  SELECT show_chunks('disttable_repl')
+NOTICE:  [db_dist_api_calls_2]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_2_10_chunk
@@ -351,8 +345,8 @@ _timescaledb_internal._dist_hyper_2_14_chunk
 (4 rows)
 
 
-NOTICE:  [data_node_3]:  SELECT show_chunks('disttable_repl')
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_api_calls_3]:  SELECT show_chunks('disttable_repl')
+NOTICE:  [db_dist_api_calls_3]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._dist_hyper_2_11_chunk
@@ -387,6 +381,6 @@ SELECT approximate_row_count('disttable_repl');
 (1 row)
 
 DROP TABLE disttable_repl;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

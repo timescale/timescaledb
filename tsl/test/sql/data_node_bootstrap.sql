@@ -4,7 +4,7 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE OR REPLACE FUNCTION show_data_nodes()
-RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
+RETURNS TABLE(data_node_name NAME, host TEXT, dbname NAME)
 AS :TSL_MODULE_PATHNAME, 'ts_test_data_node_show' LANGUAGE C;
 
 -- Fetch the encoding, collation, and ctype as quoted strings into
@@ -18,7 +18,8 @@ SELECT QUOTE_LITERAL(PG_ENCODING_TO_CHAR(encoding)) AS enc
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 
 -- Ensure database and extensions are installed and have the correct
 -- encoding, ctype and collation.
@@ -44,8 +45,8 @@ SELECT extname, extnamespace::regnamespace FROM pg_extension e WHERE extname = '
 \set ON_ERROR_STOP 0
 -- Trying to add the data node again should fail, with or without
 -- bootstrapping.
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
+SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 \set ON_ERROR_STOP 0
 
 DROP DATABASE bootstrap_test;
@@ -54,8 +55,8 @@ DROP DATABASE bootstrap_test;
 -- Bootstrap the database and check that calling it without
 -- bootstrapping does not find any problems.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM show_data_nodes();
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -70,8 +71,8 @@ SELECT key FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 
 \set ON_ERROR_STOP 0
 -- Dropping the database with delete_data_node should not work in a
@@ -101,8 +102,8 @@ DROP DATABASE bootstrap_test;
 \set ON_ERROR_STOP 1
 
 -- Adding the data node again should work
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 -- Now drop the database manually before using the drop_database option
 DROP DATABASE bootstrap_test;
 \set ON_ERROR_STOP 0
@@ -126,8 +127,8 @@ CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 
 SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
@@ -145,8 +146,8 @@ CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 
 SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
@@ -164,8 +165,8 @@ CREATE DATABASE bootstrap_test
       OWNER :ROLE_CLUSTER_SUPERUSER;
 
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 \set ON_ERROR_STOP 1
 
 DROP DATABASE bootstrap_test;
@@ -203,8 +204,8 @@ SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
 DROP DATABASE bootstrap_test;
@@ -223,8 +224,8 @@ SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
 DROP DATABASE bootstrap_test;
@@ -243,8 +244,8 @@ SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
 DROP DATABASE bootstrap_test;
@@ -253,15 +254,15 @@ DROP DATABASE bootstrap_test;
 -- Bootstrap the database and remove it. Check that the missing
 -- database is caught when adding the node and not bootstrapping.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM show_data_nodes();
 SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
 
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
 -----------------------------------------------------------------------
@@ -270,8 +271,8 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
 -- Check that adding the data node and not bootstrapping will fail
 -- indicating that the extension is missing.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => true);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM delete_data_node('bootstrap_test');
 \c bootstrap_test :ROLE_SUPERUSER;
 
@@ -281,8 +282,8 @@ SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
 
 \set ON_ERROR_STOP 0
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
 DROP DATABASE bootstrap_test;
@@ -317,7 +318,8 @@ SET client_min_messages TO NOTICE;
 -- Add data node and delete it under error suppression. We want to
 -- avoid later tests to have random failures because the add succeeds.
 \set ON_ERROR_STOP 0
-SELECT * FROM ts_non_default.add_data_node(
+SELECT node_name, database, node_created, database_created, extension_created
+FROM ts_non_default.add_data_node(
        'bootstrap_test', host => 'localhost',
        database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM ts_non_default.delete_data_node('bootstrap_test');
@@ -332,7 +334,8 @@ DROP DATABASE access_node;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 BEGIN;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 \set ON_ERROR_STOP 1
 COMMIT;
 SELECT * FROM show_data_nodes();
@@ -375,7 +378,8 @@ SELECT label FROM pg_shseclabel
     WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
           provider = 'timescaledb';
 
-SELECT * FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
 
 -- Make sure security label is created
 SELECT substr(label, 0, 10) || ':uuid'

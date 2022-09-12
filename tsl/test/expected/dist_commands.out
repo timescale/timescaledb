@@ -6,38 +6,29 @@
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |      database      | node_created | database_created | extension_created 
--------------+-----------+-------+--------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_dist_commands_1 | t            | t                | t
-(1 row)
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+     node_name      |      database      | node_created | database_created | extension_created 
+--------------------+--------------------+--------------+------------------+-------------------
+ db_dist_commands_1 | db_dist_commands_1 | t            | t                | t
+ db_dist_commands_2 | db_dist_commands_2 | t            | t                | t
+ db_dist_commands_3 | db_dist_commands_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |      database      | node_created | database_created | extension_created 
--------------+-----------+-------+--------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_dist_commands_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |      database      | node_created | database_created | extension_created 
--------------+-----------+-------+--------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_dist_commands_3 | t            | t                | t
-(1 row)
-
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
-\des+
-                                                                                     List of foreign servers
-    Name     |       Owner        | Foreign-data wrapper |            Access privileges            | Type | Version |                          FDW options                          | Description 
--------------+--------------------+----------------------+-----------------------------------------+------+---------+---------------------------------------------------------------+-------------
- data_node_1 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'db_dist_commands_1') | 
-             |                    |                      | =U/cluster_super_user                   |      |         |                                                               | 
- data_node_2 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'db_dist_commands_2') | 
-             |                    |                      | =U/cluster_super_user                   |      |         |                                                               | 
- data_node_3 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'db_dist_commands_3') | 
-             |                    |                      | =U/cluster_super_user                   |      |         |                                                               | 
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+\des
+                    List of foreign servers
+        Name        |       Owner        | Foreign-data wrapper 
+--------------------+--------------------+----------------------
+ db_dist_commands_1 | cluster_super_user | timescaledb_fdw
+ db_dist_commands_2 | cluster_super_user | timescaledb_fdw
+ db_dist_commands_3 | cluster_super_user | timescaledb_fdw
 (3 rows)
 
 RESET ROLE;
@@ -51,19 +42,19 @@ AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
 SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_distributed_commands();
-INFO:  data_node_1 result: PGRES_COMMAND_OK
-INFO:  data_node_2 result: PGRES_COMMAND_OK
-INFO:  data_node_3 result: PGRES_COMMAND_OK
-INFO:  data_node_1 result: PGRES_COMMAND_OK
-INFO:  data_node_2 result: PGRES_COMMAND_OK
-INFO:  data_node_1 result: PGRES_COMMAND_OK
-INFO:  data_node_2 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_1 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_2 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_3 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_1 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_2 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_1 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_2 result: PGRES_COMMAND_OK
  invoke_distributed_commands 
 -----------------------------
  
 (1 row)
 
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 \dt
              List of relations
  Schema |    Name    | Type  |    Owner    
@@ -78,7 +69,7 @@ SELECT * FROM disttable1;
  Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
 (1 row)
 
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 \dt
              List of relations
  Schema |    Name    | Type  |    Owner    
@@ -93,7 +84,7 @@ SELECT * FROM disttable1;
  Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
 (1 row)
 
-\c :DN_DBNAME_3
+\c :DATA_NODE_3
 \dt
              List of relations
  Schema |    Name    | Type  |    Owner    
@@ -111,15 +102,15 @@ SET ROLE :ROLE_1;
 -- Verify failed insert command gets fully rolled back
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
-ERROR:  [data_node_3]: relation "public.disttable2" does not exist
+ERROR:  [db_dist_commands_3]: relation "public.disttable2" does not exist
 \set ON_ERROR_STOP 1
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
 (0 rows)
 
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
@@ -135,7 +126,7 @@ psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
@@ -145,7 +136,7 @@ SELECT is_access_node_session_on_data_node();
  f
 (1 row)
 
-\c :DN_DBNAME_2
+\c :DATA_NODE_2
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
@@ -155,7 +146,7 @@ SELECT is_access_node_session_on_data_node();
  f
 (1 row)
 
-\c :DN_DBNAME_3
+\c :DATA_NODE_3
 CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
@@ -175,31 +166,31 @@ SELECT is_access_node_session_on_data_node();
 
 -- Ensure peer dist id is already set and can be set only once
 \set ON_ERROR_STOP 0
-SELECT * FROM test.remote_exec('{data_node_1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
-NOTICE:  [data_node_1]:  SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec')
-ERROR:  [data_node_1]: distributed peer ID already set
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
+NOTICE:  [db_dist_commands_1]:  SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec')
+ERROR:  [db_dist_commands_1]: distributed peer ID already set
 \set ON_ERROR_STOP 1
 -- Repeat is_access_node_session_on_data_node() test again, but this time using connections openned from
 -- access node to data nodes. Must return true.
 SELECT * FROM test.remote_exec(NULL, $$ SELECT is_access_node_session_on_data_node(); $$);
-NOTICE:  [data_node_1]:  SELECT is_access_node_session_on_data_node()
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_commands_1]:  SELECT is_access_node_session_on_data_node()
+NOTICE:  [db_dist_commands_1]:
 is_access_node_session_on_data_node
 -----------------------------------
 t                                  
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT is_access_node_session_on_data_node()
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_commands_2]:  SELECT is_access_node_session_on_data_node()
+NOTICE:  [db_dist_commands_2]:
 is_access_node_session_on_data_node
 -----------------------------------
 t                                  
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT is_access_node_session_on_data_node()
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_commands_3]:  SELECT is_access_node_session_on_data_node()
+NOTICE:  [db_dist_commands_3]:
 is_access_node_session_on_data_node
 -----------------------------------
 t                                  
@@ -229,7 +220,7 @@ CALL distributed_exec_direct_function_call('CREATE TABLE dist_test(id int)', NUL
 ERROR:  ts_dist_cmd_exec() cannot run inside a transaction block
 ROLLBACK;
 -- multi-dimensional array of data nodes
-CALL distributed_exec('CREATE TABLE dist_test(id int)', '{{data_node_1}}');
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{{db_data_node_1}}');
 ERROR:  invalid data nodes list
 DETAIL:  The array of data nodes cannot be multi-dimensional.
 -- Specified, but empty data node array
@@ -237,12 +228,12 @@ CALL distributed_exec('CREATE TABLE dist_test(id int)', '{}');
 ERROR:  invalid data nodes list
 DETAIL:  The array of data nodes cannot be empty.
 -- Specified, but contains null values
-CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1, NULL}');
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{db_data_node_1, NULL}');
 ERROR:  invalid data nodes list
 DETAIL:  The array of data nodes cannot contain null values.
 -- Specified, but not a data node
-CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1928}');
-ERROR:  server "data_node_1928" does not exist
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{db_data_node_1928}');
+ERROR:  server "db_data_node_1928" does not exist
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- Make sure dist session is properly set
@@ -252,24 +243,24 @@ CALL distributed_exec('CREATE TABLE dist_test (id int)');
 CALL distributed_exec('INSERT INTO dist_test values (7)');
 -- Test INSERTING data using empty array of data nodes (same behavior as not specifying).
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from dist_test; $$);
-NOTICE:  [data_node_1]:  SELECT * from dist_test
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_commands_1]:  SELECT * from dist_test
+NOTICE:  [db_dist_commands_1]:
 id
 --
  7
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT * from dist_test
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_commands_2]:  SELECT * from dist_test
+NOTICE:  [db_dist_commands_2]:
 id
 --
  7
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT * from dist_test
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_commands_3]:  SELECT * from dist_test
+NOTICE:  [db_dist_commands_3]:
 id
 --
  7
@@ -283,8 +274,8 @@ id
 
 CALL distributed_exec('DROP TABLE dist_test');
 \set ON_ERROR_STOP 0
-CALL distributed_exec('INSERT INTO dist_test VALUES (8)', '{data_node_1}');
-ERROR:  [data_node_1]: relation "dist_test" does not exist
+CALL distributed_exec('INSERT INTO dist_test VALUES (8)', ARRAY[:'DATA_NODE_1']);
+ERROR:  [db_dist_commands_1]: relation "dist_test" does not exist
 \set ON_ERROR_STOP 1
 -- Test creating and dropping a role
 CREATE ROLE dist_test_role;
@@ -293,27 +284,27 @@ CREATE ROLE dist_test_role;
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 CALL distributed_exec('CREATE ROLE dist_test_role');
 $$);
-ERROR:  [data_node_x]: role "dist_test_role" already exists
+ERROR:  [db_dist_commands_x]: role "dist_test_role" already exists
 \set ON_ERROR_STOP 1
 SELECT * FROM test.remote_exec(NULL, $$ SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'; $$);
-NOTICE:  [data_node_1]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
-NOTICE:  [data_node_1]:
+NOTICE:  [db_dist_commands_1]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
+NOTICE:  [db_dist_commands_1]:
 bool
 ----
 t   
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
-NOTICE:  [data_node_2]:
+NOTICE:  [db_dist_commands_2]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
+NOTICE:  [db_dist_commands_2]:
 bool
 ----
 t   
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
-NOTICE:  [data_node_3]:
+NOTICE:  [db_dist_commands_3]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
+NOTICE:  [db_dist_commands_3]:
 bool
 ----
 t   
@@ -330,36 +321,36 @@ DROP ROLE DIST_TEST_ROLE;
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 CALL distributed_exec('DROP ROLE dist_test_role');
 $$);
-ERROR:  [data_node_x]: role "dist_test_role" does not exist
+ERROR:  [db_dist_commands_x]: role "dist_test_role" does not exist
 \set ON_ERROR_STOP 1
 -- Do not allow to run distributed_exec() on a data nodes
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 \set ON_ERROR_STOP 0
 CALL distributed_exec('SELECT 1');
 ERROR:  function must be run on the access node only
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM delete_data_node('data_node_1');
+SELECT * FROM delete_data_node(:'DATA_NODE_1');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_2');
+SELECT * FROM delete_data_node(:'DATA_NODE_2');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_3');
+SELECT * FROM delete_data_node(:'DATA_NODE_3');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
 \set ON_ERROR_STOP 0
 -- Calling distributed_exec without data nodes should fail
 CALL distributed_exec('SELECT 1');
@@ -388,16 +379,16 @@ DROP EXTENSION postgres_fdw;
 -- parallelize the test. Not possible right now because there are
 -- other databases above that prevents this.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DN_DBNAME_1');
-    node_name    |   host    | port  |      database      | node_created | database_created | extension_created 
------------------+-----------+-------+--------------------+--------------+------------------+-------------------
- dist_commands_1 | localhost | 55432 | db_dist_commands_1 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DATA_NODE_1');
+    node_name    |      database      | node_created | database_created | extension_created 
+-----------------+--------------------+--------------+------------------+-------------------
+ dist_commands_1 | db_dist_commands_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DN_DBNAME_2');
-    node_name    |   host    | port  |      database      | node_created | database_created | extension_created 
------------------+-----------+-------+--------------------+--------------+------------------+-------------------
- dist_commands_2 | localhost | 55432 | db_dist_commands_2 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DATA_NODE_2');
+    node_name    |      database      | node_created | database_created | extension_created 
+-----------------+--------------------+--------------+------------------+-------------------
+ dist_commands_2 | db_dist_commands_2 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
@@ -420,7 +411,7 @@ DROP DATABASE dist_commands_magic;
 CALL distributed_exec($$
   CREATE TABLE my_table (key INT, value TEXT, PRIMARY KEY (key));
 $$);
-\c :DN_DBNAME_1
+\c :DATA_NODE_1
 INSERT INTO my_table VALUES (1, 'foo');
 \c :TEST_DBNAME :ROLE_1
 \set ON_ERROR_STOP 0
@@ -516,5 +507,5 @@ key|value
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;

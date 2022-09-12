@@ -108,8 +108,10 @@ SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'D
 \set ON_ERROR_STOP 1
 
 SET default_transaction_read_only TO off;
-SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
-SELECT * FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
 
 -- create_distributed_hypertable()
 --

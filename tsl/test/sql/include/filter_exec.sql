@@ -5,7 +5,7 @@
 CREATE SCHEMA IF NOT EXISTS test;
 GRANT USAGE ON SCHEMA test TO PUBLIC;
 
-CREATE OR REPLACE FUNCTION test.execute_sql_and_filter_data_node_name_on_error(cmd TEXT, data_node_prefix TEXT DEFAULT 'data_node')
+CREATE OR REPLACE FUNCTION test.execute_sql_and_filter_data_node_name_on_error(cmd TEXT, data_node_prefix TEXT DEFAULT :'TEST_DBNAME')
 RETURNS VOID LANGUAGE PLPGSQL AS $BODY$
 DECLARE
   original_error_text TEXT;
