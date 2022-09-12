@@ -2,8 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -272,22 +272,19 @@ ORDER BY tablename, attname;
 
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |    database    | node_created | database_created | extension_created 
--------------+-----------+-------+----------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_chunk_api_1 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |    database    | node_created | database_created | extension_created 
--------------+-----------+-------+----------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_chunk_api_2 | t            | t                | t
-(1 row)
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2')) v(name)
+) a;
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ db_chunk_api_1 | db_chunk_api_1 | t            | t                | t
+ db_chunk_api_2 | db_chunk_api_2 | t            | t                | t
+(2 rows)
 
 GRANT USAGE
-   ON FOREIGN SERVER data_node_1, data_node_2
+   ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2
    TO :ROLE_1, :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_1;
 CREATE TABLE disttable (time timestamptz, device int, temp float, color text);
@@ -335,7 +332,7 @@ ORDER BY 1,2,3;
 (0 rows)
 
 -- Run ANALYZE on data node 1
-CALL distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
+CALL distributed_exec('ANALYZE disttable', ARRAY[:'DATA_NODE_1']);
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
@@ -501,13 +498,13 @@ FROM pg_statistic st, show_chunks('disttable') ch
 WHERE st.starelid = ch
 ORDER BY ch, staattnum;
 $$);
-NOTICE:  [data_node_1]: 
+NOTICE:  [db_chunk_api_1]: 
 SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
 stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
 FROM pg_statistic st, show_chunks('disttable') ch
 WHERE st.starelid = ch
 ORDER BY ch, staattnum
-NOTICE:  [data_node_1]:
+NOTICE:  [db_chunk_api_1]:
 ch                                         |staattnum|stainherit|stanullfrac|stawidth|stadistinct|stakind1|stakind2|stakind3|stakind4|stakind5|staop1|staop2|staop3|staop4|staop5|stanumbers1|stanumbers2|stanumbers3|stanumbers4|stanumbers5|stavalues1                                                     |stavalues2|stavalues3|stavalues4|stavalues5
 -------------------------------------------+---------+----------+-----------+--------+-----------+--------+--------+--------+--------+--------+------+------+------+------+------+-----------+-----------+-----------+-----------+-----------+---------------------------------------------------------------+----------+----------+----------+----------
 _timescaledb_internal._dist_hyper_2_3_chunk|        1|f         |          0|       8|         -1|       2|       3|       0|       0|       0|  1322|  1322|     0|     0|     0|           |{1}        |           |           |           |{"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"}|          |          |          |          
@@ -521,13 +518,13 @@ _timescaledb_internal._dist_hyper_2_5_chunk|        4|f         |          0|   
 (8 rows)
 
 
-NOTICE:  [data_node_2]: 
+NOTICE:  [db_chunk_api_2]: 
 SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
 stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
 FROM pg_statistic st, show_chunks('disttable') ch
 WHERE st.starelid = ch
 ORDER BY ch, staattnum
-NOTICE:  [data_node_2]:
+NOTICE:  [db_chunk_api_2]:
 ch                                         |staattnum|stainherit|stanullfrac|stawidth|stadistinct|stakind1|stakind2|stakind3|stakind4|stakind5|staop1|staop2|staop3|staop4|staop5|stanumbers1|stanumbers2|stanumbers3|stanumbers4|stanumbers5|stavalues1|stavalues2|stavalues3|stavalues4|stavalues5
 -------------------------------------------+---------+----------+-----------+--------+-----------+--------+--------+--------+--------+--------+------+------+------+------+------+-----------+-----------+-----------+-----------+-----------+----------+----------+----------+----------+----------
 _timescaledb_internal._dist_hyper_2_4_chunk|        1|f         |          0|       8|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
@@ -549,7 +546,7 @@ _timescaledb_internal._dist_hyper_2_5_chunk|        4|f         |          0|   
 -- Clean up
 RESET ROLE;
 TRUNCATE disttable;
-SELECT * FROM delete_data_node('data_node_1', force => true);
+SELECT * FROM delete_data_node(:'DATA_NODE_1', force => true);
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
 NOTICE:  the number of partitions in dimension "device" of hypertable "disttable" was decreased to 1
  delete_data_node 
@@ -557,15 +554,15 @@ NOTICE:  the number of partitions in dimension "device" of hypertable "disttable
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_2', force => true);
+SELECT * FROM delete_data_node(:'DATA_NODE_2', force => true);
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
  delete_data_node 
 ------------------
  t
 (1 row)
 
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
 -- Test create_chunk_table to recreate the chunk table and show dimension slices
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM chunkapi ORDER BY time;

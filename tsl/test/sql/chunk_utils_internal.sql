@@ -298,11 +298,16 @@ ORDER BY table_name;
 
 -- TEST error try freeze/unfreeze on dist hypertable
 -- Add distributed hypertables
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2')) v(name)
+) a;
+
 CREATE TABLE disthyper (timec timestamp, device integer);
 SELECT create_distributed_hypertable('disthyper', 'timec', 'device');
 INSERT into disthyper VALUES ('2020-01-01', 10);
@@ -374,6 +379,5 @@ ORDER BY chunk_name;
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;

@@ -102,11 +102,11 @@ set(SOLO_TESTS
     compress_bgw_reorder_drop_chunks
     compression_ddl
     cagg_bgw
+    cagg_bgw_dist_ht
     cagg_ddl
     cagg_ddl_dist_ht
     cagg_dump
     data_fetcher
-    dist_move_chunk
     dist_util
     move
     remote_connection_cache

@@ -16,13 +16,16 @@ SELECT
     test.make_tablespace_path(:'TEST_TABLESPACE1_PREFIX', :'TEST_DBNAME') AS spc1path,
     test.make_tablespace_path(:'TEST_TABLESPACE2_PREFIX', :'TEST_DBNAME') AS spc2path
 \gset
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-      node_name       |   host    | port  |       database       | node_created | database_created | extension_created 
-----------------------+-----------+-------+----------------------+--------------+------------------+-------------------
- db_dist_hypertable_1 | localhost | 55432 | db_dist_hypertable_1 | t            | t                | t
- db_dist_hypertable_2 | localhost | 55432 | db_dist_hypertable_2 | t            | t                | t
- db_dist_hypertable_3 | localhost | 55432 | db_dist_hypertable_3 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+      node_name       |       database       | node_created | database_created | extension_created 
+----------------------+----------------------+--------------+------------------+-------------------
+ db_dist_hypertable_1 | db_dist_hypertable_1 | t            | t                | t
+ db_dist_hypertable_2 | db_dist_hypertable_2 | t            | t                | t
+ db_dist_hypertable_3 | db_dist_hypertable_3 | t            | t                | t
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
@@ -41,12 +44,12 @@ SET ROLE :ROLE_1;
 --Ensure INSERTs use DataNodeDispatch. DataNodeCopy is tested later
 SET timescaledb.enable_distributed_insert_with_copy=false;
 -- Verify lack of tables
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
-      node_name       |                         options                         
-----------------------+---------------------------------------------------------
- db_dist_hypertable_1 | {host=localhost,port=55432,dbname=db_dist_hypertable_1}
- db_dist_hypertable_2 | {host=localhost,port=55432,dbname=db_dist_hypertable_2}
- db_dist_hypertable_3 | {host=localhost,port=55432,dbname=db_dist_hypertable_3}
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
+      node_name       
+----------------------
+ db_dist_hypertable_1
+ db_dist_hypertable_2
+ db_dist_hypertable_3
 (3 rows)
 
 \set ON_ERROR_STOP 0
@@ -131,10 +134,11 @@ ERROR:  replication factor too large for hypertable "underreplicated"
 \set ON_ERROR_STOP 1
 -- can create under-replicated hypertable byf force detaching a data node
 RESET ROLE;
-SELECT * FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
-      node_name       |   host    | port  |       database       | node_created | database_created | extension_created 
-----------------------+-----------+-------+----------------------+--------------+------------------+-------------------
- db_dist_hypertable_4 | localhost | 55432 | db_dist_hypertable_4 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
+      node_name       |       database       | node_created | database_created | extension_created 
+----------------------+----------------------+--------------+------------------+-------------------
+ db_dist_hypertable_4 | db_dist_hypertable_4 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_4 TO PUBLIC;
@@ -533,12 +537,12 @@ Sun Jul 01 08:21:00 2018 PDT|    29| 1.2
  
 (1 row)
 
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
-      node_name       |                         options                         
-----------------------+---------------------------------------------------------
- db_dist_hypertable_1 | {host=localhost,port=55432,dbname=db_dist_hypertable_1}
- db_dist_hypertable_2 | {host=localhost,port=55432,dbname=db_dist_hypertable_2}
- db_dist_hypertable_3 | {host=localhost,port=55432,dbname=db_dist_hypertable_3}
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
+      node_name       
+----------------------
+ db_dist_hypertable_1
+ db_dist_hypertable_2
+ db_dist_hypertable_3
 (3 rows)
 
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;

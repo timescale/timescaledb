@@ -55,8 +55,8 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
 AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'
 LANGUAGE C;
 
-SELECT * FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
-SELECT * FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
+SELECT server_name, database, server_created, database_created, extension_created FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
+SELECT server_name, database, server_created, database_created, extension_created FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
 
 -- ===================================================================
 -- create objects used through FDW loopback server

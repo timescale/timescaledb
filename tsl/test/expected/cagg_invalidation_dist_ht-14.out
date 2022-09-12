@@ -23,13 +23,16 @@ CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], 
 RETURNS TABLE("table_record" CSTRING[])
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
 LANGUAGE C;
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-           node_name            |   host    | port  |            database            | node_created | database_created | extension_created 
---------------------------------+-----------+-------+--------------------------------+--------------+------------------+-------------------
- db_cagg_invalidation_dist_ht_1 | localhost | 55432 | db_cagg_invalidation_dist_ht_1 | t            | t                | t
- db_cagg_invalidation_dist_ht_2 | localhost | 55432 | db_cagg_invalidation_dist_ht_2 | t            | t                | t
- db_cagg_invalidation_dist_ht_3 | localhost | 55432 | db_cagg_invalidation_dist_ht_3 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+           node_name            |            database            | node_created | database_created | extension_created 
+--------------------------------+--------------------------------+--------------+------------------+-------------------
+ db_cagg_invalidation_dist_ht_1 | db_cagg_invalidation_dist_ht_1 | t            | t                | t
+ db_cagg_invalidation_dist_ht_2 | db_cagg_invalidation_dist_ht_2 | t            | t                | t
+ db_cagg_invalidation_dist_ht_3 | db_cagg_invalidation_dist_ht_3 | t            | t                | t
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;

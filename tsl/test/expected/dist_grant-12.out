@@ -5,27 +5,21 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
-\set DN_DBNAME_4 :TEST_DBNAME _4
-SELECT * FROM add_data_node('data1', host => 'localhost', database => :'DN_DBNAME_1');
- node_name |   host    | port  |    database     | node_created | database_created | extension_created 
------------+-----------+-------+-----------------+--------------+------------------+-------------------
- data1     | localhost | 55432 | db_dist_grant_1 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data2', host => 'localhost', database => :'DN_DBNAME_2');
- node_name |   host    | port  |    database     | node_created | database_created | extension_created 
------------+-----------+-------+-----------------+--------------+------------------+-------------------
- data2     | localhost | 55432 | db_dist_grant_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data3', host => 'localhost', database => :'DN_DBNAME_3');
- node_name |   host    | port  |    database     | node_created | database_created | extension_created 
------------+-----------+-------+-----------------+--------------+------------------+-------------------
- data3     | localhost | 55432 | db_dist_grant_3 | t            | t                | t
-(1 row)
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\set DATA_NODE_4 :TEST_DBNAME _4
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+    node_name    |    database     | node_created | database_created | extension_created 
+-----------------+-----------------+--------------+------------------+-------------------
+ db_dist_grant_1 | db_dist_grant_1 | t            | t                | t
+ db_dist_grant_2 | db_dist_grant_2 | t            | t                | t
+ db_dist_grant_3 | db_dist_grant_3 | t            | t                | t
+(3 rows)
 
 CREATE TABLE conditions(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);
 GRANT SELECT ON conditions TO :ROLE_1;
@@ -55,33 +49,33 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT";
 $$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'conditions', 'INSERT') AS "INSERT"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |f     
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'conditions', 'INSERT') AS "INSERT"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |f     
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'conditions', 'INSERT') AS "INSERT"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |f     
@@ -106,33 +100,33 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT
 ------+------+------
 f     |t     |t     
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT
 ------+------+------
 f     |t     |t     
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT
 ------+------+------
 f     |t     |t     
@@ -178,39 +172,39 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
@@ -224,10 +218,10 @@ f     |t     |t     |t     |f
 
 -- Add another data node and check that grants are propagated when the
 -- data node is attached to an existing table.
-SELECT * FROM add_data_node('data4', host => 'localhost', database => :'DN_DBNAME_4');
- node_name |   host    | port  |    database     | node_created | database_created | extension_created 
------------+-----------+-------+-----------------+--------------+------------------+-------------------
- data4     | localhost | 55432 | db_dist_grant_4 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data4', host => 'localhost', database => :'DATA_NODE_4');
+ node_name |    database     | node_created | database_created | extension_created 
+-----------+-----------------+--------------+------------------+-------------------
+ data4     | db_dist_grant_4 | t            | t                | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -238,39 +232,39 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
@@ -302,39 +296,39 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
        , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT|UPDATE|TRUNCATE
 ------+------+------+------+--------
 f     |t     |t     |t     |f       
@@ -384,33 +378,33 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
 $$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |f     
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |f     
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |f     
@@ -449,33 +443,33 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
 $$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |t     
 (1 row)
 
 
-NOTICE:  [data2]: 
+NOTICE:  [db_dist_grant_2]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
-NOTICE:  [data2]:
+NOTICE:  [db_dist_grant_2]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |t     
 (1 row)
 
 
-NOTICE:  [data3]: 
+NOTICE:  [db_dist_grant_3]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
-NOTICE:  [data3]:
+NOTICE:  [db_dist_grant_3]:
 SELECT|DELETE|INSERT
 ------+------+------
 t     |f     |t     
@@ -783,7 +777,7 @@ SELECT * FROM CHUNK_QRY1;
 (18 rows)
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \z conditions
                                              Access privileges
  Schema |    Name    | Type  |               Access privileges               | Column privileges | Policies 
@@ -870,7 +864,7 @@ SELECT * FROM CHUNK_QRY1;
 (18 rows)
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_2 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
 \z conditions
                                              Access privileges
  Schema |    Name    | Type  |               Access privileges               | Column privileges | Policies 
@@ -958,7 +952,7 @@ SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
 (3 rows)
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_3 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER;
 \z measurements
                                               Access privileges
  Schema |     Name     | Type  |               Access privileges               | Column privileges | Policies 
@@ -1010,7 +1004,7 @@ SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
 (3 rows)
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_4 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_4 :ROLE_CLUSTER_SUPERUSER;
 \z measurements
                                               Access privileges
  Schema |     Name     | Type  |               Access privileges               | Column privileges | Policies 
@@ -1027,10 +1021,9 @@ SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
 (1 row)
 
 SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
- schema |     name     |               access_privileges               
---------+--------------+-----------------------------------------------
- public | _dist_hyper_ | cluster_super_user=arwdDxt/cluster_super_user
-(1 row)
+ schema | name | access_privileges 
+--------+------+-------------------
+(0 rows)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 -- Test GRANT/REVOKE on DATABASE
@@ -1039,76 +1032,76 @@ SET client_min_messages TO DEBUG1;
 -- being propagated to the data nodes
 GRANT ALL ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: GRANT ALL ON DATABASE db_dist_grant TO cluster_super_user;
-DEBUG:  [data1]: GRANT ALL ON DATABASE db_dist_grant_1 TO cluster_super_user 
-DEBUG:  [data2]: GRANT ALL ON DATABASE db_dist_grant_2 TO cluster_super_user 
-DEBUG:  [data3]: GRANT ALL ON DATABASE db_dist_grant_3 TO cluster_super_user 
+DEBUG:  [db_dist_grant_1]: GRANT ALL ON DATABASE db_dist_grant_1 TO cluster_super_user 
+DEBUG:  [db_dist_grant_2]: GRANT ALL ON DATABASE db_dist_grant_2 TO cluster_super_user 
+DEBUG:  [db_dist_grant_3]: GRANT ALL ON DATABASE db_dist_grant_3 TO cluster_super_user 
 DEBUG:  [data4]: GRANT ALL ON DATABASE db_dist_grant_4 TO cluster_super_user 
 GRANT TEMP ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: GRANT TEMP ON DATABASE db_dist_grant TO cluster_super_user;
-DEBUG:  [data1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user 
-DEBUG:  [data2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user 
-DEBUG:  [data3]: GRANT temp ON DATABASE db_dist_grant_3 TO cluster_super_user 
+DEBUG:  [db_dist_grant_1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user 
+DEBUG:  [db_dist_grant_2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user 
+DEBUG:  [db_dist_grant_3]: GRANT temp ON DATABASE db_dist_grant_3 TO cluster_super_user 
 DEBUG:  [data4]: GRANT temp ON DATABASE db_dist_grant_4 TO cluster_super_user 
 GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: GRANT TEMP, TEMPORARY ON DATABASE db_dist_grant TO cluster_super_user;
-DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO cluster_super_user 
-DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO cluster_super_user 
-DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO cluster_super_user 
+DEBUG:  [db_dist_grant_1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO cluster_super_user 
+DEBUG:  [db_dist_grant_2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO cluster_super_user 
+DEBUG:  [db_dist_grant_3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO cluster_super_user 
 DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO cluster_super_user 
 GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER, :ROLE_DEFAULT_PERM_USER;
 LOG:  statement: GRANT TEMP, TEMPORARY ON DATABASE db_dist_grant TO cluster_super_user, default_perm_user;
-DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO cluster_super_user, default_perm_user 
-DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO cluster_super_user, default_perm_user 
-DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO cluster_super_user, default_perm_user 
+DEBUG:  [db_dist_grant_1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO cluster_super_user, default_perm_user 
+DEBUG:  [db_dist_grant_2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO cluster_super_user, default_perm_user 
+DEBUG:  [db_dist_grant_3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO cluster_super_user, default_perm_user 
 DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO cluster_super_user, default_perm_user 
 GRANT TEMP ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER WITH GRANT OPTION;
 LOG:  statement: GRANT TEMP ON DATABASE db_dist_grant TO cluster_super_user WITH GRANT OPTION;
-DEBUG:  [data1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user WITH GRANT OPTION 
-DEBUG:  [data2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user WITH GRANT OPTION 
-DEBUG:  [data3]: GRANT temp ON DATABASE db_dist_grant_3 TO cluster_super_user WITH GRANT OPTION 
+DEBUG:  [db_dist_grant_1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user WITH GRANT OPTION 
+DEBUG:  [db_dist_grant_2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user WITH GRANT OPTION 
+DEBUG:  [db_dist_grant_3]: GRANT temp ON DATABASE db_dist_grant_3 TO cluster_super_user WITH GRANT OPTION 
 DEBUG:  [data4]: GRANT temp ON DATABASE db_dist_grant_4 TO cluster_super_user WITH GRANT OPTION 
 REVOKE TEMP ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: REVOKE TEMP ON DATABASE db_dist_grant FROM cluster_super_user;
-DEBUG:  [data1]: REVOKE temp ON DATABASE db_dist_grant_1 FROM cluster_super_user 
-DEBUG:  [data2]: REVOKE temp ON DATABASE db_dist_grant_2 FROM cluster_super_user 
-DEBUG:  [data3]: REVOKE temp ON DATABASE db_dist_grant_3 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_1]: REVOKE temp ON DATABASE db_dist_grant_1 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_2]: REVOKE temp ON DATABASE db_dist_grant_2 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_3]: REVOKE temp ON DATABASE db_dist_grant_3 FROM cluster_super_user 
 DEBUG:  [data4]: REVOKE temp ON DATABASE db_dist_grant_4 FROM cluster_super_user 
 REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: REVOKE ALL ON DATABASE db_dist_grant FROM cluster_super_user;
-DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user 
-DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
-DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
 DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user 
 REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER CASCADE;
 LOG:  statement: REVOKE ALL ON DATABASE db_dist_grant FROM cluster_super_user CASCADE;
-DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user CASCADE
-DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user CASCADE
-DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user CASCADE
+DEBUG:  [db_dist_grant_1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user CASCADE
+DEBUG:  [db_dist_grant_2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user CASCADE
+DEBUG:  [db_dist_grant_3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user CASCADE
 DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user CASCADE
 REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER RESTRICT;
 LOG:  statement: REVOKE ALL ON DATABASE db_dist_grant FROM cluster_super_user RESTRICT;
-DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user 
-DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
-DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
+DEBUG:  [db_dist_grant_3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
 DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user 
 -- Grant to specific role types
 GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO PUBLIC;
 LOG:  statement: GRANT TEMP, TEMPORARY ON DATABASE db_dist_grant TO PUBLIC;
-DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO PUBLIC 
-DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO PUBLIC 
-DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO PUBLIC 
+DEBUG:  [db_dist_grant_1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO PUBLIC 
+DEBUG:  [db_dist_grant_2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO PUBLIC 
+DEBUG:  [db_dist_grant_3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO PUBLIC 
 DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO PUBLIC 
 GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO CURRENT_USER;
 LOG:  statement: GRANT TEMP, TEMPORARY ON DATABASE db_dist_grant TO CURRENT_USER;
-DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO CURRENT_USER 
-DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO CURRENT_USER 
-DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO CURRENT_USER 
+DEBUG:  [db_dist_grant_1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO CURRENT_USER 
+DEBUG:  [db_dist_grant_2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO CURRENT_USER 
+DEBUG:  [db_dist_grant_3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO CURRENT_USER 
 DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO CURRENT_USER 
 GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO SESSION_USER, :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: GRANT TEMP, TEMPORARY ON DATABASE db_dist_grant TO SESSION_USER, cluster_super_user;
-DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO SESSION_USER, cluster_super_user 
-DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO SESSION_USER, cluster_super_user 
-DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO SESSION_USER, cluster_super_user 
+DEBUG:  [db_dist_grant_1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO SESSION_USER, cluster_super_user 
+DEBUG:  [db_dist_grant_2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO SESSION_USER, cluster_super_user 
+DEBUG:  [db_dist_grant_3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO SESSION_USER, cluster_super_user 
 DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO SESSION_USER, cluster_super_user 
 -- PG14 added support for CURRENT_ROLE
 \set ON_ERROR_STOP 0
@@ -1116,11 +1109,11 @@ GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO CURRENT_ROLE;
 ERROR:  syntax error at or near "CURRENT_ROLE" at character 52
 \set ON_ERROR_STOP 1
 -- Grant on other database should not be propagated
-GRANT CREATE ON DATABASE :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
+GRANT CREATE ON DATABASE :DATA_NODE_1 TO :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: GRANT CREATE ON DATABASE db_dist_grant_1 TO cluster_super_user;
 -- Prevent mixing databases
 \set ON_ERROR_STOP 0
-GRANT CREATE ON DATABASE :TEST_DBNAME, :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
+GRANT CREATE ON DATABASE :TEST_DBNAME, :DATA_NODE_1 TO :ROLE_CLUSTER_SUPERUSER;
 LOG:  statement: GRANT CREATE ON DATABASE db_dist_grant, db_dist_grant_1 TO cluster_super_user;
 ERROR:  cannot change privileges on multiple databases
 \set ON_ERROR_STOP 1
@@ -1166,46 +1159,46 @@ SELECT current_user;
 CREATE TABLE disttable_role_3(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Can't create distributed hypertable without GRANTs on foreign servers (data nodes)
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
-ERROR:  permission denied for foreign server data1
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+ERROR:  permission denied for foreign server db_dist_grant_1
 \set ON_ERROR_STOP 1
--- Grant USAGE on data1 (but it is not enough)
+-- Grant USAGE on DATA_NODE_1 (but it is not enough)
 RESET ROLE;
-GRANT USAGE ON FOREIGN SERVER data1 TO :ROLE_3;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1 TO :ROLE_3;
 SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
-ERROR:  permission denied for foreign server data2
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+ERROR:  permission denied for foreign server db_dist_grant_2
 \set ON_ERROR_STOP 1
 -- Creating the hypertable should work with GRANTs on both servers.
 RESET ROLE;
-GRANT USAGE ON FOREIGN SERVER data2 TO :ROLE_3;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_2 TO :ROLE_3;
 SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
 -- Still cannot connect since there is no password in the passfile and
 -- no user mapping.
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 NOTICE:  adding not-null constraint to column "time"
-ERROR:  could not connect to "data1"
+ERROR:  could not connect to "db_dist_grant_1"
 \set ON_ERROR_STOP 1
 RESET ROLE;
-CREATE USER MAPPING FOR :ROLE_3 SERVER data1 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
+CREATE USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_1 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
 -- Still cannot connect since there is only a user mapping for data
--- node "data1".
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+-- node DATA_NODE_1.
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 NOTICE:  adding not-null constraint to column "time"
-ERROR:  could not connect to "data2"
+ERROR:  could not connect to "db_dist_grant_2"
 \set ON_ERROR_STOP 1
 RESET ROLE;
 -- Create user mapping for ROLE_3, but don't specify user in
 -- options. The "current user" will instead be used when connecting.
-CREATE USER MAPPING FOR :ROLE_3 SERVER data2 OPTIONS (password :'ROLE_3_PASS');
+CREATE USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_2 OPTIONS (password :'ROLE_3_PASS');
 SET ROLE :ROLE_3;
 -- User should be able to connect and create the distributed
 -- hypertable at this point.
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |    table_name    | created 
 ---------------+-------------+------------------+---------
@@ -1220,8 +1213,8 @@ SELECT * FROM disttable_role_3;
  Tue Jan 01 00:00:00 2019 PST |      1 | 23.4
 (1 row)
 
-DROP USER MAPPING FOR :ROLE_3 SERVER data1;
-DROP USER MAPPING FOR :ROLE_3 SERVER data2;
+DROP USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_1;
+DROP USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_2;
 -- Test altering default privileges
 RESET ROLE;
 -- Should be superuser
@@ -1236,20 +1229,20 @@ SET ROLE :ROLE_1;
 \set ON_ERROR_STOP 0
 -- Should fail due to lack of privileges (only insert on one data node
 -- to make error reporting deterministic)
-CALL distributed_exec($$ INSERT INTO nodefprivs VALUES ('2019-01-01 00:00:00', 1) $$, '{ "data1" }');
-ERROR:  [data1]: permission denied for table nodefprivs
+CALL distributed_exec($$ INSERT INTO nodefprivs VALUES ('2019-01-01 00:00:00', 1) $$, ARRAY[:'DATA_NODE_1']);
+ERROR:  [db_dist_grant_1]: permission denied for table nodefprivs
 \set ON_ERROR_STOP 1
 -- Reset to super user
 RESET ROLE;
 -- Now alter default privileges and create table
 ALTER DEFAULT PRIVILEGES GRANT INSERT ON TABLES TO :ROLE_1;
-SELECT FROM test.remote_exec('{ "data1" }', $$
+SELECT FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 $$);
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 defaclrole        |defaclobjtype|defaclacl                                                                       
 ------------------+-------------+--------------------------------------------------------------------------------
 cluster_super_user|r            |{cluster_super_user=arwdDxt/cluster_super_user,test_role_1=a/cluster_super_user}
@@ -1267,13 +1260,13 @@ CALL distributed_exec($$ INSERT INTO defprivs VALUES ('2019-01-01 00:00:00', 1) 
 RESET ROLE;
 ALTER DEFAULT PRIVILEGES REVOKE INSERT ON TABLES FROM :ROLE_1;
 -- No default privileges remain
-SELECT FROM test.remote_exec('{ "data1" }', $$
+SELECT FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 $$);
-NOTICE:  [data1]: 
+NOTICE:  [db_dist_grant_1]: 
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 
-NOTICE:  [data1]:
+NOTICE:  [db_dist_grant_1]:
 defaclrole|defaclobjtype|defaclacl
 ----------+-------------+---------
 (0 rows)
@@ -1284,7 +1277,7 @@ defaclrole|defaclobjtype|defaclacl
 
 CALL distributed_exec($$ DROP TABLE defprivs $$);
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
-DROP DATABASE :DN_DBNAME_4;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+DROP DATABASE :DATA_NODE_4;

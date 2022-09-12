@@ -24,8 +24,11 @@ SELECT
     test.make_tablespace_path(:'TEST_TABLESPACE2_PREFIX', :'TEST_DBNAME') AS spc2path
 \gset
 
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
@@ -61,7 +64,7 @@ SET ROLE :ROLE_1;
 SET timescaledb.enable_distributed_insert_with_copy=false;
 
 -- Verify lack of tables
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Test that one cannot directly create TimescaleDB foreign tables
@@ -103,7 +106,8 @@ SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor =>
 \set ON_ERROR_STOP 1
 -- can create under-replicated hypertable byf force detaching a data node
 RESET ROLE;
-SELECT * FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_4 TO PUBLIC;
 SET ROLE :ROLE_1;
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
@@ -265,7 +269,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT * FROM disttable;
 $$);
 
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 
 -- Show what some queries would look like on the frontend

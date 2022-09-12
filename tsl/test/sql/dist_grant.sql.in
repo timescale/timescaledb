@@ -10,14 +10,16 @@
 \o
 \set ECHO all
 
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
-\set DN_DBNAME_4 :TEST_DBNAME _4
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\set DATA_NODE_4 :TEST_DBNAME _4
 
-SELECT * FROM add_data_node('data1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data2', host => 'localhost', database => :'DN_DBNAME_2');
-SELECT * FROM add_data_node('data3', host => 'localhost', database => :'DN_DBNAME_3');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
 
 CREATE TABLE conditions(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);
 GRANT SELECT ON conditions TO :ROLE_1;
@@ -76,7 +78,7 @@ $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
 
 -- Add another data node and check that grants are propagated when the
 -- data node is attached to an existing table.
-SELECT * FROM add_data_node('data4', host => 'localhost', database => :'DN_DBNAME_4');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data4', host => 'localhost', database => :'DATA_NODE_4');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM test.remote_exec(NULL, format($$
@@ -232,7 +234,7 @@ GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM CHUNK_QRY1;
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \z conditions
 SELECT * FROM CHUNK_QRY1;
 
@@ -244,7 +246,7 @@ REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM CHUNK_QRY1;
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_2 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
 \z conditions
 SELECT * FROM CHUNK_QRY1;
 
@@ -280,7 +282,7 @@ GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_3 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER;
 \z measurements
 \z conditions
 SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
@@ -293,7 +295,7 @@ REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
 
 -- Check on one datanode, should be the same on others as well
-\c :DN_DBNAME_4 :ROLE_CLUSTER_SUPERUSER;
+\c :DATA_NODE_4 :ROLE_CLUSTER_SUPERUSER;
 \z measurements
 \z conditions
 SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
@@ -325,11 +327,11 @@ GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO CURRENT_ROLE;
 \set ON_ERROR_STOP 1
 
 -- Grant on other database should not be propagated
-GRANT CREATE ON DATABASE :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
+GRANT CREATE ON DATABASE :DATA_NODE_1 TO :ROLE_CLUSTER_SUPERUSER;
 
 -- Prevent mixing databases
 \set ON_ERROR_STOP 0
-GRANT CREATE ON DATABASE :TEST_DBNAME, :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
+GRANT CREATE ON DATABASE :TEST_DBNAME, :DATA_NODE_1 TO :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 1
 
 -- Test disabling DDL commands on global objects
@@ -359,55 +361,55 @@ CREATE TABLE disttable_role_3(time timestamptz, device int, temp float);
 
 \set ON_ERROR_STOP 0
 -- Can't create distributed hypertable without GRANTs on foreign servers (data nodes)
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 \set ON_ERROR_STOP 1
 
--- Grant USAGE on data1 (but it is not enough)
+-- Grant USAGE on DATA_NODE_1 (but it is not enough)
 RESET ROLE;
-GRANT USAGE ON FOREIGN SERVER data1 TO :ROLE_3;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1 TO :ROLE_3;
 SET ROLE :ROLE_3;
 
 \set ON_ERROR_STOP 0
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 \set ON_ERROR_STOP 1
 
 -- Creating the hypertable should work with GRANTs on both servers.
 RESET ROLE;
-GRANT USAGE ON FOREIGN SERVER data2 TO :ROLE_3;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_2 TO :ROLE_3;
 SET ROLE :ROLE_3;
 
 \set ON_ERROR_STOP 0
 -- Still cannot connect since there is no password in the passfile and
 -- no user mapping.
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
-CREATE USER MAPPING FOR :ROLE_3 SERVER data1 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
+CREATE USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_1 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 SET ROLE :ROLE_3;
 
 \set ON_ERROR_STOP 0
 -- Still cannot connect since there is only a user mapping for data
--- node "data1".
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+-- node DATA_NODE_1.
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
 -- Create user mapping for ROLE_3, but don't specify user in
 -- options. The "current user" will instead be used when connecting.
-CREATE USER MAPPING FOR :ROLE_3 SERVER data2 OPTIONS (password :'ROLE_3_PASS');
+CREATE USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_2 OPTIONS (password :'ROLE_3_PASS');
 SET ROLE :ROLE_3;
 
 -- User should be able to connect and create the distributed
 -- hypertable at this point.
-SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => '{"data1", "data2"}');
+SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 
 -- Test insert and query
 INSERT INTO disttable_role_3 VALUES ('2019-01-01 00:00:00', 1, 23.4);
 SELECT * FROM disttable_role_3;
 
-DROP USER MAPPING FOR :ROLE_3 SERVER data1;
-DROP USER MAPPING FOR :ROLE_3 SERVER data2;
+DROP USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_1;
+DROP USER MAPPING FOR :ROLE_3 SERVER :DATA_NODE_2;
 
 -- Test altering default privileges
 RESET ROLE;
@@ -420,14 +422,14 @@ SET ROLE :ROLE_1;
 \set ON_ERROR_STOP 0
 -- Should fail due to lack of privileges (only insert on one data node
 -- to make error reporting deterministic)
-CALL distributed_exec($$ INSERT INTO nodefprivs VALUES ('2019-01-01 00:00:00', 1) $$, '{ "data1" }');
+CALL distributed_exec($$ INSERT INTO nodefprivs VALUES ('2019-01-01 00:00:00', 1) $$, ARRAY[:'DATA_NODE_1']);
 \set ON_ERROR_STOP 1
 
 -- Reset to super user
 RESET ROLE;
 -- Now alter default privileges and create table
 ALTER DEFAULT PRIVILEGES GRANT INSERT ON TABLES TO :ROLE_1;
-SELECT FROM test.remote_exec('{ "data1" }', $$
+SELECT FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 $$);
 CALL distributed_exec($$ CREATE TABLE defprivs (time timestamptz, value int) $$);
@@ -440,13 +442,13 @@ CALL distributed_exec($$ INSERT INTO defprivs VALUES ('2019-01-01 00:00:00', 1) 
 RESET ROLE;
 ALTER DEFAULT PRIVILEGES REVOKE INSERT ON TABLES FROM :ROLE_1;
 -- No default privileges remain
-SELECT FROM test.remote_exec('{ "data1" }', $$
+SELECT FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 $$);
 CALL distributed_exec($$ DROP TABLE defprivs $$);
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
-DROP DATABASE :DN_DBNAME_4;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+DROP DATABASE :DATA_NODE_4;

@@ -107,16 +107,18 @@ SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'D
 ERROR:  cannot execute add_data_node() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
-SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- db_read_only_1 | localhost | 55432 | db_read_only_1 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ db_read_only_1 | db_read_only_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- db_read_only_2 | localhost | 55432 | db_read_only_2 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
+   node_name    |    database    | node_created | database_created | extension_created 
+----------------+----------------+--------------+------------------+-------------------
+ db_read_only_2 | db_read_only_2 | t            | t                | t
 (1 row)
 
 -- create_distributed_hypertable()

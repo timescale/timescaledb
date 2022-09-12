@@ -2,42 +2,30 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-\set DN_DBNAME_1 :TEST_DBNAME _1
-\set DN_DBNAME_2 :TEST_DBNAME _2
-\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 \set TEST_BASE_NAME data_fetcher
-SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
-       format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+SELECT format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/results/%s_results_cursor.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_CURSOR",
        format('%s/results/%s_results_row_by_row.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_ROW_BY_ROW"
 \gset
 SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_ROW_BY_ROW') as "DIFF_CMD"
 \gset
-SET client_min_messages TO warning;
-\ir :TEST_LOAD_NAME
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
--------------+-----------+-------+-------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_data_fetcher_1 | t            | t                | t
-(1 row)
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+     node_name     |     database      | node_created | database_created | extension_created 
+-------------------+-------------------+--------------+------------------+-------------------
+ db_data_fetcher_1 | db_data_fetcher_1 | t            | t                | t
+ db_data_fetcher_2 | db_data_fetcher_2 | t            | t                | t
+ db_data_fetcher_3 | db_data_fetcher_3 | t            | t                | t
+(3 rows)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
--------------+-----------+-------+-------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_data_fetcher_2 | t            | t                | t
-(1 row)
-
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
--------------+-----------+-------+-------------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | db_data_fetcher_3 | t            | t                | t
-(1 row)
-
-CREATE TABLE disttable(time timestamptz, device int, temp float);
+CREATE TABLE disttable(time timestamptz NOT NULL, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -53,4 +41,43 @@ SELECT setseed(1);
 INSERT INTO disttable
 SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random() * 10
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-02'::timestamptz, '1 second') as t;
-\set ECHO errors
+SET client_min_messages TO error;
+-- Set a smaller fetch size to ensure that the result is split into
+-- mutliple batches.
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fetch_size '100');
+-- run the queries using row by row fetcher
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+\set ON_ERROR_STOP 0
+\o :TEST_RESULTS_ROW_BY_ROW
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+ANALYZE disttable;
+SELECT count(*) FROM disttable;
+SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
+FROM disttable
+GROUP BY 1,2
+ORDER BY 1,2;
+\o
+\set ON_ERROR_STOP 1
+-- run queries using cursor fetcher
+SET timescaledb.remote_data_fetcher = 'cursor';
+\o :TEST_RESULTS_CURSOR
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+ANALYZE disttable;
+SELECT count(*) FROM disttable;
+SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
+FROM disttable
+GROUP BY 1,2
+ORDER BY 1,2;
+\o
+-- compare results
+:DIFF_CMD
+RESET ROLE;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
