@@ -65,6 +65,7 @@ ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
 --test adding boolean columns with default and not null
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
   create_hypertable   
 ----------------------
  (3,public,records,t)

@@ -1266,6 +1266,7 @@ CREATE TABLE water_consumption
     water_index integer
 );
 SELECT create_hypertable('water_consumption', 'timestamp', 'sensor_id', 2);
+WARNING:  column type "timestamp without time zone" used for "timestamp" does not follow best practices
         create_hypertable        
 ---------------------------------
  (34,public,water_consumption,t)

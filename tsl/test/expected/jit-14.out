@@ -22,6 +22,7 @@ SET jit_tuple_deforming=on;
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE TABLE jit_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_hypertable('jit_test', 'time');
+psql:include/jit_load.sql:6: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
    create_hypertable   
 -----------------------
  (1,public,jit_test,t)

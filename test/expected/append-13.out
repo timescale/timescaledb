@@ -92,6 +92,7 @@ ANALYZE metrics_date;
 -- create hypertable with TIMESTAMP time dimension
 CREATE TABLE metrics_timestamp(time TIMESTAMP NOT NULL);
 SELECT create_hypertable('metrics_timestamp','time');
+psql:include/append_load.sql:67: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
        create_hypertable        
 --------------------------------
  (4,public,metrics_timestamp,t)
@@ -134,6 +135,7 @@ CREATE TABLE i2661 (
   "first" float4 NULL
 );
 SELECT create_hypertable('i2661', 'timestamp');
+psql:include/append_load.sql:99: WARNING:  column type "character varying" used for "name" does not follow best practices
  create_hypertable  
 --------------------
  (7,public,i2661,t)

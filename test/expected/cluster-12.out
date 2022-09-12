@@ -153,6 +153,7 @@ ERROR:  there is no previously clustered index for table "_hyper_1_1_chunk"
 CREATE TABLE cluster_alter(time timestamp, id text, val int);
 CREATE INDEX idstuff ON cluster_alter USING btree (id ASC NULLS LAST, time);
 SELECT table_name FROM create_hypertable('cluster_alter', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
   table_name   
 ---------------

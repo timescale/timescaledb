@@ -947,6 +947,7 @@ CREATE TABLE test4 (
     two double precision
 );
 SELECT * FROM create_hypertable('test4', 'timestamp');
+WARNING:  column type "timestamp without time zone" used for "timestamp" does not follow best practices
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             20 | public      | test4      | t

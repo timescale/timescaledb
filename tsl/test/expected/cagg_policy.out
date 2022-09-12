@@ -666,6 +666,7 @@ RESET client_min_messages;
 DROP MATERIALIZED VIEW max_mat_view_date;
 CREATE TABLE continuous_agg_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_timestamp', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------

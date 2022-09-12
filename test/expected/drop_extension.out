@@ -3,6 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
@@ -49,6 +50,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 NOTICE:  extension "timescaledb" already exists, skipping
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
    create_hypertable    
 ------------------------
  (1,public,drop_test,t)

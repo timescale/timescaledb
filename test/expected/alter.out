@@ -13,6 +13,7 @@ ALTER TABLE alter_before ALTER COLUMN colorid RESET (n_distinct);
 ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
 ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
@@ -51,6 +52,7 @@ ORDER BY c.relname, a.attnum;
 -- DROP a table's column after making it a hypertable and having data
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------

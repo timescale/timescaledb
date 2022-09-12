@@ -555,6 +555,8 @@ CREATE TABLE test (
 SELECT create_hypertable(
     'test', 'time'
 );
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+HINT:  Use datatype TIMESTAMPTZ instead.
  create_hypertable  
 --------------------
  (29,public,test,t)

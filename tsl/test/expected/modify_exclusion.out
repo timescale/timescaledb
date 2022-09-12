@@ -38,6 +38,7 @@ SELECT table_name FROM create_hypertable('metrics_date','time');
 (1 row)
 
 SELECT table_name FROM create_hypertable('metrics_timestamp','time');
+psql:include/modify_exclusion_load.sql:17: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     table_name     
 -------------------
  metrics_timestamp
@@ -50,6 +51,7 @@ SELECT table_name FROM create_hypertable('metrics_timestamptz','time');
 (1 row)
 
 SELECT table_name FROM create_hypertable('metrics_space','time','device',4);
+psql:include/modify_exclusion_load.sql:19: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
   table_name   
 ---------------
  metrics_space

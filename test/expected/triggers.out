@@ -344,6 +344,7 @@ CREATE TRIGGER create_color_trigger
     BEFORE INSERT OR UPDATE ON location
     FOR EACH ROW EXECUTE FUNCTION create_color_trigger_fn();
 SELECT create_hypertable('location', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
    create_hypertable   
 -----------------------
  (2,public,location,t)

@@ -3,6 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 CREATE TABLE upsert_test(time timestamp PRIMARY KEY, temp float, color text);
 SELECT create_hypertable('upsert_test', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     create_hypertable     
 --------------------------
  (1,public,upsert_test,t)
@@ -50,6 +51,7 @@ ERROR:  duplicate key value violates unique constraint "1_1_upsert_test_pkey"
 -- Test with UNIQUE index on multiple columns instead of PRIMARY KEY constraint
 CREATE TABLE upsert_test_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_unique', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
@@ -84,6 +86,7 @@ SELECT * FROM upsert_test_unique ORDER BY time, color DESC;
 -- Test with multiple UNIQUE indexes
 CREATE TABLE upsert_test_multi_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_multi_unique', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
@@ -142,6 +145,7 @@ ALTER TABLE upsert_test_space DROP to_drop;
 ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id char(20);
 ALTER TABLE upsert_test_space ADD CONSTRAINT time_space_constraint UNIQUE (time, device_id);
 SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_internal.get_partition_for_key'::regproc);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
@@ -340,6 +344,7 @@ ERROR:  could not find arbiter index for hypertable index "multi_time_color_idx"
 --to ensure this, create a chunk before altering the table this chunk will not have a tup_conv_map
 CREATE TABLE upsert_test_diffchunk(time timestamp, device_id char(20), to_drop int, temp float, color text);
 SELECT create_hypertable('upsert_test_diffchunk', 'time', chunk_time_interval=> interval '1 month');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
@@ -397,6 +402,7 @@ select * from upsert_test_diffchunk order by time, device_id;
 --arbiter index tests
 CREATE TABLE upsert_test_arbiter(time timestamp, to_drop int);
 SELECT create_hypertable('upsert_test_arbiter', 'time', chunk_time_interval=> interval '1 month');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------

@@ -10,6 +10,7 @@ CREATE TABLE metric (id SERIAL PRIMARY KEY, value INT);
 CREATE TABLE hyper(time TIMESTAMP NOT NULL, time_int BIGINT, time_broken DATE, metricid int, value double precision);
 CREATE TABLE regular(time TIMESTAMP NOT NULL, time_int BIGINT, time_date DATE, metricid int, value double precision);
 SELECT create_hypertable('hyper', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE);
+psql:include/plan_hashagg_load.sql:9: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_hypertable  
 --------------------
  (1,public,hyper,t)

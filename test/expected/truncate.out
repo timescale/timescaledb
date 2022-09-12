@@ -244,6 +244,7 @@ RESET client_min_messages;
 \c test_trunc_ht owner
 CREATE TABLE test_hypertable (time TIMESTAMP WITHOUT TIME ZONE NOT NULL, value DOUBLE PRECISION);
 SELECT create_hypertable('test_hypertable', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
       create_hypertable       
 ------------------------------
  (1,public,test_hypertable,t)

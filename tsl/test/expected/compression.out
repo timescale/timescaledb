@@ -875,6 +875,7 @@ CREATE TABLE datatype_test(
   char_column char
 );
 SELECT create_hypertable('datatype_test','time');
+WARNING:  column type "timestamp without time zone" used for "timestamp_column" does not follow best practices
       create_hypertable      
 -----------------------------
  (11,public,datatype_test,t)

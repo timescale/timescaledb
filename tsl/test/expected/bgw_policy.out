@@ -344,6 +344,7 @@ create or replace function dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as
 create or replace function overflow_now() returns SMALLINT LANGUAGE SQL IMMUTABLE as  'SELECT 32767::SMALLINT';
 CREATE TABLE test_table_perm(time timestamp PRIMARY KEY);
 SELECT create_hypertable('test_table_perm', 'time', chunk_time_interval => 1);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 WARNING:  unexpected interval: smaller than one second
       create_hypertable       
 ------------------------------

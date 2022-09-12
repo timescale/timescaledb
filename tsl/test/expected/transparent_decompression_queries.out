@@ -4,6 +4,7 @@
 --TEST github issue 1650 character segment by column 
 CREATE TABLE test_chartab ( job_run_id INTEGER NOT NULL, mac_id CHAR(16) NOT NULL, rtt INTEGER NOT NULL, ts TIMESTAMP(3) NOT NULL );
 SELECT create_hypertable('test_chartab', 'ts', chunk_time_interval => interval '1 day', migrate_data => true);
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
      create_hypertable     
 ---------------------------
  (1,public,test_chartab,t)
@@ -56,6 +57,7 @@ select * from test_chartab order by mac_id , ts limit 2;
 SET enable_hashagg TO false;
 CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT NULL, device_id integer NOT NULL, value float);
 SELECT create_hypertable('merge_sort', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     create_hypertable    
 -------------------------
  (3,public,merge_sort,t)

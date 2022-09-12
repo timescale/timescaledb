@@ -9,6 +9,7 @@
 \set CHUNK2 _timescaledb_internal._hyper_1_2_chunk
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
 NOTICE:  adding not-null constraint to column "i"
  create_hypertable 
 -------------------

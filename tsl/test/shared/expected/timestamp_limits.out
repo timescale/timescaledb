@@ -175,6 +175,7 @@ pg_get_constraintdef | CHECK (("time" >= '294246-12-31'::date))
 
 CREATE TABLE timestamp_table(time timestamp);
 SELECT table_name FROM create_hypertable('timestamp_table', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]---------------
 table_name | timestamp_table
@@ -199,6 +200,7 @@ pg_get_constraintdef | CHECK (("time" >= '294246-12-31 00:00:00'::timestamp with
 
 CREATE TABLE timestamptz_table(time timestamp);
 SELECT table_name FROM create_hypertable('timestamptz_table', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]-----------------
 table_name | timestamptz_table

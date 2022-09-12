@@ -425,3 +425,20 @@ select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', repla
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+
+-- github issue #4650
+CREATE TABLE sample_table (
+       cpu double precision null,
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       name varchar(100) default 'this is a default string value',
+       UNIQUE(sensor_id, time)
+);
+
+ALTER TABLE sample_table DROP COLUMN name;
+
+-- below creation should not report any warnings.
+SELECT * FROM create_hypertable('sample_table', 'time');
+
+-- cleanup
+DROP TABLE sample_table CASCADE;

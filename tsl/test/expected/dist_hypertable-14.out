@@ -4869,6 +4869,8 @@ CREATE TABLE test_1702 (
 	dummy71	int	
 );
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
+WARNING:  column type "character varying" used for "id" does not follow best practices
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
  (22,public,test_1702,t)
@@ -4925,6 +4927,8 @@ CREATE TABLE test_1702 (
 	dummy5	int
 	);
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
+WARNING:  column type "character varying" used for "id" does not follow best practices
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
  (23,public,test_1702,t)
@@ -5572,6 +5576,7 @@ SELECT * FROM disttable ORDER BY 1;
 --
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -5586,6 +5591,7 @@ $$;
 CALL test_drop();
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -5615,6 +5621,7 @@ SELECT test.tsl_override_current_timestamptz(null);
 CREATE TABLE test_tz (time timestamp, v int);
 SELECT create_distributed_hypertable('test_tz','time',
 	chunk_time_interval => interval '1 hour');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -5936,6 +5943,7 @@ DROP TABLE test_tz;
 CREATE TABLE test_now (time timestamp, v int);
 SELECT create_distributed_hypertable('test_now','time',
 	chunk_time_interval => interval '1 hour');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -6005,6 +6013,7 @@ DEALLOCATE test_query;
 --
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -6027,6 +6036,7 @@ SELECT compress_chunk(show_chunks) FROM show_chunks('test');
 DROP TABLE test;
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -6059,6 +6069,7 @@ DROP TABLE test;
 --
 CREATE TABLE test (time timestamp NOT NULL, my_column int NOT NULL);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
  (35,public,test,t)

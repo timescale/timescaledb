@@ -386,6 +386,7 @@ SELECT * FROM PUBLIC."Hypertable_1";
 CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
 -- create hypertable with two chunks
 SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);
+WARNING:  column type "character varying" used for "color" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
@@ -531,6 +532,7 @@ ERROR:  cannot drop column named in partition key
 -- test expression index creation where physical layout of chunks differs from hypertable
 CREATE TABLE i2504(time timestamp NOT NULL, a int, b int, c int, d int);
 select create_hypertable('i2504', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
   create_hypertable  
 ---------------------
  (11,public,i2504,t)

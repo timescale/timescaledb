@@ -13,6 +13,7 @@ order by priority limit 1 \gset
 create table compressed_collation_ht(time timestamp, name text collate :"COLLATION",
     value float);
 select create_hypertable('compressed_collation_ht', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
