@@ -827,27 +827,6 @@ select alter_job(:job_id_alter, config => '{}');
  (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
 (1 row)
 
--- test what happens if the check function contains a COMMIT
--- procedure with transaction handling
-CREATE OR REPLACE PROCEDURE custom_proc2_jsonb(config jsonb) LANGUAGE PLPGSQL AS
-$$
-BEGIN
---   RAISE NOTICE 'Starting some transactions inside procedure';
-  INSERT INTO custom_log VALUES(1, $1, 'custom_proc 1 COMMIT');
-  COMMIT;
-END
-$$;
-select add_job('test_proc_with_check', '5 secs', config => '{}') as job_id_err \gset
-select alter_job(:job_id_err, check_config => 'custom_proc2_jsonb');
-ERROR:  portal snapshots (0) did not account for all active snapshots (1)
-select alter_job(:job_id_err, schedule_interval => '3 minutes');
-                       alter_job                       
--------------------------------------------------------
- (1012,"@ 3 mins","@ 0",-1,"@ 5 mins",t,{},-infinity,)
-(1 row)
-
-select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'custom_proc2_jsonb') as job_id_commit \gset
-ERROR:  portal snapshots (0) did not account for all active snapshots (1)
 -- test the case where we have a background job that registers jobs with a check fn
 CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
 $$
