@@ -14,7 +14,21 @@ jobs:
       - uses: actions/add-to-project@v0.1.0
         with:
           project-url: https://github.com/orgs/timescale/projects/55
-          # Token will expire Oct 2, 2022
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
           labeled: bug, needs-triage
           label-operator: OR
+
+  waiting-for-author:
+    name: Waiting for Author
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'need-more-info'
+    steps:
+      - uses: alex-page/github-project-automation-plus@v0.8.1
+        with:
+          project: Database - TimescaleDB Bugs Board
+          column: Waiting for Author
+          repo-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+
+  waiting-for-engineer:
+    name: Waiting for Engineer
+    if: github.event_name == 'issue_comment' && github.event.action == 'labeled' && github.event.label.name == 'need-more-info'
