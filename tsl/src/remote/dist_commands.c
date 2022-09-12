@@ -76,6 +76,59 @@ ts_dist_cmd_collect_responses(List *requests)
 }
 
 /*
+ * Invoke SQL statement (command) on the given data node connections.
+ */
+static DistCmdResult *
+ts_dist_cmd_invoke_on_data_node_connections(const char *sql, List *data_nodes, List *dn_conn_list)
+{
+	ListCell *lc_conn, *lc_cmd_descr;
+	List *cmd_descriptors = NIL;
+	DistCmdDescr cmd_descr = { .sql = sql, .params = NULL };
+	List *requests = NIL;
+	DistCmdResult *results;
+
+	if (data_nodes == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no data nodes to execute command on"),
+				 errhint("Add data nodes before executing a distributed command.")));
+
+	Assert(list_length(data_nodes) == list_length(dn_conn_list));
+	for (int i = 0; i < list_length(data_nodes); ++i)
+	{
+		cmd_descriptors = lappend(cmd_descriptors, &cmd_descr);
+	}
+
+	forboth (lc_conn, dn_conn_list, lc_cmd_descr, cmd_descriptors)
+	{
+		AsyncRequest *req;
+		TSConnection *connection = lfirst(lc_conn);
+		DistCmdDescr *cmd_descr = lfirst(lc_cmd_descr);
+		const char *sql = cmd_descr->sql;
+		StmtParams *params = cmd_descr->params;
+
+		ereport(DEBUG2,
+				(errmsg_internal("sending \"%s\" to data node \"%s\"",
+								 sql,
+								 remote_connection_node_name(connection))));
+
+		if (params == NULL)
+			req = async_request_send(connection, sql);
+		else
+			req = async_request_send_with_params(connection, sql, params, FORMAT_TEXT);
+
+		async_request_attach_user_data(req, (void *) remote_connection_node_name(connection));
+		requests = lappend(requests, req);
+	}
+
+	results = ts_dist_cmd_collect_responses(requests);
+	list_free(requests);
+	Assert(ts_dist_cmd_response_count(results) == list_length(data_nodes));
+
+	return results;
+}
+
+/*
  * Invoke multiple SQL statements (commands) on the given data nodes.
  *
  * The list of data nodes can either be a list of data node names, or foreign
@@ -166,32 +219,88 @@ ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transac
 	return ts_dist_cmd_params_invoke_on_data_nodes(sql, NULL, data_nodes, transactional);
 }
 
+/*
+ * Return a list of connections to datanodes that can be used for multiple commands
+ */
+static List *
+ts_dist_cmd_get_data_node_connections(List *data_nodes, bool transactional)
+{
+	ListCell *lc_data_node;
+	List *dn_conn_list = NIL;
+
+	if (data_nodes == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no data nodes to execute command on"),
+				 errhint("Add data nodes before executing a distributed command.")));
+
+	switch (nodeTag(data_nodes))
+	{
+		case T_OidList:
+			data_nodes = data_node_oids_to_node_name_list(data_nodes, ACL_NO_CHECK);
+			break;
+		case T_List:
+			/* Already in the format we want */
+			data_node_name_list_check_acl(data_nodes, ACL_NO_CHECK);
+			break;
+		default:
+			elog(ERROR, "invalid list type %u", nodeTag(data_nodes));
+			break;
+	}
+
+	foreach (lc_data_node, data_nodes)
+	{
+		const char *node_name = lfirst(lc_data_node);
+		TSConnection *connection =
+			data_node_get_connection(node_name, REMOTE_TXN_NO_PREP_STMT, transactional);
+
+		dn_conn_list = lappend(dn_conn_list, connection);
+	}
+
+	return dn_conn_list;
+}
+
 DistCmdResult *
 ts_dist_cmd_invoke_on_data_nodes_using_search_path(const char *sql, const char *search_path,
 												   List *node_names, bool transactional)
 {
 	DistCmdResult *set_result;
 	DistCmdResult *results;
+	List *dn_conn_list = NIL;
 	bool set_search_path = search_path != NULL;
 
+	/*
+	 * if we have to set search path then obtain a connection and use it for the entire
+	 * duration of this function to send the rest of the commands as well. We cannot
+	 * assume that we will get the same connection in successive calls since cache
+	 * invalidations might cause connections to go away if we don't re-use the
+	 * same connection for the entirety of this function.
+	 */
 	if (set_search_path)
 	{
 		char *set_request = psprintf("SET search_path = %s, pg_catalog", search_path);
 
-		set_result = ts_dist_cmd_invoke_on_data_nodes(set_request, node_names, transactional);
+		dn_conn_list = ts_dist_cmd_get_data_node_connections(node_names, transactional);
+
+		set_result =
+			ts_dist_cmd_invoke_on_data_node_connections(set_request, node_names, dn_conn_list);
 		if (set_result)
 			ts_dist_cmd_close_response(set_result);
 
 		pfree(set_request);
 	}
 
-	results = ts_dist_cmd_invoke_on_data_nodes(sql, node_names, transactional);
+	if (dn_conn_list)
+		results = ts_dist_cmd_invoke_on_data_node_connections(sql, node_names, dn_conn_list);
+	else
+		results = ts_dist_cmd_invoke_on_data_nodes(sql, node_names, transactional);
 
 	if (set_search_path)
 	{
-		set_result = ts_dist_cmd_invoke_on_data_nodes("SET search_path = pg_catalog",
-													  node_names,
-													  transactional);
+		Assert(dn_conn_list != NIL);
+		set_result = ts_dist_cmd_invoke_on_data_node_connections("SET search_path = pg_catalog",
+																 node_names,
+																 dn_conn_list);
 		if (set_result)
 			ts_dist_cmd_close_response(set_result);
 	}
