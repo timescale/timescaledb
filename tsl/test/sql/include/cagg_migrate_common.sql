@@ -214,7 +214,7 @@ SELECT * FROM conditions_summary_daily_new;
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
 DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
 ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
-CALL cagg_migrate('conditions_summary_daily', TRUE);
+CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
 -- cagg with the old format because it was overriden
@@ -229,7 +229,7 @@ DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
 ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
 DROP MATERIALIZED VIEW conditions_summary_daily;
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
-CALL cagg_migrate('conditions_summary_daily', TRUE, TRUE);
+CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
 \set ON_ERROR_STOP 0
