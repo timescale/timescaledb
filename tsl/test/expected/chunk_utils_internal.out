@@ -514,6 +514,7 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN
 
 CREATE TABLE disthyper (timec timestamp, device integer);
 SELECT create_distributed_hypertable('disthyper', 'timec', 'device');
+WARNING:  column type "timestamp without time zone" used for "timec" does not follow best practices
 NOTICE:  adding not-null constraint to column "timec"
  create_distributed_hypertable 
 -------------------------------

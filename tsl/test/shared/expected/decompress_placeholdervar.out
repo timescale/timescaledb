@@ -16,6 +16,7 @@ CREATE TABLE decompress_phv_ping (
     insert_ts timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 SELECT table_name FROM create_hypertable('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
+WARNING:  column type "timestamp without time zone" used for "insert_ts" does not follow best practices
      table_name      
  decompress_phv_ping
 (1 row)

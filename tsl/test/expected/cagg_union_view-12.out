@@ -641,6 +641,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT create_hypertable('timestamp_table', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------

@@ -85,6 +85,8 @@ logret double precision,
 knowledge_date date NOT NULL
 );
 SELECT create_hypertable('metaseg_tab', 'end_dt', chunk_time_interval=>interval '1 month', create_default_indexes=>false);
+WARNING:  column type "timestamp without time zone" used for "start_dt" does not follow best practices
+WARNING:  column type "timestamp without time zone" used for "end_dt" does not follow best practices
 NOTICE:  adding not-null constraint to column "end_dt"
     create_hypertable     
 --------------------------
@@ -179,6 +181,7 @@ ERROR:  invalid input syntax for type date: "dec 2010" at character 86
 -- test casts between different char types are pushed down
 CREATE TABLE pushdown_relabel(time timestamptz NOT NULL, dev_vc varchar(10), dev_c char(10));
 SELECT table_name FROM create_hypertable('pushdown_relabel', 'time');
+WARNING:  column type "character varying" used for "dev_vc" does not follow best practices
     table_name    
 ------------------
  pushdown_relabel

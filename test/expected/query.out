@@ -22,6 +22,7 @@ CREATE TABLE PUBLIC.hyper_1 (
 );
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
 SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
+psql:include/query_load.sql:13: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper_1    | t

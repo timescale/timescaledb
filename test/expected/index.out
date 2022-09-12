@@ -554,6 +554,7 @@ CREATE TABLE reindex_test(time timestamp, temp float, PRIMARY KEY(time, temp));
 CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
 -- create hypertable with three chunks
 SELECT create_hypertable('reindex_test', 'time', chunk_time_interval => 2628000000000);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
      create_hypertable      
 ----------------------------
  (12,public,reindex_test,t)

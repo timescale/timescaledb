@@ -245,6 +245,7 @@ CREATE TABLE test (time timestamp, v int);
 NOTICE:  test_ddl_command_start: 0 hypertables, query: CREATE TABLE test (time timestamp, v int);
 NOTICE:  test_ddl_command_end: CREATE TABLE
 SELECT create_hypertable('test','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------

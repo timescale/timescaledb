@@ -78,6 +78,7 @@ ERROR:  must be owner of hypertable "one_Partition"
 \set ON_ERROR_STOP 1
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
@@ -441,6 +442,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
 CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
@@ -453,6 +455,7 @@ INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 --all of the following should produce errors
 \set ON_ERROR_STOP 0
 SELECT create_hypertable('plain_table_su', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 ERROR:  must be owner of hypertable "plain_table_su"
 CREATE INDEX ON plain_table_su (time, temp);
 ERROR:  must be owner of table plain_table_su

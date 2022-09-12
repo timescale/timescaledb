@@ -32,6 +32,7 @@ GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 SET ROLE :ROLE_1;
 CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
  (1,public,dist_test,t)
@@ -148,6 +149,7 @@ ERROR:  function must be run on the access node only
 -- ensure that hypertable chunks are distributed
 CREATE TABLE nondist_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_hypertable('nondist_test', 'time', 'device', 3);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
      create_hypertable     
 ---------------------------
  (2,public,nondist_test,t)
@@ -327,6 +329,7 @@ DROP TABLE dist_test;
 -- Create a compressed hypertable
 CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
  (3,public,dist_test,t)

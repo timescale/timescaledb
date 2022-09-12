@@ -15,6 +15,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 
 **Features**
 * #4670 Add timezone support to time_bucket_gapfill
+* #4650 Show warnings when not following best practices
 
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables

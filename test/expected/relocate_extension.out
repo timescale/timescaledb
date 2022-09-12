@@ -16,6 +16,7 @@ CREATE TABLE test_ts(time timestamp, temp float8, device text);
 CREATE TABLE test_tz(time timestamptz, temp float8, device text);
 CREATE TABLE test_dt(time date, temp float8, device text);
 SELECT "testSchema0".create_hypertable('test_ts', 'time', 'device', 2);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------

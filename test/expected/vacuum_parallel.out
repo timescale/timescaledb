@@ -9,6 +9,7 @@ CREATE TABLE vacuum_test(time timestamp NOT NULL, temp1 float, temp2 int);
 -- we create chunks in public schema cause otherwise we would need
 -- elevated privileges to create indexes directly
 SELECT create_hypertable('vacuum_test', 'time', create_default_indexes => false, associated_schema_name => 'public');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     create_hypertable     
 --------------------------
  (1,public,vacuum_test,t)

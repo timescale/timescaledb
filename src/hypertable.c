@@ -1996,6 +1996,44 @@ ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
 	return ts_hypertable_create_internal(fcinfo, true);
 }
 
+/* Go through columns of parent table and check for column data types. */
+static void
+ts_validate_basetable_columns(Relation *rel)
+{
+	int attno;
+	TupleDesc tupdesc;
+
+	tupdesc = RelationGetDescr(*rel);
+	for (attno = 1; attno <= tupdesc->natts; attno++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno - 1);
+		/* skip dropped columns */
+		if (attr->attisdropped)
+			continue;
+		Oid typid = attr->atttypid;
+		switch (typid)
+		{
+			case CHAROID:
+			case VARCHAROID:
+				ereport(WARNING,
+						(errmsg("column type \"%s\" used for \"%s\" does not follow best practices",
+								format_type_be(typid),
+								NameStr(attr->attname)),
+						 errhint("Use datatype TEXT instead.")));
+				break;
+			case TIMESTAMPOID:
+				ereport(WARNING,
+						(errmsg("column type \"%s\" used for \"%s\" does not follow best practices",
+								format_type_be(typid),
+								NameStr(attr->attname)),
+						 errhint("Use datatype TIMESTAMPTZ instead.")));
+				break;
+			default:
+				break;
+		}
+	}
+}
+
 /* Creates a new hypertable.
  *
  * Flags are one of HypertableCreateFlags.
@@ -2065,6 +2103,13 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 				 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
 	}
+
+	/*
+	 * Hypertables also get created as part of caggs. Report warnings
+	 * only for hypertables created via call to create_hypertable().
+	 */
+	if (hypertable_id == INVALID_HYPERTABLE_ID)
+		ts_validate_basetable_columns(&rel);
 
 	/*
 	 * Check that the user has permissions to make this table into a

@@ -780,6 +780,7 @@ SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------

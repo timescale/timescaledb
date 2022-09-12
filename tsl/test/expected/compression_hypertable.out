@@ -614,6 +614,7 @@ DROP TABLE test6;
 -- test 7, compress misc types, and NULLs in dictionaries
 CREATE TABLE test7(time INT, c1 DATE, c2 TIMESTAMP, c3 FLOAT, n TEXT);
 SELECT create_hypertable('test7', 'time', chunk_time_interval=> 200);
+WARNING:  column type "timestamp without time zone" used for "c2" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------

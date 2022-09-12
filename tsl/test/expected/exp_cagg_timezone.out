@@ -10,6 +10,7 @@ SELECT create_hypertable(
   'conditions', 'day',
   chunk_time_interval => INTERVAL '1 day'
 );
+WARNING:  column type "timestamp without time zone" used for "day" does not follow best practices
     create_hypertable    
 -------------------------
  (1,public,conditions,t)

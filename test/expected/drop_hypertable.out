@@ -13,6 +13,7 @@ SELECT * from _timescaledb_catalog.dimension;
 
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
@@ -21,6 +22,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 CREATE TABLE hyper_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('hyper_with_dependencies', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
@@ -43,6 +45,7 @@ NOTICE:  drop cascades to view dependent_view
 
 CREATE TABLE chunk_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('chunk_with_dependencies', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
@@ -87,6 +90,7 @@ SELECT * from _timescaledb_catalog.dimension;
 DROP TABLE should_drop;
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------

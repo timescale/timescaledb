@@ -69,6 +69,7 @@ psql:include/plan_expand_hypertable_load.sql:57: WARNING:  unexpected interval: 
 INSERT INTO hyper_timefunc (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
 CREATE TABLE metrics_timestamp(time timestamp);
 SELECT create_hypertable('metrics_timestamp','time');
+psql:include/plan_expand_hypertable_load.sql:62: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 psql:include/plan_expand_hypertable_load.sql:62: NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------

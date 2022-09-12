@@ -409,6 +409,7 @@ NOTICE:  column "location" is already a dimension, skipping
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
@@ -526,9 +527,11 @@ select * from only test_schema.test_migrate;
 \set ON_ERROR_STOP 0
 --should fail without migrate_data => true
 select create_hypertable('test_schema.test_migrate', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 ERROR:  table "test_migrate" is not empty
 \set ON_ERROR_STOP 1
 select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
         create_hypertable        
@@ -579,6 +582,7 @@ select * from only _timescaledb_internal._hyper_10_10_chunk;
 
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
@@ -588,6 +592,7 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE TYPE test_type AS (time timestamp, temp float);
 CREATE TABLE test_table_of_type OF test_type;
 SELECT create_hypertable('test_table_of_type', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
@@ -603,6 +608,7 @@ DROP TYPE test_type CASCADE;
 NOTICE:  drop cascades to 3 other objects
 CREATE TABLE test_table_of_type (time timestamp, temp float);
 SELECT create_hypertable('test_table_of_type', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
@@ -778,3 +784,21 @@ select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_I
  29 |            17 | time        | bigint      | t       |            |                          |                   |               1 | my_new_schema           | dummy_now4
 (1 row)
 
+-- github issue #4650
+CREATE TABLE sample_table (
+       cpu double precision null,
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       name varchar(100) default 'this is a default string value',
+       UNIQUE(sensor_id, time)
+);
+ALTER TABLE sample_table DROP COLUMN name;
+-- below creation should not report any warnings.
+SELECT * FROM create_hypertable('sample_table', 'time');
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+            18 | public      | sample_table | t
+(1 row)
+
+-- cleanup
+DROP TABLE sample_table CASCADE;

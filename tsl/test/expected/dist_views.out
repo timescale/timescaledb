@@ -116,6 +116,7 @@ ORDER BY node_name;;
 ---tables with special characters in the name ----
 CREATE TABLE "quote'tab" ( a timestamp,  b integer);
 SELECT create_distributed_hypertable( '"quote''tab"', 'a', 'b', replication_factor=>2, chunk_time_interval=>INTERVAL '1 day');
+WARNING:  column type "timestamp without time zone" used for "a" does not follow best practices
 NOTICE:  adding not-null constraint to column "a"
  create_distributed_hypertable 
 -------------------------------
@@ -138,6 +139,7 @@ SELECT * FROM  chunks_detailed_size( '"quote''tab"') ORDER BY chunk_name, node_n
 
 CREATE TABLE "special#tab" ( a timestamp,  b integer);
 SELECT create_hypertable( 'special#tab', 'a', 'b', replication_factor=>2, chunk_time_interval=>INTERVAL '1 day');
+WARNING:  column type "timestamp without time zone" used for "a" does not follow best practices
 NOTICE:  adding not-null constraint to column "a"
     create_hypertable     
 --------------------------
