@@ -1035,12 +1035,10 @@ insert_job('test_job_3_long_2', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERV
 insert_job('test_job_3_long_3', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
 insert_job('test_job_3_long_4', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
 insert_job('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
-insert_job('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
-insert_job('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
-insert_job('test_job_3_long_8', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms');
- insert_job | insert_job | insert_job | insert_job | insert_job | insert_job | insert_job | insert_job 
-------------+------------+------------+------------+------------+------------+------------+------------
-       1006 |       1007 |       1008 |       1009 |       1010 |       1011 |       1012 |       1013
+insert_job('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms');
+ insert_job | insert_job | insert_job | insert_job | insert_job | insert_job 
+------------+------------+------------+------------+------------+------------
+       1006 |       1007 |       1008 |       1009 |       1010 |       1011
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -1057,7 +1055,7 @@ SELECT wait_for_timer_to_run(0);
  t
 (1 row)
 
-SELECT wait_for_job_3_to_finish(7);
+SELECT wait_for_job_3_to_finish(6);
  wait_for_job_3_to_finish 
 --------------------------
  t
@@ -1074,28 +1072,7 @@ ORDER BY job_id;
    1009 | t                |          1 |               1 |              0 |             0 |                   0
    1010 | t                |          1 |               1 |              0 |             0 |                   0
    1011 | t                |          1 |               1 |              0 |             0 |                   0
-   1012 | t                |          1 |               1 |              0 |             0 |                   0
-(7 rows)
-
---but after the first batch finishes and 1 second (START_RETRY_MS) plus 2 seconds
--- backoff pass, the last job will run.
-SELECT ts_bgw_params_reset_time(3000000, true); --set to second 3
- ts_bgw_params_reset_time 
---------------------------
- 
-(1 row)
-
-SELECT wait_for_timer_to_run(3000000);
- wait_for_timer_to_run 
------------------------
- t
-(1 row)
-
-SELECT wait_for_job_3_to_finish(8);
- wait_for_job_3_to_finish 
---------------------------
- t
-(1 row)
+(6 rows)
 
 SELECT ts_bgw_params_reset_time(30000000, true); --set to second 30, which causes a quit.
  ts_bgw_params_reset_time 
@@ -1121,25 +1098,19 @@ ORDER BY job_id;
    1009 | t                |          1 |               1 |              0 |             0 |                   0
    1010 | t                |          1 |               1 |              0 |             0 |                   0
    1011 | t                |          1 |               1 |              0 |             0 |                   0
-   1012 | t                |          1 |               1 |              0 |             0 |                   0
-   1013 | t                |          1 |               1 |              0 |             0 |                   0
-(8 rows)
+(6 rows)
 
 SELECT * FROM sorted_bgw_log WHERE application_name = 'DB Scheduler' ORDER BY application_name, msg_no;
- msg_no | application_name |                                   msg                                    
---------+------------------+--------------------------------------------------------------------------
+ msg_no | application_name |                        msg                         
+--------+------------------+----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Registered new background worker
       3 | DB Scheduler     | [TESTING] Registered new background worker
       4 | DB Scheduler     | [TESTING] Registered new background worker
       5 | DB Scheduler     | [TESTING] Registered new background worker
-      6 | DB Scheduler     | [TESTING] Registered new background worker
-      7 | DB Scheduler     | failed to launch job 1013 "test_job_3_long_8": out of background workers
-      8 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      9 | DB Scheduler     | [TESTING] Registered new background worker
-     10 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-(11 rows)
+      6 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+(7 rows)
 
 SELECT ts_bgw_params_destroy();
  ts_bgw_params_destroy 
@@ -1169,13 +1140,13 @@ DELETE FROM _timescaledb_config.bgw_job;
 SELECT insert_job('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
  insert_job 
 ------------
-       1014
+       1012
 (1 row)
 
 select * from _timescaledb_config.bgw_job;
   id  | application_name | schedule_interval |   max_runtime   | max_retries | retry_period | proc_schema |   proc_name    |   owner    | scheduled | hypertable_id | config | check_schema | check_name 
 ------+------------------+-------------------+-----------------+-------------+--------------+-------------+----------------+------------+-----------+---------------+--------+--------------+------------
- 1014 | test_job_4       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_4 | super_user | t         |               |        |              | 
+ 1012 | test_job_4       | @ 0.1 secs        | @ 1 min 40 secs |           5 | @ 1 sec      | public      | bgw_test_job_4 | super_user | t         |               |        |              | 
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -1190,7 +1161,7 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 FROM _timescaledb_internal.bgw_job_stat;
  job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------------+------------+-----------------+----------------+---------------
-   1014 | t                |          1 |               1 |              0 |             0
+   1012 | t                |          1 |               1 |              0 |             0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -1214,7 +1185,7 @@ SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_succ
 FROM _timescaledb_internal.bgw_job_stat;
  job_id |           next_start           |          last_finish           | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------
-   1014 | Fri Dec 31 16:00:00.4 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          2 |               2 |              0 |             0
+   1012 | Fri Dec 31 16:00:00.4 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          2 |               2 |              0 |             0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -1317,7 +1288,7 @@ insert_job('test_2', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERV
 insert_job('test_3', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
  insert_job | insert_job | insert_job 
 ------------+------------+------------
-       1015 |       1016 |       1017
+       1013 |       1014 |       1015
 (1 row)
 
 select * from verify_refresh_correct();
@@ -1330,7 +1301,7 @@ DELETE from _timescaledb_config.bgw_job where application_name='test_2';
 SELECT insert_job('test_4', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
  insert_job 
 ------------
-       1018
+       1016
 (1 row)
 
 select * from verify_refresh_correct();
@@ -1343,7 +1314,7 @@ DELETE FROM _timescaledb_config.bgw_job;
 SELECT insert_job('test_10', 'test_10', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
  insert_job 
 ------------
-       1019
+       1017
 (1 row)
 
 select * from verify_refresh_correct();
@@ -1368,7 +1339,7 @@ insert_job('another3', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTE
 insert_job('another4', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
  insert_job | insert_job | insert_job | insert_job | insert_job 
 ------------+------------+------------+------------+------------
-       1020 |       1021 |       1022 |       1023 |       1024
+       1018 |       1019 |       1020 |       1021 |       1022
 (1 row)
 
 select * from verify_refresh_correct();
@@ -1381,7 +1352,7 @@ DELETE FROM _timescaledb_config.bgw_job where application_name='another' OR appl
 SELECT insert_job('blah', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
  insert_job 
 ------------
-       1025
+       1023
 (1 row)
 
 select * from verify_refresh_correct();
@@ -1423,7 +1394,7 @@ SELECT insert_job('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s'
 SELECT alter_job(:job_id,scheduled:=true);
                             alter_job                            
 -----------------------------------------------------------------
- (1026,"@ 0.1 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,)
+ (1024,"@ 0.1 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,)
 (1 row)
 
 SELECT ts_bgw_params_reset_time(50000, true);
@@ -1465,7 +1436,7 @@ SELECT wait_for_job_1_to_run(2);
 select * from _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
 --------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1026 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+   1024 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
 (1 row)
 
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
@@ -1525,7 +1496,7 @@ SELECT insert_job('new_job', 'bgw_test_job_1', INTERVAL '10ms', INTERVAL '100s',
 SELECT alter_job(:job_id,scheduled:=true);
                             alter_job                             
 ------------------------------------------------------------------
- (1027,"@ 0.01 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,)
+ (1025,"@ 0.01 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,)
 (1 row)
 
 SELECT ts_bgw_params_reset_time(450000, true);
@@ -1584,7 +1555,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
 --------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1027 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+   1025 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
 (1 row)
 
 -- clean up jobs

@@ -441,26 +441,18 @@ insert_job('test_job_3_long_2', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERV
 insert_job('test_job_3_long_3', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
 insert_job('test_job_3_long_4', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
 insert_job('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
-insert_job('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
-insert_job('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
-insert_job('test_job_3_long_8', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms');
+insert_job('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms');
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT ts_bgw_db_scheduler_test_run(25000); --quit at second 25
 --the first 7 jobs will run right away, but not the last one
 SELECT wait_for_timer_to_run(0);
-SELECT wait_for_job_3_to_finish(7);
+SELECT wait_for_job_3_to_finish(6);
 
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
-
---but after the first batch finishes and 1 second (START_RETRY_MS) plus 2 seconds
--- backoff pass, the last job will run.
-SELECT ts_bgw_params_reset_time(3000000, true); --set to second 3
-SELECT wait_for_timer_to_run(3000000);
-SELECT wait_for_job_3_to_finish(8);
 
 SELECT ts_bgw_params_reset_time(30000000, true); --set to second 30, which causes a quit.
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
