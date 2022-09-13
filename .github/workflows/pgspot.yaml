@@ -40,8 +40,12 @@ jobs:
 
     - name: Build timescaledb sqlfiles
       run: |
+        update_from=$(grep '^update_from_version = ' version.config | sed -e 's!^[^=]\+ = !!')
         git fetch --tags
         ./bootstrap -DGENERATE_DOWNGRADE_SCRIPT=ON
+        git checkout ${update_from}
+        make -C build sqlfile sqlupdatescripts
+        git checkout ${GITHUB_SHA}
         make -C build sqlfile sqlupdatescripts
         ls -la build/sql/timescaledb--*.sql
 
@@ -58,7 +62,7 @@ jobs:
         pgspot ${{ env.PGSPOT_OPTS }} build/sql/timescaledb--${version}.sql
         # The next pgspot execution tests the update script to the latest version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
+        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${update_from}.sql build/sql/timescaledb--${update_from}--${version}.sql
         # The next pgspot execution tests the downgrade script to the previous version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
         pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
