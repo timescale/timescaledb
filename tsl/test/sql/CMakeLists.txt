@@ -1,13 +1,9 @@
 include(GenerateTestSchedule)
 
-# These are the configurations. There has to be a file whatever.conf.in for each
-# configuration name in this list and the corresponding variables use the
-# configuration name as a suffix.
-set(TEST_CONFIGURATIONS postgresql max_bgw_8)
-
 # These are the files for the 'postgresql' configuration. This is the default,
 # so unless you have a good reason, add new test files here.
-set(TEST_FILES_postgresql
+set(TEST_FILES
+    bgw_db_scheduler.sql
     bgw_custom.sql
     bgw_policy.sql
     cagg_errors.sql
@@ -34,7 +30,7 @@ set(TEST_FILES_postgresql
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
-    TEST_FILES_postgresql
+    TEST_FILES
     bgw_reorder_drop_chunks.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
@@ -74,6 +70,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_compression.sql
     dist_copy_long.sql
     dist_ddl.sql
+    dist_move_chunk.sql
     dist_partial_agg.sql
     dist_policy.sql
     dist_query.sql
@@ -91,16 +88,16 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     tsl_tables.sql
     license.sql)
   if(USE_TELEMETRY)
-    list(APPEND TEST_FILES_postgresql telemetry_stats.sql)
+    list(APPEND TEST_FILES telemetry_stats.sql)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES_postgresql modify_exclusion.sql
-       chunk_utils_internal.sql)
+  list(APPEND TEST_FILES modify_exclusion.sql chunk_utils_internal.sql)
 endif()
 
-set(SOLO_TESTS_postgresql
+set(SOLO_TESTS
+    bgw_db_scheduler
     bgw_reorder_drop_chunks
     compress_bgw_reorder_drop_chunks
     compression_ddl
@@ -109,6 +106,7 @@ set(SOLO_TESTS_postgresql
     cagg_ddl_dist_ht
     cagg_dump
     data_fetcher
+    dist_move_chunk
     dist_util
     move
     remote_connection_cache
@@ -117,14 +115,6 @@ set(SOLO_TESTS_postgresql
     remote_txn_resolve
     reorder
     telemetry_stats)
-
-# Test files for the max_bgw_8 configuration that configures TimescaleDB with a
-# max of 8 TimescaleDB background workers.
-set(TEST_FILES_max_bgw_8)
-set(SOLO_TESTS_max_bgw_8 bgw_db_scheduler)
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES_max_bgw_8 bgw_db_scheduler.sql dist_move_chunk.sql)
-endif()
 
 set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
@@ -164,7 +154,7 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
   configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE}
                  COPYONLY)
-  list(APPEND TEST_FILES_postgresql ${TEST_FILE})
+  list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
 if(NOT TEST_GROUP_SIZE)
@@ -173,14 +163,12 @@ else()
   set(PARALLEL_GROUP_SIZE ${TEST_GROUP_SIZE})
 endif()
 
-# Generate a test schedule for each configuration.
-foreach(_conf ${TEST_CONFIGURATIONS})
-  generate_test_schedule(
-    ${TEST_SCHEDULE}_${_conf}
-    TEST_FILES
-    ${TEST_FILES_${_conf}}
-    SOLO
-    ${SOLO_TESTS_${_conf}}
-    GROUP_SIZE
-    ${PARALLEL_GROUP_SIZE})
-endforeach()
+# Generate a test schedule
+generate_test_schedule(
+  ${TEST_SCHEDULE}
+  TEST_FILES
+  ${TEST_FILES}
+  SOLO
+  ${SOLO_TESTS}
+  GROUP_SIZE
+  ${PARALLEL_GROUP_SIZE})

@@ -58,7 +58,6 @@ else()
   set(TELEMETRY_DEFAULT_SETTING)
 endif()
 configure_file(postgresql.conf.in postgresql.conf)
-configure_file(max_bgw_8.conf.in max_bgw_8.conf)
 configure_file(${PRIMARY_TEST_DIR}/pgtest.conf.in pgtest.conf)
 
 # pgpass file requires chmod 0600
