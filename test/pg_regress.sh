@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# shellcheck disable=SC2053
+# shellcheck disable=SC2235
+
 # Wrapper around pg_regress and pg_isolation_regress to be able to control the schedule with environment variables
 #
 # The following control variables are supported:
@@ -35,8 +38,6 @@ PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tes
 # all bgw tests would be "*bgw*" while with =~ it would be ".*bgw.*"
 matches() {
   for pattern in $1; do
-    # shellcheck disable=SC2053
-    # We do want to match globs in $pattern here.
     if [[ $2 == $pattern ]]; then
       return 0
     fi
@@ -59,11 +60,11 @@ if [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -z ${IGNORES} ]]; then
 
   SCHEDULE=${TEST_SCHEDULE}
 
-elif [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -n ${IGNORES} ]]; then
-  # if we only have IGNORES we can use the cmake created schedule
+elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
+  # If we only have IGNORES or SKIPS we can use the cmake created schedule
   # and just prepend ignore lines for the tests whose result should be
-  # ignored. This will allow us to retain the parallel groupings from
-  # the supplied schedule
+  # ignored and strip out the skipped tests. This will allow us to retain
+  # the parallel groupings from the supplied schedule.
 
   echo > ${TEMP_SCHEDULE}
 
@@ -71,23 +72,35 @@ elif [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -n ${IGNORES} ]]; then
 
   # to support wildcards in IGNORES we match the IGNORES
   # list against the actual list of tests
-  for test_pattern in ${IGNORES}; do
-    for test_name in ${ALL_TESTS}; do
-      # shellcheck disable=SC2053
-      # We do want to match globs in $test_pattern here.
-      if [[ $test_name == $test_pattern ]]; then
-        echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
-      fi
+  if [[ -n ${IGNORES} ]]; then
+    for test_pattern in ${IGNORES}; do
+      for test_name in ${ALL_TESTS}; do
+        if [[ $test_name == $test_pattern ]]; then
+          echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
+        fi
+      done
     done
-  done
+  fi
 
   cat ${TEST_SCHEDULE} >> ${TEMP_SCHEDULE}
+
+  # to support wildcards in SKIPS we match the SKIPS
+  # list against the actual list of tests
+  if [[ -n ${SKIPS} ]]; then
+    for test_pattern in ${SKIPS}; do
+      for test_name in ${ALL_TESTS}; do
+        if [[ $test_name == $test_pattern ]]; then
+          sed -i ${TEMP_SCHEDULE} -e "s!^test:\s*${test_name}\s*\$!!"
+          sed -i ${TEMP_SCHEDULE} -e "s!\b${test_name}\b!!"
+        fi
+      done
+    done
+  fi
 
   SCHEDULE=${TEMP_SCHEDULE}
 
 else
-  # either TESTS or SKIPS was specified so we need to create a new schedule
-  # based on those
+  # TESTS was specified so we need to create a new schedule based on that
 
   ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
@@ -102,8 +115,6 @@ else
   for test_pattern in ${TESTS}; do
     for test_name in ${ALL_TESTS}; do
       if ! matches "${SKIPS}" "${test_name}"; then
-        # shellcheck disable=SC2053
-        # We do want to match globs in $test_pattern here.
         if [[ $test_name == $test_pattern ]]; then
           current_tests="${current_tests} ${test_name}"
         fi
@@ -127,8 +138,6 @@ else
   for test_pattern in ${IGNORES}; do
     for test_name in ${ALL_TESTS}; do
       if ! matches "${SKIPS}" "${test_name}"; then
-        # shellcheck disable=SC2053
-        # We do want to match globs in $test_pattern here.
         if [[ $test_name == $test_pattern ]]; then
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
