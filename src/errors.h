@@ -11,6 +11,7 @@
 -- TS000 - GROUP: query errors
 -- TS001 - hypertable does not exist
 -- TS002 - column does not exist
+-- TS003 - chunk does not exist
 */
 #define ERRCODE_TS_QUERY_ERRORS MAKE_SQLSTATE('T', 'S', '0', '0', '0')
 #define ERRCODE_TS_HYPERTABLE_NOT_EXIST MAKE_SQLSTATE('T', 'S', '0', '0', '1')
@@ -29,9 +30,11 @@
 --TS140 - tablespace already attached
 --TS150 - tablespace not attached
 --TS160 - duplicate dimension
---TS170 - no data nodes
---TS180 - data node assignment already exists
---TS190 - data node not attached
+--TS170 - insufficient number of data nodes
+--TS171 - data node assignment already exists
+--TS172 - data node already attached
+--TS173 - data node not attached
+--TS174 - invalid data node configuration
 */
 #define ERRCODE_TS_DDL_ERRORS MAKE_SQLSTATE('T', 'S', '1', '0', '0')
 #define ERRCODE_TS_OPERATION_NOT_SUPPORTED MAKE_SQLSTATE('T', 'S', '1', '0', '1')
@@ -51,9 +54,11 @@
 #define ERRCODE_TS_DATA_NODE_INVALID_CONFIG MAKE_SQLSTATE('T', 'S', '1', '7', '4')
 
 /*
---IO500 - GROUP: internal error
---IO501 - unexpected state/event
---IO502 - communication/remote error
+--TS500 - GROUP: internal error
+--TS501 - unexpected state/event
+--TS502 - communication/remote error
+--TS503 - chunk collision
+--TS504 - data node in use
 */
 #define ERRCODE_TS_INTERNAL_ERROR MAKE_SQLSTATE('T', 'S', '5', '0', '0')
 #define ERRCODE_TS_UNEXPECTED MAKE_SQLSTATE('T', 'S', '5', '0', '1')
