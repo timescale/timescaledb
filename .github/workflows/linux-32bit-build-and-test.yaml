@@ -96,7 +96,7 @@ jobs:
           apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
+            echo 'printf "%s", debug_query_string\nbt full' | gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file | tee -a stacktraces.log
           done
           echo "::set-output name=coredumps::true"
           exit 1
