@@ -619,22 +619,16 @@ BEGIN
 END
 $$;
 -- step 3, add the job with the config check function passed as argument
--- test procedures
+-- test procedures, should get an unsupported error
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_proc'::regproc);
-ERROR:  Config must be not NULL and have drop_after
-select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_proc'::regproc);
-ERROR:  Config must be not NULL and have drop_after
-select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_proc'::regproc);
-ERROR:  invalid input syntax for type interval: "chicken"
-select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_proc'::regproc)
-as job_with_proc_check_id \gset
+ERROR:  unsupported function type
 -- test functions
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
 ERROR:  Config can be NULL but must have drop_after if not
 select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
  add_job 
 ---------
-    1006
+    1005
 (1 row)
 
 select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
@@ -647,13 +641,7 @@ ERROR:  invalid input syntax for type interval: "chicken"
 select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
                                                     alter_job                                                    
 -----------------------------------------------------------------------------------------------------------------
- (1007,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""5 years""}",-infinity,public.test_config_check_func)
-(1 row)
-
-select alter_job(:job_with_proc_check_id, config => '{"drop_after":"4 days"}');
-                                                   alter_job                                                    
-----------------------------------------------------------------------------------------------------------------
- (1005,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""4 days""}",-infinity,public.test_config_check_proc)
+ (1006,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""5 years""}",-infinity,public.test_config_check_func)
 (1 row)
 
 -- test that jobs with an incorrect check function signature will not be registered
@@ -701,7 +689,7 @@ select add_job('test_proc_with_check', '5 secs', config => NULL, check_config =>
 NOTICE:  This message will get printed for both NULL and not NULL config
  add_job 
 ---------
-    1008
+    1007
 (1 row)
 
 -- check done
@@ -721,18 +709,18 @@ NOTICE:  I print a message, and then I return least(1,2)
 -- the check is being skipped due to the check function missing
 ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
 select alter_job(:job_id, schedule_interval => '1 hour');
-WARNING:  function or procedure public.test_config_check_func(config jsonb) not found, skipping config validation for job 1009
+WARNING:  function public.test_config_check_func(config jsonb) not found, skipping config validation for job 1008
                                      alter_job                                      
 ------------------------------------------------------------------------------------
- (1009,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.test_config_check_func)
+ (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.test_config_check_func)
 (1 row)
 
 DROP FUNCTION test_config_check_func_returns_int;
 select alter_job(:job_id_int, config => '{"field":"value"}');
-WARNING:  function or procedure public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1010
+WARNING:  function public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1009
                                                       alter_job                                                       
 ----------------------------------------------------------------------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""field"": ""value""}",-infinity,public.test_config_check_func_returns_int)
+ (1009,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""field"": ""value""}",-infinity,public.test_config_check_func_returns_int)
 (1 row)
 
 -- rename the check function and then call alter_job to register the new name
@@ -740,7 +728,7 @@ select alter_job(:job_id, check_config => 'renamed_func'::regproc);
 NOTICE:  This message will get printed for both NULL and not NULL config
                                 alter_job                                 
 --------------------------------------------------------------------------
- (1009,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+ (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
 (1 row)
 
 -- run alter again, should get a config check
@@ -748,7 +736,7 @@ select alter_job(:job_id, config => '{}');
 NOTICE:  This message will get printed for both NULL and not NULL config
                                 alter_job                                 
 --------------------------------------------------------------------------
- (1009,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+ (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
 (1 row)
 
 -- do not drop the current check function but register a new one
@@ -763,14 +751,14 @@ select alter_job(:job_id, check_config => 'substitute_check_func');
 NOTICE:  This message is a substitute of the previously printed one
                                      alter_job                                     
 -----------------------------------------------------------------------------------
- (1009,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.substitute_check_func)
+ (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.substitute_check_func)
 (1 row)
 
 select alter_job(:job_id, config => '{}');
 NOTICE:  This message is a substitute of the previously printed one
                                      alter_job                                     
 -----------------------------------------------------------------------------------
- (1009,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.substitute_check_func)
+ (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.substitute_check_func)
 (1 row)
 
 RESET client_min_messages;
@@ -810,21 +798,21 @@ select alter_job(:job_id_alter);
 NOTICE:  This message will get printed for both NULL and not NULL config
                                 alter_job                                 
 --------------------------------------------------------------------------
- (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+ (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
 (1 row)
 
 -- test that we can unregister the check function
 select alter_job(:job_id_alter, check_config => 0);
                        alter_job                       
 -------------------------------------------------------
- (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+ (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
 (1 row)
 
 -- no message printed now
 select alter_job(:job_id_alter, config => '{}'); 
                        alter_job                       
 -------------------------------------------------------
- (1011,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+ (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
 (1 row)
 
 -- test the case where we have a background job that registers jobs with a check fn
