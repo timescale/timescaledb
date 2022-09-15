@@ -112,6 +112,8 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.policy_compression(integer,jsonb)
  _timescaledb_internal.policy_compression_check(jsonb)
  _timescaledb_internal.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean)
+ _timescaledb_internal.policy_job_error_retention(integer,jsonb)
+ _timescaledb_internal.policy_job_error_retention_check(jsonb)
  _timescaledb_internal.policy_recompression(integer,jsonb)
  _timescaledb_internal.policy_refresh_continuous_aggregate(integer,jsonb)
  _timescaledb_internal.policy_refresh_continuous_aggregate_check(jsonb)

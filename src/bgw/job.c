@@ -1138,7 +1138,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			start_time = job_stat->fd.last_start;
 			finish_time = job_stat->fd.last_finish;
 		}
-		CommitTransactionCommand();
 
 		jerr.error_data = ts_errdata_to_jsonb(edata);
 		jerr.job_id = params.job_id;
@@ -1146,7 +1145,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		jerr.finish_time = finish_time;
 		jerr.pid = MyProcPid;
 
-		StartTransactionCommand();
 
 		ts_job_errors_insert_relation(&jerr);
 

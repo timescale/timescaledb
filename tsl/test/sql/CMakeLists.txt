@@ -24,13 +24,13 @@ set(TEST_FILES
     move.sql
     partialize_finalize.sql
     reorder.sql
-    skip_scan.sql)
+    skip_scan.sql
+    troubleshooting_job_errors.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES_postgresql
-    troubleshooting_job_errors.sql
     bgw_db_scheduler.sql
     bgw_reorder_drop_chunks.sql
     compress_bgw_reorder_drop_chunks.sql
