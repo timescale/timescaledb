@@ -361,12 +361,8 @@ END
 $$;
 
 -- step 3, add the job with the config check function passed as argument
--- test procedures
+-- test procedures, should get an unsupported error
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_proc'::regproc);
-select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_proc'::regproc);
-select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_proc'::regproc);
-select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_proc'::regproc)
-as job_with_proc_check_id \gset
 
 -- test functions
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
@@ -379,8 +375,6 @@ as job_with_func_check_id \gset
 --- test alter_job
 select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
 select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
-
-select alter_job(:job_with_proc_check_id, config => '{"drop_after":"4 days"}');
 
 
 -- test that jobs with an incorrect check function signature will not be registered
