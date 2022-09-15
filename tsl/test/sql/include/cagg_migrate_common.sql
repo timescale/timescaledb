@@ -162,11 +162,17 @@ ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq
 CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
 
--- policy for test
+ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
+
+-- policies for test
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
+SELECT add_continuous_aggregate_policy('conditions_summary_daily', '30 days'::interval, '1 day'::interval, '1 hour'::interval);
+SELECT add_compression_policy('conditions_summary_daily', '45 days'::interval);
 \else
-SELECT add_retention_policy('conditions_summary_daily', '30'::integer);
+SELECT add_retention_policy('conditions_summary_daily', '400'::integer);
+SELECT add_continuous_aggregate_policy('conditions_summary_daily', '50'::integer, '1'::integer, '1 hour'::interval);
+SELECT add_compression_policy('conditions_summary_daily', '100'::integer);
 \endif
 
 SELECT job_id, application_name, proc_schema, proc_name, scheduled, hypertable_schema, hypertable_name, config
@@ -209,6 +215,16 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 SELECT * FROM conditions_summary_daily
 EXCEPT
 SELECT * FROM conditions_summary_daily_new;
+
+-- compress both caggs
+SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY c::regclass::text;
+SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
+
+-- check migrated data after compression. should return 0 (zero) rows
+SELECT * FROM conditions_summary_daily
+EXCEPT
+SELECT * FROM conditions_summary_daily_new;
+
 
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
