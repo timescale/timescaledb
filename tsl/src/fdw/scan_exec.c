@@ -152,6 +152,27 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		}
 	}
 
+	/*
+	 * Row-by-row fetcher uses COPY statement that don't work with prepared
+	 * statements. If this plan is parameterized, this means we'll have to
+	 * revert to cursor fetcher.
+	 */
+	if (num_params > 0 && fsstate->planned_fetcher_type == RowByRowFetcherType)
+	{
+		if (ts_guc_remote_data_fetcher == AutoFetcherType)
+		{
+			fsstate->planned_fetcher_type = CursorFetcherType;
+		}
+		else
+		{
+			ereport(ERROR,
+					(errmsg("cannot use row-by-row fetcher because the plan is parameterized"),
+					 errhint("Set \"timescaledb.remote_data_fetcher\" to \"cursor\" to explicitly "
+							 "set the fetcher type or use \"auto\" to select the fetcher type "
+							 "automatically.")));
+		}
+	}
+
 	if (fsstate->planned_fetcher_type == CursorFetcherType)
 	{
 		fetcher = cursor_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
