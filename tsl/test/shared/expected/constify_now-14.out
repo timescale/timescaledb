@@ -488,3 +488,14 @@ QUERY PLAN
 
 DROP TABLE now_view_test CASCADE;
 NOTICE:  drop cascades to view now_view
+-- #4709
+-- test queries with constraints involving columns from different nesting levels
+SELECT * FROM
+  (SELECT * FROM metrics m1 LIMIT 1) m1
+  INNER JOIN (SELECT * FROM metrics m2 LIMIT 1) m2 ON true,
+  LATERAL (SELECT m2.time FROM devices LIMIT 1) as subq_1
+WHERE subq_1.time > m1.time;
+ time | device_id | v0 | v1 | v2 | v3 | time | device_id | v0 | v1 | v2 | v3 | time 
+------+-----------+----+----+----+----+------+-----------+----+----+----+----+------
+(0 rows)
+

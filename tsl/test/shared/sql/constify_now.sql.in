@@ -170,4 +170,11 @@ CREATE VIEW now_view AS SELECT time, device, avg(value) from now_view_test GROUP
 :PREFIX SELECT * FROM now_view WHERE time > now() - '168h'::interval;
 DROP TABLE now_view_test CASCADE;
 
+-- #4709
+-- test queries with constraints involving columns from different nesting levels
+SELECT * FROM
+  (SELECT * FROM metrics m1 LIMIT 1) m1
+  INNER JOIN (SELECT * FROM metrics m2 LIMIT 1) m2 ON true,
+  LATERAL (SELECT m2.time FROM devices LIMIT 1) as subq_1
+WHERE subq_1.time > m1.time;
 

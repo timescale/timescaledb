@@ -83,6 +83,8 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 		if (!IsA(tle->expr, Var))
 			return false;
 		var = castNode(Var, tle->expr);
+		if (var->varlevelsup != 0)
+			return false;
 		rte = list_nth(rte->subquery->rtable, var->varno - 1);
 	}
 
