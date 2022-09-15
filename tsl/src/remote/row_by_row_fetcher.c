@@ -116,15 +116,18 @@ row_by_row_fetcher_send_fetch_request(DataFetcher *df)
 		fetcher->state.open = true;
 
 		PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
-		if (!res)
+		if (res == NULL)
 		{
-			elog(ERROR, "unexpected NULL response when starting COPY mode");
+			/* Shouldn't really happen but technically possible. */
+			TSConnectionError err;
+			remote_connection_get_error(fetcher->state.conn, &err);
+			remote_connection_error_elog(&err, ERROR);
 		}
 		if (PQresultStatus(res) != PGRES_COPY_OUT)
 		{
-			elog(ERROR,
-				 "unexpected PQresult status %d when starting COPY mode",
-				 PQresultStatus(res));
+			TSConnectionError err;
+			remote_connection_get_result_error(res, &err);
+			remote_connection_error_elog(&err, ERROR);
 		}
 
 		PQclear(res);

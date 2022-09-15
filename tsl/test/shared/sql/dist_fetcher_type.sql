@@ -136,3 +136,40 @@ WHERE EXISTS (
     (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
 )
 ORDER BY 1,2;
+
+-- Check that we don't use row-by-row fetcher for parameterized plans.
+CREATE TABLE lookup (id SERIAL NOT NULL, key TEXT, val TEXT);
+CREATE TABLE metric (ts TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, lookup_id INT NOT NULL);
+SELECT 1 FROM create_distributed_hypertable('metric', 'ts');
+
+INSERT INTO lookup (key, val) VALUES ('host', 'localhost');
+INSERT INTO metric (ts, val, lookup_id) SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-08-17 00:00:00'::timestamp, '2021-08-17 00:59:59'::timestamp, '1 s'::interval) s;
+
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    ARRAY[m.lookup_id] && (SELECT array_agg(l.id)::int[] FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
