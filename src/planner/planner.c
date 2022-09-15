@@ -615,6 +615,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	PG_CATCH();
 	{
 		ts_baserel_info = NULL;
+		ts_data_node_fetcher_scan_type = AutoFetcherType;
 		/* Pop the cache, but do not release since caches are auto-released on
 		 * error */
 		planner_hcache_pop(false);
