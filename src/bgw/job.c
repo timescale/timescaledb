@@ -85,22 +85,6 @@ job_execute_function(FuncExpr *funcexpr)
 	FreeExecutorState(estate);
 }
 
-/* This is copied from tsl/src/job.c */
-static void
-job_execute_procedure(FuncExpr *funcexpr)
-{
-	CallStmt *call = makeNode(CallStmt);
-	call->funcexpr = funcexpr;
-	DestReceiver *dest = CreateDestReceiver(DestNone);
-	/* we don't need to create proper param list cause we pass in all arguments as Const */
-#ifdef PG11
-	ParamListInfo params = palloc0(offsetof(ParamListInfoData, params));
-#else
-	ParamListInfo params = makeParamList(0);
-#endif
-	ExecuteCallStmt(call, params, false, dest);
-}
-
 /**
  * Run configuration check validation function.
  *
@@ -125,19 +109,13 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 	FuncExpr *funcexpr =
 		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 
-	switch (get_func_prokind(check))
-	{
-		case PROKIND_FUNCTION:
-			job_execute_function(funcexpr);
-			break;
-		case PROKIND_PROCEDURE:
-			job_execute_procedure(funcexpr);
-			break;
-		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")));
-			break;
-	}
+	if (get_func_prokind(check) == PROKIND_FUNCTION)
+		job_execute_function(funcexpr);
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")),
+				errdetail("Only functions are allowed as custom configuration checks"),
+				errhint("Use a FUNCTION instead"));
 }
 
 /* Run the check function on a configuration. It will generate errors if there
@@ -147,7 +125,7 @@ static void
 job_config_check(BgwJob *job, Jsonb *config)
 {
 	Oid proc;
-	ObjectWithArgs *object;
+	List *funcname;
 
 	/* Both should either be empty or contain a schema and name */
 	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
@@ -157,12 +135,13 @@ job_config_check(BgwJob *job, Jsonb *config)
 	if (strlen(NameStr(job->fd.check_name)) == 0)
 		return;
 
-	object = makeNode(ObjectWithArgs);
+	funcname = list_make2(makeString(NameStr(job->fd.check_schema)),
+						  makeString(NameStr(job->fd.check_name)));
 
-	object->objname = list_make2(makeString(NameStr(job->fd.check_schema)),
-								 makeString(NameStr(job->fd.check_name)));
-	object->objargs = list_make1(SystemTypeName("jsonb"));
-	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+	Oid argtypes[] = { JSONBOID };
+	/* Only functions allowed as custom checks, as procedures can cause errors with COMMIT
+	 * statements */
+	proc = LookupFuncName(funcname, 1, argtypes, true);
 
 	/* a check function has been registered but it can't be found anymore
 	 because it was dropped or renamed. Allow alter_job to run if that's the case
@@ -171,7 +150,7 @@ job_config_check(BgwJob *job, Jsonb *config)
 		ts_bgw_job_run_config_check(proc, job->fd.id, config);
 	else
 		elog(WARNING,
-			 "function or procedure %s.%s(config jsonb) not found, skipping config validation for "
+			 "function %s.%s(config jsonb) not found, skipping config validation for "
 			 "job %d",
 			 NameStr(job->fd.check_schema),
 			 NameStr(job->fd.check_name),
