@@ -422,10 +422,10 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 -- show the column name and type of the partitioning dimension in the
 -- metadata table
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
- 15 |             9 | color       | character varying        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
- 14 |             9 | time        | timestamp with time zone | t       |            |                          |                    |   2628000000000 |                         | 
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+ 15 |             9 | color       | character varying        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+ 14 |             9 | time        | timestamp with time zone | t       |            |                          |                    |   2628000000000 |                          |                         | 
 (2 rows)
 
 EXPLAIN (costs off)
@@ -476,10 +476,10 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 
 -- show that the metadata has been updated
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
- 15 |             9 | colorname   | character varying           | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
- 14 |             9 | time_us     | timestamp without time zone | t       |            |                          |                    |   2628000000000 |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+ 15 |             9 | colorname   | character varying           | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+ 14 |             9 | time_us     | timestamp without time zone | t       |            |                          |                    |   2628000000000 |                          |                         | 
 (2 rows)
 
 -- constraint exclusion should still work with updated column

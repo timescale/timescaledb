@@ -64,8 +64,8 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;

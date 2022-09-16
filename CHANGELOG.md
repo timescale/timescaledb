@@ -16,6 +16,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 **Features**
 * #4650 Show warnings when not following best practices
 * #4670 Add timezone support to time_bucket_gapfill
+* #4718 Add ability to merge chunks while compressing
 * #4786 Extend the now() optimization to also apply to CURRENT_TIMESTAMP
 
 **Bugfixes**

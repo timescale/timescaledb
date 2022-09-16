@@ -2143,13 +2143,13 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
-  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000 |                         | 
-  2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  3 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000 |                         | 
-  5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000 |                         | 
-  6 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                 |                         | 
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000 |                          |                         | 
+  2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  3 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000 |                          |                         | 
+  5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000 |                          |                         | 
+  6 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
 (5 rows)
 
 SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
@@ -2178,13 +2178,13 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_1]:
-id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
- 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
- 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                       |                
+id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+ 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+ 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
 (5 rows)
 
 
@@ -2212,13 +2212,13 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 NOTICE:  [db_dist_hypertable_2]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_2]:
-id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
- 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
- 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 6|            4|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 7|            4|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                       |                
+id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+ 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+ 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 6|            4|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 7|            4|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
 (5 rows)
 
 
@@ -2246,13 +2246,13 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 NOTICE:  [db_dist_hypertable_3]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_3]:
-id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
- 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
- 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                       |                
+id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+ 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+ 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
 (5 rows)
 
 
@@ -2374,17 +2374,17 @@ SELECT * FROM dimented_table ORDER BY time;
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+-------------------------+------------------
-  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
-  3 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  6 |             4 | __region         | text                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
-  7 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  8 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
-  9 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
- 10 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                 |                         | 
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash    |                 |                          |                         | 
+  3 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  6 |             4 | __region         | text                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                 |                          |                         | 
+  7 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  8 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                          |                         | 
+  9 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+ 10 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                 |                          |                         | 
 (9 rows)
 
 SELECT * FROM attach_data_node(:'DATA_NODE_2', 'dimented_table');
@@ -2394,17 +2394,17 @@ SELECT * FROM attach_data_node(:'DATA_NODE_2', 'dimented_table');
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+-------------------------+------------------
-  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
-  3 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  6 |             4 | __region         | text                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
-  7 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  8 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
-  9 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
- 10 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                 |                         | 
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash    |                 |                          |                         | 
+  3 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  6 |             4 | __region         | text                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                 |                          |                         | 
+  7 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+  8 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                          |                         | 
+  9 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
+ 10 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                 |                          |                         | 
 (9 rows)
 
 -- ensure data node has new dimensions
@@ -2414,47 +2414,47 @@ $$);
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_1]:
-id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func    |interval_length|integer_now_func_schema|integer_now_func
---+-------------+----------------+------------------------+-------+----------+------------------------+---------------------+---------------+-----------------------+----------------
- 1|            1|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 3|            2|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 6|            4|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 7|            4|column1         |integer                 |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 8|            4|column2         |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 9|            4|column3         |integer                 |f      |         4|_timescaledb_internal   |get_partition_for_key|               |                       |                
+id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func    |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+----------------+------------------------+-------+----------+------------------------+---------------------+---------------+------------------------+-----------------------+----------------
+ 1|            1|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash   |               |                        |                       |                
+ 3|            2|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                        |                       |                
+ 6|            4|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 7|            4|column1         |integer                 |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                        |                       |                
+ 8|            4|column2         |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 9|            4|column3         |integer                 |f      |         4|_timescaledb_internal   |get_partition_for_key|               |                        |                       |                
 (9 rows)
 
 
 NOTICE:  [db_dist_hypertable_2]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_2]:
-id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func    |interval_length|integer_now_func_schema|integer_now_func
---+-------------+----------------+------------------------+-------+----------+------------------------+---------------------+---------------+-----------------------+----------------
- 1|            1|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 3|            2|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 6|            4|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 7|            4|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 8|            5|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 9|            5|column1         |integer                 |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
-10|            5|column2         |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
-11|            5|column3         |integer                 |f      |         4|_timescaledb_internal   |get_partition_for_key|               |                       |                
+id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func    |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+----------------+------------------------+-------+----------+------------------------+---------------------+---------------+------------------------+-----------------------+----------------
+ 1|            1|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash   |               |                        |                       |                
+ 3|            2|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 6|            4|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 7|            4|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                        |                       |                
+ 8|            5|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+ 9|            5|column1         |integer                 |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                        |                       |                
+10|            5|column2         |timestamp with time zone|t      |          |                        |                     |   604800000000|                        |                       |                
+11|            5|column3         |integer                 |f      |         4|_timescaledb_internal   |get_partition_for_key|               |                        |                       |                
 (9 rows)
 
 
 NOTICE:  [db_dist_hypertable_3]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_3]:
-id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
- 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
- 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                       |                
+id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+ 1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+ 3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                        |                       |                
+ 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
 (5 rows)
 
 
@@ -3427,9 +3427,9 @@ NOTICE:  [db_dist_hypertable_1]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_1]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+-----------------------+----------------
-20|           11|time       |bigint     |t      |          |                        |                 |        1000000|                       |                
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+------------------------+-----------------------+----------------
+20|           11|time       |bigint     |t      |          |                        |                 |        1000000|                        |                       |                
 (1 row)
 
 
@@ -3437,9 +3437,9 @@ NOTICE:  [db_dist_hypertable_2]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_2]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+-----------------------+----------------
-20|           11|time       |bigint     |t      |          |                        |                 |        1000000|                       |                
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+------------------------+-----------------------+----------------
+20|           11|time       |bigint     |t      |          |                        |                 |        1000000|                        |                       |                
 (1 row)
 
 
@@ -3447,9 +3447,9 @@ NOTICE:  [db_dist_hypertable_3]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_3]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+-----------------------+----------------
-14|            9|time       |bigint     |t      |          |                        |                 |        1000000|                       |                
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+------------------------+-----------------------+----------------
+14|            9|time       |bigint     |t      |          |                        |                 |        1000000|                        |                       |                
 (1 row)
 
 
@@ -3477,10 +3477,10 @@ NOTICE:  [db_dist_hypertable_1]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_1]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-21|           11|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                       |                
-20|           11|time       |bigint     |t      |          |                        |                  |        1000000|                       |                
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+21|           11|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+20|           11|time       |bigint     |t      |          |                        |                  |        1000000|                        |                       |                
 (2 rows)
 
 
@@ -3488,10 +3488,10 @@ NOTICE:  [db_dist_hypertable_2]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_2]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-21|           11|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                       |                
-20|           11|time       |bigint     |t      |          |                        |                  |        1000000|                       |                
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+21|           11|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+20|           11|time       |bigint     |t      |          |                        |                  |        1000000|                        |                       |                
 (2 rows)
 
 
@@ -3499,10 +3499,10 @@ NOTICE:  [db_dist_hypertable_3]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_3]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-15|            9|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                       |                
-14|            9|time       |bigint     |t      |          |                        |                  |        1000000|                       |                
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+15|            9|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+14|            9|time       |bigint     |t      |          |                        |                  |        1000000|                        |                       |                
 (2 rows)
 
 
@@ -3543,10 +3543,10 @@ NOTICE:  [db_dist_hypertable_1]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_1]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-21|           11|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
-20|           11|time       |bigint     |t      |          |                        |                  |     2000000000|public                 |dummy_now       
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+21|           11|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+20|           11|time       |bigint     |t      |          |                        |                  |     2000000000|                        |public                 |dummy_now       
 (2 rows)
 
 
@@ -3554,10 +3554,10 @@ NOTICE:  [db_dist_hypertable_2]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_2]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-21|           11|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
-20|           11|time       |bigint     |t      |          |                        |                  |     2000000000|public                 |dummy_now       
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+21|           11|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+20|           11|time       |bigint     |t      |          |                        |                  |     2000000000|                        |public                 |dummy_now       
 (2 rows)
 
 
@@ -3565,10 +3565,10 @@ NOTICE:  [db_dist_hypertable_3]:
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_3]:
-id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
---+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-15|            9|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
-14|            9|time       |bigint     |t      |          |                        |                  |     2000000000|public                 |dummy_now       
+id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|compress_interval_length|integer_now_func_schema|integer_now_func
+--+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+------------------------+-----------------------+----------------
+15|            9|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                        |                       |                
+14|            9|time       |bigint     |t      |          |                        |                  |     2000000000|                        |public                 |dummy_now       
 (2 rows)
 
 

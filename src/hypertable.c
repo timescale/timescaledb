@@ -2538,6 +2538,18 @@ ts_hypertable_unset_compressed(Hypertable *ht)
 	return ts_hypertable_update(ht) > 0;
 }
 
+bool
+ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
+{
+	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+
+	Dimension *time_dimension =
+		ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+
+	return ts_dimension_set_compress_interval(time_dimension, compress_interval) > 0;
+}
+
 /* create a compressed hypertable
  * table_relid - already created table which we are going to
  *               set up as a compressed hypertable

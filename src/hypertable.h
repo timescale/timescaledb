@@ -149,6 +149,8 @@ extern bool ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_at
 extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
 													 int32 compressed_hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
+															int64 compress_interval);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(const Hypertable *ht,
 																	  List *constraint_list);
 extern List *ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube);

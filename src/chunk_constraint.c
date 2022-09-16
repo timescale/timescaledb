@@ -995,6 +995,52 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
 	return count;
 }
 
+bool
+ts_chunk_constraint_update_slice_id(int32 chunk_id, int32 old_slice_id, int32 new_slice_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+
+	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, old_slice_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool replIsnull[Natts_chunk_constraint];
+		bool repl[Natts_chunk_constraint] = { false };
+		Datum values[Natts_chunk_constraint];
+		bool should_free, isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		int32 current_chunk_id =
+			DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
+
+		if (isnull || current_chunk_id != chunk_id)
+			continue;
+
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+		HeapTuple new_tuple;
+
+		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull);
+
+		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] =
+			Int32GetDatum(new_slice_id);
+		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
+
+		new_tuple =
+			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull, repl);
+
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
+		ts_scan_iterator_close(&iterator);
+		return true;
+	}
+
+	return false;
+}
+
 int
 ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
 												 const char *new_name)

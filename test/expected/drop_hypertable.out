@@ -7,8 +7,8 @@ SELECT * from _timescaledb_catalog.hypertable;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
 (0 rows)
 
 CREATE TABLE should_drop (time timestamp, temp float8);
@@ -82,9 +82,9 @@ SELECT * from _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
 (1 row)
 
 DROP TABLE should_drop;
@@ -105,8 +105,8 @@ SELECT * from _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
 (1 row)
 

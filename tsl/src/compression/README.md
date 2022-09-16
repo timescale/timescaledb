@@ -66,3 +66,27 @@ The array "compression" method simply stores the data in an array-like
 structure and does not actually compress it (though TOAST-based compression
 can be applied on top). It is the compression mechanism used when no other
 compression mechanism works. It can store any type of data.
+
+# Merging chunks while compressing #
+
+## Setup ## 
+
+Chunks will be merged during compression if we specify the `compress_chunk_time_interval` parameter.
+This value will be used to merge chunks adjacent on the time dimension if possible. This allows usage
+of smaller chunk intervals which are rolled into bigger compressed chunks. 
+
+## Operation ##
+
+Compression itself is altered by changing the destination compressed chunk from a newly created one to
+an already existing chunk which satisfies the necessary requirements (is adjacent to the compressed chunk
+and chunk interval can be increased not to go over compress chunk time interval).
+
+After compression completes, catalog is updated by dropping the compressed chunk and increasing the chunk
+interval of the adjacent chunk to include its time dimension slice. Chunk constraints are updated as necessary.
+
+## Compression setup where time dimension is not the first column on order by ## 
+
+When merging such chunks, due to the nature of sequence number ordering, we will inherently be left with
+chunks where the sequence numbers are not correctly ordered. In order to mitigate this issue, chunks are 
+recompressed immediately. This has obvious performance implications which might make merging chunks
+not optimal for certain setups.

@@ -2,6 +2,7 @@ set(SOURCES
     data_node.c
     deparse.c
     test_chunk_stats.c
+    test_merge_chunk.c
     test_compression.c
     test_continuous_agg.c
     test_ddl_hook.c

@@ -4671,6 +4671,119 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	chunk_add_inheritance(chunk, parent_ht);
 }
 
+void
+ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk, int32 dimension_id)
+{
+	const DimensionSlice *slice, *merge_slice;
+	int num_ccs, i;
+	bool dimension_slice_found = false;
+
+	if (chunk->hypertable_relid != merge_chunk->hypertable_relid)
+		ereport(ERROR,
+				(errmsg("cannot merge chunks from different hypertables"),
+				 errhint("chunk 1: \"%s\", chunk 2: \"%s\"",
+						 get_rel_name(chunk->table_id),
+						 get_rel_name(merge_chunk->table_id))));
+
+	for (int i = 0; i < chunk->cube->num_slices; i++)
+	{
+		if (chunk->cube->slices[i]->fd.dimension_id == dimension_id)
+		{
+			slice = chunk->cube->slices[i];
+			merge_slice = merge_chunk->cube->slices[i];
+			dimension_slice_found = true;
+		}
+		else if (chunk->cube->slices[i]->fd.id != merge_chunk->cube->slices[i]->fd.id)
+		{
+			/* If the slices do not match (except on time dimension), we cannot merge the chunks. */
+			ereport(ERROR,
+					(errmsg("cannot merge chunks with different partitioning schemas"),
+					 errhint("chunk 1: \"%s\", chunk 2: \"%s\" have different slices on "
+							 "dimension ID %d",
+							 get_rel_name(chunk->table_id),
+							 get_rel_name(merge_chunk->table_id),
+							 chunk->cube->slices[i]->fd.dimension_id)));
+		}
+	}
+
+	if (!dimension_slice_found)
+		ereport(ERROR,
+				(errmsg("cannot find slice for merging dimension"),
+				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
+						 get_rel_name(chunk->table_id),
+						 get_rel_name(merge_chunk->table_id),
+						 dimension_id)));
+
+	if (slice->fd.range_end != merge_slice->fd.range_start)
+		ereport(ERROR,
+				(errmsg("cannot merge non-adjacent chunks over supplied dimension"),
+				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
+						 get_rel_name(chunk->table_id),
+						 get_rel_name(merge_chunk->table_id),
+						 dimension_id)));
+
+	num_ccs =
+		ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, NULL, CurrentMemoryContext);
+
+	/* There should always be an associated chunk constraint to a dimension slice.
+	 * This can only occur when the catalog metadata is corrupt.
+	 */
+	if (num_ccs <= 0)
+		ereport(ERROR,
+				(errmsg("missing chunk constraint for dimension slice"),
+				 errhint("chunk: \"%s\", slice ID %d",
+						 get_rel_name(chunk->table_id),
+						 slice->fd.id)));
+
+	DimensionSlice *new_slice =
+		ts_dimension_slice_create(dimension_id, slice->fd.range_start, merge_slice->fd.range_end);
+
+	/* Only if there is exactly one chunk constraint for the merged dimension slice
+	 * we can go ahead and delete it since we are dropping the chunk.
+	 */
+	if (num_ccs == 1)
+		ts_dimension_slice_delete_by_id(slice->fd.id, false);
+
+	/* Check for dimension slice already exists, if not create a new one. */
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleKeyShare,
+		.waitpolicy = LockWaitBlock,
+	};
+	if (!ts_dimension_slice_scan_for_existing(new_slice, &tuplock))
+	{
+		ts_dimension_slice_insert(new_slice);
+	}
+
+	ts_chunk_constraint_update_slice_id(chunk->fd.id, slice->fd.id, new_slice->fd.id);
+	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
+	num_ccs =
+		ts_chunk_constraint_scan_by_dimension_slice_id(new_slice->fd.id, ccs, CurrentMemoryContext);
+
+	if (num_ccs <= 0)
+		ereport(ERROR,
+				(errmsg("missing chunk constraint for merged dimension slice"),
+				 errhint("chunk: \"%s\", slice ID %d",
+						 get_rel_name(chunk->table_id),
+						 new_slice->fd.id)));
+
+	/* We have to recreate the chunk constraints since we are changing
+	 * table constraints when updating the slice.
+	 */
+	for (i = 0; i < ccs->capacity; i++)
+	{
+		ChunkConstraint cc = ccs->constraints[i];
+		if (cc.fd.chunk_id == chunk->fd.id)
+		{
+			ts_process_utility_set_expect_chunk_modification(true);
+			ts_chunk_constraint_recreate(&cc, chunk->table_id);
+			ts_process_utility_set_expect_chunk_modification(false);
+			break;
+		}
+	}
+
+	ts_chunk_drop(merge_chunk, DROP_RESTRICT, 1);
+}
+
 /* Internal API used by OSM extension. OSM table is a foreign table that is
  * attached as a chunk of the hypertable. A chunk needs dimension constraints. We
  * add dummy constraints for the OSM chunk and then attach it to the hypertable.
