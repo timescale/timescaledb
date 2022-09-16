@@ -51,3 +51,44 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_internal.job_errors;
 DROP VIEW timescaledb_information.job_errors;
 DROP TABLE _timescaledb_internal.job_errors;
 
+-- drop dependent view
+DROP VIEW IF EXISTS timescaledb_information.job_stats;
+ALTER TABLE _timescaledb_internal.bgw_job_stat
+DROP COLUMN flags;
+-- need to recreate the bgw_job_stats table because dropping the column 
+-- will not remove it from the pg_attribute table
+
+CREATE TABLE _timescaledb_internal.bgw_job_stat_tmp (
+    LIKE _timescaledb_internla.bgw_job_stat
+    INCLUDING ALL
+    -- indexes and constraintes will be created later to keep original names
+    EXCLUDING INDEXES
+    EXCLUDING CONSTRAINTS
+);
+
+INSERT INTO _timescaledb_internal.bgw_job_stat_tmp
+SELECT
+    job_id,
+    last_start,
+    last_finish,
+    next_start,
+    last_successful_finish,
+    last_run_success,
+    total_runs,
+    total_duration,
+    total_successes,
+    total_failures,
+    total_crashes,
+    consecutive_failures,
+    consecutive_crashes
+FROM
+    _timescaledb_internal.bgw_job_stat;
+
+DROP TABLE _timescaledb_internal.bgw_job_stat;
+
+ALTER TABLE _timescaledb_internal.bgw_job_stat_tmp
+    ADD CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
+    ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) 
+    REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE;
+
+GRANT SELECT ON TABLE _timescaledb_internal.bgw_job_stat TO PUBLIC;
