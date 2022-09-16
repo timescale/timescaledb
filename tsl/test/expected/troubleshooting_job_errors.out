@@ -83,7 +83,9 @@ select pg_sleep(20);
  
 (1 row)
 
-select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode from _timescaledb_internal.job_errors;
+-- exclude the retention policy
+select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode 
+from _timescaledb_internal.job_errors WHERE job_id != 2;
  job_id |                     err_message                     | sqlerrcode 
 --------+-----------------------------------------------------+------------
    1000 | raising an exception                                | P0001

@@ -32,5 +32,5 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 INSERT INTO _timescaledb_config.bgw_job (id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, config, check_schema, check_name) VALUES
-(2, 'Error Log Retention Policy [2]', INTERVAL '2 minutes', INTERVAL '10 min', -1, INTERVAL '1h', '_timescaledb_internal', 'policy_job_error_retention', CURRENT_ROLE, true, '{"drop_after":"1 month"}', '_timescaledb_internal', 'policy_job_error_retention_check')
+(2, 'Error Log Retention Policy [2]', INTERVAL '1 month', INTERVAL '1 hour', -1, INTERVAL '1h', '_timescaledb_internal', 'policy_job_error_retention', CURRENT_ROLE, true, '{"drop_after":"1 month"}', '_timescaledb_internal', 'policy_job_error_retention_check')
 ON CONFLICT (id) DO NOTHING;

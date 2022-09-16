@@ -94,6 +94,8 @@ FROM
 DROP TABLE _timescaledb_internal.bgw_job_stat;
 
 ALTER TABLE _timescaledb_internal.bgw_job_stat_tmp
+    RENAME TO bgw_job_stat;
+ALTER TABLE _timescaledb_internal.bgw_job_stat
     ADD CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
     ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) 
     REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE;

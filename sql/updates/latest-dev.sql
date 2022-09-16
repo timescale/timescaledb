@@ -56,15 +56,18 @@ CREATE TABLE _timescaledb_internal.job_errors (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
 
-CREATE OR REPLACE VIEW timescaledb_information.job_errors AS 
-SELECT job_id, pid, start_time, finish_time, error_data->'sqlerrcode' as sqlerrcode, 
-(
-  CASE WHEN error_data IS NOT NULL THEN
-    (error_data->'message')::text
-  ELSE
-    'job crash detected, see server logs'
-  END) AS err_message, error_data->'detail' as err_detail, 
-error_data->'hint' as err_hint FROM _timescaledb_internal.job_errors;
+CREATE VIEW timescaledb_information.job_errors AS 
+SELECT
+    job_id,
+    pid,
+    start_time,
+    finish_time,
+    error_data ->> 'sqlerrcode' AS sqlerrcode,
+    COALESCE(error_data ->> 'message', 'job crash detected, see server logs') AS err_message,
+    error_data ->> 'detail' AS err_detail,
+    error_data ->> 'hint' AS err_hint
+FROM
+    _timescaledb_internal.job_errors;
 
 ALTER TABLE _timescaledb_internal.bgw_job_stat ADD COLUMN flags integer;
 UPDATE _timescaledb_internal.bgw_job_stat SET flags = 0;

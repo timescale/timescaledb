@@ -54,7 +54,8 @@ select job_id, error_data->>'message', error_data->>'sqlerrcode' from _timescale
 select delete_job(:jobf_id);
 
 select pg_sleep(20);
-
-select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode from _timescaledb_internal.job_errors;
+-- exclude the retention policy
+select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode 
+from _timescaledb_internal.job_errors WHERE job_id != 2;
 
 ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;

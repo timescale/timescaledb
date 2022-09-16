@@ -441,7 +441,8 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_flags)] = Int32GetDatum(JOB_STAT_FLAGS_DEFAULT);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_flags)] =
+		Int32GetDatum(JOB_STAT_FLAGS_DEFAULT);
 
 	if (mark_start)
 	{
@@ -610,8 +611,8 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 			FormData_job_error jerr = { 0 };
 			jerr.error_data = NULL;
 			jerr.start_time = jobstat->fd.last_start;
-			// what should this be? maybe -infinity to indicate the job never finished, crashed instead?
-			// or now? (jobstat will set it to now in a bit)
+			// what should this be? maybe -infinity to indicate the job never finished, crashed
+			// instead? or now? (jobstat will set it to now in a bit)
 			jerr.finish_time = ts_timer_get_current_timestamp();
 			jerr.pid = -1;
 			jerr.job_id = jobstat->fd.id;
@@ -619,7 +620,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 			ts_job_errors_insert_relation(&jerr);
 			ts_bgw_job_stat_mark_crash_reported(jobstat->fd.id);
 		}
-		
+
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
 	}
 
