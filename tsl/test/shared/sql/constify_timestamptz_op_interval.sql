@@ -128,3 +128,45 @@ SELECT time
 FROM metrics
 WHERE time < NULL::timestamptz - NULL::interval;
 
+-- test timezone changes in prepared statements
+CREATE TABLE dst_test(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('dst_test','time',chunk_time_interval:=interval '30 minutes');
+
+INSERT INTO dst_test SELECT generate_series('2022-03-27 22:00:00+01'::timestamptz,'2022-03-28 02:00:00+01'::timestamptz,'30min'::interval);
+
+SET timezone TO UTC;
+PREPARE p1 AS SELECT count(*) FROM dst_test WHERE time > '2022-03-27 00:00:00+00'::timestamptz + interval '1 day';
+EXECUTE p1;
+set timezone TO 'Europe/Berlin';
+EXECUTE p1;
+SELECT count(*) FROM dst_test WHERE time > '2022-03-27 00:00:00+00'::timestamptz + interval '1 day';
+DEALLOCATE p1;
+
+SET timezone TO UTC;
+PREPARE p1 AS SELECT count(*) FROM dst_test WHERE time < '2022-03-27 00:00:00+00'::timestamptz + interval '1 day';
+EXECUTE p1;
+set timezone TO 'Africa/Casablanca';
+EXECUTE p1;
+SELECT count(*) FROM dst_test WHERE time < '2022-03-27 00:00:00+00'::timestamptz + interval '1 day';
+DEALLOCATE p1;
+
+-- do same tests with var on wrong side
+SET timezone TO UTC;
+PREPARE p1 AS SELECT count(*) FROM dst_test WHERE '2022-03-27 00:00:00+00'::timestamptz + interval '1 day' < time;
+EXECUTE p1;
+set timezone TO 'Europe/Berlin';
+EXECUTE p1;
+SELECT count(*) FROM dst_test WHERE '2022-03-27 00:00:00+00'::timestamptz + interval '1 day' < time;
+DEALLOCATE p1;
+
+SET timezone TO UTC;
+PREPARE p1 AS SELECT count(*) FROM dst_test WHERE '2022-03-27 00:00:00+00'::timestamptz + interval '1 day' > time;
+EXECUTE p1;
+set timezone TO 'Africa/Casablanca';
+EXECUTE p1;
+SELECT count(*) FROM dst_test WHERE '2022-03-27 00:00:00+00'::timestamptz + interval '1 day' > time;
+DEALLOCATE p1;
+
+
+DROP TABLE dst_test;
+
