@@ -780,6 +780,7 @@ enum Anum_bgw_job_stat
 	Anum_bgw_job_stat_total_crashes,
 	Anum_bgw_job_stat_consecutive_failures,
 	Anum_bgw_job_stat_consecutive_crashes,
+	Anum_bgw_job_stat_flags,
 	_Anum_bgw_job_stat_max,
 };
 
@@ -800,6 +801,7 @@ typedef struct FormData_bgw_job_stat
 	int64 total_crashes;
 	int32 consecutive_failures;
 	int32 consecutive_crashes;
+	int32 flags;
 } FormData_bgw_job_stat;
 
 typedef FormData_bgw_job_stat *Form_bgw_job_stat;

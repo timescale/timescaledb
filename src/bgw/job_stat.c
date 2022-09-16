@@ -17,7 +17,10 @@
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
-#define MIN_WAIT_AFTER_CRASH_MS (5 * 60 * 1000)
+#define MIN_WAIT_AFTER_CRASH_MS (1 * 60 * 1000)
+
+#define JOB_STAT_FLAGS_DEFAULT 0
+#define LAST_CRASH_REPORTED 1
 
 static bool
 bgw_job_stat_next_start_was_set(FormData_bgw_job_stat *fd)
@@ -148,7 +151,8 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	fd->last_run_success = false;
 	fd->total_crashes++;
 	fd->consecutive_crashes++;
-
+	// maybe unnecessary, but clear the flags (error repored -> false)
+	fd->flags = ts_clear_flags_32(fd->flags, LAST_CRASH_REPORTED);
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
@@ -333,6 +337,8 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	fd->last_run_success = result_ctx->result == JOB_SUCCESS ? true : false;
 	fd->total_crashes--;
 	fd->consecutive_crashes = 0;
+	// last_crash_reported = false;
+	fd->flags = ts_clear_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	if (result_ctx->result == JOB_SUCCESS)
 	{
@@ -360,6 +366,25 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 															 fd->consecutive_failures,
 															 result_ctx->job);
 	}
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	return SCAN_DONE;
+}
+
+static ScanTupleResult
+bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
@@ -416,6 +441,7 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_flags)] = Int32GetDatum(JOB_STAT_FLAGS_DEFAULT);
 
 	if (mark_start)
 	{
@@ -476,6 +502,18 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  &res,
 								  RowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
+	pgstat_report_activity(STATE_IDLE, NULL);
+}
+
+void
+ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id)
+{
+	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+								  bgw_job_stat_tuple_mark_crash_reported,
+								  NULL,
+								  NULL,
+								  RowExclusiveLock))
+		elog(ERROR, "unable to find job statistics for job %d", bgw_job_id);
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
@@ -566,18 +604,22 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 
 	if (jobstat->fd.consecutive_crashes > 0)
 	{
-		// update the errors table regarding the crash
-		FormData_job_error jerr = { 0 };
-		jerr.error_data = NULL;
-		jerr.start_time = jobstat->fd.last_start;
-		// what should this be? maybe -infinity to indicate the job never finished, crashed instead?
-		// or now? (jobstat will set it to now in a bit)
-		jerr.finish_time = ts_timer_get_current_timestamp();
-		jerr.pid = -1;
-		jerr.job_id = jobstat->fd.id;
+		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
+		{
+			/* Update the errors table regarding the crash */
+			FormData_job_error jerr = { 0 };
+			jerr.error_data = NULL;
+			jerr.start_time = jobstat->fd.last_start;
+			// what should this be? maybe -infinity to indicate the job never finished, crashed instead?
+			// or now? (jobstat will set it to now in a bit)
+			jerr.finish_time = ts_timer_get_current_timestamp();
+			jerr.pid = -1;
+			jerr.job_id = jobstat->fd.id;
 
-		ts_job_errors_insert_relation(&jerr);
-
+			ts_job_errors_insert_relation(&jerr);
+			ts_bgw_job_stat_mark_crash_reported(jobstat->fd.id);
+		}
+		
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
 	}
 
