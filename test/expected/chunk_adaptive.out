@@ -82,9 +82,9 @@ FROM _timescaledb_catalog.hypertable;
 -- Check that adaptive chunking sets a 1 day default chunk time
 -- interval => 86400000000 microseconds
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  2 |             2 | time        | timestamp with time zone | t       |            |                          |                   |     86400000000 |                         | 
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  2 |             2 | time        | timestamp with time zone | t       |            |                          |                   |     86400000000 |                          |                         | 
 (1 row)
 
 -- Change the target size

@@ -151,6 +151,7 @@ extern void decompress_chunk(Oid in_table, Oid out_table);
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
 extern void update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid);
+extern void merge_chunk_relstats(Oid merged_relid, Oid compressed_relid);
 
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;

@@ -1,0 +1,105 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_count_chunks_pre_compression s3_lock_compression s1_compress_first_half_of_chunks s2_compress_second_half_of_chunks s3_unlock_compression s3_count_chunks_post_compression
+step s3_count_chunks_pre_compression: 
+    select count(*), 48 as expected from show_chunks('sensor_data');
+
+count|expected
+-----+--------
+   48|      48
+(1 row)
+
+step s3_lock_compression: 
+    SELECT debug_waitpoint_enable('compress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_compress_first_half_of_chunks: 
+   call compress_chunks_in_individual_transactions(
+     $$
+       select show_chunks('sensor_data') limit 24
+     $$
+   ); 
+ <waiting ...>
+step s2_compress_second_half_of_chunks: 
+   call compress_chunks_in_individual_transactions($$select show_chunks('sensor_data') i  offset 24$$); 
+ <waiting ...>
+step s3_unlock_compression: 
+    SELECT debug_waitpoint_release('compress_chunk_impl_start');
+ <waiting ...>
+step s1_compress_first_half_of_chunks: <... completed>
+step s2_compress_second_half_of_chunks: <... completed>
+step s3_unlock_compression: <... completed>
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s3_count_chunks_post_compression: 
+    select count(*), 24 as expected from show_chunks('sensor_data');
+
+count|expected
+-----+--------
+   24|      24
+(1 row)
+
+
+starting permutation: s3_count_chunks_pre_compression s3_lock_compression s1_compress_first_two_by_two s2_compress_second_two_by_two s3_unlock_compression s3_count_chunks_post_compression
+step s3_count_chunks_pre_compression: 
+    select count(*), 48 as expected from show_chunks('sensor_data');
+
+count|expected
+-----+--------
+   48|      48
+(1 row)
+
+step s3_lock_compression: 
+    SELECT debug_waitpoint_enable('compress_chunk_impl_start');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_compress_first_two_by_two: 
+   call compress_chunks_in_individual_transactions(
+     $$
+       select i.show_chunks 
+       from (
+         select row_number() over () as row_number, i as show_chunks 
+         from show_chunks('sensor_data') i
+       ) i where i.row_number%4 in (1,2) 
+     $$); 
+ <waiting ...>
+step s2_compress_second_two_by_two: 
+   call compress_chunks_in_individual_transactions(
+     $$
+       select i.show_chunks 
+       from (
+         select row_number() over () as row_number, i as show_chunks 
+         from show_chunks('sensor_data') i
+       ) i where i.row_number%4 in (3,0) 
+     $$); 
+ <waiting ...>
+step s3_unlock_compression: 
+    SELECT debug_waitpoint_release('compress_chunk_impl_start');
+ <waiting ...>
+step s1_compress_first_two_by_two: <... completed>
+step s2_compress_second_two_by_two: <... completed>
+step s3_unlock_compression: <... completed>
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s3_count_chunks_post_compression: 
+    select count(*), 24 as expected from show_chunks('sensor_data');
+
+count|expected
+-----+--------
+   24|      24
+(1 row)
+

@@ -588,14 +588,14 @@ select remove_retention_policy('part_time_now_func');
 alter function dummy_now() rename to dummy_now_renamed;
 alter schema public rename to new_public;
 select * from  _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                    |    604800000000 |                         | 
-  2 |             1 | chunk_id    | integer                     | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  5 |             4 | time        | timestamp without time zone | t       |            |                          |                    |               1 |                         | 
-  6 |             5 | time        | double precision            | t       |            | new_public               | time_partfunc      |               1 | new_public              | dummy_now
-  3 |             2 | time        | bigint                      | t       |            |                          |                    |               1 | new_public              | nowstamp
-  4 |             3 | time        | smallint                    | t       |            |                          |                    |               1 | new_public              | overflow_now
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                    |    604800000000 |                          |                         | 
+  2 |             1 | chunk_id    | integer                     | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  5 |             4 | time        | timestamp without time zone | t       |            |                          |                    |               1 |                          |                         | 
+  6 |             5 | time        | double precision            | t       |            | new_public               | time_partfunc      |               1 |                          | new_public              | dummy_now
+  3 |             2 | time        | bigint                      | t       |            |                          |                    |               1 |                          | new_public              | nowstamp
+  4 |             3 | time        | smallint                    | t       |            |                          |                    |               1 |                          | new_public              | overflow_now
 (6 rows)
 
 alter schema new_public rename to public;

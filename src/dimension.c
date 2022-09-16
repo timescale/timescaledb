@@ -222,8 +222,13 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	if (IS_CLOSED_DIMENSION(d))
 		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
 	else
+	{
 		d->fd.interval_length =
 			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+		if (!isnull[Anum_dimension_compress_interval_length - 1])
+			d->fd.compress_interval_length = DatumGetInt64(
+				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
+	}
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
 	d->main_table_relid = main_table_relid;
@@ -745,6 +750,17 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
 			Int64GetDatum(dim->fd.interval_length);
 
+	if (dim->fd.compress_interval_length > 0)
+	{
+		values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] =
+			Int64GetDatum(dim->fd.compress_interval_length);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = false;
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
+	}
+
 	new_tuple = heap_form_tuple(ts_scanner_get_tupledesc(ti), values, nulls);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
@@ -807,6 +823,9 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	/* no integer_now function by default */
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = true;
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)] = true;
+
+	/* no compress interval length by default */
+	nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	dimension_id = Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION));
@@ -875,6 +894,19 @@ ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval)
 	Assert(IS_OPEN_DIMENSION(dim));
 
 	dim->fd.interval_length = chunk_interval;
+
+	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
+}
+
+int
+ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval)
+{
+	if (!IS_OPEN_DIMENSION(dim))
+		ereport(ERROR,
+				(errmsg("trying to set compress interval on closed dimension"),
+				 errhint("dimension ID %d", dim->fd.id)));
+
+	dim->fd.compress_interval_length = compress_interval;
 
 	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }

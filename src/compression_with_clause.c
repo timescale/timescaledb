@@ -35,6 +35,10 @@ static const WithClauseDefinition compress_hypertable_with_clause_def[] = {
 			 .arg_name = "compress_orderby",
 			 .type_id = TEXTOID,
 		},
+		[CompressChunkTimeInterval] = {
+			 .arg_name = "compress_chunk_time_interval",
+			 .type_id = INTERVALOID,
+		},
 };
 
 WithClauseResult *
@@ -276,4 +280,20 @@ ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertab
 	}
 	else
 		return NIL;
+}
+
+/* returns List of CompressedParsedCol
+ * E.g. timescaledb.compress_orderby = 'col1 asc nulls first,col2 desc,col3'
+ */
+Interval *
+ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_options,
+												 Hypertable *hypertable)
+{
+	if (parsed_options[CompressChunkTimeInterval].is_default == false)
+	{
+		Datum textarg = parsed_options[CompressChunkTimeInterval].parsed;
+		return DatumGetIntervalP(textarg);
+	}
+	else
+		return NULL;
 }

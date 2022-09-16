@@ -76,6 +76,7 @@ extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, const DimensionSlice 
 								   int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);
 extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
+extern void ts_dimension_slice_insert(DimensionSlice *slice);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 

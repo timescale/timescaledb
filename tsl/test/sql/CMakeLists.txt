@@ -37,11 +37,13 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
+    chunk_merge.sql
     chunk_utils_compression.sql
     compression_algos.sql
     compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql
+    compression_merge.sql
     compression_segment_meta.sql
     compression.sql
     compress_table.sql

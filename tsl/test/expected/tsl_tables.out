@@ -189,10 +189,10 @@ select remove_retention_policy('test_table');
 -- Test set_integer_now_func and add_retention_policy with
 -- hypertables that have integer time dimension
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
-  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 |                         | 
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
+  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 |                          |                         | 
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -207,10 +207,10 @@ select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
-  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | my_new_schema           | dummy_now2
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
+  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now2
 (2 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
