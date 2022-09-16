@@ -56,15 +56,17 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_internal.job_errors;
 DROP VIEW timescaledb_information.job_errors;
 DROP TABLE _timescaledb_internal.job_errors;
 
--- drop dependent view
+-- drop dependent views
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
+DROP VIEW IF EXISTS timescaledb_information.jobs;
+
 ALTER TABLE _timescaledb_internal.bgw_job_stat
 DROP COLUMN flags;
 -- need to recreate the bgw_job_stats table because dropping the column 
 -- will not remove it from the pg_attribute table
 
 CREATE TABLE _timescaledb_internal.bgw_job_stat_tmp (
-    LIKE _timescaledb_internla.bgw_job_stat
+    LIKE _timescaledb_internal.bgw_job_stat
     INCLUDING ALL
     -- indexes and constraintes will be created later to keep original names
     EXCLUDING INDEXES
