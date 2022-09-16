@@ -656,15 +656,19 @@ pg_strtoint64(const char *str)
 									 oldestXmin,                                                   \
 									 freezeLimit,                                                  \
 									 multiXactCutoff)                                              \
-	vacuum_set_xid_limits(rel,                                                                     \
-						  freeze_min_age,                                                          \
-						  freeze_table_age,                                                        \
-						  multixact_freeze_min_age,                                                \
-						  multixact_freeze_table_age,                                              \
-						  oldestXmin,                                                              \
-						  freezeLimit,                                                             \
-						  multiXactCutoff,                                                         \
-						  NULL)
+	do                                                                                             \
+	{                                                                                              \
+		MultiXactId oldestMxact;                                                                   \
+		vacuum_set_xid_limits(rel,                                                                 \
+							  freeze_min_age,                                                      \
+							  freeze_table_age,                                                    \
+							  multixact_freeze_min_age,                                            \
+							  multixact_freeze_table_age,                                          \
+							  oldestXmin,                                                          \
+							  &oldestMxact,                                                        \
+							  freezeLimit,                                                         \
+							  multiXactCutoff);                                                    \
+	} while (0)
 #endif
 
 #if PG15_LT
