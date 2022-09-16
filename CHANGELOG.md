@@ -9,10 +9,11 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables
 * #4673 Fix now() constification for VIEWs
+* #4676 Fix a deadlock when decompressing chunks and performing SELECTs
 * #4681 Fix compression_chunk_size primary key
 * #4685 Improve chunk exclusion for space dimensions
 * #4696 Report warning when enabling compression on hypertable
-* #4676 Fix a deadlock when decompressing chunks and performing SELECTs
+* #4720 Fix chunk exclusion for prepared statements and dst changes
 * #4739 Fix continuous aggregate migrate check constraint
 
 **Thanks**

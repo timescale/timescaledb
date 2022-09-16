@@ -39,6 +39,7 @@
 #include <partitioning/partbounds.h>
 #include <utils/date.h>
 #include <utils/errcodes.h>
+#include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/syscache.h>
 
@@ -267,6 +268,47 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		return constraint;
 
 	constified = DirectFunctionCall2(opfunc, c_ts->constvalue, c_int->constvalue);
+
+	/*
+	 * Since constifying intervals with day component does depend on the timezone
+	 * this can lead to different results around daylight saving time switches.
+	 * So we add a safety buffer when the interval has day components to counteract.
+	 */
+	if (interval->day != 0)
+	{
+		bool add;
+		TimestampTz constified_tstz = DatumGetTimestampTz(constified);
+
+		switch (constraint->opfuncid)
+		{
+			case F_TIMESTAMPTZ_LE:
+			case F_TIMESTAMPTZ_LT:
+				add = true;
+				break;
+			case F_TIMESTAMPTZ_GE:
+			case F_TIMESTAMPTZ_GT:
+				add = false;
+				break;
+			default:
+				return constraint;
+		}
+		/*
+		 * If Var is on wrong side reverse the direction.
+		 */
+		if (!var_on_left)
+			add = !add;
+
+		/*
+		 * The safety buffer is chosen to be 4 hours because daylight saving time
+		 * changes seem to be in the range between -1 and 2 hours.
+		 */
+		if (add)
+			constified_tstz += 4 * USECS_PER_HOUR;
+		else
+			constified_tstz -= 4 * USECS_PER_HOUR;
+
+		constified = TimestampTzGetDatum(constified_tstz);
+	}
 
 	c_ts = copyObject(c_ts);
 	c_ts->constvalue = constified;
