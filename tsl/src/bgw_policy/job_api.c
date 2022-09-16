@@ -207,10 +207,12 @@ job_delete(PG_FUNCTION_ARGS)
 	owner = get_role_oid(NameStr(job->fd.owner), false);
 
 	if (!has_privs_of_role(GetUserId(), owner))
+	{
+		char *username = GetUserNameFromId(GetUserId(), false);
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("insufficient permissions to delete job for user \"%s\"",
-						NameStr(job->fd.owner))));
+				 errmsg("insufficient permissions to delete job for user \"%s\"", username)));
+	}
 
 	ts_bgw_job_delete_by_id(job_id);
 
