@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #4673 Fix now() constification for VIEWs
 * #4681 Fix compression_chunk_size primary key
 * #4685 Improve chunk exclusion for space dimensions
+* #4696 Report warning when enabling compression on hypertable
 
 **Thanks**
 * @maxtwardowski for reporting problems with chunk exclusion and space dimensions
