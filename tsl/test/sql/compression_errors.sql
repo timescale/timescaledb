@@ -348,3 +348,16 @@ SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
 --below query should pass after chunks are compressed
 SELECT 1 FROM test GROUP BY enum_col;
 EXPLAIN SELECT DISTINCT 1 FROM test;
+
+--github issue 4398
+SELECT format('CREATE TABLE data_table AS SELECT now() AS tm, %s', array_to_string(array_agg(format('125 AS c%s',a)), ', ')) FROM generate_series(1,550)a \gexec
+CREATE TABLE ts_table (LIKE data_table);
+SELECT * FROM create_hypertable('ts_table', 'tm');
+--should report a warning
+\set VERBOSITY terse
+ALTER TABLE ts_table SET(timescaledb.compress, timescaledb.compress_segmentby = 'c1',
+					   timescaledb.compress_orderby = 'tm');
+INSERT INTO ts_table SELECT * FROM data_table;
+--cleanup tables
+DROP TABLE data_table cascade;
+DROP TABLE ts_table cascade;
