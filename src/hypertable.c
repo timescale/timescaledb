@@ -2549,8 +2549,29 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	NameData schema_name, table_name, associated_schema_name;
 	ChunkSizingInfo *chunk_sizing_info;
 	Relation rel;
-
 	rel = table_open(table_relid, AccessExclusiveLock);
+	int32 row_size = MAXALIGN(SizeofHeapTupleHeader);
+	/* estimate tuple width of compressed hypertable */
+	for (int i = 1; i <= RelationGetNumberOfAttributes(rel); i++)
+	{
+		bool is_varlena = false;
+		Oid outfunc;
+		Form_pg_attribute att = TupleDescAttr(rel->rd_att, i - 1);
+		getTypeOutputInfo(att->atttypid, &outfunc, &is_varlena);
+		if (is_varlena)
+			row_size += 18;
+		else
+			row_size += att->attlen;
+	}
+	if (row_size > MaxHeapTupleSize)
+	{
+		ereport(WARNING,
+				(errmsg("compressed row size might exceed maximum row size"),
+				 errdetail("Estimated row size of compressed hypertable is %u. This exceeds the "
+						   "maximum size of %zu and can cause compression of chunks to fail.",
+						   row_size,
+						   MaxHeapTupleSize)));
+	}
 	/*
 	 * Check that the user has permissions to make this table to a compressed
 	 * hypertable
