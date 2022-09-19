@@ -200,7 +200,8 @@ static CustomPathMethods gapfill_path_methods = {
 };
 
 static bool
-gapfill_expression_walker(Expr *node, bool (*walker)(), gapfill_walker_context *context)
+gapfill_expression_walker(Expr *node, bool (*walker)(Node *, gapfill_walker_context *),
+						  gapfill_walker_context *context)
 {
 	context->count = 0;
 	context->call.node = NULL;
