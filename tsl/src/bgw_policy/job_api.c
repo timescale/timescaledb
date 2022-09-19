@@ -30,6 +30,13 @@
 
 #define ALTER_JOB_NUM_COLS 9
 
+static bool
+is_error_retention_job(BgwJob *job)
+{
+	return namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0 &&
+		   namestrcmp(&job->fd.proc_name, "policy_job_error_retention") == 0;
+}
+
 /*
  * This function ensures that the check function has the required signature
  * @param check A valid Oid
@@ -288,8 +295,9 @@ job_alter(PG_FUNCTION_ARGS)
 	job = find_job(job_id, PG_ARGISNULL(0), if_exists);
 	if (job == NULL)
 		PG_RETURN_NULL();
-
-	ts_bgw_job_permission_check(job);
+	/* if this is the error retention job, skip the permission check and allow modifications */
+	if (!is_error_retention_job(job))
+		ts_bgw_job_permission_check(job);
 
 	if (!PG_ARGISNULL(1))
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);

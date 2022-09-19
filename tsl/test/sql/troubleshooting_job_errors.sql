@@ -58,3 +58,4 @@ select pg_sleep(20);
 select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode from _timescaledb_internal.job_errors;
 
 ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;
+SELECT _timescaledb_internal.stop_background_workers();

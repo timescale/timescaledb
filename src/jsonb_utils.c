@@ -278,6 +278,8 @@ ts_errdata_to_jsonb(ErrorData *edata)
 		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
 	if (edata->internalquery)
 		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
+	if (edata->detail_log)
+		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	return JsonbValueToJsonb(result);
 }

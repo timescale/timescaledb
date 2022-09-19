@@ -1145,6 +1145,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		jerr.finish_time = finish_time;
 		jerr.pid = MyProcPid;
 
+
 		ts_job_errors_insert_relation(&jerr);
 
 		CommitTransactionCommand();
