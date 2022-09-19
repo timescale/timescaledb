@@ -140,7 +140,10 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        echo 'printf "%s", debug_query_string\nbt full' | sudo coredumpctl gdb
+        sudo coredumpctl gdb <<EOT
+          printf "%s", debug_query_string
+          bt full
+        EOT
         ./scripts/bundle_coredumps.sh
         false
 
