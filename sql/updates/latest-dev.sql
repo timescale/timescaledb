@@ -66,3 +66,9 @@ SELECT job_id, pid, start_time, finish_time, error_data->'sqlerrcode' as sqlerrc
   END) AS err_message, error_data->'detail' as err_detail, 
 error_data->'hint' as err_hint FROM _timescaledb_internal.job_errors;
 
+ALTER TABLE _timescaledb_internal.bgw_job_stat ADD COLUMN flags integer;
+UPDATE _timescaledb_internal.bgw_job_stat SET flags = 0;
+
+ALTER TABLE _timescaledb_internal.bgw_job_stat 
+ALTER COLUMN flags SET NOT NULL,
+ALTER COLUMN flags SET DEFAULT 0;
