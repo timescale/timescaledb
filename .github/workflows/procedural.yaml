@@ -14,7 +14,7 @@ jobs:
       - uses: actions/add-to-project@v0.1.0
         with:
           project-url: https://github.com/orgs/timescale/projects/55
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           labeled: bug, needs-triage
           label-operator: OR
 
@@ -27,7 +27,7 @@ jobs:
         with:
           project: Database - TimescaleDB Bugs Board
           column: Waiting for Author
-          repo-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
   waiting-for-engineering:
     name: Waiting for Engineering
@@ -44,4 +44,4 @@ jobs:
         with:
           project: Database - TimescaleDB Bugs Board
           column: Waiting for Engineering
-          repo-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
