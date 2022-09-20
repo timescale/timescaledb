@@ -113,9 +113,10 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 		job_execute_function(funcexpr);
 	else
 		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")),
-				errdetail("Only functions are allowed as custom configuration checks"),
-				errhint("Use a FUNCTION instead"));
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("unsupported function type"),
+				 errdetail("Only functions are allowed as custom configuration checks"),
+				 errhint("Use a FUNCTION instead")));
 }
 
 /* Run the check function on a configuration. It will generate errors if there
