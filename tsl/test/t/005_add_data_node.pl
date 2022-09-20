@@ -4,10 +4,8 @@
 
 use strict;
 use warnings;
-use PostgresNode;
 use AccessNode;
 use DataNode;
-use TestLib;
 use Test::More tests => 1;
 
 #
@@ -18,7 +16,10 @@ use Test::More tests => 1;
 # https://github.com/timescale/timescaledb/issues/3951
 
 my $an = AccessNode->create('an');
-my $dn = get_new_node('dn');
+my $dn =
+  ($ENV{PG_VERSION_MAJOR} >= 15)
+  ? PostgreSQL::Test::Cluster->new('dn')
+  : PostgresNode->get_new_node('dn');
 $dn->init();
 $dn->start();
 

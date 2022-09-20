@@ -6,7 +6,6 @@ use strict;
 use warnings;
 use AccessNode;
 use DataNode;
-use TestLib;
 use Test::More tests => 28;
 
 #Initialize all the multi-node instances

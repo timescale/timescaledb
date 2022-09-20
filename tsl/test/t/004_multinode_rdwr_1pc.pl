@@ -8,12 +8,14 @@ use strict;
 use warnings;
 use AccessNode;
 use DataNode;
-use TestLib;
 use Test::More tests => 15;
 
 #Initialize all the multi-node instances
 
-my $an = AccessNode->get_new_node('an');
+my $an =
+  ($ENV{PG_VERSION_MAJOR} >= 15)
+  ? AccessNode->new('an')
+  : AccessNode->get_new_node('an');
 $an->init(
 	allows_streaming => 1,
 	auth_extra       => [ '--create-role', 'repl_role' ]);
@@ -26,7 +28,10 @@ my $backup_name = 'my_backup';
 $an->backup($backup_name);
 
 # Create streaming standby linking to access node
-my $an_standby = AccessNode->get_new_node('an_standby_1');
+my $an_standby =
+  ($ENV{PG_VERSION_MAJOR} >= 15)
+  ? AccessNode->new('an_standby_1')
+  : AccessNode->get_new_node('an_standby_1');
 $an_standby->init_from_backup($an, $backup_name, has_streaming => 1);
 $an_standby->start;
 
