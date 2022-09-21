@@ -39,3 +39,11 @@ BEGIN
 END;
 $BODY$;
 
+-- Issue #4727
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
+    DROP CONSTRAINT IF EXISTS continuous_agg_migrate_plan_step_check2;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
+    ADD CONSTRAINT continuous_agg_migrate_plan_step_check2
+    CHECK (type IN ('CREATE NEW CAGG', 'DISABLE POLICIES', 'COPY POLICIES', 'ENABLE POLICIES', 'SAVE WATERMARK', 'REFRESH NEW CAGG', 'COPY DATA'));
+
