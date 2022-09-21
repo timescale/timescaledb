@@ -31,6 +31,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_db_scheduler.sql
+    bgw_db_scheduler_fixed.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
     compress_bgw_reorder_drop_chunks.sql
@@ -99,6 +100,7 @@ endif()
 
 set(SOLO_TESTS
     bgw_db_scheduler
+    bgw_db_scheduler_fixed
     bgw_reorder_drop_chunks
     scheduler_fixed
     compress_bgw_reorder_drop_chunks
