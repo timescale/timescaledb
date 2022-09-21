@@ -13,10 +13,12 @@ accidentally triggering the load of a previous DB version.**
 * #4685 Improve chunk exclusion for space dimensions
 * #4696 Report warning when enabling compression on hypertable
 * #4676 Fix a deadlock when decompressing chunks and performing SELECTs
+* #4739 Fix continuous aggregate migrate check constraint
 
 **Thanks**
 * @maxtwardowski for reporting problems with chunk exclusion and space dimensions
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
+* @carobme for reporting constraint error during continuous aggregate migration
 
 ## 2.8.0 (2022-08-30)
 
