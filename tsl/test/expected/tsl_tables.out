@@ -165,7 +165,7 @@ WARNING:  retention policy already exists for hypertable "test_table"
 SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+-----------------------+------------------------
- 1002 | Retention Policy [1002] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
+ 1002 | Retention Policy [1002] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -177,7 +177,7 @@ ERROR:  retention policy already exists for hypertable "test_table"
 SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+-----------------------+------------------------
- 1002 | Retention Policy [1002] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
+ 1002 | Retention Policy [1002] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
 (1 row)
 
 select remove_retention_policy('test_table');
@@ -238,7 +238,7 @@ select add_retention_policy('test_table', INTERVAL '3 month');
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+-----------------------+------------------------
- 1003 | Retention Policy [1003] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
+ 1003 | Retention Policy [1003] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_internal | policy_retention_check
 (1 row)
 
 select remove_retention_policy('test_table');
@@ -261,7 +261,7 @@ select add_retention_policy('test_table_int', 1);
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                config                 |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+---------------------------------------+-----------------------+------------------------
- 1004 | Retention Policy [1004] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             2 | {"drop_after": 1, "hypertable_id": 2} | _timescaledb_internal | policy_retention_check
+ 1004 | Retention Policy [1004] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             2 | {"drop_after": 1, "hypertable_id": 2} | _timescaledb_internal | policy_retention_check
 (1 row)
 
 -- Should not add new policy with different parameters
@@ -438,8 +438,8 @@ select add_retention_policy('test_table2', INTERVAL '1 days');
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+-----------------------+------------------------
- 1009 | Retention Policy [1009] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             4 | {"drop_after": "@ 2 days", "hypertable_id": 4} | _timescaledb_internal | policy_retention_check
- 1010 | Retention Policy [1010] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             5 | {"drop_after": "@ 1 day", "hypertable_id": 5}  | _timescaledb_internal | policy_retention_check
+ 1009 | Retention Policy [1009] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             4 | {"drop_after": "@ 2 days", "hypertable_id": 4} | _timescaledb_internal | policy_retention_check
+ 1010 | Retention Policy [1010] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             5 | {"drop_after": "@ 1 day", "hypertable_id": 5}  | _timescaledb_internal | policy_retention_check
 (2 rows)
 
 DROP TABLE test_table;
@@ -447,7 +447,7 @@ DROP TABLE test_table_int;
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                    config                     |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------+-----------------------+------------------------
- 1010 | Retention Policy [1010] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             5 | {"drop_after": "@ 1 day", "hypertable_id": 5} | _timescaledb_internal | policy_retention_check
+ 1010 | Retention Policy [1010] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             5 | {"drop_after": "@ 1 day", "hypertable_id": 5} | _timescaledb_internal | policy_retention_check
 (1 row)
 
 DROP TABLE test_table2;
@@ -577,7 +577,7 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                          config                           |     check_schema      |       check_name       
 ------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------+-----------------------+------------------------
  1012 | Reorder Policy [1012]   | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder   | default_perm_user | t         | f              |               |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7} | _timescaledb_internal | policy_reorder_check
- 1013 | Retention Policy [1013] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | t              |               |             7 | {"drop_after": "@ 2 days", "hypertable_id": 7}            | _timescaledb_internal | policy_retention_check
+ 1013 | Retention Policy [1013] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | f              |               |             7 | {"drop_after": "@ 2 days", "hypertable_id": 7}            | _timescaledb_internal | policy_retention_check
 (2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row

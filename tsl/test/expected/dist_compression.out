@@ -659,7 +659,7 @@ select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
   id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |     check_schema      |        check_name        
 ------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+-----------------------+--------------------------
- 1000 | Compression Policy [1000] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | t              |               |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check
+ 1000 | Compression Policy [1000] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
@@ -671,7 +671,7 @@ select * from alter_job(:compressjob_id, schedule_interval=>'1s');
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |     check_schema      |        check_name        
 ------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+-----------------------+--------------------------
- 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | t              |               |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check
+ 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 -- we want only 1 chunk to be compressed --
@@ -773,7 +773,7 @@ SELECT add_compression_policy('test_table_smallint', 2::int) AS compressjob_id \
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |     check_schema      |        check_name        
 ------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-------------------------------------------+-----------------------+--------------------------
- 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | t              |               |             3 | {"hypertable_id": 3, "compress_after": 2} | _timescaledb_internal | policy_compression_check
+ 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             3 | {"hypertable_id": 3, "compress_after": 2} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 CALL run_job(:compressjob_id);
@@ -815,7 +815,7 @@ SELECT add_compression_policy('test_table_integer', 2::int) AS compressjob_id \g
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |     check_schema      |        check_name        
 ------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-------------------------------------------+-----------------------+--------------------------
- 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | t              |               |             4 | {"hypertable_id": 4, "compress_after": 2} | _timescaledb_internal | policy_compression_check
+ 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             4 | {"hypertable_id": 4, "compress_after": 2} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 CALL run_job(:compressjob_id);
@@ -857,7 +857,7 @@ SELECT add_compression_policy('test_table_bigint', 2::int) AS compressjob_id \gs
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |     check_schema      |        check_name        
 ------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-------------------------------------------+-----------------------+--------------------------
- 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | t              |               |             5 | {"hypertable_id": 5, "compress_after": 2} | _timescaledb_internal | policy_compression_check
+ 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             5 | {"hypertable_id": 5, "compress_after": 2} | _timescaledb_internal | policy_compression_check
 (1 row)
 
 CALL run_job(:compressjob_id);
