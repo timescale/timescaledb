@@ -2278,8 +2278,8 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 				 * writeable, we just retry.
 				 */
 				(void) WaitLatchOrSocket(MyLatch,
+										 WL_TIMEOUT | WL_SOCKET_WRITEABLE | WL_EXIT_ON_PM_DEATH,
 										 socket,
-										 WL_TIMEOUT | WL_SOCKET_WRITEABLE,
 										 /* timeout = */ 1000,
 										 /* wait_event_info = */ 0);
 			}
@@ -2348,12 +2348,8 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		ExecStatusType status = PQresultStatus(res);
 		if (status != PGRES_COMMAND_OK)
 		{
-			success =
-				fill_result_error(err,
-								  ERRCODE_CONNECTION_EXCEPTION,
-								  psprintf("invalid result status '%s' when ending remote COPY",
-										   PQresStatus(status)),
-								  res);
+			success = false;
+			remote_connection_get_result_error(res, err);
 		}
 	}
 
