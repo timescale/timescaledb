@@ -23,11 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'need-more-info'
     steps:
-      - uses: alex-page/github-project-automation-plus@v0.8.1
+      - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
         with:
-          project: Database - TimescaleDB Bugs Board
-          column: Waiting for Author
-          repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          organization: timescale
+          project_id: 55
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: 'Waiting for Author'
 
   waiting-for-engineering:
     name: Waiting for Engineering
@@ -40,8 +42,10 @@ jobs:
           remove-labels: 'need-more-info'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Move to waiting for engineering column
-        uses: alex-page/github-project-automation-plus@v0.8.1
+        uses: leonsteinhaeuser/project-beta-automations@v2.0.0
         with:
-          project: Database - TimescaleDB Bugs Board
-          column: Waiting for Engineering
-          repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          organization: timescale
+          project_id: 55
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: 'Waiting for Engineering'
