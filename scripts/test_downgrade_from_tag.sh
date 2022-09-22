@@ -92,14 +92,14 @@ docker_pgcmd() {
 
 docker_pgscript() {
     local database=${3:-single}
-    docker_exec $1 "psql -h localhost -U postgres -d $database $PGOPTS -v ON_ERROR_STOP=1 -f $2"
+    docker_exec $1 "psql --set VERBOSITY=verbose --set ECHO=all -h localhost -U postgres -d $database $PGOPTS -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {
     local database=${3:-single}
     set +e
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    if ! docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database -f $2 > ${TEST_TMPDIR}/$1.out
+    if ! docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database $PGOPTS -f $2 > ${TEST_TMPDIR}/$1.out
     then
       docker_logs $1
       exit 1
