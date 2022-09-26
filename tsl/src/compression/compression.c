@@ -419,7 +419,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 										  sort_operators,
 										  sort_collations,
 										  nulls_first,
-										  work_mem,
+										  maintenance_work_mem,
 										  NULL,
 										  false /*=randomAccess*/);
 
