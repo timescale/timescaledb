@@ -10,8 +10,15 @@ jobs:
     steps:
       - uses: actions/stale@v5
         with:
-          stale-issue-message: 'This issue has been automatically marked as stale due to lack of activity. You can remove the stale label or comment. Otherwise, this issue will be closed in 30 days. Thank you!'
-          close-issue-message: 'We are closing this issue due to lack of activity. Feel free to add a comment to this issue if you can provide more information and we will re-open it. Thank you!'
+          stale-issue-message: |
+            Dear Author,
+
+            This issue has been automatically marked as stale due to lack of activity. With only the issue description that is currently provided, we do not have enough information to take action. If you have or find the answers we would need, please reach out. Otherwise, this issue will be closed in 30 days. Thank you!
+
+          close-issue-message: |
+            Dear Author,
+
+            We are closing this issue due to lack of activity. Feel free to add a comment to this issue if you can provide more information and we will re-open it. Thank you!
 
           # Don't process PRs
           days-before-stale: -1

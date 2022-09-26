@@ -547,6 +547,8 @@ get_reindex_options(ReindexStmt *stmt)
  * timestamp_gt.
  */
 #if PG14_LT
+#define F_TIMESTAMPTZ_LE F_TIMESTAMP_LE
+#define F_TIMESTAMPTZ_LT F_TIMESTAMP_LT
 #define F_TIMESTAMPTZ_GE F_TIMESTAMP_GE
 #define F_TIMESTAMPTZ_GT F_TIMESTAMP_GT
 #endif

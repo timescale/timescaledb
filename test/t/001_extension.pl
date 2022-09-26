@@ -5,7 +5,6 @@
 use strict;
 use warnings;
 use TimescaleNode;
-use TestLib;
 use Data::Dumper;
 use Test::More tests => 6;
 

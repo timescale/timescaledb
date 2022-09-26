@@ -58,8 +58,7 @@ then
 	echo "No TAP tests to run for the current configuration, skipping..."
 	exit 0;
 fi
-
-${PROVE} \
+PG_VERSION_MAJOR=${PG_VERSION_MAJOR} ${PROVE} \
     -I "${SRC_DIR}/src/test/perl" \
     -I "${CM_SRC_DIR}/test/perl" \
     -I "${PG_LIBDIR}/pgxs/src/test/perl" \
