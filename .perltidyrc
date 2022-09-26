@@ -1,6 +1,4 @@
 --add-whitespace
---backup-and-modify-in-place
---backup-file-extension=/
 --delete-old-whitespace
 --entab-leading-whitespace=4
 --keep-old-blank-lines=2
