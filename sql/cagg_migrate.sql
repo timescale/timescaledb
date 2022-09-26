@@ -170,6 +170,14 @@ BEGIN
 
     EXECUTE _sql;
 
+    -- get all scheduled policies
+    SELECT jsonb_build_object('policies', array_agg(id))
+    INTO _policies
+    FROM _timescaledb_config.bgw_job
+    WHERE hypertable_id = _cagg_data.mat_hypertable_id
+    AND scheduled IS TRUE
+    AND id >= 1000;
+
     INSERT INTO
         _timescaledb_catalog.continuous_agg_migrate_plan_step (mat_hypertable_id, type, config)
     VALUES
@@ -188,17 +196,29 @@ CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_create_ne
 LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    _view_def TEXT;
+    _view_name              TEXT;
+    _view_def               TEXT;
+    _compression_enabled    BOOLEAN;
 BEGIN
-    _view_def := left(pg_get_viewdef(format('%I.%I', _cagg_data.direct_view_schema, _cagg_data.direct_view_name), false), -1);
+    _view_name := format('%I.%I', _cagg_data.user_view_schema, _plan_step.config->>'cagg_name_new');
+
+    SELECT c.compression_enabled, left(c.view_definition, -1)
+    INTO _compression_enabled, _view_def
+    FROM timescaledb_information.continuous_aggregates c
+    WHERE c.view_schema = _cagg_data.user_view_schema
+    AND c.view_name = _cagg_data.user_view_name;
+
     _view_def := format(
-        'CREATE MATERIALIZED VIEW %I.%I WITH (timescaledb.continuous, timescaledb.materialized_only=%L) AS %s WITH NO DATA;',
-        _cagg_data.user_view_schema,
-        _plan_step.config->>'cagg_name_new',
+        'CREATE MATERIALIZED VIEW %s WITH (timescaledb.continuous, timescaledb.materialized_only=%L) AS %s WITH NO DATA;',
+        _view_name,
         _cagg_data.materialized_only,
         _view_def);
 
     EXECUTE _view_def;
+
+    IF _compression_enabled IS TRUE THEN
+        EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.compress=true)', _view_name);
+    END IF;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 

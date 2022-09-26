@@ -9,7 +9,9 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     dist_restore_point.spec.in
     cagg_drop_chunks.spec.in
     telemetry.spec.in
-    compression_chunk_race.spec.in)
+    compression_chunk_race.spec.in
+    decompression_chunk_and_parallel_query.in
+    decompression_chunk_and_parallel_query_wo_idx.in)
 
 # These tests are using markers for the isolation tests (to avoid race
 # conditions causing differing output), which were added after 12.7, 13.3, and

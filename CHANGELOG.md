@@ -20,13 +20,18 @@ argument or resolve the type ambiguity by casting to the intended type.
 **Bugfixes**
 * #4619 Improve handling enum columns in compressed hypertables
 * #4673 Fix now() constification for VIEWs
+* #4676 Fix a deadlock when decompressing chunks and performing SELECTs
 * #4681 Fix compression_chunk_size primary key
 * #4685 Improve chunk exclusion for space dimensions
 * #4696 Report warning when enabling compression on hypertable
+* #4720 Fix chunk exclusion for prepared statements and dst changes
+* #4738 Fix the assorted epoll_ctl() errors that could occur with COPY into a distributed hypertable
+* #4739 Fix continuous aggregate migrate check constraint
 
 **Thanks**
 * @maxtwardowski for reporting problems with chunk exclusion and space dimensions
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
+* @carobme for reporting constraint error during continuous aggregate migration
 
 ## 2.8.0 (2022-08-30)
 
