@@ -27,6 +27,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4720 Fix chunk exclusion for prepared statements and dst changes
 * #4738 Fix the assorted epoll_ctl() errors that could occur with COPY into a distributed hypertable
 * #4739 Fix continuous aggregate migrate check constraint
+* #4756 Improve compression job IO performance
 * #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
 
 **Thanks**

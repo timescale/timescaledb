@@ -159,7 +159,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 }
 
 static void
-preserve_uncompressed_chunk_stats(Oid chunk_relid)
+disable_autovacuum_on_chunk(Oid chunk_relid)
 {
 	AlterTableCmd at_cmd = {
 		.type = T_AlterTableCmd,
@@ -167,20 +167,6 @@ preserve_uncompressed_chunk_stats(Oid chunk_relid)
 		.def = (Node *) list_make1(
 			makeDefElem("autovacuum_enabled", (Node *) makeString("false"), -1)),
 	};
-	VacuumRelation vr = {
-		.type = T_VacuumRelation,
-		.relation = NULL,
-		.oid = chunk_relid,
-		.va_cols = NIL,
-	};
-	VacuumStmt vs = {
-		.type = T_VacuumStmt,
-		.rels = list_make1(&vr),
-		.is_vacuumcmd = false,
-		.options = NIL,
-	};
-
-	ExecVacuum(NULL, &vs, true);
 	ts_alter_table_with_event_trigger(chunk_relid, NULL, list_make1(&at_cmd), false);
 }
 
@@ -234,8 +220,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.srcht_chunk->table_id, ShareLock);
 
-	/* Perform an analyze on the chunk to get up-to-date stats before compressing */
-	preserve_uncompressed_chunk_stats(chunk_relid);
+	/* Disabling autovacuum on chunk which should be empty while in compressed state */
+	disable_autovacuum_on_chunk(chunk_relid);
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
