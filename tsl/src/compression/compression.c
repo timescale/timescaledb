@@ -20,6 +20,7 @@
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
+#include <nodes/pg_list.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
@@ -390,6 +391,7 @@ static void compress_chunk_populate_sort_info_for_column(Oid table,
 														 const ColumnCompressionInfo *column,
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
+static void run_analyze_on_chunk(Oid chunk_relid);
 
 static Tuplesortstate *
 compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressionInfo **keys)
@@ -441,6 +443,12 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 
 	heap_endscan(heapScan);
 
+	/* Perform an analyze on the chunk to get up-to-date stats before compressing.
+	 * We do it at this point because we've just read out the entire chunk into
+	 * tuplesort, so its pages are likely to be cached and we can save on I/O.
+	 */
+	run_analyze_on_chunk(in_rel->rd_id);
+
 	ExecDropSingleTupleTableSlot(heap_tuple_slot);
 
 	tuplesort_performsort(tuplesortstate);
@@ -486,6 +494,25 @@ compress_chunk_populate_sort_info_for_column(Oid table, const ColumnCompressionI
 			 format_type_be(att_tup->atttypid));
 
 	ReleaseSysCache(tp);
+}
+
+static void
+run_analyze_on_chunk(Oid chunk_relid)
+{
+	VacuumRelation vr = {
+		.type = T_VacuumRelation,
+		.relation = NULL,
+		.oid = chunk_relid,
+		.va_cols = NIL,
+	};
+	VacuumStmt vs = {
+		.type = T_VacuumStmt,
+		.rels = list_make1(&vr),
+		.is_vacuumcmd = false,
+		.options = NIL,
+	};
+
+	ExecVacuum(NULL, &vs, true);
 }
 
 /********************
