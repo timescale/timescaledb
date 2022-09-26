@@ -238,3 +238,43 @@ ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats ADD CONSTRAINT bgw_poli
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
 GRANT SELECT ON _timescaledb_config.bgw_job TO PUBLIC;
 GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
+
+-- do simple CREATE for the functions with modified signatures
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+continuous_aggregate REGCLASS, start_offset "any", 
+end_offset "any", schedule_interval INTERVAL, 
+if_not_exists BOOL = false, 
+initial_start TIMESTAMPTZ = NULL)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
+LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.add_compression_policy(
+        hypertable REGCLASS, compress_after "any", 
+        if_not_exists BOOL = false,
+        schedule_interval INTERVAL = NULL, 
+        initial_start TIMESTAMPTZ = NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
+LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.add_retention_policy(
+       relation REGCLASS,
+       drop_after "any",
+       if_not_exists BOOL = false,
+       schedule_interval INTERVAL = NULL,
+       initial_start TIMESTAMPTZ = NULL
+)
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
+LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.add_job(
+  proc REGPROC,
+  schedule_interval INTERVAL,
+  config JSONB DEFAULT NULL,
+  initial_start TIMESTAMPTZ DEFAULT NULL,
+  scheduled BOOL DEFAULT true,
+  check_config REGPROC DEFAULT NULL,
+  fixed_schedule BOOL DEFAULT TRUE
+) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;

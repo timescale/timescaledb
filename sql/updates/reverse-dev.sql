@@ -161,6 +161,7 @@ BEGIN
     SET end_ts = pg_catalog.clock_timestamp()
     WHERE mat_hypertable_id OPERATOR(pg_catalog.=) _cagg_data.mat_hypertable_id;
 END;
+$BODY$;
 
 -- Issue #4727
 ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
@@ -181,9 +182,9 @@ DROP FUNCTION IF EXISTS  @extschema@.add_compression_policy(REGCLASS, "any", BOO
 -- fixed schedule changes
 -- drop and recreate functions with modified signatures, modified views, modified tables
 DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL, REGPROC, BOOL);
-DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "any", "any", INTERVAL, BOOL, TIMESTAMPTZ, BOOL);
-DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, BOOL);
-DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "any", "any", INTERVAL, BOOL, TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ);
 -- recreate functions with the previous signature
 CREATE FUNCTION @extschema@.add_job(
   proc REGPROC,
