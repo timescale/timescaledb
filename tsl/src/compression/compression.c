@@ -7,6 +7,7 @@
 #include "compression/compression.h"
 
 #include <access/heapam.h>
+#include <access/nbtree.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
 #include <access/xact.h>
@@ -287,6 +288,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	int n_keys;
 	ListCell *lc;
 	int i;
+	int indexscan_direction = -1;
 	List *in_rel_index_iods; 
 	Relation matched_index_rel = NULL;
 	TupleTableSlot *slot;
@@ -319,7 +321,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 	in_rel_index_iods = RelationGetIndexList(in_rel);
-	
+
 	foreach (lc, in_rel_index_iods)
 	{
 		Oid index_oid = lfirst_oid(lc);
@@ -328,17 +330,24 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 		{
 			for (i = 0; i < n_keys; i++)
 			{
+				bool compression_col_is_orderby = COMPRESSIONCOL_IS_ORDER_BY(keys[i]);
+				bool compression_col_is_segmentby = COMPRESSIONCOL_IS_SEGMENT_BY(keys[i]);
 				if (namestrcmp((Name) &keys[i]->attname,
-							   NameStr(index_rel->rd_att->attrs[i].attname)) != 0)
+							   NameStr(index_rel->rd_att->attrs[i].attname)) == 0 &&
+					(compression_col_is_orderby || compression_col_is_segmentby))
 				{
-					index_close(index_rel, AccessShareLock);
+					if (compression_col_is_segmentby)
+						indexscan_direction = BackwardScanDirection;
+					else
+						indexscan_direction = ForwardScanDirection;
+
+					matched_index_rel = index_rel;
 					break;
 				}
-			}
-			if (i == n_keys)
-			{
-				matched_index_rel = index_rel;
-				break;
+				else
+				{
+					index_close(index_rel, AccessShareLock);
+				}
 			}
 		}
 		else
@@ -361,11 +370,11 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	if (matched_index_rel != NULL)
 	{
-	    DEBUG_WAITPOINT("compress_chunk_indexscan_start");
+		DEBUG_WAITPOINT("compress_chunk_indexscan_start");
 		index_scan = index_beginscan(in_rel, matched_index_rel, SnapshotAny, 0, 0);
 		slot = table_slot_create(in_rel, NULL);
 		index_rescan(index_scan, NULL, 0, NULL, 0);
-		while (index_getnext_slot(index_scan, BackwardScanDirection, slot))
+		while (index_getnext_slot(index_scan, indexscan_direction, slot))
 		{
 			slot_getallattrs(slot);
 			old_ctx = MemoryContextSwitchTo(row_compressor.per_row_ctx);
@@ -400,7 +409,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	}
 	else
 	{
-	    DEBUG_WAITPOINT("compress_chunk_tuplesort_start");
+		DEBUG_WAITPOINT("compress_chunk_tuplesort_start");
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(in_rel, n_keys, keys);
 		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc);
 		tuplesort_end(sorted_rel);
