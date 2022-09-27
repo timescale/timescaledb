@@ -27,11 +27,13 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4720 Fix chunk exclusion for prepared statements and dst changes
 * #4738 Fix the assorted epoll_ctl() errors that could occur with COPY into a distributed hypertable
 * #4739 Fix continuous aggregate migrate check constraint
+* #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
 
 **Thanks**
 * @maxtwardowski for reporting problems with chunk exclusion and space dimensions
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 * @carobme for reporting constraint error during continuous aggregate migration
+* @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
 
 ## 2.8.0 (2022-08-30)
 
