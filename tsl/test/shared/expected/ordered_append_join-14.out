@@ -3769,3 +3769,38 @@ RESET enable_seqscan;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
+ table_name 
+ i4418_1
+(1 row)
+
+ table_name 
+ i4418_2
+(1 row)
+
+QUERY PLAN
+ Sort (actual rows=20 loops=1)
+   Sort Key: (time_bucket('@ 1 day'::interval, tbl1_1."time"))
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=20 loops=1)
+         Group Key: time_bucket('@ 1 day'::interval, tbl1_1."time")
+         Batches: 1 
+         ->  Merge Join (actual rows=9121 loops=1)
+               Merge Cond: ((tbl1_1.device = tbl2_1.device) AND (tbl1_1."time" = tbl2_1."time"))
+               ->  Sort (actual rows=9121 loops=1)
+                     Sort Key: tbl1_1.device, tbl1_1."time"
+                     Sort Method: quicksort 
+                     ->  Append (actual rows=9121 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl1_1 (actual rows=1300 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl1_2 (actual rows=3360 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl1_3 (actual rows=3360 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl1_4 (actual rows=1101 loops=1)
+               ->  Sort (actual rows=9121 loops=1)
+                     Sort Key: tbl2_1.device, tbl2_1."time"
+                     Sort Method: quicksort 
+                     ->  Append (actual rows=9121 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl2_1 (actual rows=1300 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl2_2 (actual rows=3360 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl2_3 (actual rows=3360 loops=1)
+                           ->  Seq Scan on _hyper_X_X_chunk tbl2_4 (actual rows=1101 loops=1)
+(24 rows)
+

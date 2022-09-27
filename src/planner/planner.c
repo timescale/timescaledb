@@ -873,6 +873,14 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 */
 				Expr *em_expr = find_em_expr_for_rel(pk->pk_eclass, rel);
 
+				/*
+				 * If this is a join the ordering information might not be
+				 * for the current rel and have no EquivalenceMember.
+				 */
+
+				if (!em_expr)
+					return false;
+
 				if (IsA(em_expr, Var) && castNode(Var, em_expr)->varattno == order_attno)
 					return true;
 				else if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
