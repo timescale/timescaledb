@@ -59,3 +59,22 @@ SET client_min_messages TO error;
 
 -- diff compressed and uncompressed results
 :DIFF_CMD
+
+-- #4418
+-- test ordered append planning when inner join 2 hypertables on time column
+CREATE table i4418_1(time timestamptz, device text);
+CREATE table i4418_2(time timestamptz, device text);
+SELECT table_name FROM create_hypertable('i4418_1','time');
+SELECT table_name FROM create_hypertable('i4418_2','time');
+INSERT INTO i4418_1 SELECT time, 'device 1' FROM generate_series('2022-08-01'::timestamptz, '2022-08-20'::timestamptz,'3min'::interval) g(time);
+INSERT INTO i4418_2 SELECT * FROM i4418_1;
+
+EXPLAIN (analyze,costs off,timing off,summary off) SELECT time_bucket('1d', tbl1.time), count(*)
+FROM i4418_1 tbl1
+INNER JOIN i4418_2 tbl2
+ON tbl1.device = tbl2.device AND tbl1.time = tbl2.time
+GROUP BY 1 ORDER BY 1;
+
+DROP TABLE i4418_1;
+DROP TABLE i4418_2;
+
