@@ -230,19 +230,6 @@ policy_refresh_cagg_check(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-static Oid
-ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
-{
-	Oid ownerid = ts_rel_get_owner(cagg_oid);
-
-	if (!has_privs_of_role(userid, ownerid))
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(cagg_oid))));
-
-	return ownerid;
-}
-
 static void
 json_add_dim_interval_value(JsonbParseState *parse_state, const char *json_label, Oid dim_type,
 							Datum value)

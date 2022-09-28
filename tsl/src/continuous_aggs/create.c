@@ -91,29 +91,6 @@
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
 #define INTERNAL_TO_TS_FUNCTION "to_timestamp_without_timezone"
 
-/*switch to ts user for _timescaledb_internal access */
-#define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
-	do                                                                                             \
-	{                                                                                              \
-		if ((schemaname) &&                                                                        \
-			strncmp(schemaname, INTERNAL_SCHEMA_NAME, strlen(INTERNAL_SCHEMA_NAME)) == 0)          \
-			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
-		else                                                                                       \
-			(newuid) = InvalidOid;                                                                 \
-		if ((newuid) != InvalidOid)                                                                \
-		{                                                                                          \
-			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
-			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
-		}                                                                                          \
-	} while (0)
-
-#define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		if ((newuid) != InvalidOid)                                                                \
-			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
-	} while (0);
-
 #define PRINT_MATCOLNAME(colbuf, type, original_query_resno, colno)                                \
 	do                                                                                             \
 	{                                                                                              \
