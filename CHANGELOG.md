@@ -31,6 +31,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
 * #4756 Improve compression job IO performance
 * #4760 Fix segfault when INNER JOINing hypertables
+* #4735 Allow manual index creation for CAggs
 
 **Thanks**
 * @boxhock and @cocowalla for reporting a segfault when JOINing hypertables

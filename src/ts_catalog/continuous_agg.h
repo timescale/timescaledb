@@ -17,6 +17,29 @@
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
+/*switch to ts user for _timescaledb_internal access */
+#define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
+	do                                                                                             \
+	{                                                                                              \
+		if ((schemaname) &&                                                                        \
+			strncmp(schemaname, INTERNAL_SCHEMA_NAME, strlen(INTERNAL_SCHEMA_NAME)) == 0)          \
+			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
+		else                                                                                       \
+			(newuid) = InvalidOid;                                                                 \
+		if ((newuid) != InvalidOid)                                                                \
+		{                                                                                          \
+			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
+			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
+		}                                                                                          \
+	} while (0)
+
+#define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
+	do                                                                                             \
+	{                                                                                              \
+		if ((newuid) != InvalidOid)                                                                \
+			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
+	} while (0);
+
 typedef enum ContinuousAggViewOption
 {
 	ContinuousEnabled = 0,
@@ -132,6 +155,8 @@ typedef struct CaggPolicyOffset
 	bool isnull;
 	const char *name;
 } CaggPolicyOffset;
+
+extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
 extern TSDLLEXPORT const CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
