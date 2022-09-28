@@ -1762,3 +1762,16 @@ ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
 	val_new = generic_add_interval(bf, val_new);
 	return ts_time_value_to_internal(val_new, TIMESTAMPOID);
 }
+
+Oid
+ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
+{
+	Oid ownerid = ts_rel_get_owner(cagg_oid);
+
+	if (!has_privs_of_role(userid, ownerid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(cagg_oid))));
+
+	return ownerid;
+}

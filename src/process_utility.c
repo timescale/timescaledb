@@ -2594,6 +2594,9 @@ process_index_start(ProcessUtilityArgs *args)
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
 	LockRelId main_table_index_lock_relid;
+	int sec_ctx;
+	Oid uid = InvalidOid, saved_uid = InvalidOid;
+	ContinuousAgg *cagg = NULL;
 
 	Assert(IsA(stmt, IndexStmt));
 
@@ -2612,13 +2615,15 @@ process_index_start(ProcessUtilityArgs *args)
 	if (NULL == ht)
 	{
 		/* Check if the relation is a Continuous Aggregate */
-		ContinuousAgg *cagg = ts_continuous_agg_find_by_rv(stmt->relation);
+		cagg = ts_continuous_agg_find_by_rv(stmt->relation);
 
 		if (cagg)
 		{
 			/* If the relation is a CAgg and it is finalized */
 			if (ContinuousAggIsFinalized(cagg))
+			{
 				ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+			}
 			else
 			{
 				ts_cache_release(hcache);
@@ -2703,12 +2708,25 @@ process_index_start(ProcessUtilityArgs *args)
 		PreventInTransactionBlock(true,
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
 
+	if (cagg)
+	{
+		/*
+		 * If this is an index creation for cagg, then we need to switch user as the current
+		 * user might not have permissions on the internal schema where cagg index will be
+		 * created.
+		 * Need to restore user soon after this step.
+		 */
+		ts_cagg_permissions_check(ht->main_table_relid, GetUserId());
+		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
+	}
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
 														   info.extended_options.multitransaction,
 														   hypertable_is_distributed(ht));
 
+	if (cagg)
+		RESTORE_USER(uid, saved_uid, sec_ctx);
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
 	 * to do here. */
