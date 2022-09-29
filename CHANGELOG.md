@@ -4,30 +4,39 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.8.1 (2022-10-06)
+
+This release is a patch release. We recommend that you upgrade at the
+next available opportunity.
 
 **Bugfixes**
-* #4619 Improve handling enum columns in compressed hypertables
-* #4673 Fix now() constification for VIEWs
+* #4454 Keep locks after reading job status
+* #4658 Fix error when querying a compressed hypertable with compress_segmentby on an enum column
+* #4671 Fix a possible error while flushing the COPY data
+* #4675 Fix bad TupleTableSlot drop
 * #4676 Fix a deadlock when decompressing chunks and performing SELECTs
-* #4681 Fix compression_chunk_size primary key
-* #4685 Improve chunk exclusion for space dimensions
-* #4696 Report warning when enabling compression on hypertable
+* #4685 Fix chunk exclusion for space partitions in SELECT FOR UPDATE queries
+* #4694 Change parameter names of cagg_migrate procedure
+* #4698 Do not use row-by-row fetcher for parameterized plans
+* #4711 Remove support for procedures as custom checks
+* #4712 Fix assertion failure in constify_now
+* #4713 Fix Continuous Aggregate migration policies
 * #4720 Fix chunk exclusion for prepared statements and dst changes
+* #4726 Fix gapfill function signature
 * #4737 Fix join on time column of compressed chunk
-* #4738 Fix the assorted epoll_ctl() errors that could occur with COPY into a distributed hypertable
+* #4738 Fix error when waiting for remote COPY to finish
 * #4739 Fix continuous aggregate migrate check constraint
-* #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
-* #4756 Improve compression job IO performance
 * #4760 Fix segfault when INNER JOINing hypertables
-* #4735 Allow manual index creation for CAggs
+* #4767 Fix permission issues on index creation for CAggs
 
 **Thanks**
 * @boxhock and @cocowalla for reporting a segfault when JOINing hypertables
-* @choisnetm, @dustinsorensen, @jayadevanm and @joeyberkovitz for reporting a problem with JOINs on compressed hypertables
-* @maxtwardowski for reporting problems with chunk exclusion and space dimensions
-* @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 * @carobme for reporting constraint error during continuous aggregate migration
+* @choisnetm, @dustinsorensen, @jayadevanm and @joeyberkovitz for reporting a problem with JOINs on compressed hypertables
+* @daniel-k for reporting a background worker crash
+* @justinpryzby for reporting an error when compressing very wide tables
+* @maxtwardowski for reporting problems with chunk exclusion and space partitions
+* @yuezhihan for reporting GROUP BY error when having compress_segmentby on an enum column
 
 ## 2.8.0 (2022-08-30)
 
@@ -2420,7 +2429,6 @@ complete, depending on the size of your database**
 **Thanks**
 * @yadid for reporting a segfault (fixed in 50c8c4c)
 * @ryan-shaw for reporting tuples not being correctly converted to a chunk's rowtype (fixed in 645b530)
-* @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 
 ## 0.4.0 (2017-08-21)
 
@@ -2579,6 +2587,3 @@ the next release.
 * [72f754a] use PostgreSQL's own `hash_any` function as default partfunc (thanks @robin900)
 * [39f4c0f] Remove sample data instructions and point to docs site
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
-
-**Bugfixes**
-* #4619 Improve handling enum columns in compressed hypertables
