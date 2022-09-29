@@ -14,6 +14,7 @@ accidentally triggering the load of a previous DB version.**
 * #4685 Improve chunk exclusion for space dimensions
 * #4696 Report warning when enabling compression on hypertable
 * #4720 Fix chunk exclusion for prepared statements and dst changes
+* #4737 Fix join on time column of compressed chunk
 * #4738 Fix the assorted epoll_ctl() errors that could occur with COPY into a distributed hypertable
 * #4739 Fix continuous aggregate migrate check constraint
 * #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
@@ -22,6 +23,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Thanks**
 * @boxhock and @cocowalla for reporting a segfault when JOINing hypertables
+* @choisnetm, @dustinsorensen, @jayadevanm and @joeyberkovitz for reporting a problem with JOINs on compressed hypertables
 * @maxtwardowski for reporting problems with chunk exclusion and space dimensions
 * @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 * @carobme for reporting constraint error during continuous aggregate migration
