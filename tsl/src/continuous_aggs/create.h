@@ -19,6 +19,4 @@ DDLResult tsl_process_continuous_agg_viewstmt(Node *node, const char *query_stri
 extern void cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht);
 extern void cagg_rename_view_columns(ContinuousAgg *agg);
 
-extern Datum tsl_cagg_try_repair(PG_FUNCTION_ARGS);
-
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H */
