@@ -14,8 +14,9 @@ set(TEST_FILES_SHARED
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in generated_columns.sql.in ordered_append.sql.in
-    ordered_append_join.sql.in transparent_decompress_chunk.sql.in)
+    decompress_join.sql.in gapfill.sql.in generated_columns.sql.in
+    ordered_append.sql.in ordered_append_join.sql.in
+    transparent_decompress_chunk.sql.in)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED compression_dml.sql memoize.sql)
