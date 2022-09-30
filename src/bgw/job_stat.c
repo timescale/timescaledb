@@ -205,7 +205,6 @@ calculate_next_start_on_success_fixed(TimestampTz finish_time, BgwJob *job)
 {
 	TimestampTz next_slot;
 
-	next_slot = job->fd.initial_start;
 	next_slot = get_next_scheduled_execution_slot(job, finish_time);
 
 	return next_slot;
