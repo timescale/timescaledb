@@ -395,6 +395,26 @@ bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
 }
 
 static ScanTupleResult
+bgw_job_stat_tuple_update_pid(TupleInfo *ti, void *const data)
+{
+	bool should_free;
+	pid_t pid = *(pid_t *)data;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	fd->pid = pid;
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	return SCAN_DONE;
+}
+
+static ScanTupleResult
 bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 {
 	TimestampTz *next_start = data;
@@ -516,6 +536,19 @@ ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id)
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
+void
+ts_bgw_job_stat_update_pid(int32 bgw_job_id, pid_t pid)
+{
+	pid_t p_id = pid;
+	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+								  bgw_job_stat_tuple_update_pid,
+								  NULL,
+								  &p_id,
+								  RowExclusiveLock))
+		elog(ERROR, "unable to find job statistics for job %d", bgw_job_id);
+	pgstat_report_activity(STATE_IDLE, NULL);
+}
+
 bool
 ts_bgw_job_stat_end_was_marked(BgwJobStat *jobstat)
 {
@@ -616,7 +649,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 				.error_data = JsonbValueToJsonb(result),
 				.start_time = jobstat->fd.last_start,
 				.finish_time = ts_timer_get_current_timestamp(),
-				.pid = -1,
+				.pid = jobstat->fd.pid,
 				.job_id = jobstat->fd.id,
 			};
 

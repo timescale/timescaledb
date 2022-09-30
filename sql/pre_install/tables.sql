@@ -305,6 +305,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   total_crashes bigint NOT NULL,
   consecutive_failures int NOT NULL,
   consecutive_crashes int NOT NULL,
+  pid int NOT NULL DEFAULT -1,
   flags int NOT NULL DEFAULT 0,
   -- table constraints
   CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),

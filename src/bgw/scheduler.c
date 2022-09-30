@@ -40,6 +40,7 @@
 #include "timer.h"
 #include "version.h"
 #include "worker.h"
+#include <unistd.h>
 
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 #define START_RETRY_MS (1 * INT64CONST(1000)) /* 1 seconds */
@@ -412,6 +413,12 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 			break;
 		case BGWH_STARTED:
 			/* all good */
+			/* Now that we have a pid, update the bgw_job_stat table 
+			 so it is available in case the job crashes */
+			StartTransactionCommand();
+			ts_bgw_job_stat_update_pid(sjob->job.fd.id, pid);
+			CommitTransactionCommand();
+			MemoryContextSwitchTo(scratch_mctx);
 			break;
 		case BGWH_STOPPED:
 			StartTransactionCommand();
