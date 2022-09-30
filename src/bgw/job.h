@@ -59,4 +59,5 @@ extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
 extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
 											  Interval *next_interval);
 extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *jerr);
+extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule_interval);
 #endif /* BGW_JOB_H */

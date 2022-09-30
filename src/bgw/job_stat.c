@@ -205,7 +205,6 @@ calculate_next_start_on_success_fixed(TimestampTz finish_time, BgwJob *job)
 {
 	TimestampTz next_slot;
 
-	next_slot = job->fd.initial_start;
 	next_slot = get_next_scheduled_execution_slot(job, finish_time);
 
 	return next_slot;
@@ -437,25 +436,6 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 															 result_ctx->job,
 															 false);
 	}
-
-	ts_catalog_update(ti->scanrel, new_tuple);
-	heap_freetuple(new_tuple);
-
-	return SCAN_DONE;
-}
-
-static ScanTupleResult
-bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
-{
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	HeapTuple new_tuple = heap_copytuple(tuple);
-	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);

@@ -832,10 +832,6 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		BoolGetDatum(updated_job->fd.scheduled);
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
 
-	// values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] =
-	// 	BoolGetDatum(updated_job->fd.fixed_schedule);
-	// repl[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = true;
-
 	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] =
@@ -1335,8 +1331,8 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = BoolGetDatum(fixed_schedule);
 	/* initial_start must have a value if the schedule is fixed */
-	if (fixed_schedule)
-		Assert(!TIMESTAMP_NOT_FINITE(initial_start));
+	Assert(!fixed_schedule || !TIMESTAMP_NOT_FINITE(initial_start));
+
 	if (TIMESTAMP_NOT_FINITE(initial_start))
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
 	else
@@ -1382,13 +1378,10 @@ ts_bgw_job_validate_schedule_interval(Interval *schedule_interval)
 	has_day = schedule_interval->day;
 	has_time = schedule_interval->time;
 
-	if (has_month)
-	{
-		if (has_day || has_time)
-			ereport(ERROR,
-					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					errmsg("month intervals cannot have day or time component"),
-					errdetail("fixed schedule jobs do not support such schedule intervals"),
-					errhint("express the interval in terms of days or time instead"));
-	}
+	if (has_month && (has_day || has_time))
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("month intervals cannot have day or time component"),
+				errdetail("fixed schedule jobs do not support such schedule intervals"),
+				errhint("express the interval in terms of days or time instead"));
 }
