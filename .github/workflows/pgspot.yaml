@@ -40,10 +40,15 @@ jobs:
 
     - name: Build timescaledb sqlfiles
       run: |
-        update_from=$(grep '^update_from_version = ' version.config | sed -e 's!^[^=]\+ = !!')
+        downgrade_to=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
         git fetch --tags
         ./bootstrap -DGENERATE_DOWNGRADE_SCRIPT=ON
-        git checkout ${update_from}
+        # We use downgrade_to_version instead of update_from_version because
+        # when the release PR for a new version has been merged to main but
+        # the version is not tagged yet update_from_version will not exist yet.
+        # In all other situations update_from_version and downgrade_to_version
+        # should point to the same version.
+        git checkout ${downgrade_to}
         make -C build sqlfile sqlupdatescripts
         git checkout ${GITHUB_SHA}
         make -C build sqlfile sqlupdatescripts
@@ -52,7 +57,6 @@ jobs:
     - name: Run pgspot
       run: |
         version=$(grep '^version = ' version.config | sed -e 's!^[^=]\+ = !!')
-        update_from=$(grep '^update_from_version = ' version.config | sed -e 's!^[^=]\+ = !!')
         downgrade_to=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
 
         # Show files used
@@ -62,7 +66,7 @@ jobs:
         pgspot ${{ env.PGSPOT_OPTS }} build/sql/timescaledb--${version}.sql
         # The next pgspot execution tests the update script to the latest version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${update_from}.sql build/sql/timescaledb--${update_from}--${version}.sql
+        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${downgrade_to}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
         # The next pgspot execution tests the downgrade script to the previous version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
         pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
