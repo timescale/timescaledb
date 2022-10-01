@@ -33,6 +33,17 @@ INSERT INTO const_now SELECT '3000-01-01','3000-01-01',2,0.5;
 :PREFIX SELECT FROM const_now WHERE time > now() + '3d'::interval;
 :PREFIX SELECT FROM const_now WHERE time > now() - '1week'::interval;
 :PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP;
+:PREFIX SELECT FROM const_now WHERE time >= CURRENT_TIMESTAMP;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '24h'::interval;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP + '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time >= CURRENT_TIMESTAMP - '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time >= CURRENT_TIMESTAMP + '10m'::interval;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '2d'::interval;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP + '3d'::interval;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '1week'::interval;
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '1month'::interval;
+
 
 -- test bitmapheapscan
 SET enable_indexscan TO false;

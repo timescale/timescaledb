@@ -14,8 +14,9 @@ might need to be adjusted and either explicitly name the positional
 argument or resolve the type ambiguity by casting to the intended type.
 
 **Features**
-* #4670 Add timezone support to time_bucket_gapfill
 * #4650 Show warnings when not following best practices
+* #4670 Add timezone support to time_bucket_gapfill
+* #4786 Extend the now() optimization to also apply to CURRENT_TIMESTAMP
 
 **Bugfixes**
 * #4673 Fix now() constification for VIEWs

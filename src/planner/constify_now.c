@@ -45,6 +45,19 @@ get_hypertable_dimension(Oid relid, int flags)
 }
 
 static bool
+is_valid_now_func(Node *node)
+{
+	if (IsA(node, FuncExpr) && castNode(FuncExpr, node)->funcid == F_NOW)
+		return true;
+
+	if (IsA(node, SQLValueFunction) &&
+		castNode(SQLValueFunction, node)->type == SVFOP_CURRENT_TIMESTAMP)
+		return true;
+
+	return false;
+}
+
+static bool
 is_valid_now_expr(OpExpr *op, List *rtable)
 {
 	int flags = CACHE_FLAG_MISSING_OK | CACHE_FLAG_NOCREATE;
@@ -93,7 +106,7 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 		return false;
 
 	/* Var > now() or Var >= now() */
-	if (IsA(lsecond(op->args), FuncExpr) && lsecond_node(FuncExpr, op->args)->funcid == F_NOW)
+	if (is_valid_now_func(lsecond(op->args)))
 		return true;
 
 	if (!IsA(lsecond(op->args), OpExpr))
@@ -103,9 +116,7 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	OpExpr *op_inner = lsecond_node(OpExpr, op->args);
 	if ((op_inner->opfuncid != F_TIMESTAMPTZ_MI_INTERVAL &&
 		 op_inner->opfuncid != F_TIMESTAMPTZ_PL_INTERVAL) ||
-		!IsA(linitial(op_inner->args), FuncExpr) ||
-		linitial_node(FuncExpr, op_inner->args)->funcid != F_NOW ||
-		!IsA(lsecond(op_inner->args), Const))
+		!is_valid_now_func(linitial(op_inner->args)) || !IsA(lsecond(op_inner->args), Const))
 		return false;
 
 	/*
@@ -145,13 +156,8 @@ constify_now_expr(PlannerInfo *root, OpExpr *op)
 {
 	op = copyObject(op);
 	op->location = PLANNER_LOCATION_MAGIC;
-	if (IsA(lsecond(op->args), FuncExpr))
+	if (is_valid_now_func(lsecond(op->args)))
 	{
-		/*
-		 * Sanity check that this is a supported expression. We should never
-		 * end here if it isn't since this is checked in is_valid_now_expr.
-		 */
-		Assert(lsecond_node(FuncExpr, op->args)->funcid == F_NOW);
 		lsecond(op->args) = make_now_const();
 
 		return op;
@@ -166,7 +172,7 @@ constify_now_expr(PlannerInfo *root, OpExpr *op)
 		 * Sanity check that this is a supported expression. We should never
 		 * end here if it isn't since this is checked in is_valid_now_expr.
 		 */
-		Assert(linitial_node(FuncExpr, op_inner->args)->funcid == F_NOW);
+		Assert(is_valid_now_func(linitial(op_inner->args)));
 		Const *now = make_now_const();
 		linitial(op_inner->args) = now;
 
