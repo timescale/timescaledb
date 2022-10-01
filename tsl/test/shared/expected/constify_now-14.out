@@ -84,6 +84,96 @@ QUERY PLAN
    Index Cond: ("time" > (now() - '@ 1 mon'::interval))
 (2 rows)
 
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > CURRENT_TIMESTAMP)
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > CURRENT_TIMESTAMP)
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= CURRENT_TIMESTAMP;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" >= CURRENT_TIMESTAMP)
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" >= CURRENT_TIMESTAMP)
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '24h'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 24 hours'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 24 hours'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP + '10m'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP + '@ 10 mins'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP + '@ 10 mins'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= CURRENT_TIMESTAMP - '10m'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" >= (CURRENT_TIMESTAMP - '@ 10 mins'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" >= (CURRENT_TIMESTAMP - '@ 10 mins'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time >= CURRENT_TIMESTAMP + '10m'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" >= (CURRENT_TIMESTAMP + '@ 10 mins'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" >= (CURRENT_TIMESTAMP + '@ 10 mins'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '2d'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 2 days'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 2 days'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP + '3d'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP + '@ 3 days'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP + '@ 3 days'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '1week'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 7 days'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 7 days'::interval))
+(5 rows)
+
+:PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP - '1month'::interval;
+QUERY PLAN
+ Append
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 1 mon'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > (CURRENT_TIMESTAMP - '@ 1 mon'::interval))
+(5 rows)
+
 -- test bitmapheapscan
 SET enable_indexscan TO false;
 :PREFIX SELECT FROM const_now WHERE time > now();
