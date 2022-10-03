@@ -4884,31 +4884,31 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 --
 -- Expect batch size to be lower than defined max_insert_batch_size
 --
-EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)  (cost=0.00..0.01 rows=1 width=506)
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable test_1702
-   ->  Insert on test_1702  (cost=0.00..0.01 rows=1 width=506)
-         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=506)
+   ->  Insert on test_1702
+         ->  Custom Scan (DataNodeDispatch)
                Batch size: 910
-               ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=506)
-                     ->  Result  (cost=0.00..0.01 rows=1 width=506)
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Result
 (7 rows)
 
 INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
-EXPLAIN INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)  (cost=0.00..37.50 rows=1499 width=506)
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable test_1702
-   ->  Insert on test_1702  (cost=0.00..37.50 rows=1499 width=506)
-         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..37.50 rows=1499 width=506)
+   ->  Insert on test_1702
+         ->  Custom Scan (DataNodeDispatch)
                Batch size: 910
-               ->  Custom Scan (ChunkDispatch)  (cost=0.00..37.50 rows=1499 width=506)
-                     ->  Subquery Scan on "*SELECT*"  (cost=0.00..37.50 rows=1499 width=506)
-                           ->  ProjectSet  (cost=0.00..7.52 rows=1499 width=12)
-                                 ->  Result  (cost=0.00..0.01 rows=1 width=0)
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Subquery Scan on "*SELECT*"
+                           ->  ProjectSet
+                                 ->  Result
 (9 rows)
 
 INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
@@ -4938,16 +4938,16 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  (23,public,test_1702,t)
 (1 row)
 
-EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)  (cost=0.00..0.01 rows=1 width=242)
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable test_1702
-   ->  Insert on test_1702  (cost=0.00..0.01 rows=1 width=242)
-         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=242)
+   ->  Insert on test_1702
+         ->  Custom Scan (DataNodeDispatch)
                Batch size: 1000
-               ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=242)
-                     ->  Result  (cost=0.00..0.01 rows=1 width=242)
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Result
 (7 rows)
 
 DROP TABLE test_1702;
