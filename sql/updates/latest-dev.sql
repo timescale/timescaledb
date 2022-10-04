@@ -42,12 +42,39 @@ SELECT
 FROM
     _timescaledb_internal.job_errors;
 
-ALTER TABLE _timescaledb_internal.bgw_job_stat ADD COLUMN flags integer;
-UPDATE _timescaledb_internal.bgw_job_stat SET flags = 0;
+-- drop dependent views
+DROP VIEW IF EXISTS timescaledb_information.job_stats;
+DROP VIEW IF EXISTS timescaledb_information.jobs;
 
-ALTER TABLE _timescaledb_internal.bgw_job_stat
-ALTER COLUMN flags SET NOT NULL,
-ALTER COLUMN flags SET DEFAULT 0;
+CREATE TABLE _timescaledb_internal._tmp_bgw_job_stat AS SELECT * FROM _timescaledb_internal.bgw_job_stat;
+DROP TABLE _timescaledb_internal.bgw_job_stat;
+
+CREATE TABLE _timescaledb_internal.bgw_job_stat (
+  job_id integer NOT NULL,
+  last_start timestamptz NOT NULL DEFAULT NOW(),
+  last_finish timestamptz NOT NULL,
+  next_start timestamptz NOT NULL,
+  last_successful_finish timestamptz NOT NULL,
+  last_run_success bool NOT NULL,
+  total_runs bigint NOT NULL,
+  total_duration interval NOT NULL,
+  total_successes bigint NOT NULL,
+  total_failures bigint NOT NULL,
+  total_crashes bigint NOT NULL,
+  consecutive_failures int NOT NULL,
+  consecutive_crashes int NOT NULL,
+  flags int NOT NULL DEFAULT 0,
+  -- table constraints
+  CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
+  CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_internal.bgw_job_stat SELECT
+  job_id, last_start, last_finish, next_start, last_successful_finish, last_run_success, total_runs, total_duration, total_successes, total_failures, total_crashes, consecutive_failures, consecutive_crashes, 0
+FROM _timescaledb_internal._tmp_bgw_job_stat;
+DROP TABLE _timescaledb_internal._tmp_bgw_job_stat;
+
+GRANT SELECT ON TABLE _timescaledb_internal.bgw_job_stat TO PUBLIC;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_local_size(name, name);
 DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size;
