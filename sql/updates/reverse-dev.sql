@@ -188,7 +188,7 @@ DROP VIEW IF EXISTS timescaledb_information.jobs;
 
 ALTER TABLE _timescaledb_internal.bgw_job_stat
 DROP COLUMN flags;
--- need to recreate the bgw_job_stats table because dropping the column 
+-- need to recreate the bgw_job_stats table because dropping the column
 -- will not remove it from the pg_attribute table
 
 CREATE TABLE _timescaledb_internal.bgw_job_stat_tmp (
@@ -223,7 +223,75 @@ ALTER TABLE _timescaledb_internal.bgw_job_stat_tmp
     RENAME TO bgw_job_stat;
 ALTER TABLE _timescaledb_internal.bgw_job_stat
     ADD CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
-    ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) 
+    ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id)
     REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE;
 
 GRANT SELECT ON TABLE _timescaledb_internal.bgw_job_stat TO PUBLIC;
+
+DROP VIEW _timescaledb_internal.hypertable_chunk_local_size;
+DROP FUNCTION _timescaledb_internal.hypertable_local_size(name, name);
+
+CREATE FUNCTION _timescaledb_internal.hypertable_local_size(
+	schema_name_in name,
+	table_name_in name)
+RETURNS TABLE (
+	table_bytes BIGINT,
+	index_bytes BIGINT,
+	toast_bytes BIGINT,
+	total_bytes BIGINT)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+    /* get the main hypertable id and sizes */
+    WITH _hypertable AS (
+        SELECT
+            id,
+            _timescaledb_internal.relation_size(format('%I.%I', schema_name, table_name)::regclass) AS relsize
+        FROM
+            _timescaledb_catalog.hypertable
+        WHERE
+            schema_name = schema_name_in
+            AND table_name = table_name_in
+    ),
+    /* project the size of the parent hypertable */
+    _hypertable_sizes AS (
+        SELECT
+            id,
+            COALESCE((relsize).total_size, 0) AS total_bytes,
+            COALESCE((relsize).heap_size, 0) AS heap_bytes,
+            COALESCE((relsize).index_size, 0) AS index_bytes,
+            COALESCE((relsize).toast_size, 0) AS toast_bytes,
+            0::BIGINT AS compressed_total_size,
+            0::BIGINT AS compressed_index_size,
+            0::BIGINT AS compressed_toast_size,
+            0::BIGINT AS compressed_heap_size
+        FROM
+            _hypertable
+    ),
+    /* calculate the size of the hypertable chunks */
+    _chunk_sizes AS (
+        SELECT
+            chunk_id,
+            COALESCE(ch.total_bytes, 0) AS total_bytes,
+            COALESCE(ch.heap_bytes, 0) AS heap_bytes,
+            COALESCE(ch.index_bytes, 0) AS index_bytes,
+            COALESCE(ch.toast_bytes, 0) AS toast_bytes,
+            COALESCE(ch.compressed_total_size, 0) AS compressed_total_size,
+            COALESCE(ch.compressed_index_size, 0) AS compressed_index_size,
+            COALESCE(ch.compressed_toast_size, 0) AS compressed_toast_size,
+            COALESCE(ch.compressed_heap_size, 0) AS compressed_heap_size
+        FROM
+            _timescaledb_internal.hypertable_chunk_local_size ch
+            JOIN _hypertable_sizes ht ON ht.id = ch.hypertable_id
+    )
+    /* calculate the SUM of the hypertable and chunk sizes */
+	SELECT
+		(SUM(heap_bytes)  + SUM(compressed_heap_size))::BIGINT AS heap_bytes,
+		(SUM(index_bytes) + SUM(compressed_index_size))::BIGINT AS index_bytes,
+		(SUM(toast_bytes) + SUM(compressed_toast_size))::BIGINT AS toast_bytes,
+		(SUM(total_bytes) + SUM(compressed_total_size))::BIGINT AS total_bytes
+	FROM
+		(SELECT * FROM _hypertable_sizes
+         UNION ALL
+         SELECT * FROM _chunk_sizes) AS sizes;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
