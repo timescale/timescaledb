@@ -68,6 +68,10 @@ set(TS_MODULE_PATHNAME
     ${MODULE_PATHNAME}
     PARENT_SCOPE)
 
+set(TSL_MODULE_PATHNAME
+    "$libdir/timescaledb-tsl-${PROJECT_VERSION_MOD}"
+    PARENT_SCOPE)
+
 if(NOT GENERATE_DOWNGRADE_SCRIPT)
   message(
     STATUS "Not generating downgrade script: downgrade generation disabled.")

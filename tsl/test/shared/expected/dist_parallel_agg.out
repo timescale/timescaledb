@@ -17,6 +17,9 @@ WARNING:  only one data node was assigned to the hypertable
 (1 row)
 
 insert into metrics_dist1 select * from metrics_dist order by metrics_dist limit 20000;
+-- Start transaction in order to keep same connection
+-- during the test and avoid connection cache invalidations
+begin;
 \set safe 'create or replace aggregate ts_debug_shippable_safe_count(*) (sfunc = int8inc, combinefunc=int8pl, stype = bigint, initcond = 0, parallel = safe);'
 \set unsafe 'create or replace aggregate ts_debug_shippable_unsafe_count(*) (sfunc = int8inc, combinefunc=int8pl, stype = bigint, initcond = 0, parallel = unsafe);'
 :safe
@@ -102,3 +105,4 @@ QUERY PLAN
  
 (14 rows)
 
+commit;

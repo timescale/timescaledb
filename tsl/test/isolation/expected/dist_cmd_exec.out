@@ -1,0 +1,64 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1_lock1 s1_lock2 s2_set_search_path s2_analyze s1_invalidate s1_unlock1 s1_invalidate s1_unlock2
+node_name  
+-----------
+data_node_1
+(1 row)
+
+created
+-------
+t      
+(1 row)
+
+step s1_lock1: SELECT debug_waitpoint_enable('dist_cmd_using_search_path_1');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_lock2: SELECT debug_waitpoint_enable('dist_cmd_using_search_path_2');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_set_search_path: 
+	SET search_path = dist_schema;
+	SHOW search_path;
+
+search_path
+-----------
+dist_schema
+(1 row)
+
+step s2_analyze: ANALYZE disttable; <waiting ...>
+step s1_invalidate: 
+	SELECT invalidate_data_node('data_node_1');
+
+invalidate_data_node
+--------------------
+f                   
+(1 row)
+
+step s1_unlock1: SELECT debug_waitpoint_release('dist_cmd_using_search_path_1');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_invalidate: 
+	SELECT invalidate_data_node('data_node_1');
+
+invalidate_data_node
+--------------------
+f                   
+(1 row)
+
+step s1_unlock2: SELECT debug_waitpoint_release('dist_cmd_using_search_path_2');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_analyze: <... completed>
