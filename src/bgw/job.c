@@ -1337,7 +1337,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] =
 			TimestampTzGetDatum(initial_start);
 	}
-
 	else
 	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = false;

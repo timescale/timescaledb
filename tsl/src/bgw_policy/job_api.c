@@ -143,7 +143,7 @@ job_add(PG_FUNCTION_ARGS)
 		namestrcpy(&check_name, check_name_str);
 	}
 
-	// if no initial_start was provided for a fixed schedule, use the current time
+	/* if no initial_start was provided for a fixed schedule, use the current time */
 	if (fixed_schedule && TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		initial_start = ts_timer_get_current_timestamp();
@@ -399,7 +399,6 @@ job_alter(PG_FUNCTION_ARGS)
 		values[8] = CStringGetTextDatum(schema_qualified_check_name);
 	else
 		nulls[8] = true;
-	// values[9] = BoolGetDatum(job->fd.fixed_schedule);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);

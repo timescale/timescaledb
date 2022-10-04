@@ -191,7 +191,7 @@ get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 										  schedint_datum,
 										  TimestampTzGetDatum(finish_time),
 										  TimestampTzGetDatum(job->fd.initial_start));
-	// always the next time_bucket
+	/* always the next time_bucket */
 	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
 	if (job->fd.schedule_interval.month)
 	{
