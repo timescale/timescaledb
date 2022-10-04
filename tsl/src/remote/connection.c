@@ -1270,6 +1270,10 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 	values[option_pos] = make_user_path(user_name, PATH_KIND_KEY)->data;
 	option_pos++;
 
+	/* if ts_set_ssl_options_hook is enabled then invoke that hook */
+	if (ts_set_ssl_options_hook)
+		ts_set_ssl_options_hook(user_name);
+
 	*option_start = option_pos;
 }
 
