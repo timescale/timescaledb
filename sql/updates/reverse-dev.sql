@@ -186,45 +186,32 @@ DROP TABLE _timescaledb_internal.job_errors;
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 DROP VIEW IF EXISTS timescaledb_information.jobs;
 
-ALTER TABLE _timescaledb_internal.bgw_job_stat
-DROP COLUMN flags;
--- need to recreate the bgw_job_stats table because dropping the column
--- will not remove it from the pg_attribute table
-
-CREATE TABLE _timescaledb_internal.bgw_job_stat_tmp (
-    LIKE _timescaledb_internal.bgw_job_stat
-    INCLUDING ALL
-    -- indexes and constraintes will be created later to keep original names
-    EXCLUDING INDEXES
-    EXCLUDING CONSTRAINTS
-);
-
-INSERT INTO _timescaledb_internal.bgw_job_stat_tmp
-SELECT
-    job_id,
-    last_start,
-    last_finish,
-    next_start,
-    last_successful_finish,
-    last_run_success,
-    total_runs,
-    total_duration,
-    total_successes,
-    total_failures,
-    total_crashes,
-    consecutive_failures,
-    consecutive_crashes
-FROM
-    _timescaledb_internal.bgw_job_stat;
-
+CREATE TABLE _timescaledb_internal._tmp_bgw_job_stat AS SELECT * FROM _timescaledb_internal.bgw_job_stat;
 DROP TABLE _timescaledb_internal.bgw_job_stat;
 
-ALTER TABLE _timescaledb_internal.bgw_job_stat_tmp
-    RENAME TO bgw_job_stat;
-ALTER TABLE _timescaledb_internal.bgw_job_stat
-    ADD CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
-    ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id)
-    REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE;
+CREATE TABLE _timescaledb_internal.bgw_job_stat (
+  job_id integer NOT NULL,
+  last_start timestamptz NOT NULL DEFAULT NOW(),
+  last_finish timestamptz NOT NULL,
+  next_start timestamptz NOT NULL,
+  last_successful_finish timestamptz NOT NULL,
+  last_run_success bool NOT NULL,
+  total_runs bigint NOT NULL,
+  total_duration interval NOT NULL,
+  total_successes bigint NOT NULL,
+  total_failures bigint NOT NULL,
+  total_crashes bigint NOT NULL,
+  consecutive_failures int NOT NULL,
+  consecutive_crashes int NOT NULL,
+  -- table constraints
+  CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
+  CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_internal.bgw_job_stat SELECT
+  job_id, last_start, last_finish, next_start, last_successful_finish, last_run_success, total_runs, total_duration, total_successes, total_failures, total_crashes, consecutive_failures, consecutive_crashes
+FROM _timescaledb_internal._tmp_bgw_job_stat;
+DROP TABLE _timescaledb_internal._tmp_bgw_job_stat;
 
 GRANT SELECT ON TABLE _timescaledb_internal.bgw_job_stat TO PUBLIC;
 
