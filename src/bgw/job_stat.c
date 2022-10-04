@@ -171,8 +171,6 @@ typedef struct
 
 /*
  * time_bucket(schedule_interval, finish_time, origin => initial_start)
- * therefore, if initial_start is not provided, the time_bucket will be calculated
- * using the default origin which is Monday 2000-01-03, or 2000-01-01 for month buckets
  */
 static TimestampTz
 get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
@@ -197,6 +195,15 @@ get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 	{
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
 	}
+	/*
+	 * adding the schedule interval above to get the next bucket might still not hit
+	 * the next bucket if we are crossing DST. So we can end up with a next_start value
+	 * that is actually less than the finish time of the job. Hence, we have to make sure
+	 * the next scheduled slot we compute is in the future and not in the past
+	 */
+	while (result <= TimestampTzGetDatum(finish_time))
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+
 	return DatumGetTimestampTz(result);
 }
 
