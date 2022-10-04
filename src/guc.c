@@ -111,6 +111,16 @@ bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = "";
 #endif
 
+/* Hook for plugins to allow additional SSL options */
+set_ssl_options_hook_type ts_set_ssl_options_hook = NULL;
+
+/* Assign the hook to the passed in function argument */
+void
+ts_assign_ssl_options_hook(void *fn)
+{
+	ts_set_ssl_options_hook = (set_ssl_options_hook_type) fn;
+}
+
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
 {
