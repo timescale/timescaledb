@@ -1382,7 +1382,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 									 &bucket_functions);
 
 	static const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
-		INT4OID,	  INT4OID,		REGTYPEOID,   INT8OID,		INT8OID,
+		INT4OID,	  INT4OID,		REGTYPEOID,	  INT8OID,		INT8OID,
 		INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID,
 	};
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
@@ -1434,7 +1434,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 		InternalTimeRange merged_window = {
 			.type = refresh_window->type,
 			.start = TS_TIME_NOEND, /* initial state invalid */
-			.end = TS_TIME_NOBEGIN  /* initial state invalid */
+			.end = TS_TIME_NOBEGIN	/* initial state invalid */
 		};
 
 		for (i = 0; i < num_dist_res; ++i)

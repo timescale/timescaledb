@@ -115,7 +115,7 @@ typedef struct TsFdwRelInfo
 								  * subquery? */
 	bool make_innerrel_subquery; /* do we deparse innerrel as a
 								  * subquery? */
-	Relids lower_subquery_rels;  /* all relids appearing in lower
+	Relids lower_subquery_rels;	 /* all relids appearing in lower
 								  * subqueries */
 
 	/*

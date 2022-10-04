@@ -162,9 +162,9 @@ const_datum_get_int(Const *cnst)
 	switch (cnst->consttype)
 	{
 		case INT2OID:
-			return (int64)(DatumGetInt16(cnst->constvalue));
+			return (int64) (DatumGetInt16(cnst->constvalue));
 		case INT4OID:
-			return (int64)(DatumGetInt32(cnst->constvalue));
+			return (int64) (DatumGetInt32(cnst->constvalue));
 		case INT8OID:
 			return DatumGetInt64(cnst->constvalue);
 	}

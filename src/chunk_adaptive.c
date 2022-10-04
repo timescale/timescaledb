@@ -118,7 +118,7 @@ get_memory_cache_size(void)
 extern inline int64
 ts_chunk_calculate_initial_chunk_target_size(void)
 {
-	return (int64)((double) get_memory_cache_size() * DEFAULT_CACHE_MEMORY_SLACK);
+	return (int64) ((double) get_memory_cache_size() * DEFAULT_CACHE_MEMORY_SLACK);
 }
 
 typedef enum MinMaxResult
@@ -564,7 +564,7 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 			 "some undersized ones found. increase interval to probe for better"
 			 " threshold. factor=%lf",
 			 incr_factor);
-		chunk_interval = (int64)(avg_interval * incr_factor);
+		chunk_interval = (int64) (avg_interval * incr_factor);
 	}
 	/* No data & insufficient amount of undersized chunks, keep old interval */
 	else if (num_intervals == 0)

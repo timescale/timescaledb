@@ -84,7 +84,8 @@ typedef enum SchedulerState
 
 static volatile sig_atomic_t got_SIGHUP = false;
 
-static void launcher_sighup(SIGNAL_ARGS)
+static void
+launcher_sighup(SIGNAL_ARGS)
 {
 	/* based on av_sighup_handler */
 	int save_errno = errno;

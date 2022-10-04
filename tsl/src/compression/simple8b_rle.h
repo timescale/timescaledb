@@ -804,7 +804,7 @@ simple8brle_selector_is_rle(uint8 selector)
 static inline uint32
 simple8brle_rledata_repeatcount(uint64 rledata)
 {
-	return (uint32)((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
+	return (uint32) ((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
 }
 
 static inline uint64

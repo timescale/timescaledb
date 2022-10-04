@@ -33,7 +33,7 @@ typedef struct StmtParams
 	int converted_tuples;
 	bool ctid;
 	List *target_attr_nums;
-	MemoryContext mctx;	/* where we allocate param values */
+	MemoryContext mctx;	   /* where we allocate param values */
 	MemoryContext tmp_ctx; /* used for converting values */
 	bool preset;		   /* idicating if we set values explicitly */
 } StmtParams;

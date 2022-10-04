@@ -108,7 +108,7 @@ typedef enum TSConnectionStatus
 {
 	CONN_IDLE,		 /* No command being processed */
 	CONN_PROCESSING, /* Command/query is being processed */
-	CONN_COPY_IN,	/* Connection is in COPY_IN mode */
+	CONN_COPY_IN,	 /* Connection is in COPY_IN mode */
 } TSConnectionStatus;
 
 TSConnectionResult remote_connection_drain(TSConnection *conn, TimestampTz endtime,

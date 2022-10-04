@@ -404,7 +404,7 @@ static const char *conn_status_str[] = {
 };
 
 static const char *conn_txn_status_str[] = {
-	[PQTRANS_IDLE] = "IDLE",	   [PQTRANS_ACTIVE] = "ACTIVE",   [PQTRANS_INTRANS] = "INTRANS",
+	[PQTRANS_IDLE] = "IDLE",	   [PQTRANS_ACTIVE] = "ACTIVE",	  [PQTRANS_INTRANS] = "INTRANS",
 	[PQTRANS_INERROR] = "INERROR", [PQTRANS_UNKNOWN] = "UNKNOWN",
 };
 

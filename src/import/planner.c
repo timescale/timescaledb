@@ -90,7 +90,7 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 		{
 			vars = lappend(vars,
 						   makeVar(newvarno,
-								   (AttrNumber)(old_attno + 1),
+								   (AttrNumber) (old_attno + 1),
 								   atttypid,
 								   atttypmod,
 								   attcollation,
@@ -140,7 +140,7 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 
 		vars = lappend(vars,
 					   makeVar(newvarno,
-							   (AttrNumber)(new_attno + 1),
+							   (AttrNumber) (new_attno + 1),
 							   atttypid,
 							   atttypmod,
 							   attcollation,

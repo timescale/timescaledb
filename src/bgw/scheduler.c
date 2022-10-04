@@ -845,7 +845,8 @@ ts_bgw_scheduler_setup_mctx()
 	MemoryContextSwitchTo(scratch_mctx);
 }
 
-static void handle_sighup(SIGNAL_ARGS)
+static void
+handle_sighup(SIGNAL_ARGS)
 {
 	/* based on av_sighup_handler */
 	int save_errno = errno;

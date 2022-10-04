@@ -10,7 +10,7 @@ on:
 jobs:
   cmake_checks:
     name: Check CMake files
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Install prerequisites
         run: pip install cmakelang
@@ -24,7 +24,7 @@ jobs:
         run: git diff --exit-code
   perl_checks:
     name: Check Perl code in tree
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Install prerequisites
         run: sudo apt install perltidy
@@ -36,7 +36,7 @@ jobs:
         run: git diff --exit-code
   misc_checks:
     name: Check formatting, license, update scripts and git hooks
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
@@ -56,9 +56,9 @@ jobs:
     - name: Check code formatting
       if: always()
       run: |
-        sudo apt install clang-format-8
-        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-8 100
-        sudo update-alternatives --set clang-format /usr/bin/clang-format-8
+        sudo apt install clang-format-14
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-14 100
+        sudo update-alternatives --set clang-format /usr/bin/clang-format-14
         ./scripts/clang_format_all.sh
         git diff --exit-code
     - name: Check update scripts

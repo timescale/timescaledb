@@ -303,7 +303,7 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 									template_indexrel->rd_indoption,
 									reloptions,
 									flags,
-									0,	 /* constr_flags constant and 0
+									0,	   /* constr_flags constant and 0
 											* for now */
 									false, /* allow system table mods */
 									false, /* is internal */

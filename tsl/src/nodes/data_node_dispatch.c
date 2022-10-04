@@ -156,7 +156,7 @@ typedef struct DataNodeDispatchState
 	Relation rel;			 /* The (local) relation we're inserting into */
 	bool set_processed;		 /* Indicates whether to set the number or processed tuples */
 	DeparsedInsertStmt stmt; /* Partially deparsed insert statement */
-	const char *sql_stmt;	/* Fully deparsed insert statement */
+	const char *sql_stmt;	 /* Fully deparsed insert statement */
 	TupleFactory *tupfactory;
 	List *target_attrs;		  /* The attributes to send to remote data nodes */
 	List *responses;		  /* List of responses to process in RETURNING state */
@@ -166,7 +166,7 @@ typedef struct DataNodeDispatchState
 	int64 num_tuples;		  /* Total number of tuples flushed each round */
 	int64 next_tuple;		  /* Next tuple to return to the parent node when in
 							   * RETURNING state */
-	int replication_factor;   /* > 1 if we replicate tuples across data nodes */
+	int replication_factor;	  /* > 1 if we replicate tuples across data nodes */
 	StmtParams *stmt_params;  /* Parameters to send with statement. Format can be binary or text */
 	int flush_threshold;	  /* Batch size used for this dispatch state */
 	TupleTableSlot *batch_slot; /* Slot used for sending tuples to data

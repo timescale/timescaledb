@@ -248,7 +248,7 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	if (!parse->hasAggs)
 		return;
 
-	Assert(!parse->setOperations);  /* shouldn't get here if a setop */
+	Assert(!parse->setOperations);	/* shouldn't get here if a setop */
 	Assert(parse->rowMarks == NIL); /* nor if FOR UPDATE */
 
 	/*

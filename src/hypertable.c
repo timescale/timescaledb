@@ -1686,7 +1686,7 @@ ts_validate_replication_factor(const char *hypertable_name, int32 replication_fa
 				 errhint("A hypertable's replication factor must be between 1 and %d.",
 						 PG_INT16_MAX)));
 
-	return (int16)(replication_factor & 0xFFFF);
+	return (int16) (replication_factor & 0xFFFF);
 }
 
 static int16

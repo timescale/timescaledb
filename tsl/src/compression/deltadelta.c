@@ -702,5 +702,5 @@ static inline uint64
 zig_zag_decode(uint64 value)
 {
 	/* ZigZag turns negative numbers into odd ones, and positive numbers into even ones*/
-	return (value >> 1) ^ (uint64) - (int64)(value & 1);
+	return (value >> 1) ^ (uint64) - (int64) (value & 1);
 }
