@@ -66,7 +66,7 @@ debug_point_init(DebugPoint *point, const char *name)
 	/* Use 64-bit hashing to get two independent 32-bit hashes */
 	uint64 hash = debug_point_name_to_id(name);
 
-	SET_LOCKTAG_ADVISORY(point->tag, MyDatabaseId, (uint32)(hash >> 32), (uint32) hash, 1);
+	SET_LOCKTAG_ADVISORY(point->tag, MyDatabaseId, (uint32) (hash >> 32), (uint32) hash, 1);
 	point->name = pstrdup(name);
 	ereport(DEBUG3,
 			(errmsg("initializing debug point '%s' to use " UINT64_FORMAT, point->name, hash)));

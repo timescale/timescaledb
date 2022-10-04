@@ -13,7 +13,7 @@
 typedef enum DistUtilMembershipStatus
 {
 	DIST_MEMBER_NONE,		/* Database doesn't belong to a distributed database */
-	DIST_MEMBER_DATA_NODE,  /* Database is a data node */
+	DIST_MEMBER_DATA_NODE,	/* Database is a data node */
 	DIST_MEMBER_ACCESS_NODE /* Database is an access node */
 } DistUtilMembershipStatus;
 

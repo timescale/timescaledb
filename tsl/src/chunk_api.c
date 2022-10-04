@@ -735,7 +735,7 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 		ATTSTATSSLOT_NUMBERS,						/* DECHIST */
 		/* ATTSTATSSLOT_VALUES is not always present for all HISTOGRAM operators.. */
 		ATTSTATSSLOT_NUMBERS, /* RANGE_LENGTH_HISTOGRAM */
-		ATTSTATSSLOT_VALUES   /* BOUNDS_HISTOGRAM */
+		ATTSTATSSLOT_VALUES	  /* BOUNDS_HISTOGRAM */
 	};
 
 	int i;

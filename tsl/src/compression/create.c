@@ -52,7 +52,7 @@ typedef struct CompressColInfo
 {
 	int numcols;
 	FormData_hypertable_compression
-		*col_meta;	/* metadata about columns from src hypertable that will be compressed*/
+		*col_meta;	  /* metadata about columns from src hypertable that will be compressed*/
 	List *coldeflist; /*list of ColumnDef for the compressed column */
 } CompressColInfo;
 

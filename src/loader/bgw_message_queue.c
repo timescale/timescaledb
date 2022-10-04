@@ -40,8 +40,8 @@ typedef struct MessageQueue
 {
 	pid_t reader_pid; /* Should only be set once at cluster launcher
 					   * startup */
-	slock_t mutex;	/* Controls access to the reader pid */
-	LWLock *lock;	 /* Pointer to the lock to control
+	slock_t mutex;	  /* Controls access to the reader pid */
+	LWLock *lock;	  /* Pointer to the lock to control
 					   * adding/removing elements from queue */
 	uint8 read_upto;
 	uint8 num_elements;

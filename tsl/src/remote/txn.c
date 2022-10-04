@@ -42,7 +42,7 @@
 
 typedef struct RemoteTxn
 {
-	TSConnectionId id;  /* hash key (must be first) */
+	TSConnectionId id;	/* hash key (must be first) */
 	TSConnection *conn; /* connection to data node, or NULL */
 	/* Remaining fields are invalid when conn is NULL: */
 	bool have_prep_stmt;	/* have we prepared any stmts in this xact? */

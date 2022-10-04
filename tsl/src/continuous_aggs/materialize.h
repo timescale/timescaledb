@@ -32,7 +32,7 @@ typedef struct InternalTimeRange
 {
 	Oid type;
 	int64 start; /* inclusive */
-	int64 end;   /* exclusive */
+	int64 end;	 /* exclusive */
 } InternalTimeRange;
 
 InternalTimeRange continuous_agg_materialize_window_max(Oid timetype);

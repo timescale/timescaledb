@@ -131,7 +131,7 @@
 typedef struct MatTableColumnInfo
 {
 	List *matcollist;		 /* column defns for materialization tbl*/
-	List *partial_seltlist;  /* tlist entries for populating the materialization table columns */
+	List *partial_seltlist;	 /* tlist entries for populating the materialization table columns */
 	List *partial_grouplist; /* group clauses used for populating the materialization table */
 	List *mat_groupcolname_list; /* names of columns that are populated by the group-by clause
 									correspond to the partial_grouplist.
@@ -143,7 +143,7 @@ typedef struct MatTableColumnInfo
 
 typedef struct FinalizeQueryInfo
 {
-	List *final_seltlist;   /* select target list for finalize query */
+	List *final_seltlist;	/* select target list for finalize query */
 	Node *final_havingqual; /* having qual for finalize query */
 	Query *final_userquery; /* user query used to compute the finalize_query */
 	bool finalized;			/* finalized form? */
@@ -490,11 +490,11 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
 							   InvalidOid, /* indexRelationId */
 							   InvalidOid, /* parentIndexId */
 							   InvalidOid, /* parentConstraintId */
-							   false,	  /* is_alter_table */
-							   false,	  /* check_rights */
-							   false,	  /* check_not_in_use */
-							   false,	  /* skip_build */
-							   false);	 /* quiet */
+							   false,	   /* is_alter_table */
+							   false,	   /* check_rights */
+							   false,	   /* check_not_in_use */
+							   false,	   /* skip_build */
+							   false);	   /* quiet */
 		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
 
 		if (!HeapTupleIsValid(indxtuple))
@@ -1195,7 +1195,7 @@ static Oid
 get_finalizefnoid()
 {
 	Oid finalfnoid;
-	Oid finalfnargtypes[] = { TEXTOID,  NAMEOID,	  NAMEOID, get_array_type(NAMEOID),
+	Oid finalfnargtypes[] = { TEXTOID,	NAMEOID,	  NAMEOID, get_array_type(NAMEOID),
 							  BYTEAOID, ANYELEMENTOID };
 	List *funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(FINALFN));
 	int nargs = sizeof(finalfnargtypes) / sizeof(finalfnargtypes[0]);

@@ -371,18 +371,9 @@ configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
         DESTINATION "${PG_SHAREDIR}/extension")
 
-# We look for specific versions installed by distributions before the default
-# name since distros that have installed clang-format-9 will not work and the
-# user need to install an earlier version, which will then be named
-# "clang-format-N".
-#
-# This breaks the CMake convention of using the "default" name first to handle
-# local installs. If this turns out to be something that we want to support, we
-# need to look specifically for "clang-format" in the local installation paths
-# before looking for the versioned names in standard installation paths.
 find_program(
   CLANG_FORMAT
-  NAMES clang-format-8 clang-format-7 clang-format
+  NAMES clang-format
   PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin /opt/bin
   DOC "The path to clang-format")
 
@@ -399,8 +390,8 @@ if(CLANG_FORMAT)
         "Could not parse clang-format version ${CLANG_FORMAT_VERSION_OUTPUT}")
   endif()
 
-  if((${CMAKE_MATCH_1} LESS "7") OR (${CMAKE_MATCH_1} GREATER "8"))
-    message(WARNING "clang-format version 7 or 8 required")
+  if((${CMAKE_MATCH_1} LESS "14"))
+    message(WARNING "clang-format version 14 or greater required")
     set(CLANG_FORMAT False)
   endif()
 endif()

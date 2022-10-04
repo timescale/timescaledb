@@ -568,9 +568,9 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		if (prev_planner_hook != NULL)
 		/* Call any earlier hooks */
 #if PG13_GE
-			stmt = (prev_planner_hook)(parse, query_string, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (parse, query_string, cursor_opts, bound_params);
 #else
-			stmt = (prev_planner_hook)(parse, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (parse, cursor_opts, bound_params);
 #endif
 		else
 		/* Call the standard planner */

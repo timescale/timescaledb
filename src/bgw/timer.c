@@ -57,7 +57,7 @@ get_timeout_millisec(TimestampTz by_time)
 	if (timeout_sec < 0 || timeout_usec < 0)
 		return 0;
 
-	return (int64)(timeout_sec * MILLISECS_PER_SEC + ((int64) timeout_usec) / USECS_PER_MILLISEC);
+	return (int64) (timeout_sec * MILLISECS_PER_SEC + ((int64) timeout_usec) / USECS_PER_MILLISEC);
 }
 
 static bool

@@ -162,7 +162,7 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 			if (val + other >= PG_INT32_MAX)
 				elog(ERROR, "overflow in histogram combine");
 
-			result->buckets[i] = Int32GetDatum((int32)(val + other));
+			result->buckets[i] = Int32GetDatum((int32) (val + other));
 		}
 	}
 

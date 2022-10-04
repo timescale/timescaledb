@@ -336,7 +336,11 @@ static CustomScanMethods data_node_copy_plan_methods = {
  * assignment (see transam.h). We can assume that any type created with an OID
  * starting at this number is a "custom" (user-created) type.
  */
-static bool type_is_custom(Oid typeid) { return typeid >= FirstNormalObjectId; }
+static bool
+type_is_custom(Oid typeid)
+{
+	return typeid >= FirstNormalObjectId;
+}
 
 /*
  * Get and validate the attributes we send in the COPY command.

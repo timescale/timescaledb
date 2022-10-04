@@ -197,7 +197,8 @@ test_job_2_error()
 
 static pqsigfunc prev_signal_func = NULL;
 
-static void log_terminate_signal(SIGNAL_ARGS)
+static void
+log_terminate_signal(SIGNAL_ARGS)
 {
 	write_stderr("job got term signal\n");
 	if (prev_signal_func != NULL)

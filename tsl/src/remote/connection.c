@@ -2132,8 +2132,8 @@ send_binary_copy_header(const TSConnection *conn, TSConnectionError *err)
 	/* File header for binary format */
 	static const char file_header[] = {
 		'P', 'G', 'C', 'O', 'P', 'Y', '\n', '\377', '\r', '\n', '\0', /* Signature */
-		0,   0,   0,   0,											  /* 4 bytes flags */
-		0,   0,   0,   0 /* 4 bytes header extension length (unused) */
+		0,	 0,	  0,   0,											  /* 4 bytes flags */
+		0,	 0,	  0,   0 /* 4 bytes header extension length (unused) */
 	};
 
 	int res = PQputCopyData(conn->pg_conn, file_header, sizeof(file_header));

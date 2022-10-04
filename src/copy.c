@@ -663,7 +663,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	};
 	CommandId mycid = GetCurrentCommandId(true);
 	CopyInsertMethod insertMethod;				   /* The insert method for the table */
-	CopyInsertMethod currentTupleInsertMethod;	 /* The insert method of the current tuple */
+	CopyInsertMethod currentTupleInsertMethod;	   /* The insert method of the current tuple */
 	TSCopyMultiInsertInfo multiInsertInfo = { 0 }; /* pacify compiler */
 	int ti_options = 0;							   /* start with default options for insert */
 	BulkInsertState bistate = NULL;

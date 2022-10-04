@@ -53,7 +53,7 @@ typedef struct DimensionValues
 {
 	List *values;
 	bool use_or; /* ORed or ANDed values */
-	Oid type;	/* Oid type for values */
+	Oid type;	 /* Oid type for values */
 } DimensionValues;
 
 static DimensionRestrictInfoOpen *
