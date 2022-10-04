@@ -541,4 +541,54 @@ CREATE AGGREGATE sum_jsb (jsonb)
 -- for test coverage, check unsupported aggregate type
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
 
+-- github issue 4610
+CREATE TABLE sensor_data
+(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
 
+SELECT FROM create_hypertable('sensor_data','time');
+
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(1, 50, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+
+-- enable compression
+ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+-- create new chunks
+
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(now() - INTERVAL '2 months', now() - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
+		generate_series(1, 30, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+-- change compression status so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=3 where table_name = '_hyper_4_17_chunk';
+
+CALL run_job(:compressjob_id);
+-- check compression status is not changed
+SELECT status FROM _timescaledb_catalog.chunk where table_name = '_hyper_4_17_chunk';
+-- cleanup
+DROP TABLE sensor_data CASCADE;
