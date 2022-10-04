@@ -15,6 +15,10 @@ select table_name from create_distributed_hypertable('metrics_dist1', 'time', 'd
     data_nodes => '{"data_node_1"}');
 insert into metrics_dist1 select * from metrics_dist order by metrics_dist limit 20000;
 
+-- Start transaction in order to keep same connection
+-- during the test and avoid connection cache invalidations
+begin;
+
 \set safe 'create or replace aggregate ts_debug_shippable_safe_count(*) (sfunc = int8inc, combinefunc=int8pl, stype = bigint, initcond = 0, parallel = safe);'
 \set unsafe 'create or replace aggregate ts_debug_shippable_unsafe_count(*) (sfunc = int8inc, combinefunc=int8pl, stype = bigint, initcond = 0, parallel = unsafe);'
 
@@ -40,3 +44,5 @@ select ts_debug_shippable_safe_count(*) from metrics_dist1;
 
 :analyze
 select ts_debug_shippable_unsafe_count(*) from metrics_dist1;
+
+commit;
