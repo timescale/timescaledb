@@ -48,7 +48,7 @@ NOTICE:  adding not-null constraint to column "time"
  (2,public,continuous_agg_test_mat,t)
 (1 row)
 
-INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,'','');
+INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, NULL, '','','','',0,'','');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- create the trigger
 CREATE TRIGGER continuous_agg_insert_trigger

@@ -474,16 +474,6 @@ AS SELECT time_bucket('6', time_bucket), COUNT("count")
     FROM new_name
     GROUP BY 1 WITH NO DATA;
 psql:include/cagg_ddl_common.sql:326: ERROR:  hypertable is a continuous aggregate materialization table
--- cannot create a continuous aggregate on a continuous aggregate view
-CREATE MATERIALIZED VIEW drop_chunks_view_view
-  WITH (
-    timescaledb.continuous,
-    timescaledb.materialized_only=true
-  )
-AS SELECT time_bucket('6', time_bucket), SUM(count)
-    FROM drop_chunks_view
-    GROUP BY 1 WITH NO DATA;
-psql:include/cagg_ddl_common.sql:336: ERROR:  invalid continuous aggregate view
 \set ON_ERROR_STOP 1
 CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v1 float, v2 float);
 \if :IS_DISTRIBUTED
@@ -525,10 +515,10 @@ SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
 --test materialization of invalidation before drop
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
-psql:include/cagg_ddl_common.sql:368: NOTICE:  table "drop_chunks_table" does not exist, skipping
+psql:include/cagg_ddl_common.sql:358: NOTICE:  table "drop_chunks_table" does not exist, skipping
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
-psql:include/cagg_ddl_common.sql:369: NOTICE:  drop cascades to 2 other objects
-psql:include/cagg_ddl_common.sql:369: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_9_chunk
+psql:include/cagg_ddl_common.sql:359: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_ddl_common.sql:359: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_9_chunk
 CREATE TABLE drop_chunks_table(time BIGINT NOT NULL, data INTEGER);
 \if :IS_DISTRIBUTED
 SELECT hypertable_id AS drop_chunks_table_nid
@@ -724,7 +714,7 @@ SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_tablen,
 SELECT drop_chunks('drop_chunks_view',
     newer_than => -20,
     verbose => true);
-psql:include/cagg_ddl_common.sql:464: INFO:  dropping chunk _timescaledb_internal._hyper_11_17_chunk
+psql:include/cagg_ddl_common.sql:454: INFO:  dropping chunk _timescaledb_internal._hyper_11_17_chunk
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_11_17_chunk
@@ -745,7 +735,7 @@ WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integ
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT drop_chunks(:'drop_chunks_mat_tablen', older_than => 60);
-psql:include/cagg_ddl_common.sql:476: ERROR:  operation not supported on materialized hypertable
+psql:include/cagg_ddl_common.sql:466: ERROR:  operation not supported on materialized hypertable
 DETAIL:  Hypertable "_materialized_hypertable_11" is a materialized hypertable.
 HINT:  Try the operation on the continuous aggregate instead.
 \set VERBOSITY terse
@@ -998,9 +988,9 @@ SELECT user_view,
 (2 rows)
 
 DROP MATERIALIZED VIEW whatever_view_1;
-psql:include/cagg_ddl_common.sql:654: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_24_chunk
+psql:include/cagg_ddl_common.sql:644: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_24_chunk
 DROP MATERIALIZED VIEW whatever_view_2;
-psql:include/cagg_ddl_common.sql:655: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_25_chunk
+psql:include/cagg_ddl_common.sql:645: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_25_chunk
 -- test bucket width expressions on integer hypertables
 CREATE TABLE metrics_int2 (
   time int2 NOT NULL,
@@ -1111,39 +1101,39 @@ CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:760: NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/cagg_ddl_common.sql:750: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1::smallint + 2::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:767: NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/cagg_ddl_common.sql:757: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 -- width expression for int4 hypertables
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1, time)
 FROM metrics_int4
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:775: NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/cagg_ddl_common.sql:765: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int4
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:782: NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/cagg_ddl_common.sql:772: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 -- width expression for int8 hypertables
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1, time)
 FROM metrics_int8
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:790: NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/cagg_ddl_common.sql:780: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int8
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:797: NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/cagg_ddl_common.sql:787: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 \set ON_ERROR_STOP 0
 -- non-immutable expresions should be rejected
@@ -1151,17 +1141,17 @@ CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:806: ERROR:  only immutable expressions allowed in time bucket function
+psql:include/cagg_ddl_common.sql:796: ERROR:  only immutable expressions allowed in time bucket function
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int4
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:811: ERROR:  only immutable expressions allowed in time bucket function
+psql:include/cagg_ddl_common.sql:801: ERROR:  only immutable expressions allowed in time bucket function
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int8
 GROUP BY 1;
-psql:include/cagg_ddl_common.sql:816: ERROR:  only immutable expressions allowed in time bucket function
+psql:include/cagg_ddl_common.sql:806: ERROR:  only immutable expressions allowed in time bucket function
 \set ON_ERROR_STOP 1
 -- Test various ALTER MATERIALIZED VIEW statements.
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -1188,7 +1178,7 @@ tablespace         |
 -- we test that the normal checks are done when changing the owner.
 \set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
-psql:include/cagg_ddl_common.sql:836: ERROR:  must be member of role "test_role_1"
+psql:include/cagg_ddl_common.sql:826: ERROR:  must be member of role "test_role_1"
 \set ON_ERROR_STOP 1
 -- Superuser can always change owner
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -1252,9 +1242,9 @@ AS
 SELECT time_bucket(7, time_int) as bucket,
 SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
-psql:include/cagg_ddl_common.sql:884: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
+psql:include/cagg_ddl_common.sql:874: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 DROP materialized view conditionsnm_4;
-psql:include/cagg_ddl_common.sql:886: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_37_chunk
+psql:include/cagg_ddl_common.sql:876: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_37_chunk
 -- Case 2: DROP CASCADE should have similar behaviour as DROP
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -1262,9 +1252,9 @@ AS
 SELECT time_bucket(7, time_int) as bucket,
 SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
-psql:include/cagg_ddl_common.sql:894: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
+psql:include/cagg_ddl_common.sql:884: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 DROP materialized view conditionsnm_4 CASCADE;
-psql:include/cagg_ddl_common.sql:896: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_38_chunk
+psql:include/cagg_ddl_common.sql:886: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_38_chunk
 -- Case 3: require CASCADE in case of dependent object
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -1272,16 +1262,16 @@ AS
 SELECT time_bucket(7, time_int) as bucket,
 SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
-psql:include/cagg_ddl_common.sql:904: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
+psql:include/cagg_ddl_common.sql:894: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 CREATE VIEW see_cagg as select * from conditionsnm_4;
 \set ON_ERROR_STOP 0
 DROP MATERIALIZED VIEW conditionsnm_4;
-psql:include/cagg_ddl_common.sql:908: ERROR:  cannot drop view conditionsnm_4 because other objects depend on it
+psql:include/cagg_ddl_common.sql:898: ERROR:  cannot drop view conditionsnm_4 because other objects depend on it
 \set ON_ERROR_STOP 1
 -- Case 4: DROP CASCADE with dependency
 DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
-psql:include/cagg_ddl_common.sql:912: NOTICE:  drop cascades to view see_cagg
-psql:include/cagg_ddl_common.sql:912: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_39_chunk
+psql:include/cagg_ddl_common.sql:902: NOTICE:  drop cascades to view see_cagg
+psql:include/cagg_ddl_common.sql:902: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_39_chunk
 -- Test DROP SCHEMA CASCADE with continuous aggregates
 --
 -- Issue: #2350
@@ -1324,7 +1314,7 @@ WHERE user_view_name = 'telemetry_1s';
 
 \gset
 DROP SCHEMA test_schema CASCADE;
-psql:include/cagg_ddl_common.sql:951: NOTICE:  drop cascades to 4 other objects
+psql:include/cagg_ddl_common.sql:941: NOTICE:  drop cascades to 4 other objects
 SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME';
  count 
 -------
@@ -1408,7 +1398,7 @@ WHERE user_view_name = 'cagg2';
 
 \gset
 DROP SCHEMA test_schema CASCADE;
-psql:include/cagg_ddl_common.sql:1008: NOTICE:  drop cascades to 7 other objects
+psql:include/cagg_ddl_common.sql:998: NOTICE:  drop cascades to 7 other objects
 SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME1';
  count 
 -------
@@ -1578,10 +1568,10 @@ CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set ON_ERROR_STOP 0
 -- unique indexes are not supported
 CREATE UNIQUE INDEX index_unique_error ON conditions_daily ("time", location);
-psql:include/cagg_ddl_common.sql:1094: ERROR:  continuous aggregates do not support UNIQUE indexes
+psql:include/cagg_ddl_common.sql:1084: ERROR:  continuous aggregates do not support UNIQUE indexes
 -- concurrently index creation not supported
 CREATE INDEX CONCURRENTLY index_concurrently_avg ON conditions_daily (avg);
-psql:include/cagg_ddl_common.sql:1096: ERROR:  hypertables do not support concurrent index creation
+psql:include/cagg_ddl_common.sql:1086: ERROR:  hypertables do not support concurrent index creation
 \set ON_ERROR_STOP 1
 CREATE INDEX index_avg ON conditions_daily (avg);
 CREATE INDEX index_avg_only ON ONLY conditions_daily (avg);
@@ -1618,14 +1608,14 @@ CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt +cnt2 , bucket, search_query;
-psql:include/cagg_ddl_common.sql:1118: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
+psql:include/cagg_ddl_common.sql:1108: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg1 SET (timescaledb.materialized_only = 'true');
 CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt + cnt2, bucket, search_query
  HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
-psql:include/cagg_ddl_common.sql:1126: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
+psql:include/cagg_ddl_common.sql:1116: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true');
 --TEST test with multiple settings on continuous aggregates --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
@@ -1642,7 +1632,7 @@ SELECT create_hypertable('test_setting', 'time');
 \endif
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-psql:include/cagg_ddl_common.sql:1140: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
+psql:include/cagg_ddl_common.sql:1130: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
 INSERT INTO test_setting
 SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
@@ -1724,10 +1714,10 @@ DELETE FROM test_setting WHERE val = 20;
 --TEST test with multiple settings on continuous aggregates with real time aggregates turned off initially --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
 DROP MATERIALIZED VIEW test_setting_cagg;
-psql:include/cagg_ddl_common.sql:1184: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
+psql:include/cagg_ddl_common.sql:1174: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only = true)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-psql:include/cagg_ddl_common.sql:1187: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
+psql:include/cagg_ddl_common.sql:1177: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
 SELECT count(*) from test_setting_cagg ORDER BY 1;
  count 
@@ -1855,7 +1845,7 @@ SELECT time_bucket ('1 day', time) AS bucket,
   amount + sum(fiat_value)
 FROM transactions
 GROUP BY bucket, amount;
-psql:include/cagg_ddl_common.sql:1277: NOTICE:  refreshing continuous aggregate "cashflows"
+psql:include/cagg_ddl_common.sql:1267: NOTICE:  refreshing continuous aggregate "cashflows"
 SELECT h.table_name AS "MAT_TABLE_NAME",
        partial_view_name AS "PART_VIEW_NAME",
        direct_view_name AS "DIRECT_VIEW_NAME"

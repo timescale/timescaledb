@@ -151,10 +151,11 @@ typedef struct FinalizeQueryInfo
 
 typedef struct CAggTimebucketInfo
 {
-	int32 htid;				/* hypertable id */
-	Oid htoid;				/* hypertable oid */
-	AttrNumber htpartcolno; /* primary partitioning column of raw hypertable */
-							/* This should also be the column used by time_bucket */
+	int32 htid;						/* hypertable id */
+	int32 parent_mat_hypertable_id; /* parent materialization hypertable id */
+	Oid htoid;						/* hypertable oid */
+	AttrNumber htpartcolno;			/* primary partitioning column of raw hypertable */
+									/* This should also be the column used by time_bucket */
 	Oid htpartcoltype;
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
 	int64 bucket_width;			  /* bucket_width of time_bucket, stores BUCKET_WIDHT_VARIABLE for
@@ -206,7 +207,8 @@ static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *ma
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
 									Oid hypertable_partition_coltype,
-									int64 hypertable_partition_col_interval);
+									int64 hypertable_partition_col_interval,
+									int32 parent_mat_hypertable_id);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause,
 									List *targetList);
 static void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
@@ -227,7 +229,8 @@ static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, int64 bucket_width, bool materialized_only,
-						  const char *direct_schema, const char *direct_view, const bool finalized)
+						  const char *direct_schema, const char *direct_view, const bool finalized,
+						  const int32 parent_mat_hypertable_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -249,6 +252,15 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	memset(values, 0, sizeof(values));
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)] = matht_id;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] = rawht_id;
+
+	if (parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] =
+			parent_mat_hypertable_id;
+	}
+
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)] =
 		NameGetDatum(&user_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)] =
@@ -678,9 +690,10 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 static void
 caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
 						AttrNumber hypertable_partition_colno, Oid hypertable_partition_coltype,
-						int64 hypertable_partition_col_interval)
+						int64 hypertable_partition_col_interval, int32 parent_mat_hypertable_id)
 {
 	src->htid = hypertable_id;
+	src->parent_mat_hypertable_id = parent_mat_hypertable_id;
 	src->htoid = hypertable_oid;
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
@@ -957,7 +970,7 @@ cagg_agg_validate(Node *node, void *context)
  *   added.
  */
 static bool
-cagg_query_supported(Query *query, StringInfo hint, StringInfo detail, const bool finalized)
+cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, const bool finalized)
 {
 /*
  * For now deprecate partial aggregates on release builds only.
@@ -1079,7 +1092,7 @@ cagg_query_supported(Query *query, StringInfo hint, StringInfo detail, const boo
 }
 
 static CAggTimebucketInfo
-cagg_validate_query(Query *query, bool finalized)
+cagg_validate_query(const Query *query, const bool finalized)
 {
 	CAggTimebucketInfo ret;
 	Cache *hcache;
@@ -1117,38 +1130,71 @@ cagg_validate_query(Query *query, bool finalized)
 	/* check if we have a hypertable in the FROM clause */
 	rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
 	rte = list_nth(query->rtable, rtref->rtindex - 1);
+
 	/* FROM only <tablename> sets rte->inh to false */
-	if (rte->relkind != RELKIND_RELATION || rte->tablesample || rte->inh == false)
+	if ((rte->relkind != RELKIND_RELATION && rte->relkind != RELKIND_VIEW) || rte->tablesample ||
+		rte->inh == false)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid continuous aggregate view")));
 	}
-	if (rte->relkind == RELKIND_RELATION)
+
+	if (rte->relkind == RELKIND_RELATION || rte->relkind == RELKIND_VIEW)
 	{
 		const Dimension *part_dimension = NULL;
+		int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
 
-		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
+		if (rte->relkind == RELKIND_RELATION)
+			ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
+		else
+		{
+			const ContinuousAgg *cagg;
+
+			cagg = ts_continuous_agg_find_by_relid(rte->relid);
+
+			if (!ContinuousAggIsFinalized(cagg))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("old format of continuous aggregate is not supported"),
+						 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
+								 "format.",
+								 NameStr(cagg->data.user_view_schema),
+								 NameStr(cagg->data.user_view_name))));
+			}
+
+			parent_mat_hypertable_id = cagg->data.mat_hypertable_id;
+			hcache = ts_hypertable_cache_pin();
+			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+		}
 
 		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertable is an internal compressed hypertable")));
 
-		/* there can only be one continuous aggregate per table */
-		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
+		if (rte->relkind == RELKIND_RELATION)
 		{
-			case HypertableIsMaterialization:
-			case HypertableIsMaterializationAndRaw:
+			ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+
+			/* prevent create a CAGG over an existing materialization hypertable */
+			if (status == HypertableIsMaterialization ||
+				status == HypertableIsMaterializationAndRaw)
+			{
+				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+				Assert(cagg != NULL);
+
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("hypertable is a continuous aggregate materialization table")));
-			case HypertableIsRawTable:
-				break;
-			case HypertableIsNotContinuousAgg:
-				break;
-			default:
-				Assert(false);
+						 errmsg("hypertable is a continuous aggregate materialization table"),
+						 errdetail("Materialization hypertable \"%s.%s\".",
+								   NameStr(ht->fd.schema_name),
+								   NameStr(ht->fd.table_name)),
+						 errhint("Do you want to use continuous aggregate \"%s.%s\" instead?",
+								 NameStr(cagg->data.user_view_schema),
+								 NameStr(cagg->data.user_view_name))));
+			}
 		}
 
 		/* get primary partitioning column information */
@@ -1164,7 +1210,8 @@ cagg_validate_query(Query *query, bool finalized)
 					 errmsg("custom partitioning functions not supported"
 							" with continuous aggregates")));
 
-		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)))
+		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)) &&
+			rte->relkind == RELKIND_RELATION)
 		{
 			const char *funcschema = NameStr(part_dimension->fd.integer_now_func_schema);
 			const char *funcname = NameStr(part_dimension->fd.integer_now_func);
@@ -1184,7 +1231,8 @@ cagg_validate_query(Query *query, bool finalized)
 								ht->main_table_relid,
 								part_dimension->column_attno,
 								part_dimension->fd.column_type,
-								part_dimension->fd.interval_length);
+								part_dimension->fd.interval_length,
+								parent_mat_hypertable_id);
 
 		ts_cache_release(hcache);
 	}
@@ -2268,7 +2316,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname,
-							  finalized);
+							  finalized,
+							  origquery_ht->parent_mat_hypertable_id);
 
 	if (origquery_ht->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{

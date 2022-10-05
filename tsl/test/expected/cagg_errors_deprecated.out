@@ -368,7 +368,25 @@ Select sum( b), min(c)
 from rowsec_tab
 group by time_bucket('1', a) WITH NO DATA;
 ERROR:  cannot create continuous aggregate on hypertable with row security
+-- cagg on cagg not allowed
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+SELECT time_bucket('1 day', timec) AS bucket
+  FROM conditions
+GROUP BY time_bucket('1 day', timec);
+NOTICE:  continuous aggregate "mat_m1" is already up-to-date
+CREATE MATERIALIZED VIEW mat_m2_on_mat_m1 WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('1 week', bucket) AS bucket
+  FROM mat_m1
+GROUP BY time_bucket('1 week', bucket);
+ERROR:  old format of continuous aggregate is not supported
+HINT:  Run "CALL cagg_migrate('public.mat_m1');" to migrate to the new format.
 drop table conditions cascade;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to view mat_m1
+drop cascades to view _timescaledb_internal._partial_view_3
+drop cascades to view _timescaledb_internal._direct_view_3
 --negative tests for WITH options
 CREATE TABLE conditions (
       timec       TIMESTAMPTZ       NOT NULL,
@@ -493,9 +511,9 @@ CREATE FUNCTION text_part_func(TEXT) RETURNS BIGINT
 CREATE TABLE text_time(time TEXT);
     SELECT create_hypertable('text_time', 'time', chunk_time_interval => 10, time_partitioning_func => 'text_part_func');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (9,public,text_time,t)
+    create_hypertable    
+-------------------------
+ (10,public,text_time,t)
 (1 row)
 
 \set VERBOSITY default
@@ -524,7 +542,7 @@ CREATE TABLE measurements (time TIMESTAMPTZ NOT NULL, device INT, value FLOAT);
 SELECT create_hypertable('measurements', 'time');
      create_hypertable      
 ----------------------------
- (10,public,measurements,t)
+ (11,public,measurements,t)
 (1 row)
 
 INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
@@ -578,8 +596,8 @@ owner             | default_perm_user
 scheduled         | t
 fixed_schedule    | f
 initial_start     | 
-hypertable_id     | 11
-config            | {"end_offset": null, "start_offset": null, "mat_hypertable_id": 11}
+hypertable_id     | 12
+config            | {"end_offset": null, "start_offset": null, "mat_hypertable_id": 12}
 check_schema      | _timescaledb_internal
 check_name        | policy_refresh_continuous_aggregate_check
 timezone          | 
@@ -607,7 +625,7 @@ create table i2980(time timestamptz not null);
 select create_hypertable('i2980','time');
   create_hypertable  
 ---------------------
- (12,public,i2980,t)
+ (13,public,i2980,t)
 (1 row)
 
 create materialized view i2980_cagg with (timescaledb.continuous, timescaledb.finalized = false) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
@@ -638,7 +656,7 @@ call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_14_3_chunk
+ _timescaledb_internal._hyper_15_3_chunk
 (1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
@@ -674,7 +692,7 @@ FROM timescaledb_information.continuous_aggregates
 WHERE view_name = 'i2980_cagg2'
 \gset
 SELECT add_compression_policy( :'MAT_TABLE_NAME', 13::integer);
-ERROR:  cannot add compression policy to materialized hypertable "_materialized_hypertable_14" 
+ERROR:  cannot add compression policy to materialized hypertable "_materialized_hypertable_15" 
 --TEST compressing cagg chunks without enabling compression
 SELECT count(*) FROM (select decompress_chunk(ch) FROM show_chunks('i2980_cagg2') ch ) q;
  count 

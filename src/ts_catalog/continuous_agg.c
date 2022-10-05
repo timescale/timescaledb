@@ -288,6 +288,14 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] =
 		Int32GetDatum(fd->raw_hypertable_id);
 
+	if (fd->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] =
+			Int32GetDatum(fd->parent_mat_hypertable_id);
+	}
+
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)] =
 		NameGetDatum(&fd->user_view_schema);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)] =
@@ -328,6 +336,12 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)]);
 	fd->raw_hypertable_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)])
+		fd->parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
+	else
+		fd->parent_mat_hypertable_id = DatumGetInt32(
+			values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)]);
 
 	memcpy(&fd->user_view_schema,
 		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]),

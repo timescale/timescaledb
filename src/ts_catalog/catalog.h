@@ -938,6 +938,7 @@ typedef enum Anum_continuous_agg
 {
 	Anum_continuous_agg_mat_hypertable_id = 1,
 	Anum_continuous_agg_raw_hypertable_id,
+	Anum_continuous_agg_parent_mat_hypertable_id,
 	Anum_continuous_agg_user_view_schema,
 	Anum_continuous_agg_user_view_name,
 	Anum_continuous_agg_partial_view_schema,
@@ -956,6 +957,7 @@ typedef struct FormData_continuous_agg
 {
 	int32 mat_hypertable_id;
 	int32 raw_hypertable_id;
+	int32 parent_mat_hypertable_id; /* Nested Continuous Aggregate */
 	NameData user_view_schema;
 	NameData user_view_name;
 	NameData partial_view_schema;
