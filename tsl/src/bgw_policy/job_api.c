@@ -70,6 +70,7 @@ validate_check_signature(Oid check)
  * 4 scheduled BOOL DEFAULT true
  * 5 check_config REGPROC DEFAULT NULL
  * 6 fixed_schedule BOOL DEFAULT TRUE
+ * 7 timezone TEXT DEFAULT NULL
  * ) RETURNS INTEGER
  */
 Datum
@@ -86,6 +87,7 @@ job_add(PG_FUNCTION_ARGS)
 	int32 job_id;
 	char *func_name = NULL;
 	char *check_name_str = NULL;
+	char *valid_timezone = NULL;
 	TimestampTz initial_start = PG_ARGISNULL(3) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(3);
 
 	Oid owner = GetUserId();
@@ -95,6 +97,13 @@ job_add(PG_FUNCTION_ARGS)
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
 	Oid check = PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
 	bool fixed_schedule = PG_ARGISNULL(6) ? true : PG_GETARG_BOOL(6);
+	text *timezone = PG_ARGISNULL(7) ? NULL : PG_GETARG_TEXT_PP(7);
+	/* verify it's a valid timezone */
+	if (timezone != NULL)
+	{
+		ts_bgw_job_validate_timezone(PG_GETARG_DATUM(7));
+		valid_timezone = text_to_cstring(timezone);
+	}
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -182,7 +191,8 @@ job_add(PG_FUNCTION_ARGS)
 										fixed_schedule,
 										0,
 										config,
-										initial_start);
+										initial_start,
+										valid_timezone);
 
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);

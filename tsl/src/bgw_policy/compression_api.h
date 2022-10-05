@@ -28,7 +28,7 @@ Interval *policy_recompression_get_recompress_after_interval(const Jsonb *config
 Datum policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 									  Oid compress_after_type, Interval *default_schedule_interval,
 									  bool user_defined_schedule_interval, bool if_not_exists,
-									  bool fixed_schedule, TimestampTz initial_start);
+									  bool fixed_schedule, TimestampTz initial_start, const char *timezone);
 bool policy_compression_remove_internal(Oid user_rel_oid, bool if_exists);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_COMPRESSION_API_H */

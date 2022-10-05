@@ -172,6 +172,42 @@ typedef struct
 /*
  * time_bucket(schedule_interval, finish_time, origin => initial_start)
  */
+// static TimestampTz
+// get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
+// {
+// 	Assert(job->fd.fixed_schedule == true);
+// 	Datum timebucket_fini, result;
+// 	Datum schedint_datum = IntervalPGetDatum(&job->fd.schedule_interval);
+
+// 	/* if we have a month component, the origin doesn't work so we must manually
+// 	 include the offset */
+// 	Datum offset = DirectFunctionCall2(ts_timestamptz_bucket,
+// 									   schedint_datum,
+// 									   TimestampTzGetDatum(job->fd.initial_start));
+// 	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
+// 	timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+// 										  schedint_datum,
+// 										  TimestampTzGetDatum(finish_time),
+// 										  TimestampTzGetDatum(job->fd.initial_start));
+// 	/* always the next time_bucket */
+// 	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+// 	if (job->fd.schedule_interval.month)
+// 	{
+// 		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
+// 	}
+// 	/*
+// 	 * adding the schedule interval above to get the next bucket might still not hit
+// 	 * the next bucket if we are crossing DST. So we can end up with a next_start value
+// 	 * that is actually less than the finish time of the job. Hence, we have to make sure
+// 	 * the next scheduled slot we compute is in the future and not in the past
+// 	 */
+// 	while (result <= TimestampTzGetDatum(finish_time))
+// 		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+
+// 	return DatumGetTimestampTz(result);
+// }
+
+/* timebucket()*/
 static TimestampTz
 get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 {
@@ -191,6 +227,18 @@ get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 										  TimestampTzGetDatum(job->fd.initial_start));
 	/* always the next time_bucket */
 	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+	if (job->fd.timezone != NULL)
+	{
+		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+										  schedint_datum,
+										  TimestampTzGetDatum(finish_time),
+										  PointerGetDatum(job->fd.timezone),
+										  TimestampTzGetDatum(job->fd.initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	}
+
 	if (job->fd.schedule_interval.month)
 	{
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);

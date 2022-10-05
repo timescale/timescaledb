@@ -150,7 +150,7 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 Datum
 policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 							  Interval default_schedule_interval, bool if_not_exists,
-							  bool fixed_schedule, TimestampTz initial_start)
+							  bool fixed_schedule, TimestampTz initial_start, const char *timezone)
 {
 	NameData application_name;
 	int32 job_id;
@@ -293,7 +293,8 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										fixed_schedule,
 										hypertable->fd.id,
 										config,
-										initial_start);
+										initial_start,
+										timezone);
 
 	ts_cache_release(hcache);
 
@@ -315,6 +316,8 @@ policy_retention_add(PG_FUNCTION_ARGS)
 		PG_ARGISNULL(3) ? (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
 	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
 	bool fixed_schedule = !PG_ARGISNULL(4);
+	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
+	char *valid_timezone = NULL;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -326,13 +329,22 @@ policy_retention_add(PG_FUNCTION_ARGS)
 		if (TIMESTAMP_NOT_FINITE(initial_start))
 			initial_start = ts_timer_get_current_timestamp();
 	}
+
+	if (timezone != NULL)
+	{
+		ts_bgw_job_validate_timezone(PG_GETARG_DATUM(7));
+		valid_timezone = text_to_cstring(timezone);
+	}
+		
+	
 	retval = policy_retention_add_internal(ht_oid,
 										   window_type,
 										   window_datum,
 										   default_schedule_interval,
 										   if_not_exists,
 										   fixed_schedule,
-										   initial_start);
+										   initial_start,
+										   valid_timezone);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

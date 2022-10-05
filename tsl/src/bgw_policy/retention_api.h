@@ -21,6 +21,6 @@ Interval *policy_retention_get_drop_after_interval(const Jsonb *config);
 
 Datum policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 									Interval default_schedule_interval, bool if_not_exists,
-									bool fixed_schedule, TimestampTz initial_start);
+									bool fixed_schedule, TimestampTz initial_start, const char *timezone);
 Datum policy_retention_remove_internal(Oid table_oid, bool if_exists);
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_RETENTION_API_H */

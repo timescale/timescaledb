@@ -265,7 +265,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										false, /*fixed_schedule*/
 										hypertable_id,
 										config,
-										DT_NOBEGIN);
+										DT_NOBEGIN,
+										NULL);
 
 	PG_RETURN_INT32(job_id);
 }

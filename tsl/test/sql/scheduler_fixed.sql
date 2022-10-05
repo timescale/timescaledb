@@ -95,22 +95,25 @@ select ts_test_next_scheduled_execution_slot('1d', '2022-09-21 13:21:34+00'::tim
 -- go from +1 to +2
 set timezone to 'Europe/Berlin';
 -- DST switch on March 27th 2022
-select ts_test_next_scheduled_execution_slot('1 week', '2022-03-23 09:21:34 CET'::timestamptz, '2022-03-23 09:00:00 CET'::timestamptz) as t1 \gset
+select ts_test_next_scheduled_execution_slot('1 week', '2022-03-23 09:21:34 Europe/Berlin'::timestamptz, '2022-03-23 09:00:00 Europe/Berlin'::timestamptz) as t1 \gset
+-- ideally, this is the desired result:
+select time_bucket('1 week', '2022-03-23 09:21:34 Europe/Berlin'::timestamptz, 'Europe/Berlin', '2022-03-23 09:00:00'::timestamptz);
 select :'t1';
-select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t2 \gset
+select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz + interval '3 sec', '2022-03-23 09:00:00 Europe/Berlin'::timestamptz) as t2 \gset
 select :'t2';
-select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t3 \gset
+select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz + interval '3 sec', '2022-03-23 09:00:00 Europe/Berlin'::timestamptz) as t3 \gset
 select :'t3';
 
 -- go from +2 to +1
 -- DST switch on October 30th 2022
-select ts_test_next_scheduled_execution_slot('1 week', '2022-10-29 09:21:34+02'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t1 \gset
+select ts_test_next_scheduled_execution_slot('1 week', '2022-10-29 09:21:34+02'::timestamptz, '2022-10-29 09:00:00 Europe/Berlin'::timestamptz) as t1 \gset
 select :'t1';
-select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t2 \gset
+select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz + interval '3 sec', '2022-10-29 09:00:00 Europe/Berlin'::timestamptz) as t2 \gset
 select :'t2';
-select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t3 \gset
+select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz + interval '3 sec', '2022-10-29 09:00:00 Europe/Berlin'::timestamptz) as t3 \gset
 select :'t3';
 
 \set ON_ERROR_STOP 0
 -- test some unacceptable values for schedule interval
 select add_job('job_5', schedule_interval => interval '1 month 1week', initial_start => :'initial_start'::timestamptz);
+-- test some unacceptable values for timezone 

@@ -178,7 +178,7 @@ Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 								Oid compress_after_type, Interval *default_schedule_interval,
 								bool user_defined_schedule_interval, bool if_not_exists,
-								bool fixed_schedule, TimestampTz initial_start)
+								bool fixed_schedule, TimestampTz initial_start, const char *timezone)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_schema, check_name, owner;
@@ -324,7 +324,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										fixed_schedule,
 										hypertable->fd.id,
 										config,
-										initial_start);
+										initial_start,
+										timezone);
 
 	ts_cache_release(hcache);
 	PG_RETURN_INT32(job_id);
@@ -351,6 +352,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
 	// if not providing initial_start, then we still get the old behavior
 	bool fixed_schedule = !PG_ARGISNULL(4);
+	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
+	char *valid_timezone = NULL;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -361,6 +364,13 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		if (TIMESTAMP_NOT_FINITE(initial_start))
 			initial_start = ts_timer_get_current_timestamp();
 	}
+
+	if (timezone != NULL)
+	{
+		ts_bgw_job_validate_timezone(PG_GETARG_DATUM(7));
+		valid_timezone = text_to_cstring(timezone);
+	}
+	
 	Datum retval;
 	retval = policy_compression_add_internal(user_rel_oid,
 											 compress_after_datum,
@@ -369,7 +379,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 											 user_defined_schedule_interval,
 											 if_not_exists,
 											 fixed_schedule,
-											 initial_start);
+											 initial_start,
+											 valid_timezone);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);
