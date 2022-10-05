@@ -220,17 +220,17 @@ CREATE TABLE _timescaledb_config.bgw_job (
   config jsonb ,
   check_schema NAME,
   check_name NAME,
-  timezone TEXT 
+  timezone TEXT
 );
 
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
 CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
 
 INSERT INTO _timescaledb_config.bgw_job(
-    id, application_name, schedule_interval, 
-    max_runtime, max_retries, retry_period, 
-    proc_schema, proc_name, owner, scheduled, 
-    hypertable_id, config, check_schema, check_name, 
+    id, application_name, schedule_interval,
+    max_runtime, max_retries, retry_period,
+    proc_schema, proc_name, owner, scheduled,
+    hypertable_id, config, check_schema, check_name,
     fixed_schedule
 )
 SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period,
@@ -247,9 +247,9 @@ GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
 
 -- do simple CREATE for the functions with modified signatures
 CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
-continuous_aggregate REGCLASS, start_offset "any", 
-end_offset "any", schedule_interval INTERVAL, 
-if_not_exists BOOL = false, 
+continuous_aggregate REGCLASS, start_offset "any",
+end_offset "any", schedule_interval INTERVAL,
+if_not_exists BOOL = false,
 initial_start TIMESTAMPTZ = NULL,
 timezone TEXT = NULL)
 RETURNS INTEGER
@@ -257,9 +257,9 @@ AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
 
 CREATE FUNCTION @extschema@.add_compression_policy(
-        hypertable REGCLASS, compress_after "any", 
+        hypertable REGCLASS, compress_after "any",
         if_not_exists BOOL = false,
-        schedule_interval INTERVAL = NULL, 
+        schedule_interval INTERVAL = NULL,
         initial_start TIMESTAMPTZ = NULL,
         timezone TEXT = NULL
 )
@@ -399,3 +399,100 @@ BEGIN
      RAISE EXCEPTION 'unable to modify frozen chunk %s', TG_TABLE_NAME;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
+
+--
+-- Rebuild the catalog table `_timescaledb_catalog.continuous_agg`
+--
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+DROP PROCEDURE IF EXISTS @extschema@.cagg_migrate (REGCLASS, BOOLEAN, BOOLEAN);
+DROP FUNCTION IF EXISTS _timescaledb_internal.cagg_migrate_pre_validation (TEXT, TEXT, TEXT);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_create_plan (_timescaledb_catalog.continuous_agg, TEXT, BOOLEAN, BOOLEAN);
+DROP FUNCTION IF EXISTS _timescaledb_internal.cagg_migrate_plan_exists (INTEGER);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_plan (_timescaledb_catalog.continuous_agg);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_create_new_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_disable_policies (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_enable_policies (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_copy_policies (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_copy_data (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_override_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+DROP PROCEDURE IF EXISTS _timescaledb_internal.cagg_migrate_execute_drop_old_cagg (_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step);
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.continuous_agg;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    DROP CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan
+    DROP CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey;
+
+CREATE TABLE _timescaledb_catalog._tmp_continuous_agg AS
+    SELECT
+        mat_hypertable_id,
+        raw_hypertable_id,
+        NULL::INTEGER AS parent_mat_hypertable_id,
+        user_view_schema,
+        user_view_name,
+        partial_view_schema,
+        partial_view_name,
+        bucket_width,
+        direct_view_schema,
+        direct_view_name,
+        materialized_only,
+        finalized
+    FROM
+        _timescaledb_catalog.continuous_agg
+    ORDER BY
+        mat_hypertable_id;
+
+DROP TABLE _timescaledb_catalog.continuous_agg;
+
+CREATE TABLE _timescaledb_catalog.continuous_agg (
+    mat_hypertable_id integer NOT NULL,
+    raw_hypertable_id integer NOT NULL,
+    parent_mat_hypertable_id integer,
+    user_view_schema name NOT NULL,
+    user_view_name name NOT NULL,
+    partial_view_schema name NOT NULL,
+    partial_view_name name NOT NULL,
+    bucket_width bigint NOT NULL,
+    direct_view_schema name NOT NULL,
+    direct_view_name name NOT NULL,
+    materialized_only bool NOT NULL DEFAULT FALSE,
+    finalized bool NOT NULL DEFAULT TRUE,
+    -- table constraints
+    CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
+    CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
+    CONSTRAINT continuous_agg_user_view_schema_user_view_name_key UNIQUE (user_view_schema, user_view_name),
+    CONSTRAINT continuous_agg_mat_hypertable_id_fkey
+        FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+    CONSTRAINT continuous_agg_raw_hypertable_id_fkey
+        FOREIGN KEY (raw_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+    CONSTRAINT continuous_agg_parent_mat_hypertable_id_fkey
+        FOREIGN KEY (parent_mat_hypertable_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_catalog.continuous_agg
+SELECT * FROM _timescaledb_catalog._tmp_continuous_agg;
+DROP TABLE _timescaledb_catalog._tmp_continuous_agg;
+
+CREATE INDEX continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.continuous_agg (raw_hypertable_id);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
+
+GRANT SELECT ON TABLE _timescaledb_catalog.continuous_agg TO PUBLIC;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id) ON DELETE CASCADE;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan
+    ADD CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey
+        FOREIGN KEY (mat_hypertable_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id);
+
+ANALYZE _timescaledb_catalog.continuous_agg;

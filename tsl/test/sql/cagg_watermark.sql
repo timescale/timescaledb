@@ -20,7 +20,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLE continuous_agg_test_mat(time int);
 select create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
-INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,'','');
+INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, NULL, '','','','',0,'','');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- create the trigger

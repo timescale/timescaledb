@@ -62,6 +62,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_migrate_timestamptz.sql
     cagg_migrate_timestamptz_dist_ht.sql
     cagg_multi.sql
+    cagg_on_cagg_integer.sql
+    cagg_on_cagg_integer_dist_ht.sql
+    cagg_on_cagg_timestamp.sql
+    cagg_on_cagg_timestamp_dist_ht.sql
+    cagg_on_cagg_timestamptz.sql
+    cagg_on_cagg_timestamptz_dist_ht.sql
     continuous_aggs_deprecated.sql
     cagg_tableam.sql
     cagg_usage.sql

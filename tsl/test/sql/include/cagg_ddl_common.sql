@@ -324,16 +324,6 @@ CREATE MATERIALIZED VIEW new_name_view
 AS SELECT time_bucket('6', time_bucket), COUNT("count")
     FROM new_name
     GROUP BY 1 WITH NO DATA;
-
--- cannot create a continuous aggregate on a continuous aggregate view
-CREATE MATERIALIZED VIEW drop_chunks_view_view
-  WITH (
-    timescaledb.continuous,
-    timescaledb.materialized_only=true
-  )
-AS SELECT time_bucket('6', time_bucket), SUM(count)
-    FROM drop_chunks_view
-    GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 1
 
 CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v1 float, v2 float);

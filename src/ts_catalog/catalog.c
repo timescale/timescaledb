@@ -81,8 +81,8 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.table_name = BGW_POLICY_CHUNK_STATS_TABLE_NAME,
 	},
 	[CONTINUOUS_AGG] = {
-			.schema_name = CATALOG_SCHEMA_NAME,
-			.table_name = CONTINUOUS_AGG_TABLE_NAME,
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGG_TABLE_NAME,
 	},
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
