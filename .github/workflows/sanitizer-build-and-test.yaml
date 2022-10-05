@@ -141,7 +141,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
         sudo coredumpctl gdb <<EOT
-          printf "%s", debug_query_string
+          printf "%s\n\n", debug_query_string
           bt full
         EOT
         ./scripts/bundle_coredumps.sh
