@@ -917,7 +917,10 @@ remote_connection_exec(TSConnection *conn, const char *cmd)
 		ResultEntry *entry = PQresultInstanceData(res, eventproc);
 
 		if (status == PGRES_FATAL_ERROR && entry == NULL)
+		{
+			res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
 			PQfireResultCreateEvents(conn->pg_conn, res);
+		}
 	}
 	return res;
 }
