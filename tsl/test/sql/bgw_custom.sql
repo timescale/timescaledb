@@ -551,7 +551,7 @@ CREATE TABLE sensor_data
 );
 
 SELECT FROM create_hypertable('sensor_data','time');
-
+SELECT '2022-10-06 00:00:00+00' as start_date_sd \gset
 INSERT INTO sensor_data
 	SELECT
 		time + (INTERVAL '1 minute' * random()) AS time,
@@ -559,7 +559,7 @@ INSERT INTO sensor_data
 		random() AS cpu,
 		random()* 100 AS temperature
 	FROM
-		generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '1 months', :'start_date_sd'::timestamptz - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
 		generate_series(1, 50, 1 ) AS g2(sensor_id)
 	ORDER BY
 		time;
@@ -580,7 +580,7 @@ INSERT INTO sensor_data
 		random() AS cpu,
 		random()* 100 AS temperature
 	FROM
-		generate_series(now() - INTERVAL '2 months', now() - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '2 months', :'start_date_sd'::timestamptz - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
 		generate_series(1, 30, 1 ) AS g2(sensor_id)
 	ORDER BY
 		time;
