@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_job(
   initial_start TIMESTAMPTZ DEFAULT NULL,
   scheduled BOOL DEFAULT true,
   check_config REGPROC DEFAULT NULL,
-  fixed_schedule BOOL DEFAULT TRUE
+  fixed_schedule BOOL DEFAULT TRUE,
+  timezone TEXT DEFAULT NULL
 ) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.delete_job(job_id INTEGER) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_job_delete' LANGUAGE C VOLATILE STRICT;

@@ -45,7 +45,7 @@ extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(
 	Name application_name, Interval *schedule_interval, Interval *max_runtime, int32 max_retries,
 	Interval *retry_period, Name proc_schema, Name proc_name, Name check_schema, Name check_name,
 	Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id, Jsonb *config,
-	TimestampTz initial_start);
+	TimestampTz initial_start, const char *timezone);
 extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
 
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
@@ -60,4 +60,5 @@ extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, i
 											  Interval *next_interval);
 extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *jerr);
 extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule_interval);
+extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
 #endif /* BGW_JOB_H */

@@ -282,6 +282,7 @@ CREATE TABLE _timescaledb_config.bgw_job (
   config jsonb,
   check_schema name,
   check_name name,
+  timezone text,
   -- table constraints
   CONSTRAINT bgw_job_pkey PRIMARY KEY (id),
   CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE

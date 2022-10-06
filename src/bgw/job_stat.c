@@ -176,21 +176,42 @@ static TimestampTz
 get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 {
 	Assert(job->fd.fixed_schedule == true);
-	Datum timebucket_fini, result;
+	Datum timebucket_fini, result, offset;
 	Datum schedint_datum = IntervalPGetDatum(&job->fd.schedule_interval);
 
+	if (job->fd.timezone == NULL)
+	{
+		offset = DirectFunctionCall2(ts_timestamptz_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(job->fd.initial_start));
+
+		timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  TimestampTzGetDatum(job->fd.initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	}
+	else
+	{
+		char *tz = text_to_cstring(job->fd.timezone);
+		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  CStringGetTextDatum(tz),
+											  TimestampTzGetDatum(job->fd.initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(job->fd.initial_start),
+									 CStringGetTextDatum(tz));
+	}
+
+	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
 	/* if we have a month component, the origin doesn't work so we must manually
 	 include the offset */
-	Datum offset = DirectFunctionCall2(ts_timestamptz_bucket,
-									   schedint_datum,
-									   TimestampTzGetDatum(job->fd.initial_start));
-	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
-	timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
-										  schedint_datum,
-										  TimestampTzGetDatum(finish_time),
-										  TimestampTzGetDatum(job->fd.initial_start));
-	/* always the next time_bucket */
-	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
 	if (job->fd.schedule_interval.month)
 	{
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
@@ -201,7 +222,7 @@ get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 	 * that is actually less than the finish time of the job. Hence, we have to make sure
 	 * the next scheduled slot we compute is in the future and not in the past
 	 */
-	while (result <= TimestampTzGetDatum(finish_time))
+	while (DatumGetTimestampTz(result) <= finish_time)
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
 
 	return DatumGetTimestampTz(result);

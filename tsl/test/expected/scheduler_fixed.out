@@ -28,7 +28,7 @@ BEGIN
     RETURN false;
 END
 $BODY$;
-CREATE OR REPLACE FUNCTION ts_test_next_scheduled_execution_slot(schedule_interval INTERVAL, finish_time TIMESTAMPTZ, initial_start TIMESTAMPTZ)
+CREATE OR REPLACE FUNCTION ts_test_next_scheduled_execution_slot(schedule_interval INTERVAL, finish_time TIMESTAMPTZ, initial_start TIMESTAMPTZ, timezone TEXT = NULL)
 RETURNS TIMESTAMPTZ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 -- follow exactly cagg_bgw_drop_chunks
 -- Remove any default jobs, e.g., telemetry
@@ -139,47 +139,55 @@ select ts_test_next_scheduled_execution_slot('1d', '2022-09-21 13:21:34+00'::tim
 set timezone to 'Europe/Berlin';
 -- DST switch on March 27th 2022
 select ts_test_next_scheduled_execution_slot('1 week', '2022-03-23 09:21:34 CET'::timestamptz, '2022-03-23 09:00:00 CET'::timestamptz) as t1 \gset
-select :'t1';
-           ?column?            
--------------------------------
- Wed Mar 30 09:00:00 2022 CEST
+select ts_test_next_scheduled_execution_slot('1 week', '2022-03-23 09:21:34 CET'::timestamptz, '2022-03-23 09:00:00 CET'::timestamptz, timezone => 'Europe/Berlin')
+as t1_tz \gset
+select :'t1' as without_timezone, :'t1_tz' as with_timezone;
+       without_timezone        |         with_timezone         
+-------------------------------+-------------------------------
+ Wed Mar 30 09:00:00 2022 CEST | Wed Mar 30 09:00:00 2022 CEST
 (1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t2 \gset
-select :'t2';
-           ?column?            
--------------------------------
- Wed Mar 30 09:00:00 2022 CEST
+select ts_test_next_scheduled_execution_slot('1 week', :'t1_tz'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz, timezone => 'Europe/Berlin') as t2_tz \gset
+select :'t2' as without_timezone, :'t2_tz' as with_timezone;
+       without_timezone        |         with_timezone         
+-------------------------------+-------------------------------
+ Wed Apr 06 09:00:00 2022 CEST | Wed Apr 06 09:00:00 2022 CEST
 (1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t3 \gset
-select :'t3';
-           ?column?            
--------------------------------
- Wed Mar 30 09:00:00 2022 CEST
+select ts_test_next_scheduled_execution_slot('1 week', :'t2_tz'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz, timezone => 'Europe/Berlin') as t3_tz \gset
+select :'t3' as without_timezone, :'t3_tz' as with_timezone;
+       without_timezone        |         with_timezone         
+-------------------------------+-------------------------------
+ Wed Apr 06 10:00:00 2022 CEST | Wed Apr 13 09:00:00 2022 CEST
 (1 row)
 
 -- go from +2 to +1
 -- DST switch on October 30th 2022
 select ts_test_next_scheduled_execution_slot('1 week', '2022-10-29 09:21:34+02'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t1 \gset
-select :'t1';
-           ?column?           
-------------------------------
- Sat Nov 05 09:00:00 2022 CET
+select ts_test_next_scheduled_execution_slot('1 week', '2022-10-29 09:21:34+02'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin')
+as t1_tz \gset
+select :'t1' as without_timezone, :'t1_tz' as with_timezone;
+       without_timezone       |        with_timezone         
+------------------------------+------------------------------
+ Sat Nov 05 09:00:00 2022 CET | Sat Nov 05 09:00:00 2022 CET
 (1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t2 \gset
-select :'t2';
-           ?column?           
-------------------------------
- Sat Nov 12 08:00:00 2022 CET
+select ts_test_next_scheduled_execution_slot('1 week', :'t1_tz'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin') as t2_tz \gset
+select :'t2' as without_timezone, :'t2_tz' as with_timezone;
+       without_timezone       |        with_timezone         
+------------------------------+------------------------------
+ Sat Nov 12 08:00:00 2022 CET | Sat Nov 12 09:00:00 2022 CET
 (1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t3 \gset
-select :'t3';
-           ?column?           
-------------------------------
- Sat Nov 19 08:00:00 2022 CET
+select ts_test_next_scheduled_execution_slot('1 week', :'t2_tz'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin') as t3_tz \gset
+select :'t3' as without_timezone, :'t3_tz' as with_timezone;
+       without_timezone       |        with_timezone         
+------------------------------+------------------------------
+ Sat Nov 19 08:00:00 2022 CET | Sat Nov 19 09:00:00 2022 CET
 (1 row)
 
 \set ON_ERROR_STOP 0

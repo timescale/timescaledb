@@ -512,7 +512,7 @@ Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
-								 TimestampTz initial_start)
+								 TimestampTz initial_start, const char *timezone)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -638,7 +638,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 										fixed_schedule,
 										cagg->data.mat_hypertable_id,
 										config,
-										initial_start);
+										initial_start,
+										timezone);
 
 	PG_RETURN_INT32(job_id);
 }
@@ -668,6 +669,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	if_not_exists = PG_GETARG_BOOL(4);
 	TimestampTz initial_start = PG_ARGISNULL(5) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(5);
 	bool fixed_schedule = !PG_ARGISNULL(5);
+	text *timezone = PG_ARGISNULL(6) ? NULL : PG_GETARG_TEXT_PP(6);
+	char *valid_timezone = NULL;
 
 	Datum retval;
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -677,6 +680,10 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 		if (TIMESTAMP_NOT_FINITE(initial_start))
 			initial_start = ts_timer_get_current_timestamp();
 	}
+
+	if (timezone != NULL)
+		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(6));
+
 	retval = policy_refresh_cagg_add_internal(cagg_oid,
 											  start_offset_type,
 											  start_offset,
@@ -685,7 +692,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  refresh_interval,
 											  if_not_exists,
 											  fixed_schedule,
-											  initial_start);
+											  initial_start,
+											  valid_timezone);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

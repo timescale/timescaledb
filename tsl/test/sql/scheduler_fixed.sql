@@ -31,7 +31,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ts_test_next_scheduled_execution_slot(schedule_interval INTERVAL, finish_time TIMESTAMPTZ, initial_start TIMESTAMPTZ)
+CREATE OR REPLACE FUNCTION ts_test_next_scheduled_execution_slot(schedule_interval INTERVAL, finish_time TIMESTAMPTZ, initial_start TIMESTAMPTZ, timezone TEXT = NULL)
 RETURNS TIMESTAMPTZ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 -- follow exactly cagg_bgw_drop_chunks
@@ -96,20 +96,28 @@ select ts_test_next_scheduled_execution_slot('1d', '2022-09-21 13:21:34+00'::tim
 set timezone to 'Europe/Berlin';
 -- DST switch on March 27th 2022
 select ts_test_next_scheduled_execution_slot('1 week', '2022-03-23 09:21:34 CET'::timestamptz, '2022-03-23 09:00:00 CET'::timestamptz) as t1 \gset
-select :'t1';
+select ts_test_next_scheduled_execution_slot('1 week', '2022-03-23 09:21:34 CET'::timestamptz, '2022-03-23 09:00:00 CET'::timestamptz, timezone => 'Europe/Berlin')
+as t1_tz \gset
+select :'t1' as without_timezone, :'t1_tz' as with_timezone;
 select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t2 \gset
-select :'t2';
+select ts_test_next_scheduled_execution_slot('1 week', :'t1_tz'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz, timezone => 'Europe/Berlin') as t2_tz \gset
+select :'t2' as without_timezone, :'t2_tz' as with_timezone;
 select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t3 \gset
-select :'t3';
+select ts_test_next_scheduled_execution_slot('1 week', :'t2_tz'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz, timezone => 'Europe/Berlin') as t3_tz \gset
+select :'t3' as without_timezone, :'t3_tz' as with_timezone;
 
 -- go from +2 to +1
 -- DST switch on October 30th 2022
 select ts_test_next_scheduled_execution_slot('1 week', '2022-10-29 09:21:34+02'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t1 \gset
-select :'t1';
+select ts_test_next_scheduled_execution_slot('1 week', '2022-10-29 09:21:34+02'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin')
+as t1_tz \gset
+select :'t1' as without_timezone, :'t1_tz' as with_timezone;
 select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t2 \gset
-select :'t2';
+select ts_test_next_scheduled_execution_slot('1 week', :'t1_tz'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin') as t2_tz \gset
+select :'t2' as without_timezone, :'t2_tz' as with_timezone;
 select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t3 \gset
-select :'t3';
+select ts_test_next_scheduled_execution_slot('1 week', :'t2_tz'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin') as t3_tz \gset
+select :'t3' as without_timezone, :'t3_tz' as with_timezone;
 
 \set ON_ERROR_STOP 0
 -- test some unacceptable values for schedule interval

@@ -217,7 +217,8 @@ CREATE TABLE _timescaledb_config.bgw_job (
   hypertable_id  integer REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   config jsonb ,
   check_schema NAME,
-  check_name NAME 
+  check_name NAME,
+  timezone TEXT 
 );
 
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
@@ -247,7 +248,8 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
 continuous_aggregate REGCLASS, start_offset "any", 
 end_offset "any", schedule_interval INTERVAL, 
 if_not_exists BOOL = false, 
-initial_start TIMESTAMPTZ = NULL)
+initial_start TIMESTAMPTZ = NULL,
+timezone TEXT = NULL)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
@@ -256,7 +258,8 @@ CREATE FUNCTION @extschema@.add_compression_policy(
         hypertable REGCLASS, compress_after "any", 
         if_not_exists BOOL = false,
         schedule_interval INTERVAL = NULL, 
-        initial_start TIMESTAMPTZ = NULL
+        initial_start TIMESTAMPTZ = NULL,
+        timezone TEXT = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
@@ -267,7 +270,8 @@ CREATE FUNCTION @extschema@.add_retention_policy(
        drop_after "any",
        if_not_exists BOOL = false,
        schedule_interval INTERVAL = NULL,
-       initial_start TIMESTAMPTZ = NULL
+       initial_start TIMESTAMPTZ = NULL,
+       timezone TEXT = NULL
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
 LANGUAGE C VOLATILE;
@@ -279,5 +283,6 @@ CREATE FUNCTION @extschema@.add_job(
   initial_start TIMESTAMPTZ DEFAULT NULL,
   scheduled BOOL DEFAULT true,
   check_config REGPROC DEFAULT NULL,
-  fixed_schedule BOOL DEFAULT TRUE
+  fixed_schedule BOOL DEFAULT TRUE,
+  timezone TEXT DEFAULT NULL
 ) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;

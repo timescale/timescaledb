@@ -65,24 +65,57 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 	Interval *schedule_interval = PG_GETARG_INTERVAL_P(0);
 	TimestampTz finish_time = PG_GETARG_TIMESTAMPTZ(1);
 	TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(2);
+	text *timezone = PG_ARGISNULL(3) ? NULL : PG_GETARG_TEXT_PP(3);
 
-	Datum timebucket_fini, result;
+	Datum timebucket_fini, result, offset;
 	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
 
-	Datum offset = DirectFunctionCall2(ts_timestamptz_bucket,
-									   schedint_datum,
-									   TimestampTzGetDatum(initial_start));
+	if (timezone == NULL)
+	{
+		offset = DirectFunctionCall2(ts_timestamptz_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(initial_start));
+
+		timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  TimestampTzGetDatum(initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	}
+	else
+	{
+		char *tz = text_to_cstring(timezone);
+		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  CStringGetTextDatum(tz),
+											  TimestampTzGetDatum(initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(initial_start),
+									 CStringGetTextDatum(tz));
+	}
+
 	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
-	timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
-										  schedint_datum,
-										  TimestampTzGetDatum(finish_time),
-										  TimestampTzGetDatum(initial_start));
-	// always the next time_bucket
-	result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	/* if we have a month component, the origin doesn't work so we must manually
+	 include the offset */
 	if (schedule_interval->month)
 	{
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
 	}
+	/*
+	 * adding the schedule interval above to get the next bucket might still not hit
+	 * the next bucket if we are crossing DST. So we can end up with a next_start value
+	 * that is actually less than the finish time of the job. Hence, we have to make sure
+	 * the next scheduled slot we compute is in the future and not in the past
+	 */
+	while (DatumGetTimestampTz(result) <= finish_time)
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+
 	return result;
 }
 

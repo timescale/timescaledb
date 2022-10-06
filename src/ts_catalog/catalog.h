@@ -709,6 +709,7 @@ enum Anum_bgw_job
 	Anum_bgw_job_config,
 	Anum_bgw_job_check_schema,
 	Anum_bgw_job_check_name,
+	Anum_bgw_job_timezone,
 	_Anum_bgw_job_max,
 };
 
@@ -734,6 +735,7 @@ typedef struct FormData_bgw_job
 	Jsonb *config;
 	NameData check_schema;
 	NameData check_name;
+	text *timezone;
 } FormData_bgw_job;
 
 typedef FormData_bgw_job *Form_bgw_job;

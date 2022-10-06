@@ -28,7 +28,7 @@ Datum policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type,
 									   NullableDatum start_offset, Oid end_offset_type,
 									   NullableDatum end_offset, Interval refresh_interval,
 									   bool if_not_exists, bool fixed_schedule,
-									   TimestampTz initial_start);
+									   TimestampTz initial_start, const char *timezone);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_CAGG_API_H */

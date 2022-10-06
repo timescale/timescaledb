@@ -265,6 +265,9 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 			DatumGetTimestampTz(values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)]);
 	}
 
+	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)])
+		job->fd.timezone = DatumGetTextPP(values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)]);
+
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
 		job->fd.retry_period =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)]);
@@ -360,8 +363,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool should_free, isnull, initial_start_isnull;
-		Datum value, initial_start;
+		bool should_free, isnull, initial_start_isnull, timezone_isnull;
+		Datum value, initial_start, timezone;
 
 		BgwJob *job = MemoryContextAllocZero(mctx, alloc_size);
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
@@ -388,6 +391,11 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 			job->fd.initial_start = DatumGetTimestampTz(initial_start);
 		else
 			job->fd.initial_start = DT_NOBEGIN;
+		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
+		if (!timezone_isnull)
+			job->fd.timezone = DatumGetTextPP(timezone);
+		else
+			job->fd.timezone = NULL;
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
@@ -1292,7 +1300,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
 						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
-						   Jsonb *config, TimestampTz initial_start)
+						   Jsonb *config, TimestampTz initial_start, const char *timezone)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -1353,6 +1361,10 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 	else
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = JsonbPGetDatum(config);
+	if (timezone == NULL)
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = CStringGetTextDatum(timezone);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
@@ -1389,4 +1401,13 @@ ts_bgw_job_validate_schedule_interval(Interval *schedule_interval)
 				errmsg("month intervals cannot have day or time component"),
 				errdetail("Fixed schedule jobs do not support such schedule intervals."),
 				errhint("Express the interval in terms of days or time instead."));
+}
+
+char *
+ts_bgw_job_validate_timezone(Datum timezone)
+{
+	DirectFunctionCall2(timestamp_zone,
+						timezone,
+						TimestampGetDatum(ts_timer_get_current_timestamp()));
+	return TextDatumGetCString(timezone);
 }
