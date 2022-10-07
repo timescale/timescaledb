@@ -336,7 +336,9 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
 	continuous_agg_refresh_internal(policy_data.cagg,
 									&policy_data.refresh_window,
-									CAGG_REFRESH_POLICY);
+									CAGG_REFRESH_POLICY,
+									policy_data.start_is_null,
+									policy_data.end_is_null);
 
 	return true;
 }
@@ -349,6 +351,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	const Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
+	bool start_isnull, end_isnull;
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
@@ -361,8 +364,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 
 	open_dim = get_open_dimension_for_hypertable(mat_ht);
 	dim_type = ts_dimension_get_partition_type(open_dim);
-	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config);
-	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config);
+	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
+	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
 
 	if (refresh_start >= refresh_end)
 		ereport(ERROR,
@@ -379,6 +382,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->refresh_window.start = refresh_start;
 		policy_data->refresh_window.end = refresh_end;
 		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
+		policy_data->start_is_null = start_isnull;
+		policy_data->end_is_null = end_isnull;
 	}
 }
 
