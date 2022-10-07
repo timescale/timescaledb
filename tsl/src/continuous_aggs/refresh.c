@@ -573,7 +573,11 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	else
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-	continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_WINDOW);
+	continuous_agg_refresh_internal(cagg,
+									&refresh_window,
+									CAGG_REFRESH_WINDOW,
+									PG_ARGISNULL(1),
+									PG_ARGISNULL(2));
 
 	PG_RETURN_VOID();
 }
@@ -698,11 +702,12 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
-								const CaggRefreshCallContext callctx)
+								const CaggRefreshCallContext callctx, const bool start_isnull,
+								const bool end_isnull)
 {
 	Catalog *catalog = ts_catalog_get();
 	int32 mat_id = cagg->data.mat_hypertable_id;
-	InternalTimeRange refresh_window;
+	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 computed_invalidation_threshold;
 	int64 invalidation_threshold;
 	bool is_raw_ht_distributed;
@@ -732,18 +737,22 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
 	is_raw_ht_distributed = hypertable_is_distributed(ht);
 
-	if (ts_continuous_agg_bucket_width_variable(cagg))
+	/* No bucketing when open ended */
+	if (!(start_isnull && end_isnull))
 	{
-		refresh_window = *refresh_window_arg;
-		ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
-															  &refresh_window.end,
-															  cagg->bucket_function);
-	}
-	else
-	{
-		refresh_window =
-			compute_inscribed_bucketed_refresh_window(refresh_window_arg,
-													  ts_continuous_agg_bucket_width(cagg));
+		if (ts_continuous_agg_bucket_width_variable(cagg))
+		{
+			refresh_window = *refresh_window_arg;
+			ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
+																  &refresh_window.end,
+																  cagg->bucket_function);
+		}
+		else
+		{
+			refresh_window =
+				compute_inscribed_bucketed_refresh_window(refresh_window_arg,
+														  ts_continuous_agg_bucket_width(cagg));
+		}
 	}
 
 	if (refresh_window.start >= refresh_window.end)
