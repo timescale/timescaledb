@@ -23,6 +23,7 @@ CREATE OR REPLACE FUNCTION ts_bgw_test_job_sleep(job_id INT, config JSONB) RETUR
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
+-- we use insert_job instead of add_job because we want to be able to set and use max_retries, max_runtime, retry_period which are not part of the add_job api
 CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT true)
 RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
@@ -115,9 +116,7 @@ CREATE TABLE public.bgw_dsm_handle_store(
 );
 
 INSERT INTO public.bgw_dsm_handle_store VALUES (0);
--- creates the shared memory segment for the jobs to communicate in the tests
--- also sets the current_time of the mock timer to 0
--- 0 is the default WAIT_ON_JOB so I assume that's the one we have?
+
 SELECT ts_bgw_params_create();
 
 --
@@ -212,11 +211,6 @@ SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_succ
 FROM _timescaledb_internal.bgw_job_stat;
 
 SELECT * FROM sorted_bgw_log;
--- -- don't want any interference from other jobs so delete them
--- \c :TEST_DBNAME :ROLE_SUPERUSER
--- SELECT delete_job(1000);
--- \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
--- select * from _timescaledb_config.bgw_job;
 --
 -- Test what happens when running a job that throws an error
 --
@@ -284,7 +278,6 @@ SELECT true FROM alter_job(1001, scheduled => true) AS discard;
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 1001;
--- SELECT * FROM sorted_bgw_log; -- this was flaky, but I haven't figured out the cause of the flakiness...
 
 --
 -- Test timeout logic
@@ -674,4 +667,72 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 
 -- clean up jobs
 SELECT _timescaledb_internal.stop_background_workers();
+select delete_job(:job_id);
+-- test the new API with all its parameters: with timezone, without timezone
+TRUNCATE bgw_log;
 
+TRUNCATE bgw_dsm_handle_store;
+
+INSERT INTO public.bgw_dsm_handle_store VALUES (0);
+
+SELECT ts_bgw_params_create();
+
+CREATE TABLE test_table_scheduler (
+    time timestamptz not null,
+    a int,
+    b int
+);
+
+select '2000-01-01 00:00:00+00' as init \gset
+
+select create_hypertable('test_table_scheduler', 'time', chunk_time_interval => interval '1 month');
+INSERT INTO test_table_scheduler values
+(now() - interval '10 years', 1, 1),
+(now() - interval '8 years', 1, 1),
+(now() - interval '6 years', 1, 1),
+(now() - interval '4 years', 1, 1),
+(now() - interval '2 years', 1, 1),
+(now() - interval '1 years', 2, 2),
+(now() - interval '4 months', 3, 3),
+(now() - interval '3 months', 4, 4);
+
+CREATE MATERIALIZED VIEW cagg_scheduler(time, avg_a)
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 month', time), avg(a)
+FROM test_table_scheduler
+GROUP BY time_bucket('1 month', time)
+WITH NO DATA;
+
+select show_chunks('test_table_scheduler');
+
+alter table test_table_scheduler set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+select add_retention_policy('test_table_scheduler', interval '2 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
+select add_compression_policy('test_table_scheduler', interval '1 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
+select add_continuous_aggregate_policy('cagg_scheduler', interval '1 year', interval '2 months', interval '3 weeks',
+initial_start => :'init'::timestamptz + interval '5 ms', timezone => 'Europe/Athens');
+select * from _timescaledb_config.bgw_job;
+-- now wait for scheduler to run the policies
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * from _timescaledb_internal.bgw_job_stat;
+
+SELECT show_chunks('test_table_scheduler');
+select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;
+select avg_a from cagg_scheduler;
+-- test the API for add_job too
+create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
+begin
+raise NOTICE 'this is job_test_fixed';
+end
+$$;
+
+\set ON_ERROR_STOP 0
+
+select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms');
+select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms', timezone => 'Europe/Athens');
+-- this will fail because the timezone has a bad value
+select add_job('job_test_fixed', interval '8 weeks', timezone => 'EuRoPe/AmEriCa');
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+select * from _timescaledb_config.bgw_job order by id;
+select job_id, last_start, last_finish, next_start, last_successful_finish from _timescaledb_internal.bgw_job_stat order by job_id;
