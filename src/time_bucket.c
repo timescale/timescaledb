@@ -466,7 +466,8 @@ ts_date_offset_bucket(PG_FUNCTION_ARGS)
 
 /* when working with time_buckets stored in our catalog, we may not know ahead of time which
  * bucketing function to use, this function dynamically dispatches to the correct time_bucket_<foo>
- * based on an inputted timestamp_type*/
+ * based on an inputted timestamp_type
+ */
 TSDLLEXPORT int64
 ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
 {
