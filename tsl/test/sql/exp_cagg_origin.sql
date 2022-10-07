@@ -557,6 +557,16 @@ SELECT create_hypertable(
   chunk_time_interval => INTERVAL '1 day'
 );
 
+-- Add some data to the hypertable and make sure it is visible in the cagg
+INSERT INTO conditions_timestamptz(tstamp, city, temperature)
+SELECT ts, city,
+  (CASE WHEN city = 'Moscow' THEN 20000 ELSE 10000 END) +
+  date_part('day', ts at time zone 'MSK')*100 +
+  date_part('hour', ts at time zone 'MSK')
+FROM
+  generate_series('2022-01-01 00:00:00 MSK' :: timestamptz, '2022-01-02 00:00:00 MSK' :: timestamptz - interval '1 hour', '1 hour') as ts,
+  unnest(array['Moscow', 'Berlin']) as city;
+
 \set ON_ERROR_STOP 0
 
 -- For monthly buckets origin should be the first day of the month in given timezone
@@ -594,16 +604,6 @@ GROUP BY city, bucket;
 SELECT city, to_char(bucket at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS b, min, max
 FROM conditions_summary_timestamptz
 ORDER BY b, city;
-
--- Add some data to the hypertable and make sure it is visible in the cagg
-INSERT INTO conditions_timestamptz(tstamp, city, temperature)
-SELECT ts, city,
-  (CASE WHEN city = 'Moscow' THEN 20000 ELSE 10000 END) +
-  date_part('day', ts at time zone 'MSK')*100 +
-  date_part('hour', ts at time zone 'MSK')
-FROM
-  generate_series('2022-01-01 00:00:00 MSK' :: timestamptz, '2022-01-02 00:00:00 MSK' :: timestamptz - interval '1 hour', '1 hour') as ts,
-  unnest(array['Moscow', 'Berlin']) as city;
 
 -- Check the data
 SELECT to_char(tstamp at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS ts, city, temperature FROM conditions_timestamptz
