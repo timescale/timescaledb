@@ -112,22 +112,22 @@ get_time_from_config(const Dimension *dim, const Jsonb *config, const char *json
 }
 
 int64
-policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config)
+policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config, bool *start_isnull)
 {
-	bool start_isnull;
-	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_START_OFFSET, &start_isnull);
+	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_START_OFFSET, start_isnull);
+
 	/* interpret NULL as min value for that type */
-	if (start_isnull)
+	if (*start_isnull)
 		return ts_time_get_min(ts_dimension_get_partition_type(dim));
 	return res;
 }
 
 int64
-policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config)
+policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, bool *end_isnull)
 {
-	bool end_isnull;
-	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_END_OFFSET, &end_isnull);
-	if (end_isnull)
+	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_END_OFFSET, end_isnull);
+
+	if (*end_isnull)
 		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
 	return res;
 }
