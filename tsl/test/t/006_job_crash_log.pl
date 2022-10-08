@@ -5,7 +5,7 @@
 use strict;
 use warnings;
 use TimescaleNode;
-use Test::More;
+use Test::More tests => 4;
 
 # This test checks that a job crash is reported in the job errors table
 # (that is, a record gets inserted into the table _timescaledb_internal.job_errors).
@@ -55,8 +55,8 @@ my $int_pid = int($pid);
 kill 9, $int_pid;
 
 # Wait till server restarts
-is($node->poll_query_until('postgres', undef, ''),
-	"1", "reconnected after SIGQUIT");
+is($node->poll_query_until('postgres', 'SELECT 1', '1'),
+	1, "reconnected after SIGQUIT");
 
 my $errlog = $node->safe_psql('postgres',
 	'select count(*) from _timescaledb_internal.job_errors where job_id = 1000 and pid is null'
