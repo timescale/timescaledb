@@ -108,7 +108,7 @@ jobs:
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;SHOW data_directory;SELECT version();'
 
@@ -156,7 +156,7 @@ jobs:
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
