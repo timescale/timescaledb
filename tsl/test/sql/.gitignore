@@ -1,3 +1,4 @@
+/*.pgbinary
 /cagg_ddl-*.sql
 /cagg_invalidation_dist_ht-*.sql
 /cagg_permissions-*.sql
@@ -11,6 +12,7 @@
 /hypertable_distributed-*.sql
 /jit-*.sql
 /plan_skip_scan-*.sql
+/remote-copy-*sv
 /remote_copy-*.sql
-/transparent_decompression_ordered_index-*.sql
 /transparent_decompression-*.sql
+/transparent_decompression_ordered_index-*.sql

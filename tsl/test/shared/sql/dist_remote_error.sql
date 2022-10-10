@@ -29,6 +29,8 @@ set timescaledb.debug_enable_ssl to off;
 
 set client_min_messages to error;
 
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+
 -- A relatively big table on one data node
 create table metrics_dist_remote_error(like metrics_dist);
 select table_name from create_distributed_hypertable('metrics_dist_remote_error', 'time', 'device_id',
@@ -119,10 +121,15 @@ alter table metrics_dist_br alter column v0 type br;
 select table_name from create_distributed_hypertable('metrics_dist_br',
     'time', 'device_id');
 
+select hypertable_name, replication_factor from timescaledb_information.hypertables
+where hypertable_name = 'metrics_dist_br';
+
 -- Test that INSERT and COPY fail on data nodes.
 -- Note that we use the text format for the COPY input, so that the access node
 -- doesn't call `recv` and fail by itself. It's going to use binary format for
 -- transfer to data nodes regardless of the input format.
+set timescaledb.dist_copy_transfer_format = 'binary';
+
 -- First, create the reference.
 \copy (select * from metrics_dist_remote_error) to 'dist_remote_error.text' with (format text);
 
@@ -134,6 +141,51 @@ insert into metrics_dist_br select * from metrics_dist_remote_error;
 insert into metrics_dist_br select * from metrics_dist_remote_error;
 \copy metrics_dist_br from 'dist_remote_error.text' with (format text);
 
+-- Fail at different points
+set timescaledb.debug_broken_sendrecv_throw_after = 1;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 2;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 1023;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 1024;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 1025;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+reset timescaledb.debug_broken_sendrecv_throw_after;
+
+
+-- Same with different replication factor
+truncate metrics_dist_br;
+select set_replication_factor('metrics_dist_br', 2);
+select hypertable_name, replication_factor from timescaledb_information.hypertables
+where hypertable_name = 'metrics_dist_br';
+
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+set timescaledb.debug_broken_sendrecv_throw_after = 1;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 2;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 1023;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 1024;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+set timescaledb.debug_broken_sendrecv_throw_after = 1025;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+
+-- Should succeed with text format for data transfer.
+set timescaledb.dist_copy_transfer_format = 'text';
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+
+-- Final check.
+set timescaledb.enable_connection_binary_data = false;
+select count(*) from metrics_dist_br;
+set timescaledb.enable_connection_binary_data = true;
+
+reset timescaledb.debug_broken_sendrecv_throw_after;
 drop table metrics_dist_br;
 
 -- Table with sleepy receive for a data type, to improve coverage of the waiting
@@ -144,6 +196,10 @@ alter table metrics_dist_bl alter column v0 type bl;
 
 select table_name from create_distributed_hypertable('metrics_dist_bl',
     'time', 'device_id');
+
+-- We're using sleepy recv function, so need the binary transfer format for it
+-- to be called on the data nodes.
+set timescaledb.dist_copy_transfer_format = 'binary';
 
 -- Test INSERT and COPY with slow data node.
 \copy metrics_dist_bl from 'dist_remote_error.text' with (format text);
