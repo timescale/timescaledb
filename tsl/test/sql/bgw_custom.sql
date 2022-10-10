@@ -542,7 +542,8 @@ CREATE AGGREGATE sum_jsb (jsonb)
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
 
 -- github issue 4610
-CREATE TABLE sensor_data
+CREATE SCHEMA IF NOT EXISTS my_schema;
+CREATE TABLE my_schema.sensor_data
 (
     time timestamptz not null,
     sensor_id integer not null,
@@ -550,9 +551,10 @@ CREATE TABLE sensor_data
     temperature double precision null
 );
 
-SELECT FROM create_hypertable('sensor_data','time');
+SELECT FROM create_hypertable('my_schema.sensor_data','time');
 SELECT '2022-10-06 00:00:00+00' as start_date_sd \gset
-INSERT INTO sensor_data
+-- create chunks before creating compression policy
+INSERT INTO my_schema.sensor_data
 	SELECT
 		time + (INTERVAL '1 minute' * random()) AS time,
 		sensor_id,
@@ -564,18 +566,19 @@ INSERT INTO sensor_data
 	ORDER BY
 		time;
 
+-- get last chunk
+SELECT id AS chunk_id FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
 -- enable compression
-ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE my_schema.sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
 -- add new compression policy job
-SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+SELECT add_compression_policy('my_schema.sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
 -- set recompress to true
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 -- create new chunks
-
-INSERT INTO sensor_data
+INSERT INTO my_schema.sensor_data
 	SELECT
-		time + (INTERVAL '1 minute' * random()) AS time,
+		time + INTERVAL '1 minute' AS time,
 		sensor_id,
 		random() AS cpu,
 		random()* 100 AS temperature
@@ -584,11 +587,15 @@ INSERT INTO sensor_data
 		generate_series(1, 30, 1 ) AS g2(sensor_id)
 	ORDER BY
 		time;
--- change compression status so that this chunk is skipped when policy is run
-update _timescaledb_catalog.chunk set status=3 where table_name = '_hyper_4_17_chunk';
+
+SELECT table_name AS chunk_name FROM _timescaledb_catalog.chunk WHERE id > :chunk_id ORDER BY id LIMIT 1 \gset
+-- change compression status of onw of the new chunks, so that this chunk
+-- is skipped when policy is run instead of reporting an error
+update _timescaledb_catalog.chunk set status=3 where table_name = :'chunk_name';
 
 CALL run_job(:compressjob_id);
 -- check compression status is not changed
-SELECT status FROM _timescaledb_catalog.chunk where table_name = '_hyper_4_17_chunk';
+SELECT status FROM _timescaledb_catalog.chunk where table_name = :'chunk_name';
 -- cleanup
-DROP TABLE sensor_data CASCADE;
+DROP TABLE my_schema.sensor_data;
+DROP SCHEMA my_schema CASCADE;
