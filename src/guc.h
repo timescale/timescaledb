@@ -66,6 +66,15 @@ typedef enum HypertableDistType
 extern TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default;
 extern TSDLLEXPORT int ts_guc_hypertable_replication_factor_default;
 
+typedef enum DistCopyTransferFormat
+{
+	DCTF_Auto,
+	DCTF_Binary,
+	DCTF_Text
+} DistCopyTransferFormat;
+
+extern TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
+
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;

@@ -288,7 +288,7 @@ data_node_copy_end(CustomScanState *node)
 	DataNodeCopyState *dncs = (DataNodeCopyState *) node;
 
 	ExecEndNode(linitial(node->custom_ps));
-	remote_copy_end(dncs->copy_ctx);
+	remote_copy_end_on_success(dncs->copy_ctx);
 	ts_cache_release(dncs->hcache);
 }
 

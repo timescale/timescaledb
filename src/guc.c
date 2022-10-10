@@ -62,6 +62,13 @@ static const struct config_enum_entry hypertable_distributed_types[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry dist_copy_transfer_formats[] = {
+	{ "auto", DCTF_Auto, false },
+	{ "binary", DCTF_Binary, false },
+	{ "text", DCTF_Text, false },
+	{ NULL, 0, false }
+};
+
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
 bool ts_guc_enable_constraint_aware_append = true;
@@ -90,6 +97,7 @@ char *ts_last_tune_version = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
+TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
 TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
@@ -303,6 +311,25 @@ _guc_init(void)
 							 "Enable binary format for data exchanged between nodes in the cluster",
 							 &ts_guc_enable_connection_binary_data,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	/*
+	 * The default is 'auto', so that the dist COPY could use text transfer
+	 * format for text input. It has a passthrough optimization for this case,
+	 * which greatly reduces the CPU usage. Ideally we would implement the same
+	 * optimization for binary, but the Postgres COPY code doesn't provide
+	 * enough APIs for that.
+	 */
+	DefineCustomEnumVariable("timescaledb.dist_copy_transfer_format",
+							 "Data format used by distributed COPY to send data to data nodes",
+							 "auto, binary or text",
+							 (int *) &ts_guc_dist_copy_transfer_format,
+							 DCTF_Auto,
+							 dist_copy_transfer_formats,
 							 PGC_USERSET,
 							 0,
 							 NULL,

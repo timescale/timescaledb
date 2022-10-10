@@ -73,10 +73,39 @@ select count(*) from uk_price_paid;
 \copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
 
-truncate uk_price_paid;
+-- Different replication factors
+create table uk_price_paid_r2(like uk_price_paid);
+select create_distributed_hypertable('uk_price_paid_r2', 'date', 'postcode2',
+    chunk_time_interval => interval '90 day', replication_factor => 2);
 
-reset timescaledb.max_open_chunks_per_insert;
+create table uk_price_paid_r3(like uk_price_paid);
+select create_distributed_hypertable('uk_price_paid_r3', 'date', 'postcode2',
+    chunk_time_interval => interval '90 day', replication_factor => 3);
 
+select hypertable_name, replication_factor from timescaledb_information.hypertables
+where hypertable_name like 'uk_price_paid%' order by hypertable_name;
+
+\copy uk_price_paid_r2 from program 'zcat < data/prices-10k-random-1.tsv.gz';
+select count(*) from uk_price_paid_r2;
+
+\copy uk_price_paid_r3 from program 'zcat < data/prices-10k-random-1.tsv.gz';
+select count(*) from uk_price_paid_r3;
+
+-- 0, 1, 2 rows
+\copy uk_price_paid from stdin
+\.
+
+select count(*) from uk_price_paid;
+
+\copy uk_price_paid from program 'zcat < data/prices-10k-random-1.tsv.gz | head -1';
+
+select count(*) from uk_price_paid;
+
+\copy uk_price_paid from program 'zcat < data/prices-10k-random-1.tsv.gz | head -2';
+
+select count(*) from uk_price_paid;
+
+-- Teardown
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;

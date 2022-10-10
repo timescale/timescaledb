@@ -16,6 +16,7 @@
 #include <storage/procarray.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/guc.h>
 #include <utils/memutils.h>
 
 #include "debug_point.h"
@@ -125,19 +126,34 @@ ts_debug_shippable_fatal_after_n_rows(PG_FUNCTION_ARGS)
 
 /*
  * Broken send/receive functions for int4 that throw after an (arbitrarily
- * chosen prime) number of rows.
- * Use ERROR, not FATAL, because PG versions < 14 are unable to report a FATAL
- * error to the access node before closing the connection, so the test results
- * would be different.
+ * chosen prime or configured) number of rows.
  */
-#define ARBITRARY_PRIME_NUMBER 7103
+static void
+broken_sendrecv_throw()
+{
+	int throw_after = 7103; /* an arbitrary prime */
+	const char *throw_after_option =
+		GetConfigOption("timescaledb.debug_broken_sendrecv_throw_after", true, false);
+
+	if (throw_after_option)
+	{
+		throw_after = pg_atoi(throw_after_option, 4, 0);
+	}
+
+	/*
+	 * Use ERROR, not FATAL, because PG versions < 14 are unable to report a
+	 * FATAL error to the access node before closing the connection, so the test
+	 * results would be different.
+	 */
+	(void) throw_after_n_rows(throw_after, ERROR);
+}
 
 TS_FUNCTION_INFO_V1(ts_debug_broken_int4recv);
 
 Datum
 ts_debug_broken_int4recv(PG_FUNCTION_ARGS)
 {
-	(void) throw_after_n_rows(ARBITRARY_PRIME_NUMBER, ERROR);
+	broken_sendrecv_throw();
 	return int4recv(fcinfo);
 }
 
@@ -146,7 +162,7 @@ TS_FUNCTION_INFO_V1(ts_debug_broken_int4send);
 Datum
 ts_debug_broken_int4send(PG_FUNCTION_ARGS)
 {
-	(void) throw_after_n_rows(ARBITRARY_PRIME_NUMBER, ERROR);
+	broken_sendrecv_throw();
 	return int4send(fcinfo);
 }
 

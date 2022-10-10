@@ -7,5 +7,6 @@
 /generated_columns-*.sql
 /ordered_append-*.sql
 /ordered_append_join-*.sql
+/remote-copy-escapes.*sv
 /space_constraint-*.sql
 /transparent_decompress_chunk-*.sql

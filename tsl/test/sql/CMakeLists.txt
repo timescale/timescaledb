@@ -69,6 +69,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_api_calls.sql
     dist_commands.sql
     dist_compression.sql
+    dist_copy_format_long.sql
     dist_copy_long.sql
     dist_ddl.sql
     dist_move_chunk.sql
