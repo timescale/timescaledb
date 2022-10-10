@@ -60,6 +60,16 @@ static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo 
 static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
 							   List *pathkeys);
 
+static bool
+is_compressed_column(CompressionInfo *info, AttrNumber attno)
+{
+	char *column_name = get_attname(info->compressed_rte->relid, attno, false);
+	FormData_hypertable_compression *column_info =
+		get_column_compressioninfo(info->hypertable_compression_info, column_name);
+
+	return column_info->algo_id != 0;
+}
+
 /*
  * Like ts_make_pathkey_from_sortop but passes down the compressed relid so that existing
  * equivalence members that are marked as childen are properly checked.
@@ -437,6 +447,46 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * subquery that references the hypertable is a parent of compressed_rel as well.
 			 */
 			if (bms_overlap(parent_relids, child_path->param_info->ppi_req_outer))
+				continue;
+
+			ListCell *lc_ri;
+			bool references_compressed = false;
+			/*
+			 * Check if this path is parameterized on a compressed
+			 * column. Ideally those paths wouldn't be generated
+			 * in the first place but since we create compressed
+			 * EquivalenceMembers for all EquivalenceClasses these
+			 * Paths can happen and will fail at execution since
+			 * the left and right side of the expression are not
+			 * compatible. Therefore we skip any Path that is
+			 * parameterized on a compressed column here.
+			 */
+			foreach (lc_ri, child_path->param_info->ppi_clauses)
+			{
+				RestrictInfo *ri = lfirst_node(RestrictInfo, lc_ri);
+
+				if (ri->right_em && IsA(ri->right_em->em_expr, Var) &&
+					castNode(Var, ri->right_em->em_expr)->varno == info->compressed_rel->relid)
+				{
+					Var *var = castNode(Var, ri->right_em->em_expr);
+					if (is_compressed_column(info, var->varattno))
+					{
+						references_compressed = true;
+						break;
+					}
+				}
+				if (ri->left_em && IsA(ri->left_em->em_expr, Var) &&
+					castNode(Var, ri->left_em->em_expr)->varno == info->compressed_rel->relid)
+				{
+					Var *var = castNode(Var, ri->left_em->em_expr);
+					if (is_compressed_column(info, var->varattno))
+					{
+						references_compressed = true;
+						break;
+					}
+				}
+			}
+			if (references_compressed)
 				continue;
 		}
 

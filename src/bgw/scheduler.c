@@ -134,7 +134,10 @@ ts_bgw_start_worker(const char *name, const BgwParams *bgw_params)
 	/* handle needs to be allocated in long-lived memory context */
 	MemoryContextSwitchTo(scheduler_mctx);
 	if (!RegisterDynamicBackgroundWorker(&worker, &handle))
+	{
+		elog(NOTICE, "unable to register background worker");
 		handle = NULL;
+	}
 	MemoryContextSwitchTo(scratch_mctx);
 
 	return handle;
@@ -221,6 +224,8 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 * Usually the job process will mark the end, but if the job gets
 			 * a signal (cancel or terminate), it won't be able to so we
 			 * should.
+			 * TODO: Insert a record in the job_errors table informing of this failure
+			 * Currently the SIGTERM case is not handled, there might be other cases as well
 			 */
 			elog(LOG, "job %d failed", sjob->job.fd.id);
 			mark_job_as_ended(sjob, JOB_FAILURE);

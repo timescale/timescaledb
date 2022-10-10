@@ -1522,10 +1522,10 @@ SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 --
 -- Expect batch size to be lower than defined max_insert_batch_size
 --
-EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 
-EXPLAIN INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
 INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
 SELECT count(*) from test_1702;
 
@@ -1545,7 +1545,7 @@ CREATE TABLE test_1702 (
 
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 
-EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 
 DROP TABLE test_1702;
 

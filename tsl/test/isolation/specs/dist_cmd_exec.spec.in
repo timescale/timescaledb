@@ -1,0 +1,73 @@
+# This file and its contents are licensed under the Timescale License.
+# Please see the included NOTICE for copyright information and
+# LICENSE-TIMESCALE for a copy of the license.
+
+#
+# Test dist_cmd_invoke_on_data_nodes_using_search_path() connection cache
+# invalidation race
+#
+setup
+{
+	CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
+
+	CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
+
+	CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT) RETURNS BIGINT LANGUAGE C VOLATILE STRICT
+	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_id';
+
+	CREATE FUNCTION invalidate_data_node(node_name NAME) RETURNS BOOL LANGUAGE C STRICT
+	AS '@TSL_MODULE_PATHNAME@', 'ts_test_alter_data_node';
+
+	SET timescaledb_experimental.enable_distributed_ddl=off;
+	CREATE SCHEMA dist_schema;
+	CREATE TABLE IF NOT EXISTS dist_schema.disttable(time timestamptz NOT NULL, device int, temp float);
+}
+setup { SELECT node_name FROM add_data_node('data_node_1', host => 'localhost', database => 'dn_1', if_not_exists => true); }
+setup { CALL distributed_exec('CREATE SCHEMA dist_schema', transactional => false); }
+setup { SELECT created FROM create_distributed_hypertable('dist_schema.disttable', 'time', 'device'); }
+
+teardown
+{
+   DROP SCHEMA dist_schema CASCADE;
+}
+
+# locking session
+session "s1"
+setup
+{
+	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+	SET application_name = 's1';
+}
+step "s1_lock1"      { SELECT debug_waitpoint_enable('dist_cmd_using_search_path_1'); }
+step "s1_unlock1"    { SELECT debug_waitpoint_release('dist_cmd_using_search_path_1'); }
+step "s1_lock2"      { SELECT debug_waitpoint_enable('dist_cmd_using_search_path_2'); }
+step "s1_unlock2"    { SELECT debug_waitpoint_release('dist_cmd_using_search_path_2'); }
+step "s1_invalidate" {
+	SELECT invalidate_data_node('data_node_1');
+}
+
+session "s2"
+setup
+{
+	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+	SET application_name = 's2';
+}
+step "s2_set_search_path" {
+	SET search_path = dist_schema;
+	SHOW search_path;
+}
+
+step "s2_analyze" { ANALYZE disttable; }
+
+#
+# Test connection cache invalidation ignore between sequential execution of
+# non-transactional commands using the same connection.
+#
+# Invalidate connection after search_path being executed, this will force to reopen
+# connection and produce an error otherwise.
+#
+# Issue: #4022
+#
+permutation "s1_lock1" "s1_lock2" "s2_set_search_path" "s2_analyze" "s1_invalidate" "s1_unlock1" "s1_invalidate" "s1_unlock2"

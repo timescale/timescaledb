@@ -22,6 +22,7 @@
 #include "miscadmin.h"
 #include "errors.h"
 #include "deparse.h"
+#include "debug_point.h"
 
 typedef struct DistPreparedStmt
 {
@@ -174,6 +175,14 @@ ts_dist_cmd_invoke_on_data_nodes_using_search_path(const char *sql, const char *
 	DistCmdResult *results;
 	bool set_search_path = search_path != NULL;
 
+	DEBUG_WAITPOINT("dist_cmd_using_search_path_1");
+
+	/*
+	 * As a workaround for non-transactional execution, we expect the same connection
+	 * to be present after we set search_path.
+	 */
+	remote_connection_cache_invalidation_ignore(true);
+
 	if (set_search_path)
 	{
 		char *set_request = psprintf("SET search_path = %s, pg_catalog", search_path);
@@ -184,6 +193,8 @@ ts_dist_cmd_invoke_on_data_nodes_using_search_path(const char *sql, const char *
 
 		pfree(set_request);
 	}
+
+	DEBUG_WAITPOINT("dist_cmd_using_search_path_2");
 
 	results = ts_dist_cmd_invoke_on_data_nodes(sql, node_names, transactional);
 
@@ -196,6 +207,7 @@ ts_dist_cmd_invoke_on_data_nodes_using_search_path(const char *sql, const char *
 			ts_dist_cmd_close_response(set_result);
 	}
 
+	remote_connection_cache_invalidation_ignore(false);
 	return results;
 }
 
@@ -207,6 +219,8 @@ ts_dist_multi_cmds_invoke_on_data_nodes_using_search_path(List *cmd_descriptors,
 	DistCmdResult *set_result;
 	DistCmdResult *results;
 	bool set_search_path = search_path != NULL;
+
+	remote_connection_cache_invalidation_ignore(true);
 
 	if (set_search_path)
 	{
@@ -231,6 +245,7 @@ ts_dist_multi_cmds_invoke_on_data_nodes_using_search_path(List *cmd_descriptors,
 			ts_dist_cmd_close_response(set_result);
 	}
 
+	remote_connection_cache_invalidation_ignore(false);
 	return results;
 }
 

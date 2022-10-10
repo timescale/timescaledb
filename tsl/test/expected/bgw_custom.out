@@ -73,7 +73,9 @@ SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb
     1004
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
+-- exclude the telemetry[1] and job error retention[2] jobs
+-- job 2 may have already run which will set its next_start field thus making the test flaky
+SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
  job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled |        config         | next_start | hypertable_schema | hypertable_name | check_schema | check_name 
 --------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+-----------------------+------------+-------------------+-----------------+--------------+------------
    1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   |                 |              | 
@@ -638,10 +640,10 @@ as job_with_func_check_id \gset
 --- test alter_job
 select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
 ERROR:  invalid input syntax for type interval: "chicken"
-select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
-                                                    alter_job                                                    
------------------------------------------------------------------------------------------------------------------
- (1006,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""drop_after"": ""5 years""}",-infinity,public.test_config_check_func)
+select config from alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
+          config           
+---------------------------
+ {"drop_after": "5 years"}
 (1 row)
 
 -- test that jobs with an incorrect check function signature will not be registered
@@ -708,35 +710,35 @@ NOTICE:  I print a message, and then I return least(1,2)
 -- drop the registered check function, verify that alter_job will work and print a warning that 
 -- the check is being skipped due to the check function missing
 ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
-select alter_job(:job_id, schedule_interval => '1 hour');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, schedule_interval => '1 hour');
 WARNING:  function public.test_config_check_func(config jsonb) not found, skipping config validation for job 1008
-                                     alter_job                                      
-------------------------------------------------------------------------------------
- (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.test_config_check_func)
+ job_id | schedule_interval | config |         check_config          
+--------+-------------------+--------+-------------------------------
+   1008 | @ 1 hour          | {}     | public.test_config_check_func
 (1 row)
 
 DROP FUNCTION test_config_check_func_returns_int;
-select alter_job(:job_id_int, config => '{"field":"value"}');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_int, config => '{"field":"value"}');
 WARNING:  function public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1009
-                                                      alter_job                                                       
-----------------------------------------------------------------------------------------------------------------------
- (1009,"@ 5 secs","@ 0",-1,"@ 5 mins",t,"{""field"": ""value""}",-infinity,public.test_config_check_func_returns_int)
+ job_id | schedule_interval |       config       |               check_config                
+--------+-------------------+--------------------+-------------------------------------------
+   1009 | @ 5 secs          | {"field": "value"} | public.test_config_check_func_returns_int
 (1 row)
 
 -- rename the check function and then call alter_job to register the new name
-select alter_job(:job_id, check_config => 'renamed_func'::regproc);
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc);
 NOTICE:  This message will get printed for both NULL and not NULL config
-                                alter_job                                 
---------------------------------------------------------------------------
- (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+ job_id | schedule_interval | config |    check_config     
+--------+-------------------+--------+---------------------
+   1008 | @ 1 hour          | {}     | public.renamed_func
 (1 row)
 
 -- run alter again, should get a config check
-select alter_job(:job_id, config => '{}');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
 NOTICE:  This message will get printed for both NULL and not NULL config
-                                alter_job                                 
---------------------------------------------------------------------------
- (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+ job_id | schedule_interval | config |    check_config     
+--------+-------------------+--------+---------------------
+   1008 | @ 1 hour          | {}     | public.renamed_func
 (1 row)
 
 -- do not drop the current check function but register a new one
@@ -747,18 +749,18 @@ BEGIN
 END
 $$ LANGUAGE PLPGSQL;
 -- register the new check
-select alter_job(:job_id, check_config => 'substitute_check_func');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'substitute_check_func');
 NOTICE:  This message is a substitute of the previously printed one
-                                     alter_job                                     
------------------------------------------------------------------------------------
- (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.substitute_check_func)
+ job_id | schedule_interval | config |         check_config         
+--------+-------------------+--------+------------------------------
+   1008 | @ 1 hour          | {}     | public.substitute_check_func
 (1 row)
 
-select alter_job(:job_id, config => '{}');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
 NOTICE:  This message is a substitute of the previously printed one
-                                     alter_job                                     
------------------------------------------------------------------------------------
- (1008,"@ 1 hour","@ 0",-1,"@ 5 mins",t,{},-infinity,public.substitute_check_func)
+ job_id | schedule_interval | config |         check_config         
+--------+-------------------+--------+------------------------------
+   1008 | @ 1 hour          | {}     | public.substitute_check_func
 (1 row)
 
 RESET client_min_messages;
@@ -792,27 +794,27 @@ ERROR:  permission denied for function "test_config_check_func_privileges"
 -- check that alter_job rejects a check function with invalid signature
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
 NOTICE:  This message will get printed for both NULL and not NULL config
-select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
 ERROR:  function or procedure public.test_config_check_func_0args(config jsonb) not found
-select alter_job(:job_id_alter);
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
 NOTICE:  This message will get printed for both NULL and not NULL config
-                                alter_job                                 
---------------------------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,public.renamed_func)
+ job_id | schedule_interval | config |    check_config     
+--------+-------------------+--------+---------------------
+   1010 | @ 5 secs          | {}     | public.renamed_func
 (1 row)
 
 -- test that we can unregister the check function
-select alter_job(:job_id_alter, check_config => 0);
-                       alter_job                       
--------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 0);
+ job_id | schedule_interval | config | check_config 
+--------+-------------------+--------+--------------
+   1010 | @ 5 secs          | {}     | 
 (1 row)
 
 -- no message printed now
-select alter_job(:job_id_alter, config => '{}'); 
-                       alter_job                       
--------------------------------------------------------
- (1010,"@ 5 secs","@ 0",-1,"@ 5 mins",t,{},-infinity,)
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, config => '{}'); 
+ job_id | schedule_interval | config | check_config 
+--------+-------------------+--------+--------------
+   1010 | @ 5 secs          | {}     | 
 (1 row)
 
 -- test the case where we have a background job that registers jobs with a check fn
@@ -867,3 +869,65 @@ CREATE AGGREGATE sum_jsb (jsonb)
 -- for test coverage, check unsupported aggregate type
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
 ERROR:  unsupported function type
+-- github issue 4610
+CREATE TABLE sensor_data
+(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
+SELECT FROM create_hypertable('sensor_data','time');
+--
+(1 row)
+
+SELECT '2022-10-06 00:00:00+00' as start_date_sd \gset
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '1 months', :'start_date_sd'::timestamptz - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(1, 50, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+-- enable compression
+ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+                                                                                         alter_job                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1014,"@ 3 days 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_internal.policy_compression_check)
+(1 row)
+
+-- create new chunks
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '2 months', :'start_date_sd'::timestamptz - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
+		generate_series(1, 30, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+-- change compression status so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=3 where table_name = '_hyper_4_17_chunk';
+CALL run_job(:compressjob_id);
+NOTICE:  chunk "_hyper_4_17_chunk" is not compressed
+WARNING:  compressing chunk "_timescaledb_internal._hyper_4_17_chunk" failed when compression policy is executed
+-- check compression status is not changed
+SELECT status FROM _timescaledb_catalog.chunk where table_name = '_hyper_4_17_chunk';
+ status 
+--------
+      3
+(1 row)
+
+-- cleanup
+DROP TABLE sensor_data CASCADE;
+NOTICE:  drop cascades to 8 other objects

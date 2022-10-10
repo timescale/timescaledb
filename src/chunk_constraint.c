@@ -577,6 +577,15 @@ chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conf
 		 */
 		return false;
 	}
+	/*
+	   Check if the foreign key constraint references a partition in a partitioned
+	   table. In that case, we shouldn't include this constraint as we will end up
+	   checking the foreign key constraint once for every partition, which obviously
+	   leads to foreign key constraint violation. Instead, we only include constraints
+	   referencing the parent table of the partitioned table.
+	*/
+	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
+		return false;
 
 	/* Foreign tables do not support non-check constraints, so skip them */
 	if (chunk_relkind == RELKIND_FOREIGN_TABLE)

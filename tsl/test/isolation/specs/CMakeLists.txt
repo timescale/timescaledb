@@ -7,6 +7,7 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_select.spec.in
     remote_create_chunk.spec.in
     dist_restore_point.spec.in
+    dist_cmd_exec.spec.in
     cagg_drop_chunks.spec.in
     telemetry.spec.in
     compression_chunk_race.spec.in

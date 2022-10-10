@@ -247,8 +247,8 @@ FROM
 GROUP BY bucket, device_id WITH NO DATA;
 
 -- policy API
--- compression policy will throw an error only if it attempts to compress
--- atleast 1 chunk
+-- compression policy will not throw an error, as it is expected to continue
+-- with next chunks
 SET default_transaction_read_only TO off;
 CREATE TABLE test_table_int(time bigint NOT NULL, device int);
 SELECt create_hypertable('test_table_int', 'time', chunk_time_interval=>'1'::bigint);

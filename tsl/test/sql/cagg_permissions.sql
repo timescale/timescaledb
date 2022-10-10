@@ -54,6 +54,18 @@ select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location WITH NO DATA;
 
+-- Manually create index on CAgg
+CREATE INDEX cagg_idx on mat_refresh_test(location);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE USER not_priv;
+\c :TEST_DBNAME not_priv
+-- A user with no ownership on the Cagg cannot create index on it. -- This should fail
+\set ON_ERROR_STOP 0
+CREATE INDEX cagg_idx on mat_refresh_test(humidity);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP USER not_priv;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 SELECT add_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
 
 insert into conditions

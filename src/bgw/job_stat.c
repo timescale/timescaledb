@@ -14,6 +14,8 @@
 #include "scanner.h"
 #include "timer.h"
 #include "utils.h"
+#include "jsonb_utils.h"
+#include <utils/builtins.h>
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -49,6 +51,7 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found
 		.index = catalog_get_index(catalog, BGW_JOB_STAT, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
+		.flags = SCANNER_F_KEEPLOCK,
 		.tuple_found = tuple_found,
 		.filter = tuple_filter,
 		.data = data,
@@ -104,7 +107,11 @@ bgw_job_stat_tuple_delete(TupleInfo *ti, void *const data)
 void
 ts_bgw_job_stat_delete(int32 bgw_job_id)
 {
-	bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_delete, NULL, NULL, RowExclusiveLock);
+	bgw_job_stat_scan_job_id(bgw_job_id,
+							 bgw_job_stat_tuple_delete,
+							 NULL,
+							 NULL,
+							 ShareRowExclusiveLock);
 }
 
 /* Mark the start of a job. This should be done in a separate transaction by the scheduler
@@ -148,7 +155,7 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	fd->last_run_success = false;
 	fd->total_crashes++;
 	fd->consecutive_crashes++;
-
+	fd->flags = ts_clear_flags_32(fd->flags, LAST_CRASH_REPORTED);
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
@@ -333,6 +340,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	fd->last_run_success = result_ctx->result == JOB_SUCCESS ? true : false;
 	fd->total_crashes--;
 	fd->consecutive_crashes = 0;
+	fd->flags = ts_clear_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	if (result_ctx->result == JOB_SUCCESS)
 	{
@@ -360,6 +368,25 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 															 fd->consecutive_failures,
 															 result_ctx->job);
 	}
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	return SCAN_DONE;
+}
+
+static ScanTupleResult
+bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
@@ -416,6 +443,8 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_flags)] =
+		Int32GetDatum(JOB_STAT_FLAGS_DEFAULT);
 
 	if (mark_start)
 	{
@@ -441,25 +470,21 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 void
 ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
-	/* Use double-check locking */
+	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
+	 * job races and adds a job when we insert the relation as well since that
+	 * can trigger a failure when inserting a row for the job. We use the
+	 * RowExclusiveLock in the scan since we cannot use NoLock (relation_open
+	 * requires a lock that it not NoLock). */
+	Relation rel =
+		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_mark_start,
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
-	{
-		Relation rel =
-			table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-		/* Recheck while having a self-exclusive lock */
-		if (!bgw_job_stat_scan_job_id(bgw_job_id,
-									  bgw_job_stat_tuple_mark_start,
-									  NULL,
-									  NULL,
-									  RowExclusiveLock))
-			bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
-		table_close(rel, ShareRowExclusiveLock);
-		pgstat_report_activity(STATE_IDLE, NULL);
-	}
+		bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
+	table_close(rel, NoLock);
+	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
 void
@@ -474,8 +499,20 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  bgw_job_stat_tuple_mark_end,
 								  NULL,
 								  &res,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
+	pgstat_report_activity(STATE_IDLE, NULL);
+}
+
+void
+ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id)
+{
+	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+								  bgw_job_stat_tuple_mark_crash_reported,
+								  NULL,
+								  NULL,
+								  RowExclusiveLock))
+		elog(ERROR, "unable to find job statistics for job %d", bgw_job_id);
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
@@ -496,7 +533,7 @@ ts_bgw_job_stat_set_next_start(int32 job_id, TimestampTz next_start)
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job_id);
 }
 
@@ -513,7 +550,7 @@ ts_bgw_job_stat_update_next_start(int32 job_id, TimestampTz next_start, bool all
 									 bgw_job_stat_tuple_set_next_start,
 									 NULL,
 									 &next_start,
-									 RowExclusiveLock);
+									 ShareRowExclusiveLock);
 	return found;
 }
 
@@ -524,24 +561,20 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 	if (next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
-	/* Use double-check locking */
+	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
+	 * job races and adds a job when we insert the relation as well since that
+	 * can trigger a failure when inserting a row for the job. We use the
+	 * RowExclusiveLock in the scan since we cannot use NoLock (relation_open
+	 * requires a lock that it not NoLock). */
+	Relation rel =
+		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
 								  RowExclusiveLock))
-	{
-		Relation rel =
-			table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-		/* Recheck while having a self-exclusive lock */
-		if (!bgw_job_stat_scan_job_id(bgw_job_id,
-									  bgw_job_stat_tuple_set_next_start,
-									  NULL,
-									  &next_start,
-									  RowExclusiveLock))
-			bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
-		table_close(rel, ShareRowExclusiveLock);
-	}
+		bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
+	table_close(rel, NoLock);
 }
 
 bool
@@ -565,7 +598,34 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		return DT_NOBEGIN;
 
 	if (jobstat->fd.consecutive_crashes > 0)
+	{
+		/* Update the errors table regarding the crash */
+		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
+		{
+			/* add the proc_schema, proc_name to the jsonb */
+			NameData proc_schema = { 0 }, proc_name = { 0 };
+			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
+			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
+			JsonbParseState *parse_state = NULL;
+			pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+			ts_jsonb_add_str(parse_state, "proc_schema", NameStr(proc_schema));
+			ts_jsonb_add_str(parse_state, "proc_name", NameStr(proc_name));
+			JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+
+			const FormData_job_error jerr = {
+				.error_data = JsonbValueToJsonb(result),
+				.start_time = jobstat->fd.last_start,
+				.finish_time = ts_timer_get_current_timestamp(),
+				.pid = -1,
+				.job_id = jobstat->fd.id,
+			};
+
+			ts_job_errors_insert_tuple(&jerr);
+			ts_bgw_job_stat_mark_crash_reported(jobstat->fd.id);
+		}
+
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+	}
 
 	return jobstat->fd.next_start;
 }
