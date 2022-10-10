@@ -116,7 +116,10 @@ SELECT ts_bgw_params_create();
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
+-- turn on extended display to make the many fields of the table easier to parse
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+\x off
 -- empty
 SELECT * FROM sorted_bgw_log;
 
@@ -129,12 +132,16 @@ SELECT ts_bgw_params_reset_time();
 SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s',scheduled:= false);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+\x off
 SELECT * FROM timescaledb_information.job_stats;
 
 SELECT test_toggle_scheduled(1000);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+\x off
 SELECT * FROM timescaledb_information.job_stats;
 SELECT * FROM sorted_bgw_log;
 
@@ -611,7 +618,9 @@ SELECT ts_bgw_params_reset_time(150000, true);
 SELECT wait_for_timer_to_run(150000);
 SELECT wait_for_job_1_to_run(2);
 
+\x on
 select * from _timescaledb_internal.bgw_job_stat;
+\x off
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
 
 -- test null handling in delete_job
@@ -642,8 +651,9 @@ SELECT wait_for_job_1_to_run(4);
 
 SELECT ts_bgw_params_reset_time(500000, true);
 SELECT * FROM sorted_bgw_log;
+\x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
-
+\x off
 -- clean up jobs
 SELECT _timescaledb_internal.stop_background_workers();
 

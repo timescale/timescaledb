@@ -44,6 +44,7 @@
 #include "bgw/scheduler.h"
 
 #include <cross_module_fn.h>
+#include "jsonb_utils.h"
 
 #define TELEMETRY_INITIAL_NUM_RUNS 12
 
@@ -156,6 +157,57 @@ job_config_check(BgwJob *job, Jsonb *config)
 			 NameStr(job->fd.check_schema),
 			 NameStr(job->fd.check_name),
 			 job->fd.id);
+}
+
+/* this function fills in a jsonb with the non-null fields of
+ the error data and also includes the proc name and schema in the jsonb
+ we include these here to avoid adding these fields to the table */
+static Jsonb *
+ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
+{
+	JsonbParseState *parse_state = NULL;
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	if (edata->sqlerrcode)
+		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
+	if (edata->message)
+		ts_jsonb_add_str(parse_state, "message", edata->message);
+	if (edata->detail)
+		ts_jsonb_add_str(parse_state, "detail", edata->detail);
+	if (edata->hint)
+		ts_jsonb_add_str(parse_state, "hint", edata->hint);
+	if (edata->filename)
+		ts_jsonb_add_str(parse_state, "filename", edata->filename);
+	if (edata->lineno)
+		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
+	if (edata->funcname)
+		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
+	if (edata->domain)
+		ts_jsonb_add_str(parse_state, "domain", edata->domain);
+	if (edata->context_domain)
+		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
+	if (edata->context)
+		ts_jsonb_add_str(parse_state, "context", edata->context);
+	if (edata->schema_name)
+		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
+	if (edata->table_name)
+		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
+	if (edata->column_name)
+		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
+	if (edata->datatype_name)
+		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
+	if (edata->constraint_name)
+		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
+	if (edata->internalquery)
+		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
+	if (edata->detail_log)
+		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
+	if (strlen(NameStr(*proc_schema)) > 0)
+		ts_jsonb_add_str(parse_state, "proc_schema", NameStr(*proc_schema));
+	if (strlen(NameStr(*proc_name)) > 0)
+		ts_jsonb_add_str(parse_state, "proc_name", NameStr(*proc_name));
+	/* we add the schema qualified name here as well*/
+	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	return JsonbValueToJsonb(result);
 }
 
 static BgwJob *
@@ -591,7 +643,6 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 		elog(ERROR, "job %d not found", bgw_job_id);
 
 	return job;
-	;
 }
 
 static void
@@ -976,6 +1027,46 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
+/*
+ * This function creates an entry in the job_errors table
+ * when a background job throws a runtime error or the job scheduler
+ * detects that the job crashed
+ */
+bool
+ts_job_errors_insert_tuple(const FormData_job_error *job_err)
+{
+	Catalog *catalog = ts_catalog_get();
+	Relation rel = table_open(catalog_get_table_id(catalog, JOB_ERRORS), RowExclusiveLock);
+	TupleDesc desc = RelationGetDescr(rel);
+	Datum values[Natts_job_error];
+	bool nulls[Natts_job_error] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	values[AttrNumberGetAttrOffset(Anum_job_error_job_id)] = Int32GetDatum(job_err->job_id);
+	values[AttrNumberGetAttrOffset(Anum_job_error_start_time)] =
+		TimestampTzGetDatum(job_err->start_time);
+	values[AttrNumberGetAttrOffset(Anum_job_error_finish_time)] =
+		TimestampTzGetDatum(job_err->finish_time);
+
+	if (job_err->pid > 0)
+		values[AttrNumberGetAttrOffset(Anum_job_error_pid)] = Int64GetDatum(job_err->pid);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_job_error_pid)] = true;
+	if (job_err->error_data)
+		values[AttrNumberGetAttrOffset(Anum_job_error_error_data)] =
+			JsonbPGetDatum(job_err->error_data);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_job_error_error_data)] = true;
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+
+	table_close(rel, RowExclusiveLock);
+
+	return true;
+}
+
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
@@ -1017,6 +1108,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
+	MemoryContext oldcontext = CurrentMemoryContext;
+	TimestampTz start_time = DT_NOBEGIN, finish_time = DT_NOBEGIN;
+	NameData proc_schema = { 0 }, proc_name = { 0 };
 
 	PG_TRY();
 	{
@@ -1068,17 +1162,43 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		{
 			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
 			ts_bgw_job_check_max_retries(job);
+			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
+			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
 			pfree(job);
 			job = NULL;
 		}
-		CommitTransactionCommand();
 
 		/*
 		 * the rethrow will log the error; but also log which job threw the
 		 * error
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
-		PG_RE_THROW();
+
+		ErrorData *edata;
+		FormData_job_error jerr = { 0 };
+		// switch away from error context to not lose the data
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+
+		BgwJobStat *job_stat = ts_bgw_job_stat_find(params.job_id);
+		if (job_stat != NULL)
+		{
+			start_time = job_stat->fd.last_start;
+			finish_time = job_stat->fd.last_finish;
+		}
+		/* We include the procname in the error data and expose it in the view
+		 to avoid adding an extra field in the table */
+		jerr.error_data = ts_errdata_to_jsonb(edata, &proc_schema, &proc_name);
+		jerr.job_id = params.job_id;
+		jerr.start_time = start_time;
+		jerr.finish_time = finish_time;
+		jerr.pid = MyProcPid;
+
+		ts_job_errors_insert_tuple(&jerr);
+
+		CommitTransactionCommand();
+		FlushErrorState();
+		ReThrowError(edata);
 	}
 	PG_END_TRY();
 
@@ -1210,6 +1330,6 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 
-	table_close(rel, RowExclusiveLock);
+	table_close(rel, NoLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
 }

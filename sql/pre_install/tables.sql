@@ -305,6 +305,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   total_crashes bigint NOT NULL,
   consecutive_failures int NOT NULL,
   consecutive_crashes int NOT NULL,
+  flags int NOT NULL DEFAULT 0,
   -- table constraints
   CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
   CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
@@ -547,6 +548,15 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.continuous_agg_migrate_plan_step', 'step_id'), '');
 
+CREATE TABLE _timescaledb_internal.job_errors (
+  job_id integer not null, 
+  pid integer,
+  start_time timestamptz,
+  finish_time timestamptz,
+  error_data jsonb
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all

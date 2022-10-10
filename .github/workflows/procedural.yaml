@@ -36,12 +36,22 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request && contains(github.event.issue.labels.*.name, 'need-more-info')
     steps:
+      - name: Check if organization member
+        uses: tspascoal/get-user-teams-membership@v1
+        id: checkUserMember
+        with:
+         username: ${{ github.actor }}
+         organization: timescale
+         team: 'database-eng'
+         GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       - name: Remove need-more-info label
+        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
         uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
         with:
           remove-labels: 'need-more-info'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Move to waiting for engineering column
+        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
         uses: leonsteinhaeuser/project-beta-automations@v2.0.0
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}

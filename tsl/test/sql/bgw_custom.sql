@@ -51,7 +51,9 @@ SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
 SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
+-- exclude the telemetry[1] and job error retention[2] jobs
+-- job 2 may have already run which will set its next_start field thus making the test flaky
+SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
 
@@ -374,7 +376,7 @@ as job_with_func_check_id \gset
 
 --- test alter_job
 select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
-select alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
+select config from alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
 
 
 -- test that jobs with an incorrect check function signature will not be registered
@@ -437,14 +439,14 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 -- drop the registered check function, verify that alter_job will work and print a warning that 
 -- the check is being skipped due to the check function missing
 ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
-select alter_job(:job_id, schedule_interval => '1 hour');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, schedule_interval => '1 hour');
 DROP FUNCTION test_config_check_func_returns_int;
-select alter_job(:job_id_int, config => '{"field":"value"}');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_int, config => '{"field":"value"}');
 
 -- rename the check function and then call alter_job to register the new name
-select alter_job(:job_id, check_config => 'renamed_func'::regproc);
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc);
 -- run alter again, should get a config check
-select alter_job(:job_id, config => '{}');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
 -- do not drop the current check function but register a new one
 CREATE OR REPLACE FUNCTION substitute_check_func(config jsonb) RETURNS VOID
 AS $$
@@ -453,8 +455,8 @@ BEGIN
 END
 $$ LANGUAGE PLPGSQL;
 -- register the new check
-select alter_job(:job_id, check_config => 'substitute_check_func');
-select alter_job(:job_id, config => '{}');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'substitute_check_func');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
 
 RESET client_min_messages;
 
@@ -486,12 +488,12 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 
 -- check that alter_job rejects a check function with invalid signature
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func') as job_id_alter \gset
-select alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
-select alter_job(:job_id_alter);
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
 -- test that we can unregister the check function
-select alter_job(:job_id_alter, check_config => 0);
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 0);
 -- no message printed now
-select alter_job(:job_id_alter, config => '{}'); 
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, config => '{}'); 
 
 -- test the case where we have a background job that registers jobs with a check fn
 CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
@@ -539,4 +541,54 @@ CREATE AGGREGATE sum_jsb (jsonb)
 -- for test coverage, check unsupported aggregate type
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
 
+-- github issue 4610
+CREATE TABLE sensor_data
+(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
 
+SELECT FROM create_hypertable('sensor_data','time');
+SELECT '2022-10-06 00:00:00+00' as start_date_sd \gset
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '1 months', :'start_date_sd'::timestamptz - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(1, 50, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+
+-- enable compression
+ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+-- create new chunks
+
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '2 months', :'start_date_sd'::timestamptz - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
+		generate_series(1, 30, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+-- change compression status so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=3 where table_name = '_hyper_4_17_chunk';
+
+CALL run_job(:compressjob_id);
+-- check compression status is not changed
+SELECT status FROM _timescaledb_catalog.chunk where table_name = '_hyper_4_17_chunk';
+-- cleanup
+DROP TABLE sensor_data CASCADE;

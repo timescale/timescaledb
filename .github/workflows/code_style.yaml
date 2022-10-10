@@ -31,7 +31,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v2
       - name: Format Perl files, if needed
-        run: find . -name '*.p[lm]' -exec perltidy --profile=scripts/perltidyrc {} +
+        run: find . -name '*.p[lm]' -exec perltidy -b -bext=/ {} +
       - name: Check for diff
         run: git diff --exit-code
   misc_checks:

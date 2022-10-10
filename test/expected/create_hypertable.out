@@ -802,3 +802,175 @@ SELECT * FROM create_hypertable('sample_table', 'time');
 
 -- cleanup
 DROP TABLE sample_table CASCADE;
+-- github issue 4684
+-- test PARTITION BY HASH
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY HASH (id);
+DO $$
+BEGIN
+   FOR i IN 1..2
+   LOOP
+      EXECUTE format('
+         CREATE TABLE %I
+         PARTITION OF regular
+         FOR VALUES WITH (MODULUS 2, REMAINDER %s)',
+         'regular_' || i, i - 1
+      );
+   END LOOP;
+END;
+$$;
+INSERT INTO regular SELECT generate_series(1,1000), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (19,public,timescale,t)
+(1 row)
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(1,200), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(1,200), 43;
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_19_15_chunk
+ _timescaledb_internal._hyper_19_16_chunk
+ _timescaledb_internal._hyper_19_17_chunk
+(3 rows)
+
+\set ON_ERROR_STOP 0
+-- record goes into chunk1 violating FK constraint as value 1001 is not present in regular table
+INSERT INTO timescale SELECT now(), 1001, 43;
+ERROR:  insert or update on table "_hyper_19_15_chunk" violates foreign key constraint "15_1_timescale_id_fkey"
+-- record goes into chunk2 violating FK constraint as value 1002 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 1002, 43;
+ERROR:  insert or update on table "_hyper_19_16_chunk" violates foreign key constraint "16_2_timescale_id_fkey"
+-- record goes into chunk3 violating FK constraint as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+ERROR:  insert or update on table "_hyper_19_17_chunk" violates foreign key constraint "17_3_timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to 4 other objects
+DROP TABLE timescale cascade;
+-- test PARTITION BY RANGE
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY RANGE (id);
+CREATE TABLE regular_1_500 PARTITION OF regular
+    FOR VALUES FROM (1) TO (500);
+CREATE TABLE regular_500_1000 PARTITION OF regular
+    FOR VALUES FROM (500) TO (801);
+INSERT INTO regular SELECT generate_series(1,800), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (20,public,timescale,t)
+(1 row)
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(200,400), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(400,600), 43;
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_20_18_chunk
+ _timescaledb_internal._hyper_20_19_chunk
+ _timescaledb_internal._hyper_20_20_chunk
+(3 rows)
+
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 801 is not present in regular table
+INSERT INTO timescale SELECT now(), 801, 43;
+ERROR:  insert or update on table "_hyper_20_18_chunk" violates foreign key constraint "18_4_timescale_id_fkey"
+-- FK constraint violation as value 902 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 902, 43;
+ERROR:  insert or update on table "_hyper_20_19_chunk" violates foreign key constraint "19_5_timescale_id_fkey"
+-- FK constraint violation as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+ERROR:  insert or update on table "_hyper_20_20_chunk" violates foreign key constraint "20_6_timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to 4 other objects
+DROP TABLE timescale cascade;
+-- test PARTITION BY LIST
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY LIST (id);
+CREATE TABLE regular_1_2_3_4 PARTITION OF regular FOR VALUES IN (1,2,3,4);
+CREATE TABLE regular_5_6_7_8 PARTITION OF regular FOR VALUES IN (5,6,7,8);
+INSERT INTO regular SELECT generate_series(1,8), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (21,public,timescale,t)
+(1 row)
+
+insert into timescale values (now(), 1,2);
+insert into timescale values (now(), 2,2);
+insert into timescale values (now(), 3,2);
+insert into timescale values (now(), 4,2);
+insert into timescale values (now(), 5,2);
+insert into timescale values (now(), 6,2);
+insert into timescale values (now(), 7,2);
+insert into timescale values (now(), 8,2);
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 9 is not present in regular table
+insert into timescale values (now(), 9,2);
+ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "21_7_timescale_id_fkey"
+-- FK constraint violation as value 10 is not present in regular table
+insert into timescale values (now(), 10,2);
+ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "21_7_timescale_id_fkey"
+-- FK constraint violation as value 111 is not present in regular table
+insert into timescale values (now(), 111,2);
+ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "21_7_timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to 2 other objects
+DROP TABLE timescale cascade;

@@ -225,7 +225,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 -----------------------+------------------------+-------+------------
  _timescaledb_internal | bgw_job_stat           | table | super_user
  _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
-(2 rows)
+ _timescaledb_internal | job_errors             | table | super_user
+(3 rows)
 
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);

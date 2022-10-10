@@ -22,7 +22,7 @@
 
 extern TSConnection *remote_connection_cache_get_connection(TSConnectionId id);
 extern bool remote_connection_cache_remove(TSConnectionId id);
-
+extern void remote_connection_cache_invalidation_ignore(bool value);
 extern void remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashvalue);
 extern void remote_connection_cache_dropped_db_callback(const char *dbname);
 extern void remote_connection_cache_dropped_role_callback(const char *rolename);
