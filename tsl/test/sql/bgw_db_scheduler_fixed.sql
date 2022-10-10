@@ -731,6 +731,8 @@ select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::
 select add_job('job_test_fixed', interval '7 months', initial_start => :'init'::timestamptz + interval '10 ms', timezone => 'Europe/Athens');
 -- this will fail because the timezone has a bad value
 select add_job('job_test_fixed', interval '8 weeks', timezone => 'EuRoPe/AmEriCa');
+select add_reorder_policy('test_table_scheduler','test_table_scheduler_time_idx',
+initial_start => :'init'::timestamptz + interval '15 ms', timezone => 'Europe/Berlin');
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 

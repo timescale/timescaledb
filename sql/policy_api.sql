@@ -29,9 +29,15 @@ AS '@MODULE_PATHNAME@', 'ts_policy_retention_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* reorder policy */
-CREATE OR REPLACE FUNCTION @extschema@.add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
+CREATE OR REPLACE FUNCTION @extschema@.add_reorder_policy(
+    hypertable REGCLASS,
+    index_name NAME,
+    if_not_exists BOOL = false,
+    initial_start timestamptz = NULL,
+    timezone TEXT = NULL
+) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_add'
-LANGUAGE C VOLATILE STRICT;
+LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_remove'

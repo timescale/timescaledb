@@ -129,6 +129,7 @@ DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPT
 DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "any", "any", INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, TEXT);
 DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, TEXT);
+DROP FUNCTION IF EXISTS @extschema@.add_reorder_policy(REGCLASS, NAME, BOOL, TIMESTAMPTZ, TEXT);
 -- recreate functions with the previous signature
 CREATE FUNCTION @extschema@.add_job(
   proc REGPROC,
@@ -155,6 +156,14 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(continuous_aggregate
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.add_reorder_policy(
+    hypertable REGCLASS,
+    index_name NAME,
+    if_not_exists BOOL = false
+) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_reorder_add'
+LANGUAGE C VOLATILE STRICT;
 
 DROP VIEW IF EXISTS timescaledb_information.jobs;
 DROP VIEW IF EXISTS timescaledb_information.job_stats;

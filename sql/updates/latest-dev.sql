@@ -179,6 +179,7 @@ DROP FUNCTION IF EXISTS @extschema@.add_retention_policy(REGCLASS, "any", BOOL, 
 DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(REGCLASS, "any", BOOL, INTERVAL);
 DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_policy(REGCLASS, "any", "any", INTERVAL, BOOL);
 DROP FUNCTION IF EXISTS @extschema@.add_job(REGPROC, INTERVAL, JSONB, TIMESTAMPTZ, BOOL, REGPROC);
+DROP FUNCTION IF EXISTS @extschema@.add_reorder_policy(REGCLASS, NAME, BOOL);
 
 DROP VIEW IF EXISTS timescaledb_information.jobs;
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
@@ -286,3 +287,13 @@ CREATE FUNCTION @extschema@.add_job(
   fixed_schedule BOOL DEFAULT TRUE,
   timezone TEXT DEFAULT NULL
 ) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.add_reorder_policy(
+    hypertable REGCLASS,
+    index_name NAME,
+    if_not_exists BOOL = false,
+    initial_start timestamptz = NULL,
+    timezone TEXT = NULL
+) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_reorder_add'
+LANGUAGE C VOLATILE;
