@@ -380,7 +380,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	if (matched_index_rel != NULL)
 	{
 		DEBUG_WAITPOINT("compress_chunk_indexscan_start");
-		index_scan = index_beginscan(in_rel, matched_index_rel, SnapshotAny, 0, 0);
+		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
 		slot = table_slot_create(in_rel, NULL);
 		index_rescan(index_scan, NULL, 0, NULL, 0);
 		while (index_getnext_slot(index_scan, indexscan_direction, slot))
