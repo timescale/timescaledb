@@ -17,3 +17,5 @@
 3f5872ec61650519e2c5e6fe1dfb60d07696cac7
 # Fix various misspellings
 68aec9593c0f37dddbaa4f2e2b34a9ba3f5b11d9
+# Switch to clang-format-14
+7758f5959c8ed64499ab0e6bb66c30464b11dd81
