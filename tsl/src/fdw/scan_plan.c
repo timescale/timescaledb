@@ -192,7 +192,7 @@ evaluate_stable_function(Oid funcid, Oid result_type, int32 result_typmod, Oid r
 						 Oid input_collid, List *args, bool funcvariadic, Form_pg_proc funcform)
 {
 	bool has_nonconst_input = false;
-	bool has_null_input = false;
+	PG_USED_FOR_ASSERTS_ONLY bool has_null_input = false;
 	ListCell *arg;
 	FuncExpr *newexpr;
 
