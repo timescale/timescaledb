@@ -288,7 +288,6 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 {
 	int n_keys;
 	ListCell *lc;
-	int i;
 	int indexscan_direction = -1;
 	List *in_rel_index_iods; 
 	Relation matched_index_rel = NULL;
@@ -322,40 +321,49 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 	in_rel_index_iods = RelationGetIndexList(in_rel);
-	foreach (lc, in_rel_index_iods)
+	// TODO: 
+	// 1- Focus on Single key ()
+	// 2- default compression is time desc
+	// 3- if orderby is not matching (ASC/DSC) then Nulls on index need to be flipped if its compression orderby and set direction accordingly.
+    // 4- Go with attribute numbers rather than name matching.
+	if (n_keys == 1)
 	{
-		Oid index_oid = lfirst_oid(lc);
-		Relation index_rel = index_open(index_oid, AccessShareLock);
-		if (index_rel->rd_att->natts >= n_keys)
+		int16 att_num = get_attnum(in_table, NameStr(keys[0]->attname));
+		foreach (lc, in_rel_index_iods)
 		{
-			for (i = 0; i < n_keys; i++)
-			{
-				bool compression_col_is_orderby = COMPRESSIONCOL_IS_ORDER_BY(keys[i]);
-				bool compression_col_is_segmentby = COMPRESSIONCOL_IS_SEGMENT_BY(keys[i]);
-				if (namestrcmp((Name) &keys[i]->attname,
-							   NameStr(index_rel->rd_att->attrs[i].attname)) == 0 &&
-					(compression_col_is_orderby || compression_col_is_segmentby))
-				{
-					if (compression_col_is_segmentby)
-						indexscan_direction = BackwardScanDirection;
-					else
-						indexscan_direction = ForwardScanDirection;
+			Oid index_oid = lfirst_oid(lc);
+			Relation index_rel = index_open(index_oid, AccessShareLock);
+			IndexInfo *index_info = BuildIndexInfo(index_rel);
 
+			if (n_keys == index_info->ii_NumIndexKeyAttrs &&
+				index_info->ii_IndexAttrNumbers[0] == att_num)
+			{
+				int16 option = index_rel->rd_indoption[0];
+				if ((option & INDOPTION_DESC) != 0 && keys[0]->orderby_asc == true)
+				{
+					indexscan_direction = BackwardScanDirection;
 					matched_index_rel = index_rel;
+					break;
+				}
+				else if ((option & INDOPTION_DESC) != 0 && keys[0]->orderby_asc == false)
+				{
+					indexscan_direction = ForwardScanDirection;
+					matched_index_rel = index_rel;
+					// TODO: How to do null flipping?
 					break;
 				}
 				else
 				{
 					index_close(index_rel, AccessShareLock);
+					break;
 				}
 			}
-		}
-		else
-		{
-			index_close(index_rel, AccessShareLock);
+			else
+			{
+				index_close(index_rel, AccessShareLock);
+			}
 		}
 	}
-
 	Assert(num_compression_infos <= in_desc->natts);
 	Assert(num_compression_infos <= out_desc->natts);
 	RowCompressor row_compressor;
