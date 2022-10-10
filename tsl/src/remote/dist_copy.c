@@ -934,11 +934,12 @@ copy_should_send_binary(const CopyStmt *stmt)
 		if (!ts_guc_enable_connection_binary_data)
 		{
 			ereport(ERROR,
-					errmsg("the requested binary format for COPY data transfer is disabled by the "
-						   "settings"),
-					errhint("Either enable it by setting timescaledb.enable_connection_binary_data "
-							"to true, or use automatic COPY format detection by setting "
-							"timescaledb.dist_copy_transfer_format to 'auto'."));
+					(errmsg("the requested binary format for COPY data transfer is disabled by the "
+							"settings"),
+					 errhint(
+						 "Either enable it by setting timescaledb.enable_connection_binary_data "
+						 "to true, or use automatic COPY format detection by setting "
+						 "timescaledb.dist_copy_transfer_format to 'auto'.")));
 		}
 		return true;
 	}
