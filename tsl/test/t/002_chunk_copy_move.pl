@@ -24,6 +24,8 @@ for my $node ($an, $dn1, $dn2)
 {
 	$node->safe_psql('postgres', "CREATE ROLE htowner LOGIN");
 }
+$an->safe_psql('postgres', "GRANT CREATE ON SCHEMA public TO htowner");
+
 #Create few distributed hypertables with default and specified schema names and insert a few rows
 $an->safe_psql(
 	'postgres',
