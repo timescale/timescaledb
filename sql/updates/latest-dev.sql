@@ -14,6 +14,10 @@ CREATE TABLE _timescaledb_internal.job_errors (
   error_data jsonb
 );
 
+-- don't need to drop indexes in reverse-dev because the table itself is dropped
+CREATE INDEX job_errors_job_id_idx ON _timescaledb_internal.job_errors(job_id);
+CREATE INDEX job_errors_finish_time_idx ON _timescaledb_internal.job_errors(finish_time);
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
 
 CREATE VIEW timescaledb_information.job_errors AS
