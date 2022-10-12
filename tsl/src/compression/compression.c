@@ -707,10 +707,12 @@ static void
 row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 {
 	int col;
-
+	/* save original memory context */
+	const MemoryContext oldcontext = CurrentMemoryContext;
 	Assert(row_compressor->rows_compressed_into_current_value == 0);
 	Assert(row_compressor->n_input_columns <= row->tts_nvalid);
 
+	MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
 	for (col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
@@ -722,13 +724,13 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 
 		Assert(column->compressor == NULL);
 
-		MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
 		/* Performance Improvment: We should just use array access here; everything is guaranteed to
 		   be fetched */
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		segment_info_update(column->segment_info, val, is_null);
-		MemoryContextSwitchTo(row_compressor->per_row_ctx);
 	}
+	/* switch to original memory context */
+	MemoryContextSwitchTo(oldcontext);
 }
 
 static bool
