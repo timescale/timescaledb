@@ -283,6 +283,7 @@ truncate_relation(Oid table_oid)
 	table_close(rel, NoLock);
 }
 
+static void run_analyze_on_chunk(Oid chunk_relid);
 CompressionStats
 compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column_compression_info,
 			   int num_compression_infos)
@@ -409,6 +410,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 			ExecClearTuple(slot);
 		}
 
+		run_analyze_on_chunk(in_rel->rd_id);
 		if (row_compressor.rows_compressed_into_current_value > 0)
 			row_compressor_flush(&row_compressor, mycid, true);
 
@@ -495,7 +497,6 @@ static void compress_chunk_populate_sort_info_for_column(Oid table,
 														 const ColumnCompressionInfo *column,
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
-static void run_analyze_on_chunk(Oid chunk_relid);
 
 static Tuplesortstate *
 compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressionInfo **keys)
