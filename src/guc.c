@@ -77,6 +77,7 @@ bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_async_append = true;
+TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
@@ -380,6 +381,17 @@ _guc_init(void)
 							 "Enable getting and showing EXPLAIN output from remote nodes",
 							 &ts_guc_enable_remote_explain,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_compression_indexscan",
+							 "Enable compression to take indexscan path",
+							 "Enable indexscan during compression, if matching index is found",
+							 &ts_guc_enable_compression_indexscan,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
