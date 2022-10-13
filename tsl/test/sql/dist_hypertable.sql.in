@@ -1730,7 +1730,7 @@ SELECT count(*) FROM disttable;
 -- ignore this oid mismatch for non-builtin types.
 SET timescaledb.enable_connection_binary_data=true;
 \set ON_ERROR_STOP 0
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM disttable ORDER BY 1;
 
 SET timescaledb.remote_data_fetcher = 'cursor';

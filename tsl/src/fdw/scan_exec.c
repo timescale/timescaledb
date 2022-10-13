@@ -19,7 +19,7 @@
 #include "scan_exec.h"
 #include "utils.h"
 #include "remote/data_fetcher.h"
-#include "remote/row_by_row_fetcher.h"
+#include "remote/copy_fetcher.h"
 #include "remote/cursor_fetcher.h"
 #include "guc.h"
 #include "planner.h"
@@ -131,13 +131,13 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 
 	TupleFactory *tf = tuplefactory_create_for_scan(ss, fsstate->retrieved_attrs);
 
-	if (!tuplefactory_is_binary(tf) && fsstate->planned_fetcher_type == RowByRowFetcherType)
+	if (!tuplefactory_is_binary(tf) && fsstate->planned_fetcher_type == CopyFetcherType)
 	{
 		if (ts_guc_remote_data_fetcher == AutoFetcherType)
 		{
 			/*
 			 * The user-set fetcher type was auto, and the planner decided to
-			 * use row-by-row fetcher, but at execution time (now) we found out
+			 * use COPY fetcher, but at execution time (now) we found out
 			 * there is no binary serialization for some data types. In this
 			 * case we can revert to cursor fetcher which supports text
 			 * serialization.
@@ -147,17 +147,17 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		else
 		{
 			ereport(ERROR,
-					(errmsg("cannot use row-by-row fetcher because some of the column types do not "
+					(errmsg("cannot use COPY fetcher because some of the column types do not "
 							"have binary serialization")));
 		}
 	}
 
 	/*
-	 * Row-by-row fetcher uses COPY statement that don't work with prepared
+	 * COPY fetcher uses COPY statement that don't work with prepared
 	 * statements. If this plan is parameterized, this means we'll have to
 	 * revert to cursor fetcher.
 	 */
-	if (num_params > 0 && fsstate->planned_fetcher_type == RowByRowFetcherType)
+	if (num_params > 0 && fsstate->planned_fetcher_type == CopyFetcherType)
 	{
 		if (ts_guc_remote_data_fetcher == AutoFetcherType)
 		{
@@ -166,7 +166,7 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		else
 		{
 			ereport(ERROR,
-					(errmsg("cannot use row-by-row fetcher because the plan is parameterized"),
+					(errmsg("cannot use COPY fetcher because the plan is parameterized"),
 					 errhint("Set \"timescaledb.remote_data_fetcher\" to \"cursor\" to explicitly "
 							 "set the fetcher type or use \"auto\" to select the fetcher type "
 							 "automatically.")));
@@ -183,8 +183,8 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		 * The fetcher type must have been determined by the planner at this
 		 * point, so we shouldn't see 'auto' here.
 		 */
-		Assert(fsstate->planned_fetcher_type == RowByRowFetcherType);
-		fetcher = row_by_row_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
+		Assert(fsstate->planned_fetcher_type == CopyFetcherType);
+		fetcher = copy_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
 	}
 
 	fsstate->fetcher = fetcher;
@@ -439,8 +439,8 @@ explain_fetcher_type(DataFetcherType type)
 	{
 		case AutoFetcherType:
 			return "Auto";
-		case RowByRowFetcherType:
-			return "Row by row";
+		case CopyFetcherType:
+			return "COPY";
 		case CursorFetcherType:
 			return "Cursor";
 		default:

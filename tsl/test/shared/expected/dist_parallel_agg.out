@@ -39,7 +39,7 @@ QUERY PLAN
    Output: (count(*))
    Relations: Aggregate on (public.metrics_dist1)
    Data node: data_node_1
-   Fetcher Type: Row by row
+   Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
    Remote SQL: SELECT count(*) FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[..])
    Remote EXPLAIN: 
@@ -66,7 +66,7 @@ QUERY PLAN
    Output: (ts_debug_shippable_safe_count(*))
    Relations: Aggregate on (public.metrics_dist1)
    Data node: data_node_1
-   Fetcher Type: Row by row
+   Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
    Remote SQL: SELECT public.ts_debug_shippable_safe_count(*) FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[..])
    Remote EXPLAIN: 
@@ -93,7 +93,7 @@ QUERY PLAN
    Output: (ts_debug_shippable_unsafe_count(*))
    Relations: Aggregate on (public.metrics_dist1)
    Data node: data_node_1
-   Fetcher Type: Row by row
+   Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
    Remote SQL: SELECT public.ts_debug_shippable_unsafe_count(*) FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[..])
    Remote EXPLAIN: 

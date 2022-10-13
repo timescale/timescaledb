@@ -49,7 +49,7 @@ static const struct config_enum_entry telemetry_level_options[] = {
 #endif
 
 static const struct config_enum_entry remote_data_fetchers[] = {
-	{ "rowbyrow", RowByRowFetcherType, false },
+	{ "copy", CopyFetcherType, false },
 	{ "cursor", CursorFetcherType, false },
 	{ "auto", AutoFetcherType, false },
 	{ NULL, 0, false }
@@ -373,7 +373,7 @@ _guc_init(void)
 	DefineCustomEnumVariable("timescaledb.remote_data_fetcher",
 							 "Set remote data fetcher type",
 							 "Pick data fetcher type based on type of queries you plan to run "
-							 "(rowbyrow or cursor)",
+							 "(copy or cursor)",
 							 (int *) &ts_guc_remote_data_fetcher,
 							 AutoFetcherType,
 							 remote_data_fetchers,

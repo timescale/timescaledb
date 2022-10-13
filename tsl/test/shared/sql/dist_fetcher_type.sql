@@ -10,7 +10,7 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
 
--- This query should choose row-by-row fetcher.
+-- This query should choose COPY fetcher.
 select 1 x from distinct_on_distributed t1
 limit 1;
 
@@ -28,13 +28,13 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
 
--- This query can't work with rowbyrow fetcher.
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+-- This query can't work with copy fetcher.
+set timescaledb.remote_data_fetcher = 'copy';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
 
--- Check once again that 'auto' is used after 'rowbyrow'.
+-- Check once again that 'auto' is used after 'copy'.
 set timescaledb.remote_data_fetcher = 'auto';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
@@ -68,9 +68,9 @@ ORDER BY 1,2;
 RESET jit;
 
 
--- Row by row fetcher should fail on a custom type that has no binary
+-- COPY fetcher should fail on a custom type that has no binary
 -- serialization.
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+set timescaledb.remote_data_fetcher = 'copy';
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select time, txn_id, val, substring(info for 20) from disttable_with_ct;
@@ -82,8 +82,8 @@ set timescaledb.remote_data_fetcher = 'auto';
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from disttable_with_ct;
 
--- Row by row fetcher with bytea data
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+-- COPY fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'copy';
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from disttable_with_bytea;
@@ -96,8 +96,8 @@ explain (analyze, verbose, costs off, timing off, summary off)
 select * from disttable_with_bytea;
 select * from disttable_with_bytea;
 
--- #4515 test for assertion failure in row_by_row_fetcher_close
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+-- #4515 test for assertion failure in copy_fetcher_close
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT *
 FROM
   conditions ref_0
@@ -115,7 +115,7 @@ WHERE EXISTS (
 
 -- #4518
 -- test error handling for queries with multiple distributed hypertables
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM
   conditions_dist1 ref_0
 WHERE EXISTS (
@@ -137,7 +137,7 @@ WHERE EXISTS (
 )
 ORDER BY 1,2;
 
--- Check that we don't use row-by-row fetcher for parameterized plans.
+-- Check that we don't use COPY fetcher for parameterized plans.
 CREATE TABLE lookup (id SERIAL NOT NULL, key TEXT, val TEXT);
 CREATE TABLE metric (ts TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, lookup_id INT NOT NULL);
 SELECT 1 FROM create_distributed_hypertable('metric', 'ts');
@@ -164,7 +164,7 @@ WHERE
     AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
 ORDER BY 1 DESC LIMIT 1;
 
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT
     m.ts,
     m.val

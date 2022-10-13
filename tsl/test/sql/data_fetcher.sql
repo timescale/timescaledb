@@ -11,9 +11,9 @@
 \set TEST_BASE_NAME data_fetcher
 SELECT format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/results/%s_results_cursor.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_CURSOR",
-       format('%s/results/%s_results_row_by_row.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_ROW_BY_ROW"
+       format('%s/results/%s_results_copy.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COPY"
 \gset
-SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_ROW_BY_ROW') as "DIFF_CMD"
+SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_COPY') as "DIFF_CMD"
 \gset
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -37,10 +37,10 @@ SET client_min_messages TO error;
 -- mutliple batches.
 ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fetch_size '100');
 
--- run the queries using row by row fetcher
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+-- run the queries using COPY fetcher
+SET timescaledb.remote_data_fetcher = 'copy';
 \set ON_ERROR_STOP 0
-\o :TEST_RESULTS_ROW_BY_ROW
+\o :TEST_RESULTS_COPY
 \ir :TEST_QUERY_NAME
 \o
 \set ON_ERROR_STOP 1

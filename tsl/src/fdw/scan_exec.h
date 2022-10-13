@@ -40,7 +40,7 @@ typedef struct TsFdwScanState
 	int fetch_size;				 /* number of tuples per fetch */
 	/*
 	 * The type of data fetcher to use. Note that we still can revert to
-	 * cursor fetcher if row-by-row fetcher was chosen automatically, but binary
+	 * cursor fetcher if COPY fetcher was chosen automatically, but binary
 	 * serialization turns out to be unavailable for some of the data types. We
 	 * only check this when we execute the query.
 	 */

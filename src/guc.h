@@ -50,7 +50,7 @@ extern TSDLLEXPORT bool ts_guc_enable_remote_explain;
 typedef enum DataFetcherType
 {
 	CursorFetcherType,
-	RowByRowFetcherType,
+	CopyFetcherType,
 	AutoFetcherType,
 } DataFetcherType;
 

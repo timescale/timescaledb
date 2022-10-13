@@ -7,66 +7,66 @@
 #include <postgres.h>
 #include <port/pg_bswap.h>
 
-#include "row_by_row_fetcher.h"
+#include "copy_fetcher.h"
 #include "tuplefactory.h"
 #include "async.h"
 
-typedef struct RowByRowFetcher
+typedef struct CopyFetcher
 {
 	DataFetcher state;
 
 	/* Data for virtual tuples of the current retrieved batch. */
 	Datum *batch_values;
 	bool *batch_nulls;
-} RowByRowFetcher;
+} CopyFetcher;
 
-static void row_by_row_fetcher_send_fetch_request(DataFetcher *df);
-static void row_by_row_fetcher_reset(RowByRowFetcher *fetcher);
-static int row_by_row_fetcher_fetch_data(DataFetcher *df);
-static void row_by_row_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
-static void row_by_row_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
-static void row_by_row_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
-static void row_by_row_fetcher_rescan(DataFetcher *df);
-static void row_by_row_fetcher_close(DataFetcher *df);
+static void copy_fetcher_send_fetch_request(DataFetcher *df);
+static void copy_fetcher_reset(CopyFetcher *fetcher);
+static int copy_fetcher_fetch_data(DataFetcher *df);
+static void copy_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
+static void copy_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
+static void copy_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
+static void copy_fetcher_rescan(DataFetcher *df);
+static void copy_fetcher_close(DataFetcher *df);
 
 static DataFetcherFuncs funcs = {
-	.send_fetch_request = row_by_row_fetcher_send_fetch_request,
-	.fetch_data = row_by_row_fetcher_fetch_data,
-	.set_fetch_size = row_by_row_fetcher_set_fetch_size,
-	.set_tuple_mctx = row_by_row_fetcher_set_tuple_memcontext,
-	.store_next_tuple = row_by_row_fetcher_store_next_tuple,
-	.rewind = row_by_row_fetcher_rescan,
-	.close = row_by_row_fetcher_close,
+	.send_fetch_request = copy_fetcher_send_fetch_request,
+	.fetch_data = copy_fetcher_fetch_data,
+	.set_fetch_size = copy_fetcher_set_fetch_size,
+	.set_tuple_mctx = copy_fetcher_set_tuple_memcontext,
+	.store_next_tuple = copy_fetcher_store_next_tuple,
+	.rewind = copy_fetcher_rescan,
+	.close = copy_fetcher_close,
 };
 
 static void
-row_by_row_fetcher_set_fetch_size(DataFetcher *df, int fetch_size)
+copy_fetcher_set_fetch_size(DataFetcher *df, int fetch_size)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	data_fetcher_set_fetch_size(&fetcher->state, fetch_size);
 }
 
 static void
-row_by_row_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx)
+copy_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 	data_fetcher_set_tuple_mctx(&fetcher->state, mctx);
 }
 
 static void
-row_by_row_fetcher_reset(RowByRowFetcher *fetcher)
+copy_fetcher_reset(CopyFetcher *fetcher)
 {
 	fetcher->state.open = false;
 	data_fetcher_reset(&fetcher->state);
 }
 
 static void
-row_by_row_fetcher_send_fetch_request(DataFetcher *df)
+copy_fetcher_send_fetch_request(DataFetcher *df)
 {
 	AsyncRequest *volatile req = NULL;
 	MemoryContext oldcontext;
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	if (fetcher->state.open)
 	{
@@ -76,7 +76,7 @@ row_by_row_fetcher_send_fetch_request(DataFetcher *df)
 	}
 
 	/* make sure to have a clean state */
-	row_by_row_fetcher_reset(fetcher);
+	copy_fetcher_reset(fetcher);
 
 	StringInfoData copy_query;
 	initStringInfo(&copy_query);
@@ -244,7 +244,7 @@ copy_data_check_header(StringInfo copy_data)
  * Process response for ongoing async request
  */
 static int
-row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
+copy_fetcher_complete(CopyFetcher *fetcher)
 {
 	/* Marked as volatile since it's modified in PG_TRY used in PG_CATCH */
 	AsyncResponseResult *volatile response = NULL;
@@ -480,23 +480,23 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 }
 
 static int
-row_by_row_fetcher_fetch_data(DataFetcher *df)
+copy_fetcher_fetch_data(DataFetcher *df)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	if (fetcher->state.eof)
 		return 0;
 
 	if (!fetcher->state.open)
-		row_by_row_fetcher_send_fetch_request(df);
+		copy_fetcher_send_fetch_request(df);
 
-	return row_by_row_fetcher_complete(fetcher);
+	return copy_fetcher_complete(fetcher);
 }
 
 static void
-row_by_row_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot)
+copy_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	ExecClearTuple(slot);
 
@@ -522,9 +522,9 @@ row_by_row_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot)
 }
 
 static void
-row_by_row_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
+copy_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
 {
-	row_by_row_fetcher_store_tuple(df, df->next_tuple_idx, slot);
+	copy_fetcher_store_tuple(df, df->next_tuple_idx, slot);
 
 	if (!TupIsNull(slot))
 		df->next_tuple_idx++;
@@ -533,22 +533,22 @@ row_by_row_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
 }
 
 DataFetcher *
-row_by_row_fetcher_create_for_scan(TSConnection *conn, const char *stmt, StmtParams *params,
-								   TupleFactory *tf)
+copy_fetcher_create_for_scan(TSConnection *conn, const char *stmt, StmtParams *params,
+							 TupleFactory *tf)
 {
-	RowByRowFetcher *fetcher = palloc0(sizeof(RowByRowFetcher));
+	CopyFetcher *fetcher = palloc0(sizeof(CopyFetcher));
 
 	data_fetcher_init(&fetcher->state, conn, stmt, params, tf);
-	fetcher->state.type = RowByRowFetcherType;
+	fetcher->state.type = CopyFetcherType;
 	fetcher->state.funcs = &funcs;
 
 	return &fetcher->state;
 }
 
 static void
-row_by_row_fetcher_close(DataFetcher *df)
+copy_fetcher_close(DataFetcher *df)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	/*
 	 * The fetcher state might not be open if the fetcher got initialized but
@@ -585,17 +585,17 @@ row_by_row_fetcher_close(DataFetcher *df)
 		pfree(fetcher->state.data_req);
 		fetcher->state.data_req = NULL;
 	}
-	row_by_row_fetcher_reset(fetcher);
+	copy_fetcher_reset(fetcher);
 }
 
 static void
-row_by_row_fetcher_rescan(DataFetcher *df)
+copy_fetcher_rescan(DataFetcher *df)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	if (fetcher->state.batch_count > 1)
 		/* we're over the first batch so we need to close fetcher and restart from clean state */
-		row_by_row_fetcher_close(df);
+		copy_fetcher_close(df);
 	else
 		/* we can reuse current batch of results */
 		fetcher->state.next_tuple_idx = 0;

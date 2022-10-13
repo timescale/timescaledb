@@ -1055,7 +1055,7 @@ FROM disttable;
                        ->  Custom Scan (DataNodeScan) on public.disttable disttable_1 (actual rows=1 loops=1)
                              Output: disttable_1.temp
                              Data node: db_dist_hypertable_1
-                             Fetcher Type: Row by row
+                             Fetcher Type: COPY
                              Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk
                              Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST LIMIT 1
                              Remote EXPLAIN: 
@@ -1076,7 +1076,7 @@ FROM disttable;
                        ->  Custom Scan (DataNodeScan) on public.disttable disttable_2 (actual rows=1 loops=1)
                              Output: disttable_2.temp
                              Data node: db_dist_hypertable_2
-                             Fetcher Type: Row by row
+                             Fetcher Type: COPY
                              Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_5_chunk
                              Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST LIMIT 1
                              Remote EXPLAIN: 
@@ -1097,7 +1097,7 @@ FROM disttable;
                        ->  Custom Scan (DataNodeScan) on public.disttable disttable_3 (actual rows=1 loops=1)
                              Output: disttable_3.temp
                              Data node: db_dist_hypertable_3
-                             Fetcher Type: Row by row
+                             Fetcher Type: COPY
                              Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_6_chunk
                              Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST LIMIT 1
                              Remote EXPLAIN: 
@@ -2499,19 +2499,19 @@ SELECT * FROM disttable_replicated;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=4 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: db_dist_hypertable_1
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_12_chunk, _dist_hyper_6_15_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: db_dist_hypertable_2
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_13_chunk, _dist_hyper_6_16_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: db_dist_hypertable_3
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_14_chunk, _dist_hyper_6_17_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
 (21 rows)
@@ -2567,19 +2567,19 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: db_dist_hypertable_1
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_12_chunk, _dist_hyper_6_15_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND ((temp > 2::double precision))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=0 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: db_dist_hypertable_2
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_13_chunk, _dist_hyper_6_16_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND ((temp > 2::double precision))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: db_dist_hypertable_3
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_14_chunk, _dist_hyper_6_17_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND ((temp > 2::double precision))
 (21 rows)
@@ -2595,19 +2595,19 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0 or "Color" = 11;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=1 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: db_dist_hypertable_1
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_12_chunk, _dist_hyper_6_15_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=0 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: db_dist_hypertable_2
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_13_chunk, _dist_hyper_6_16_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: db_dist_hypertable_3
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_14_chunk, _dist_hyper_6_17_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
 (21 rows)
@@ -2623,13 +2623,13 @@ SELECT * FROM disttable_replicated WHERE time < '2018-01-01 09:11';
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: db_dist_hypertable_1
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_12_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=0 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: db_dist_hypertable_2
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_13_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
 (15 rows)
@@ -2658,19 +2658,19 @@ SELECT * FROM cte;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=4 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: db_dist_hypertable_1
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_12_chunk, _dist_hyper_6_15_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: db_dist_hypertable_2
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_13_chunk, _dist_hyper_6_16_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: db_dist_hypertable_3
-               Fetcher Type: Row by row
+               Fetcher Type: COPY
                Chunks: _dist_hyper_6_14_chunk, _dist_hyper_6_17_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
 (21 rows)
@@ -5253,7 +5253,7 @@ SELECT count(*) FROM disttable;
 -- ignore this oid mismatch for non-builtin types.
 SET timescaledb.enable_connection_binary_data=true;
 \set ON_ERROR_STOP 0
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM disttable ORDER BY 1;
 ERROR:  wrong element type
 SET timescaledb.remote_data_fetcher = 'cursor';

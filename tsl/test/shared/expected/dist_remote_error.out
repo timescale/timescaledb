@@ -24,7 +24,7 @@ insert into metrics_dist_remote_error select * from metrics_dist order by metric
 -- there is no way to suppress error output from a psql script.
 set client_min_messages to ERROR;
 \set ON_ERROR_STOP off
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+set timescaledb.remote_data_fetcher = 'copy';
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;
 ERROR:  [<hidden node name>]: debug point: requested to error out after 0 rows, 1 rows seen
@@ -49,7 +49,7 @@ QUERY PLAN
  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
-   Fetcher Type: Row by row
+   Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
    Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[..]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
