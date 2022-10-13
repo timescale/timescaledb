@@ -1511,6 +1511,14 @@ WHERE hypertable_name = :'MAT_TABLE_NAME';
 -[ RECORD 1 ]----------+----------------------------
 hypertable_schema      | _timescaledb_internal
 hypertable_name        | _materialized_hypertable_41
+attname                | search_query
+segmentby_column_index | 1
+orderby_column_index   | 
+orderby_asc            | 
+orderby_nullsfirst     | 
+-[ RECORD 2 ]----------+----------------------------
+hypertable_schema      | _timescaledb_internal
+hypertable_name        | _materialized_hypertable_41
 attname                | bucket
 segmentby_column_index | 
 orderby_column_index   | 1

@@ -433,21 +433,21 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                       +
      },                                             +
      "continuous_aggregates": {                     +
-         "heap_size": 147456,                       +
+         "heap_size": 180224,                       +
          "toast_size": 24576,                       +
          "compression": {                           +
-             "compressed_heap_size": 8192,          +
-             "compressed_row_count": 1,             +
+             "compressed_heap_size": 40960,         +
+             "compressed_row_count": 10,            +
              "num_compressed_caggs": 1,             +
              "compressed_toast_size": 8192,         +
              "num_compressed_chunks": 1,            +
              "uncompressed_heap_size": 49152,       +
              "uncompressed_row_count": 452,         +
-             "compressed_indexes_size": 0,          +
+             "compressed_indexes_size": 16384,      +
              "uncompressed_toast_size": 0,          +
              "uncompressed_indexes_size": 81920     +
          },                                         +
-         "indexes_size": 163840,                    +
+         "indexes_size": 180224,                    +
          "num_children": 4,                         +
          "num_relations": 2,                        +
          "num_reltuples": 452,                      +
@@ -932,21 +932,21 @@ FROM relations;
              continuous_aggregates              
 ------------------------------------------------
  {                                             +
-     "heap_size": 335872,                      +
+     "heap_size": 368640,                      +
      "toast_size": 40960,                      +
      "compression": {                          +
-         "compressed_heap_size": 8192,         +
-         "compressed_row_count": 1,            +
+         "compressed_heap_size": 40960,        +
+         "compressed_row_count": 10,           +
          "num_compressed_caggs": 1,            +
          "compressed_toast_size": 8192,        +
          "num_compressed_chunks": 1,           +
          "uncompressed_heap_size": 49152,      +
          "uncompressed_row_count": 452,        +
-         "compressed_indexes_size": 0,         +
+         "compressed_indexes_size": 16384,     +
          "uncompressed_toast_size": 0,         +
          "uncompressed_indexes_size": 81920    +
      },                                        +
-     "indexes_size": 393216,                   +
+     "indexes_size": 409600,                   +
      "num_children": 8,                        +
      "num_relations": 4,                       +
      "num_reltuples": 452,                     +
