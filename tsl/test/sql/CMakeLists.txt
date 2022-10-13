@@ -44,6 +44,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
+    compression_indexscan.sql
     compression_segment_meta.sql
     compression.sql
     compress_table.sql
