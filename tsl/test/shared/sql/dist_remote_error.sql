@@ -46,7 +46,7 @@ set client_min_messages to ERROR;
 
 \set ON_ERROR_STOP off
 
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+set timescaledb.remote_data_fetcher = 'copy';
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;

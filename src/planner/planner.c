@@ -492,7 +492,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 			/*
 			 * Determine which type of fetcher to use. If set by GUC, use what
-			 * is set. If the GUC says 'auto', use the row-by-row fetcher if we
+			 * is set. If the GUC says 'auto', use the COPY fetcher if we
 			 * have at most one distributed table in the query. This enables
 			 * parallel plans on data nodes, which speeds up the query.
 			 * We can't use parallel plans with the cursor fetcher, because the
@@ -518,12 +518,12 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 				if (context.num_distributed_tables >= 2)
 				{
-					if (ts_guc_remote_data_fetcher == RowByRowFetcherType)
+					if (ts_guc_remote_data_fetcher == CopyFetcherType)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("row-by-row fetcher not supported"),
-								 errhint("Row-by-row fetching of data is not supported in "
+								 errmsg("COPY fetcher not supported"),
+								 errhint("COPY fetching of data is not supported in "
 										 "queries with multiple distributed hypertables."
 										 " Use cursor fetcher instead.")));
 					}
@@ -533,7 +533,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				{
 					if (ts_guc_remote_data_fetcher == AutoFetcherType)
 					{
-						ts_data_node_fetcher_scan_type = RowByRowFetcherType;
+						ts_data_node_fetcher_scan_type = CopyFetcherType;
 					}
 					else
 					{

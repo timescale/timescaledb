@@ -919,7 +919,7 @@ async_request_discard_response(AsyncRequest *req)
 	AsyncResponseResult *result = NULL;
 	do
 	{
-		/* for row-by-row fetching we need to loop until we consume the whole response */
+		/* for COPY fetching we need to loop until we consume the whole response */
 		result = async_request_set_wait_any_result(&set);
 		if (result != NULL)
 			async_response_result_close(result);
