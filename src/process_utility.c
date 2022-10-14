@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <foreign/foreign.h>
 #include <nodes/parsenodes.h>
 #include <nodes/nodes.h>
 #include <nodes/makefuncs.h>
@@ -43,6 +44,7 @@
 
 #include "annotations.h"
 #include "export.h"
+#include "extension_constants.h"
 #include "process_utility.h"
 #include "ts_catalog/catalog.h"
 #include "chunk.h"
@@ -495,14 +497,32 @@ static DDLResult
 process_alter_foreign_server(ProcessUtilityArgs *args)
 {
 	AlterForeignServerStmt *stmt = (AlterForeignServerStmt *) args->parsetree;
+	ForeignServer *server = GetForeignServerByName(stmt->servername, true);
+	Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
+	ListCell *lc;
 
-	if (stmt->has_version)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported"),
-				 errdetail("It is not possible to set a version on the data node configuration.")));
+	if (server != NULL && server->fdwid == fdwid)
+	{
+		if (stmt->has_version)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("version not supported"),
+					 errdetail(
+						 "It is not possible to set a version on the data node configuration.")));
 
-	/* Other options are validated by the FDW */
+		/* Options are validated by the FDW, but we need to block available option
+		 * since that must be handled via alter_data_node(). */
+		foreach (lc, stmt->options)
+		{
+			DefElem *elem = lfirst(lc);
+
+			if (strcmp(elem->defname, "available") == 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot set \"available\" using ALTER SERVER"),
+						 errhint("Use alter_data_node() to set \"available\".")));
+		}
+	}
 
 	return DDL_CONTINUE;
 }

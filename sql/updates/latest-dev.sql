@@ -379,3 +379,14 @@ GRANT SELECT ON _timescaledb_catalog.dimension_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.dimension TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.dimension table --
+
+-- changes related to alter_data_node():
+CREATE INDEX chunk_data_node_node_name_idx ON _timescaledb_catalog.chunk_data_node (node_name);
+CREATE FUNCTION @extschema@.alter_data_node(
+    node_name              NAME,
+    host                   TEXT = NULL,
+    database               NAME = NULL,
+    port                   INTEGER = NULL,
+	available              BOOLEAN = NULL
+) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, available BOOLEAN)
+AS '@MODULE_PATHNAME@', 'ts_data_node_alter' LANGUAGE C VOLATILE;

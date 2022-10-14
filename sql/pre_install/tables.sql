@@ -255,6 +255,8 @@ CREATE TABLE _timescaledb_catalog.chunk_data_node (
   CONSTRAINT chunk_data_node_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
 );
 
+CREATE INDEX chunk_data_node_node_name_idx ON _timescaledb_catalog.chunk_data_node (node_name);
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node', '');
 
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests

@@ -28,6 +28,7 @@ extern Datum data_node_add(PG_FUNCTION_ARGS);
 extern Datum data_node_delete(PG_FUNCTION_ARGS);
 extern Datum data_node_attach(PG_FUNCTION_ARGS);
 extern Datum data_node_detach(PG_FUNCTION_ARGS);
+extern Datum data_node_alter(PG_FUNCTION_ARGS);
 extern Datum data_node_block_new_chunks(PG_FUNCTION_ARGS);
 extern Datum data_node_allow_new_chunks(PG_FUNCTION_ARGS);
 extern List *data_node_get_node_name_list_with_aclcheck(AclMode mode, bool fail_on_aclcheck);
