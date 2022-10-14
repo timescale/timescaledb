@@ -79,6 +79,8 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 -- Should not be possible to set a version:
 ALTER SERVER data_node_3 VERSION '2';
+-- Should not be possible to set "available"
+ALTER SERVER data_node_3 OPTIONS (SET available 'true');
 \set ON_ERROR_STOP 1
 
 -- Make sure changing server owner is allowed
@@ -777,3 +779,161 @@ DROP DATABASE :DN_DBNAME_3;
 DROP DATABASE :DN_DBNAME_4;
 DROP DATABASE :DN_DBNAME_5;
 DROP DATABASE :DN_DBNAME_6;
+
+
+-----------------------------------------------
+-- Test alter_data_node()
+-----------------------------------------------
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
+SET ROLE :ROLE_1;
+
+CREATE TABLE hyper1 (time timestamptz, location int, temp float);
+CREATE TABLE hyper2 (LIKE hyper1);
+CREATE TABLE hyper3 (LIKE hyper1);
+CREATE TABLE hyper_1dim (LIKE hyper1);
+
+SELECT create_distributed_hypertable('hyper1', 'time', 'location', replication_factor=>1);
+SELECT create_distributed_hypertable('hyper2', 'time', 'location', replication_factor=>2);
+SELECT create_distributed_hypertable('hyper3', 'time', 'location', replication_factor=>3);
+SELECT create_distributed_hypertable('hyper_1dim', 'time', chunk_time_interval=>interval '2 days', replication_factor=>3);
+
+SELECT setseed(1);
+INSERT INTO hyper1
+SELECT t, (abs(timestamp_hash(t::timestamp)) % 3) + 1, random() * 30
+FROM generate_series('2022-01-01 00:00:00'::timestamptz, '2022-01-05 00:00:00', '1 h') t;
+
+INSERT INTO hyper2 SELECT * FROM hyper1;
+INSERT INTO hyper3 SELECT * FROM hyper1;
+INSERT INTO hyper_1dim SELECT * FROM hyper1;
+
+-- create view to see the data nodes and default data node of all
+-- chunks
+CREATE VIEW chunk_query_data_node AS
+SELECT ch.hypertable_name, format('%I.%I', ch.chunk_schema, ch.chunk_name)::regclass AS chunk, ch.data_nodes, fs.srvname default_data_node
+	   FROM timescaledb_information.chunks ch
+	   INNER JOIN pg_foreign_table ft ON (format('%I.%I', ch.chunk_schema, ch.chunk_name)::regclass = ft.ftrelid)
+	   INNER JOIN pg_foreign_server fs ON (ft.ftserver = fs.oid)
+	   ORDER BY 1, 2;
+
+SELECT * FROM chunk_query_data_node;
+
+-- test alter_data_node permissions
+\set ON_ERROR_STOP 0
+-- must be owner to alter a data node
+SELECT * FROM alter_data_node('data_node_1', available=>false);
+SELECT * FROM alter_data_node('data_node_1', port=>8989);
+\set ON_ERROR_STOP 1
+
+-- query some data from all hypertables to show its working before
+-- simulating the node being down
+SELECT time, location FROM hyper1 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper3 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
+
+-- simulate a node being down by renaming the database for
+-- data_node_1, but for that to work we need to reconnect the backend
+-- to clear out the connection cache
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+ALTER DATABASE :DN_DBNAME_1 RENAME TO data_node_1_unavailable;
+\set ON_ERROR_STOP 0
+SELECT time, location FROM hyper1 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper3 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
+\set ON_ERROR_STOP 1
+
+-- alter the node as not available
+SELECT * FROM alter_data_node('data_node_1', available=>false);
+
+-- the node that is not available for reads should no longer be
+-- query data node for chunks, except for those that have no
+-- alternative (i.e., the chunk only has one data node).
+SELECT * FROM chunk_query_data_node;
+
+-- queries should work again, except on hyper1 which has no
+-- replication
+\set ON_ERROR_STOP 0
+SELECT time, location FROM hyper1 ORDER BY time LIMIT 1;
+\set ON_ERROR_STOP 1
+SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper3 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
+
+
+-- inserts should fail if going to chunks that exist on the
+-- unavailable data node
+\set ON_ERROR_STOP 0
+INSERT INTO hyper3 VALUES ('2022-01-03 00:00:00', 1, 1);
+INSERT INTO hyper_1dim VALUES ('2022-01-03 00:00:00', 1, 1);
+\set ON_ERROR_STOP 1
+
+-- inserts should work if going to a new chunk
+INSERT INTO hyper3 VALUES ('2022-01-10 00:00:00', 1, 1);
+INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:00', 1, 1);
+
+SELECT hypertable_name, chunk_name, data_nodes FROM timescaledb_information.chunks
+WHERE hypertable_name IN ('hyper3', 'hyper_1dim')
+AND range_start::timestamptz <= '2022-01-10 00:00:00'
+AND range_end::timestamptz > '2022-01-10 00:00:00'
+ORDER BY 1, 2;
+
+-- re-enable the data node and the chunks should "switch back" to
+-- using the data node. However, only the chunks for which the node is
+-- "primary" should switch to using the data node for queries
+ALTER DATABASE data_node_1_unavailable RENAME TO :DN_DBNAME_1;
+SELECT * FROM alter_data_node('data_node_1', available=>true);
+SELECT * FROM chunk_query_data_node;
+
+--queries should work again on all tables
+SELECT time, location FROM hyper1 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper3 ORDER BY time LIMIT 1;
+SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
+
+-- save old port so that we can restore connectivity after we test
+-- changing the connection information for the data node
+WITH options AS (
+	 SELECT unnest(options) opt
+	 FROM timescaledb_information.data_nodes
+	 WHERE node_name = 'data_node_1'
+)
+SELECT split_part(opt, '=', 2) AS old_port
+FROM options WHERE opt LIKE 'port%' \gset
+
+-- also test altering host, port and database
+SELECT node_name, options FROM timescaledb_information.data_nodes;
+SELECT * FROM alter_data_node('data_node_1', available=>true, host=>'foo.bar', port=>8989, database=>'new_db');
+
+SELECT node_name, options FROM timescaledb_information.data_nodes;
+-- just show current options:
+SELECT * FROM alter_data_node('data_node_1');
+
+\set ON_ERROR_STOP 0
+-- test some error cases
+SELECT * FROM alter_data_node(NULL);
+SELECT * FROM alter_data_node('does_not_exist');
+SELECT * FROM alter_data_node('data_node_1', port=>89000);
+-- cannot delete data node with "drop_database" since configuration is wrong
+SELECT delete_data_node('data_node_1', drop_database=>true);
+\set ON_ERROR_STOP 1
+
+-- restore configuration for data_node_1
+SELECT * FROM alter_data_node('data_node_1', host=>'localhost', port=>:old_port, database=>:'DN_DBNAME_1');
+SELECT node_name, options FROM timescaledb_information.data_nodes;
+
+DROP TABLE hyper1;
+DROP TABLE hyper2;
+DROP TABLE hyper3;
+DROP TABLE hyper_1dim;
+DROP VIEW chunk_query_data_node;
+
+-- create new session to clear out connection cache
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SELECT delete_data_node('data_node_1', drop_database=>true);
+SELECT delete_data_node('data_node_2', drop_database=>true);
+SELECT delete_data_node('data_node_3', drop_database=>true);

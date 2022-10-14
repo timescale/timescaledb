@@ -13,6 +13,7 @@
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <nodes/makefuncs.h>
+#include <nodes/parsenodes.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/syscache.h>
@@ -36,6 +37,7 @@
 #include <errors.h>
 #include <error_utils.h>
 #include <hypertable_cache.h>
+#include "hypercube.h"
 
 #include "chunk.h"
 #include "chunk_api.h"
@@ -44,6 +46,7 @@
 #include "dist_util.h"
 #include "remote/dist_commands.h"
 #include "ts_catalog/chunk_data_node.h"
+#include "utils.h"
 
 static bool
 chunk_match_data_node_by_server(const Chunk *chunk, const ForeignServer *server)
@@ -66,7 +69,7 @@ chunk_match_data_node_by_server(const Chunk *chunk, const ForeignServer *server)
 }
 
 static bool
-chunk_set_foreign_server(Chunk *chunk, ForeignServer *new_server)
+chunk_set_foreign_server(const Chunk *chunk, const ForeignServer *new_server)
 {
 	Relation ftrel;
 	HeapTuple tuple;
@@ -134,32 +137,134 @@ chunk_set_foreign_server(Chunk *chunk, ForeignServer *new_server)
 	return true;
 }
 
-void
-chunk_update_foreign_server_if_needed(int32 chunk_id, Oid existing_server_id)
+/*
+ * Change the data node used to query a chunk.
+ *
+ * Either switch "away" from using the given data node or switch to using it
+ * (depending on the "available" parameter). The function will only switch
+ * back to using the data node if it is the determined primary/default data
+ * node for the chunk according to the partitioning configuration.
+ *
+ * Return true if the chunk's data node was changed or no change was
+ * needed. Return false if a change should have been made but wasn't possible
+ * (due to, e.g., lack of replica chunks).
+ */
+bool
+chunk_update_foreign_server_if_needed(const Chunk *chunk, Oid data_node_id, bool available)
 {
-	ListCell *lc;
-	ChunkDataNode *new_server = NULL;
-	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
 	ForeignTable *foreign_table = NULL;
+	ForeignServer *server = NULL;
+	bool should_switch_data_node = false;
+	ListCell *lc;
 
 	Assert(chunk->relkind == RELKIND_FOREIGN_TABLE);
 	foreign_table = GetForeignTable(chunk->table_id);
 
-	/* no need to update since foreign table doesn't reference server we try to remove */
-	if (existing_server_id != foreign_table->serverid)
-		return;
+	/* Cannot switch to other data node if only one or none assigned */
+	if (list_length(chunk->data_nodes) < 2)
+		return false;
 
-	Assert(list_length(chunk->data_nodes) > 1);
+	/* Nothing to do if the chunk table already has the requested data node set */
+	if ((!available && data_node_id != foreign_table->serverid) ||
+		(available && data_node_id == foreign_table->serverid))
+		return true;
 
-	foreach (lc, chunk->data_nodes)
+	if (available)
 	{
-		new_server = lfirst(lc);
-		if (new_server->foreign_server_oid != existing_server_id)
-			break;
-	}
-	Assert(new_server != NULL);
+		/* Switch to using the given data node, but only on chunks where the
+		 * given node is the "default" according to partitioning */
+		Cache *htcache = ts_hypertable_cache_pin();
+		const Hypertable *ht =
+			ts_hypertable_cache_get_entry(htcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
+		const Dimension *dim = hyperspace_get_closed_dimension(ht->space, 0);
 
-	chunk_set_foreign_server(chunk, GetForeignServer(new_server->foreign_server_oid));
+		if (dim != NULL)
+		{
+			/* For space-partitioned tables, use the current partitioning
+			 * configuration in that dimension (dimension partition) as a
+			 * template for picking the query data node */
+			const DimensionSlice *slice =
+				ts_hypercube_get_slice_by_dimension_id(chunk->cube, dim->fd.id);
+			unsigned int i;
+
+			Assert(dim->dimension_partitions);
+
+			for (i = 0; i < dim->dimension_partitions->num_partitions; i++)
+			{
+				const DimensionPartition *dp = dim->dimension_partitions->partitions[i];
+
+				/* Match the chunk with the dimension partition. Count as a
+				 * match if the start of chunk is within the range of the
+				 * partition. This captures both the case when the chunk
+				 * aligns perfectly with the partition and when it is bigger
+				 * or smaller (due to a previous partitioning change). */
+				if (slice->fd.range_start >= dp->range_start &&
+					slice->fd.range_start <= dp->range_end)
+				{
+					ListCell *lc;
+
+					/* Use the data node for queries if it is the first
+					 * available data node in the partition's list (i.e., the
+					 * default choice) */
+					foreach (lc, dp->data_nodes)
+					{
+						const char *node_name = lfirst(lc);
+						server = GetForeignServerByName(node_name, false);
+
+						if (ts_data_node_is_available_by_server(server))
+						{
+							should_switch_data_node = (server->serverid == data_node_id);
+							break;
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+			/* For hypertables without a space partition, use the data node
+			 * assignment logic to figure out whether to use the data node as
+			 * query data node. The "default" query data node is the first in
+			 * the list. The chunk assign logic only returns available data
+			 * nodes. */
+			List *datanodes = ts_hypertable_assign_chunk_data_nodes(ht, chunk->cube);
+			const char *node_name = linitial(datanodes);
+			server = GetForeignServerByName(node_name, false);
+
+			if (server->serverid == data_node_id)
+				should_switch_data_node = true;
+		}
+
+		ts_cache_release(htcache);
+	}
+	else
+	{
+		/* Switch "away" from using the given data node. Pick the first
+		 * "available" data node referenced by the chunk */
+		foreach (lc, chunk->data_nodes)
+		{
+			const ChunkDataNode *cdn = lfirst(lc);
+
+			if (cdn->foreign_server_oid != data_node_id)
+			{
+				server = GetForeignServer(cdn->foreign_server_oid);
+
+				if (ts_data_node_is_available_by_server(server))
+				{
+					should_switch_data_node = true;
+					break;
+				}
+			}
+		}
+	}
+
+	if (should_switch_data_node)
+	{
+		Assert(server != NULL);
+		chunk_set_foreign_server(chunk, server);
+	}
+
+	return should_switch_data_node;
 }
 
 Datum

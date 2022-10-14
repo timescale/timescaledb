@@ -190,6 +190,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.data_node_attach = data_node_attach,
 	.data_node_ping = data_node_ping,
 	.data_node_detach = data_node_detach,
+	.data_node_alter = data_node_alter,
 	.data_node_allow_new_chunks = data_node_allow_new_chunks,
 	.data_node_block_new_chunks = data_node_block_new_chunks,
 	.chunk_set_default_data_node = chunk_set_default_data_node,

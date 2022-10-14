@@ -158,6 +158,7 @@ typedef struct CrossModuleFunctions
 	PGFunction data_node_attach;
 	PGFunction data_node_ping;
 	PGFunction data_node_detach;
+	PGFunction data_node_alter;
 	PGFunction data_node_allow_new_chunks;
 	PGFunction data_node_block_new_chunks;
 
