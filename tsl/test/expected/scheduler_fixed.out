@@ -45,8 +45,8 @@ perform pg_sleep(5);
 end
 $$;
 select * from _timescaledb_internal.bgw_job_stat;
- job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
---------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------+-------
+ job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_duration_failures | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
+--------+------------+-------------+------------+------------------------+------------------+------------+----------------+-------------------------+-----------------+----------------+---------------+----------------------+---------------------+-------
 (0 rows)
 
 -- add job that has a runtime well under the schedule interval

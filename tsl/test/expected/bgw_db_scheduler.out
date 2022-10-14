@@ -168,21 +168,22 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 
 \x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
--[ RECORD 1 ]----------+--------------------------------
-job_id                 | 1000
-last_start             | Fri Dec 31 16:00:00.05 1999 PST
-last_finish            | Fri Dec 31 16:00:00.05 1999 PST
-next_start             | Fri Dec 31 16:00:00.15 1999 PST
-last_successful_finish | Fri Dec 31 16:00:00.05 1999 PST
-last_run_success       | t
-total_runs             | 1
-total_duration         | @ 0
-total_successes        | 1
-total_failures         | 0
-total_crashes          | 0
-consecutive_failures   | 0
-consecutive_crashes    | 0
-flags                  | 0
+-[ RECORD 1 ]-----------+--------------------------------
+job_id                  | 1000
+last_start              | Fri Dec 31 16:00:00.05 1999 PST
+last_finish             | Fri Dec 31 16:00:00.05 1999 PST
+next_start              | Fri Dec 31 16:00:00.15 1999 PST
+last_successful_finish  | Fri Dec 31 16:00:00.05 1999 PST
+last_run_success        | t
+total_runs              | 1
+total_duration          | @ 0
+total_duration_failures | @ 0
+total_successes         | 1
+total_failures          | 0
+total_crashes           | 0
+consecutive_failures    | 0
+consecutive_crashes     | 0
+flags                   | 0
 
 \x off
 SELECT * FROM timescaledb_information.job_stats;
@@ -1451,21 +1452,22 @@ SELECT wait_for_job_1_to_run(2);
 
 \x on
 select * from _timescaledb_internal.bgw_job_stat;
--[ RECORD 1 ]----------+--------------------------------
-job_id                 | 1024
-last_start             | Fri Dec 31 16:00:00.15 1999 PST
-last_finish            | Fri Dec 31 16:00:00.15 1999 PST
-next_start             | Fri Dec 31 16:00:00.25 1999 PST
-last_successful_finish | Fri Dec 31 16:00:00.15 1999 PST
-last_run_success       | t
-total_runs             | 2
-total_duration         | @ 0
-total_successes        | 2
-total_failures         | 0
-total_crashes          | 0
-consecutive_failures   | 0
-consecutive_crashes    | 0
-flags                  | 0
+-[ RECORD 1 ]-----------+--------------------------------
+job_id                  | 1024
+last_start              | Fri Dec 31 16:00:00.15 1999 PST
+last_finish             | Fri Dec 31 16:00:00.15 1999 PST
+next_start              | Fri Dec 31 16:00:00.25 1999 PST
+last_successful_finish  | Fri Dec 31 16:00:00.15 1999 PST
+last_run_success        | t
+total_runs              | 2
+total_duration          | @ 0
+total_duration_failures | @ 0
+total_successes         | 2
+total_failures          | 0
+total_crashes           | 0
+consecutive_failures    | 0
+consecutive_crashes     | 0
+flags                   | 0
 
 \x off
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
@@ -1583,21 +1585,22 @@ SELECT * FROM sorted_bgw_log;
 
 \x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
--[ RECORD 1 ]----------+--------------------------------
-job_id                 | 1025
-last_start             | Fri Dec 31 16:00:00.48 1999 PST
-last_finish            | Fri Dec 31 16:00:00.48 1999 PST
-next_start             | Fri Dec 31 16:00:00.49 1999 PST
-last_successful_finish | Fri Dec 31 16:00:00.48 1999 PST
-last_run_success       | t
-total_runs             | 2
-total_duration         | @ 0
-total_successes        | 2
-total_failures         | 0
-total_crashes          | 0
-consecutive_failures   | 0
-consecutive_crashes    | 0
-flags                  | 0
+-[ RECORD 1 ]-----------+--------------------------------
+job_id                  | 1025
+last_start              | Fri Dec 31 16:00:00.48 1999 PST
+last_finish             | Fri Dec 31 16:00:00.48 1999 PST
+next_start              | Fri Dec 31 16:00:00.49 1999 PST
+last_successful_finish  | Fri Dec 31 16:00:00.48 1999 PST
+last_run_success        | t
+total_runs              | 2
+total_duration          | @ 0
+total_duration_failures | @ 0
+total_successes         | 2
+total_failures          | 0
+total_crashes           | 0
+consecutive_failures    | 0
+consecutive_crashes     | 0
+flags                   | 0
 
 \x off
 -- clean up jobs

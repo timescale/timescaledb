@@ -433,10 +433,6 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	duration = DatumGetIntervalP(DirectFunctionCall2(timestamp_mi,
 													 TimestampTzGetDatum(fd->last_finish),
 													 TimestampTzGetDatum(fd->last_start)));
-	fd->total_duration =
-		*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
-											   IntervalPGetDatum(&fd->total_duration),
-											   IntervalPGetDatum(duration)));
 
 	/* undo marking created by start marks */
 	fd->last_run_success = result_ctx->result == JOB_SUCCESS ? true : false;
@@ -449,6 +445,10 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		fd->total_success++;
 		fd->consecutive_failures = 0;
 		fd->last_successful_finish = fd->last_finish;
+		fd->total_duration =
+			*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&fd->total_duration),
+												   IntervalPGetDatum(duration)));
 		/* Mark the next start at the end if the job itself hasn't */
 		if (!bgw_job_stat_next_start_was_set(fd))
 			fd->next_start = calculate_next_start_on_success(fd->last_finish, result_ctx->job);
@@ -457,6 +457,10 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	{
 		fd->total_failures++;
 		fd->consecutive_failures++;
+		fd->total_duration_failures =
+			*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&fd->total_duration_failures),
+												   IntervalPGetDatum(duration)));
 
 		/*
 		 * Mark the next start at the end if the job itself hasn't (this may
@@ -542,6 +546,8 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] =
 		Int64GetDatum((mark_start ? 1 : 0));
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] =
+		IntervalPGetDatum(&zero_ival);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration_failures)] =
 		IntervalPGetDatum(&zero_ival);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);

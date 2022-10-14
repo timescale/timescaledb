@@ -307,6 +307,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   last_run_success bool NOT NULL,
   total_runs bigint NOT NULL,
   total_duration interval NOT NULL,
+  total_duration_failures interval NOT NULL,
   total_successes bigint NOT NULL,
   total_failures bigint NOT NULL,
   total_crashes bigint NOT NULL,
