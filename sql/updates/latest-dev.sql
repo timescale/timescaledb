@@ -57,6 +57,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   last_run_success bool NOT NULL,
   total_runs bigint NOT NULL,
   total_duration interval NOT NULL,
+  total_duration_failures interval NOT NULL,
   total_successes bigint NOT NULL,
   total_failures bigint NOT NULL,
   total_crashes bigint NOT NULL,
@@ -69,7 +70,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
 );
 
 INSERT INTO _timescaledb_internal.bgw_job_stat SELECT
-  job_id, last_start, last_finish, next_start, last_successful_finish, last_run_success, total_runs, total_duration, total_successes, total_failures, total_crashes, consecutive_failures, consecutive_crashes, 0
+  job_id, last_start, last_finish, next_start, last_successful_finish, last_run_success, total_runs, total_duration, '00:00:00'::interval, total_successes, total_failures, total_crashes, consecutive_failures, consecutive_crashes, 0
 FROM _timescaledb_internal._tmp_bgw_job_stat;
 DROP TABLE _timescaledb_internal._tmp_bgw_job_stat;
 

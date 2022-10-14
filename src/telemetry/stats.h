@@ -90,6 +90,18 @@ typedef struct TelemetryStats
 	BaseStats views;
 } TelemetryStats;
 
+typedef struct TelemetryJobStats
+{
+	int64 total_runs;
+	int64 total_successes;
+	int64 total_failures;
+	int64 total_crashes;
+	int32 max_consecutive_failures;
+	int32 max_consecutive_crashes;
+	Interval *total_duration;
+	Interval *total_duration_failures;
+} TelemetryJobStats;
+
 extern void ts_telemetry_stats_gather(TelemetryStats *stats);
 
 #endif /* TIMESCALEDB_TELEMETRY_STATS_H */

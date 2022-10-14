@@ -785,6 +785,7 @@ enum Anum_bgw_job_stat
 	Anum_bgw_job_stat_last_run_success,
 	Anum_bgw_job_stat_total_runs,
 	Anum_bgw_job_stat_total_duration,
+	Anum_bgw_job_stat_total_duration_failures,
 	Anum_bgw_job_stat_total_success,
 	Anum_bgw_job_stat_total_failures,
 	Anum_bgw_job_stat_total_crashes,
@@ -806,6 +807,7 @@ typedef struct FormData_bgw_job_stat
 	bool last_run_success;
 	int64 total_runs;
 	Interval total_duration;
+	Interval total_duration_failures;
 	int64 total_success;
 	int64 total_failures;
 	int64 total_crashes;
