@@ -181,9 +181,12 @@ ts_dimension_partition_info_get(int32 dimension_id)
 
 	dpi = palloc0(sizeof(DimensionPartitionInfo));
 	dpi->num_partitions = count;
+
+	/* Reallocate the partitions array to use the exact size and save some
+	 * memory */
 	dpi->partitions = palloc0(sizeof(DimensionPartition *) * count);
 	memcpy(dpi->partitions, partitions, sizeof(DimensionPartition *) * count);
-	qsort(partitions, count, sizeof(DimensionPartition *), dimpart_cmp);
+	qsort(dpi->partitions, count, sizeof(DimensionPartition *), dimpart_cmp);
 	pfree(partitions);
 
 	return dpi;
