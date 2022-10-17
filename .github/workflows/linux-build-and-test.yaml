@@ -14,7 +14,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Build matrix
       id: set-matrix
       run: python .github/gh_matrix_builder.py ${{ github.event_name }}
@@ -64,7 +64,7 @@ jobs:
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}${{ env.CACHE_SUFFIX }}
@@ -96,7 +96,7 @@ jobs:
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Test telemetry without OpenSSL
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'

@@ -57,7 +57,7 @@ jobs:
           dpkg -L timescaledb-2-postgresql-${{ matrix.pg }}
         EOF
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Read versions
       id: versions

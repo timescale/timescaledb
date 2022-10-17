@@ -13,7 +13,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -31,7 +31,7 @@ jobs:
 
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Test recovery using restore points
       run: |

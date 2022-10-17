@@ -13,7 +13,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -39,7 +39,7 @@ jobs:
     # workflow since that workflow runs daily there should always be a cache hit
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-gcc-Release
@@ -56,7 +56,7 @@ jobs:
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Coverity tools
       run: |

@@ -22,7 +22,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -62,7 +62,7 @@ jobs:
     steps:
 
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Get version
       id: version
