@@ -1538,7 +1538,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		/* if we're performing partitionwise aggregation, we must populate part_rels */
 		if (rel->part_rels != NULL)
+		{
 			rel->part_rels[i] = child_rel;
+#if PG15_GE
+			rel->live_parts = bms_add_member(rel->live_parts, i);
+#endif
+		}
 
 		ts_get_private_reloptinfo(child_rel)->chunk = chunks[i];
 		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);

@@ -137,7 +137,7 @@ broken_sendrecv_throw()
 
 	if (throw_after_option)
 	{
-		throw_after = pg_atoi(throw_after_option, 4, 0);
+		throw_after = pg_strtoint32(throw_after_option);
 	}
 
 	/*

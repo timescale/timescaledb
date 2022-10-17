@@ -437,6 +437,9 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hyper_rte->relid, CACHE_FLAG_NONE);
 	List *data_node_rels_list = NIL;
 	RelOptInfo **data_node_rels;
+#if PG15_GE
+	Bitmapset *data_node_live_rels = NULL;
+#endif
 	int ndata_node_rels;
 	DataNodeChunkAssignments scas;
 	int i;
@@ -495,6 +498,9 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 		{
 			add_data_node_scan_paths(root, data_node_rel);
 			data_node_rels_list = lappend(data_node_rels_list, data_node_rel);
+#if PG15_GE
+			data_node_live_rels = bms_add_member(data_node_live_rels, i);
+#endif
 		}
 		else
 			ts_set_dummy_rel_pathlist(data_node_rel);
@@ -515,6 +521,9 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	/* Must keep partitioning info consistent with the append paths we create */
 	hyper_rel->part_rels = data_node_rels;
 	hyper_rel->nparts = ndata_node_rels;
+#if PG15_GE
+	hyper_rel->live_parts = data_node_live_rels;
+#endif
 
 	add_paths_to_append_rel(root, hyper_rel, data_node_rels_list);
 	ts_cache_release(hcache);
