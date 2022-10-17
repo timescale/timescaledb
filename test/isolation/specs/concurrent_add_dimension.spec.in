@@ -11,7 +11,7 @@ setup {
 
   DROP TABLE IF EXISTS dim_test;
   CREATE TABLE dim_test(time TIMESTAMPTZ, device int, device2 int);
-  SELECT true FROM create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
+  SELECT table_name FROM create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
   INSERT INTO dim_test VALUES ('2004-10-10 00:00:00+00', 1, 1);
 }
 
@@ -22,12 +22,12 @@ teardown {
 session "s1"
 step "s1_wp_enable"        { SELECT debug_waitpoint_enable('add_dimension_ht_lock'); }
 step "s1_wp_release"       { SELECT debug_waitpoint_release('add_dimension_ht_lock'); }
-step "s1_add_dimension"	   { SELECT true FROM add_dimension('dim_test', 'device', 2); }
+step "s1_add_dimension"	   { SELECT column_name FROM add_dimension('dim_test', 'device', 2); }
 step "s1_create_chunk"     { INSERT INTO dim_test VALUES ('2004-10-20 00:00:00+00', 1, 2); }
 
 session "s2"
-step "s2_add_dimension"	   { SELECT true FROM add_dimension('dim_test', 'device', 1); }
-step "s2_add_dimension2"   { SELECT true FROM add_dimension('dim_test', 'device2', 1); }
+step "s2_add_dimension"	   { SELECT column_name FROM add_dimension('dim_test', 'device', 1); }
+step "s2_add_dimension2"   { SELECT column_name FROM add_dimension('dim_test', 'device2', 1); }
 
 session "s3"
 step "s3_wp_enable"        { SELECT debug_waitpoint_enable('add_dimension_ht_lock'); }

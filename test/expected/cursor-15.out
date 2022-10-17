@@ -1,0 +1,52 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE cursor_test(time timestamptz, device_id int, temp float);
+SELECT create_hypertable('cursor_test','time');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable     
+--------------------------
+ (1,public,cursor_test,t)
+(1 row)
+
+INSERT INTO cursor_test SELECT '2000-01-01',1,0.5;
+INSERT INTO cursor_test SELECT '2001-01-01',1,0.5;
+INSERT INTO cursor_test SELECT '2002-01-01',1,0.5;
+\set ON_ERROR_STOP 0
+BEGIN;
+DECLARE c1 SCROLL CURSOR FOR SELECT * FROM cursor_test;
+FETCH NEXT FROM c1;
+             time             | device_id | temp 
+------------------------------+-----------+------
+ Sat Jan 01 00:00:00 2000 PST |         1 |  0.5
+(1 row)
+
+-- this will produce an error on PG < 14 because PostgreSQL checks
+-- for the existence of a scan node with the relation id for every relation
+-- used in the update plan in the plan of the cursor.
+UPDATE cursor_test SET temp = 0.7 WHERE CURRENT OF c1;
+COMMIT;
+-- test cursor with no chunks left after runtime exclusion
+BEGIN;
+DECLARE c1 SCROLL CURSOR FOR SELECT * FROM cursor_test WHERE time > now();
+UPDATE cursor_test SET temp = 0.7 WHERE CURRENT OF c1;
+ERROR:  cursor "c1" is not a simply updatable scan of table "_hyper_1_1_chunk"
+COMMIT;
+-- test cursor with no chunks left after planning exclusion
+BEGIN;
+DECLARE c1 SCROLL CURSOR FOR SELECT * FROM cursor_test WHERE time > '2010-01-01';
+UPDATE cursor_test SET temp = 0.7 WHERE CURRENT OF c1;
+ERROR:  cursor "c1" is not a simply updatable scan of table "_hyper_1_1_chunk"
+COMMIT;
+\set ON_ERROR_STOP 1
+SET timescaledb.enable_constraint_exclusion TO off;
+BEGIN;
+DECLARE c1 SCROLL CURSOR FOR SELECT * FROM cursor_test;
+FETCH NEXT FROM c1;
+             time             | device_id | temp 
+------------------------------+-----------+------
+ Sat Jan 01 00:00:00 2000 PST |         1 |  0.7
+(1 row)
+
+UPDATE cursor_test SET temp = 0.7 WHERE CURRENT OF c1;
+COMMIT;

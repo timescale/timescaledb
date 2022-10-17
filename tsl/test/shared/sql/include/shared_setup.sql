@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET client_min_messages TO ERROR;
-
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- this is a noop in our regression tests but allows us to use this
@@ -88,7 +88,7 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'dat
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
-
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null

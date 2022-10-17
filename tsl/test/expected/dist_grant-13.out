@@ -1165,6 +1165,7 @@ ERROR:  permission denied for foreign server db_dist_grant_1
 -- Grant USAGE on DATA_NODE_1 (but it is not enough)
 RESET ROLE;
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1 TO :ROLE_3;
+GRANT CREATE ON SCHEMA public TO :ROLE_3;
 SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
 SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
@@ -1173,6 +1174,7 @@ ERROR:  permission denied for foreign server db_dist_grant_2
 -- Creating the hypertable should work with GRANTs on both servers.
 RESET ROLE;
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_2 TO :ROLE_3;
+GRANT CREATE ON SCHEMA public TO :ROLE_3;
 SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
 -- Still cannot connect since there is no password in the passfile and

@@ -591,9 +591,9 @@ FROM timescaledb_information.job_stats WHERE job_id = 1001;
 -- Alter job to be rescheduled and run it again
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
-SELECT true FROM alter_job(1001, scheduled => true) AS discard;
- bool 
-------
+SELECT scheduled FROM alter_job(1001, scheduled => true) AS discard;
+ scheduled 
+-----------
  t
 (1 row)
 

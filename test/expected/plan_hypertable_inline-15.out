@@ -1,0 +1,149 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- test hypertable classification when query is in an inlineable function
+\set PREFIX 'EXPLAIN (costs off)'
+CREATE TABLE test (a int, b bigint NOT NULL);
+SELECT create_hypertable('public.test', 'b', chunk_time_interval=>10);
+ create_hypertable 
+-------------------
+ (1,public,test,t)
+(1 row)
+
+INSERT INTO test SELECT i, i FROM generate_series(1, 20) i;
+CREATE OR REPLACE FUNCTION test_f(_ts bigint)
+RETURNS SETOF test LANGUAGE SQL STABLE
+as $f$
+   SELECT DISTINCT ON (a) * FROM test WHERE b >= _ts AND b <= _ts + 2
+$f$;
+-- plans must be the same in both cases
+-- specifically, the first plan should not contain the parent hypertable
+-- as that is a sign the pruning was not done successfully
+:PREFIX SELECT * FROM test_f(5);
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.a
+         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+               Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (a) * FROM test WHERE b >= 5 AND b <= 5 + 2;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.a
+         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+               Index Cond: ((b >= 5) AND (b <= 7))
+(5 rows)
+
+-- test with FOR UPDATE
+CREATE OR REPLACE FUNCTION test_f(_ts bigint)
+RETURNS SETOF test LANGUAGE SQL STABLE
+as $f$
+   SELECT * FROM test WHERE b >= _ts AND b <= _ts + 2 FOR UPDATE
+$f$;
+-- pruning should not be done by TimescaleDb in this case
+-- specifically, the parent hypertable must exist in the output plan
+:PREFIX SELECT * FROM test_f(5);
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Subquery Scan on test_f
+   ->  LockRows
+         ->  Append
+               ->  Seq Scan on test test_1
+                     Filter: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+               ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk test_2
+                     Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+(7 rows)
+
+:PREFIX SELECT * FROM test WHERE b >= 5 AND b <= 5 + 2 FOR UPDATE;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ LockRows
+   ->  Append
+         ->  Seq Scan on test test_1
+               Filter: ((b >= 5) AND (b <= 7))
+         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk test_2
+               Index Cond: ((b >= 5) AND (b <= 7))
+(6 rows)
+
+-- test with CTE
+-- these cases are just to make sure we're everything is alright with
+-- the way we identify hypertables to prune chunks - we abuse ctename
+-- for this purpose. So double-check if we're not breaking plans
+-- with CTEs here.
+CREATE OR REPLACE FUNCTION test_f(_ts bigint)
+RETURNS SETOF test LANGUAGE SQL STABLE
+as $f$
+   WITH ct AS MATERIALIZED (
+      SELECT DISTINCT ON (a) * FROM test WHERE b >= _ts AND b <= _ts + 2
+   )
+   SELECT * FROM ct
+$f$;
+:PREFIX SELECT * FROM test_f(5);
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ CTE Scan on ct
+   CTE ct
+     ->  Unique
+           ->  Sort
+                 Sort Key: _hyper_1_1_chunk.a
+                 ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+                       Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+(7 rows)
+
+:PREFIX
+WITH ct AS MATERIALIZED (
+   SELECT DISTINCT ON (a) * FROM test WHERE b >= 5 AND b <= 5 + 2
+)
+SELECT * FROM ct;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ CTE Scan on ct
+   CTE ct
+     ->  Unique
+           ->  Sort
+                 Sort Key: _hyper_1_1_chunk.a
+                 ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+                       Index Cond: ((b >= 5) AND (b <= 7))
+(7 rows)
+
+-- CTE within CTE
+:PREFIX
+WITH ct AS MATERIALIZED (
+   SELECT * FROM test_f(5)
+)
+SELECT * FROM ct;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ CTE Scan on ct
+   CTE ct
+     ->  CTE Scan on ct ct_1
+           CTE ct
+             ->  Unique
+                   ->  Sort
+                         Sort Key: _hyper_1_1_chunk.a
+                         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+                               Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+(9 rows)
+
+-- CTE within NO MATERIALIZED CTE
+:PREFIX
+WITH ct AS NOT MATERIALIZED (
+   SELECT * FROM test_f(5)
+)
+SELECT * FROM ct;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ CTE Scan on ct
+   CTE ct
+     ->  Unique
+           ->  Sort
+                 Sort Key: _hyper_1_1_chunk.a
+                 ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+                       Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+(7 rows)
+

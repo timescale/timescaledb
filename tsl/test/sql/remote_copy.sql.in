@@ -15,6 +15,7 @@ FROM (
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
 SET timescaledb.hide_data_node_name_in_errors = 'on';
 

@@ -40,6 +40,7 @@ ORDER BY dimension_id, range_start;
 GRANT SELECT ON hypertable_partitions TO :ROLE_1;
 -- Import testsupport.sql file to data nodes
 \unset ECHO
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 --Ensure INSERTs use DataNodeDispatch. DataNodeCopy is tested later
 SET timescaledb.enable_distributed_insert_with_copy=false;
@@ -142,6 +143,7 @@ FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_4 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 NOTICE:  adding not-null constraint to column "time"
