@@ -555,28 +555,28 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
-        ORDER BY objid::text DESC;
+        ORDER BY objid::regclass::text;
                        objid                       
 ---------------------------------------------------
- timescaledb_experimental.policies
- timescaledb_experimental.chunk_replication_status
- timescaledb_information.job_errors
- timescaledb_information.compression_settings
- timescaledb_information.dimensions
- timescaledb_information.chunks
- timescaledb_information.data_nodes
- timescaledb_information.continuous_aggregates
- timescaledb_information.jobs
- timescaledb_information.job_stats
- timescaledb_information.hypertables
- _timescaledb_internal.compressed_chunk_stats
- _timescaledb_internal.hypertable_chunk_local_size
  _timescaledb_catalog.chunk_copy_operation
  _timescaledb_catalog.chunk_copy_operation_id_seq
  _timescaledb_catalog.compression_algorithm
- _timescaledb_internal.bgw_policy_chunk_stats
- _timescaledb_internal.bgw_job_stat
  _timescaledb_catalog.tablespace_id_seq
+ _timescaledb_internal.bgw_job_stat
+ _timescaledb_internal.bgw_policy_chunk_stats
+ _timescaledb_internal.compressed_chunk_stats
+ _timescaledb_internal.hypertable_chunk_local_size
+ timescaledb_experimental.chunk_replication_status
+ timescaledb_experimental.policies
+ timescaledb_information.chunks
+ timescaledb_information.compression_settings
+ timescaledb_information.continuous_aggregates
+ timescaledb_information.data_nodes
+ timescaledb_information.dimensions
+ timescaledb_information.hypertables
+ timescaledb_information.job_errors
+ timescaledb_information.job_stats
+ timescaledb_information.jobs
 (19 rows)
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
