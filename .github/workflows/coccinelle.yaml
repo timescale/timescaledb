@@ -19,7 +19,7 @@ jobs:
         sudo apt-get -y install coccinelle
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Run coccinelle
       run: |
@@ -27,7 +27,7 @@ jobs:
 
     - name: Save coccinelle.diff
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: coccinelle.diff
         path: coccinelle.diff

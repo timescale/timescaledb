@@ -19,7 +19,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -69,7 +69,7 @@ jobs:
         git config --global core.autocrlf false
         git config --global core.eol lf
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
       # the directory containing the binaries, the runs with a cache
@@ -78,7 +78,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       id: cache-postgresql
       with:
         path: ~\PostgreSQL\${{ matrix.pg }}

@@ -14,7 +14,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -59,7 +59,7 @@ jobs:
         chown -R postgres:postgres ~/postgresql
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v1
+      uses: actions/checkout@v3
 
     - name: Build TimescaleDB
       run: |
@@ -107,21 +107,21 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: Regression diff linux-i386 PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktraces.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postgres.log

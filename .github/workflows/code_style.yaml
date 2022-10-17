@@ -15,7 +15,7 @@ jobs:
       - name: Install prerequisites
         run: pip install cmakelang
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Run format on CMake files
         run: |
           find  -name CMakeLists.txt  -exec cmake-format -i {} +
@@ -29,7 +29,7 @@ jobs:
       - name: Install prerequisites
         run: sudo apt install perltidy
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Format Perl files, if needed
         run: find . -name '*.p[lm]' -exec perltidy -b -bext=/ {} +
       - name: Check for diff
@@ -42,7 +42,7 @@ jobs:
     steps:
     - name: Checkout source
       if: always()
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Check license
       if: always()
       run: ./scripts/check_license_all.sh

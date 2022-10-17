@@ -42,7 +42,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -68,13 +68,13 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -127,14 +127,14 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Regression diff ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: postgres.log
@@ -151,14 +151,14 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Coredumps ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: sanitizer logs
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: ${{ github.workspace }}/sanitizer.log.*
