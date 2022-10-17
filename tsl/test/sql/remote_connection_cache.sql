@@ -31,6 +31,7 @@ SELECT _timescaledb_internal.test_remote_connection_cache();
 -- Test that connection cache entries for a role gets invalidated when
 -- we rename the role
 GRANT USAGE ON FOREIGN SERVER loopback_1, loopback_2 TO :ROLE_1;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 CREATE TABLE testtable (time timestamptz, location int, temp float);

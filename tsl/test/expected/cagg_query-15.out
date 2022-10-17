@@ -1,0 +1,848 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set TEST_BASE_NAME cagg_query
+SELECT
+       format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
+       format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
+       format('%s/results/%s_results_table.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_TABLE"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "DIFF_CMD",
+      format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
+\gset
+\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+SET client_min_messages TO NOTICE;
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select table_name from create_hypertable( 'conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+insert into conditions values ( '2018-01-01 09:20:00-08', 'SFO', 55, 45);
+insert into conditions values ( '2018-01-02 09:30:00-08', 'por', 100, 100);
+insert into conditions values ( '2018-01-02 09:20:00-08', 'SFO', 65, 45);
+insert into conditions values ( '2018-01-02 09:10:00-08', 'NYC', 65, 45);
+insert into conditions values ( '2018-11-01 09:20:00-08', 'NYC', 45, 30);
+insert into conditions values ( '2018-11-01 10:40:00-08', 'NYC', 55, 35);
+insert into conditions values ( '2018-11-01 11:50:00-08', 'NYC', 65, 40);
+insert into conditions values ( '2018-11-01 12:10:00-08', 'NYC', 75, 45);
+insert into conditions values ( '2018-11-01 13:10:00-08', 'NYC', 85, 50);
+insert into conditions values ( '2018-11-02 09:20:00-08', 'NYC', 10, 10);
+insert into conditions values ( '2018-11-02 10:30:00-08', 'NYC', 20, 15);
+insert into conditions values ( '2018-11-02 11:40:00-08', 'NYC', null, null);
+insert into conditions values ( '2018-11-03 09:50:00-08', 'NYC', null, null);
+create table location_tab( locid integer, locname text );
+insert into location_tab values( 1, 'SFO');
+insert into location_tab values( 2, 'NYC');
+insert into location_tab values( 3, 'por');
+create materialized view mat_m1( location, timec, minl, sumt , sumh)
+WITH (timescaledb.continuous)
+as
+select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec), location WITH NO DATA;
+--compute time_bucketted max+bucket_width for the materialized view
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q;
+         time_bucket          
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
+--test first/last
+create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
+WITH (timescaledb.continuous)
+as
+select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
+from conditions
+group by time_bucket('1day', timec), location WITH NO DATA;
+--time that refresh assumes as now() for repeatability
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q;
+         time_bucket          
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
+--normal view --
+create or replace view regview( location, timec, minl, sumt , sumh)
+as
+select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by location, time_bucket('1day', timec);
+set enable_hashagg = false;
+-- NO pushdown cases ---
+--when we have addl. attrs in order by that are not in the
+-- group by, we will still need a sort
+:EXPLAIN
+select * from mat_m1 order by sumh, sumt, minl, timec ;
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.sumh, _materialized_hypertable_2.sumt, _materialized_hypertable_2.minl, _materialized_hypertable_2.timec
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                     Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
+                     Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+               ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                     Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                     Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+(31 rows)
+
+:EXPLAIN
+select * from regview order by timec desc;
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+   Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) DESC
+   ->  GroupAggregate
+         Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
+         Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+         ->  Sort
+               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+               Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               ->  Result
+                     Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                 Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+(16 rows)
+
+-- PUSHDOWN cases --
+-- all group by elts in order by , reorder group by elts to match
+-- group by order
+-- This should prevent an additional sort after GroupAggregate
+:EXPLAIN
+select * from mat_m1 order by timec desc, location;
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                     Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
+                     Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+               ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                     Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                     Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+(31 rows)
+
+:EXPLAIN
+select * from mat_m1 order by location, timec desc;
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec DESC
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                     Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
+                     Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+               ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                     Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                     Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+(31 rows)
+
+:EXPLAIN
+select * from mat_m1 order by location, timec asc;
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                     Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
+                     Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+               ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                     Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                     Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+(31 rows)
+
+:EXPLAIN
+select * from mat_m1 where timec > '2018-10-01' order by timec desc;
+                                                                                                                                              QUERY PLAN                                                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                     Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                     Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(29 rows)
+
+-- outer sort is used by mat_m1 for grouping. But doesn't avoid a sort after the join ---
+:EXPLAIN
+select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
+                                                                                                                                                    QUERY PLAN                                                                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: l.locid, _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Hash Join
+         Output: l.locid, _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+         Hash Cond: (l.locname = _materialized_hypertable_2.location)
+         ->  Seq Scan on public.location_tab l
+               Output: l.locid, l.locname
+         ->  Hash
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               ->  Append
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                                 Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+                           Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Sort
+                                 Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                                 Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                                 ->  Result
+                                       Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                                       ->  Custom Scan (ChunkAppend) on public.conditions
+                                             Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                             Startup Exclusion: true
+                                             Runtime Exclusion: false
+                                             Chunks excluded during startup: 0
+                                             ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                                   Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                                   Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                                   Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(36 rows)
+
+:EXPLAIN
+select * from mat_m2 where timec > '2018-10-01' order by timec desc;
+                                                                                                                                              QUERY PLAN                                                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+   Sort Key: _materialized_hypertable_3.timec DESC
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+               Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                     Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
+                     Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.humidity, conditions.temperature
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                       Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(29 rows)
+
+:EXPLAIN
+select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc ) as q limit 1;
+                                                                                                                                                 QUERY PLAN                                                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+   ->  Sort
+         Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+         Sort Key: _materialized_hypertable_3.timec DESC
+         ->  Append
+               ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+                     Startup Exclusion: true
+                     Runtime Exclusion: false
+                     Chunks excluded during startup: 0
+                     ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                           Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
+                           Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+               ->  GroupAggregate
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+                     Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Sort
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                           Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Result
+                                 Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                                 ->  Custom Scan (ChunkAppend) on public.conditions
+                                       Output: conditions.location, conditions.timec, conditions.humidity, conditions.temperature
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                             Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                             Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(31 rows)
+
+:EXPLAIN
+select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc , location asc nulls first) as q limit 1;
+                                                                                                                                                 QUERY PLAN                                                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+   ->  Sort
+         Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+         Sort Key: _materialized_hypertable_3.timec DESC, _materialized_hypertable_3.location NULLS FIRST
+         ->  Append
+               ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+                     Startup Exclusion: true
+                     Runtime Exclusion: false
+                     Chunks excluded during startup: 0
+                     ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                           Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
+                           Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+               ->  GroupAggregate
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+                     Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Sort
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                           Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Result
+                                 Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                                 ->  Custom Scan (ChunkAppend) on public.conditions
+                                       Output: conditions.location, conditions.timec, conditions.humidity, conditions.temperature
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                             Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                             Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(31 rows)
+
+--plans with CTE
+:EXPLAIN
+with m1 as (
+Select * from mat_m2 where timec > '2018-10-01' order by timec desc )
+select * from m1;
+                                                                                                                                              QUERY PLAN                                                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+   Sort Key: _materialized_hypertable_3.timec DESC
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+               Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                     Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
+                     Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.humidity, conditions.temperature
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                       Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(29 rows)
+
+-- should reorder mat_m1 group by only based on mat_m1 order-by
+:EXPLAIN
+select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec = mat_m2.timec order by mat_m1.timec desc;
+                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh, _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Hash Join
+         Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh, _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+         Hash Cond: (_materialized_hypertable_3.timec = _materialized_hypertable_2.timec)
+         ->  Append
+               ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+                     Startup Exclusion: true
+                     Runtime Exclusion: false
+                     Chunks excluded during startup: 0
+                     ->  Index Scan using _hyper_3_5_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_5_chunk
+                           Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.firsth, _hyper_3_5_chunk.lasth, _hyper_3_5_chunk.maxtemp, _hyper_3_5_chunk.mintemp
+                           Index Cond: (_hyper_3_5_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone))
+                     ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                           Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
+                           Index Cond: (_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone))
+               ->  GroupAggregate
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+                     Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Sort
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                           Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Result
+                                 Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                                 ->  Custom Scan (ChunkAppend) on public.conditions
+                                       Output: conditions.location, conditions.timec, conditions.humidity, conditions.temperature
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 1
+                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                             Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                             Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone))
+         ->  Hash
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               ->  Append
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                                 Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Output: conditions_1.location, (time_bucket('@ 1 day'::interval, conditions_1.timec)), min(conditions_1.location), sum(conditions_1.temperature), sum(conditions_1.humidity)
+                           Group Key: (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.location
+                           ->  Sort
+                                 Output: conditions_1.location, (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.temperature, conditions_1.humidity
+                                 Sort Key: (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.location
+                                 ->  Result
+                                       Output: conditions_1.location, time_bucket('@ 1 day'::interval, conditions_1.timec), conditions_1.temperature, conditions_1.humidity
+                                       ->  Custom Scan (ChunkAppend) on public.conditions conditions_1
+                                             Output: conditions_1.location, conditions_1.timec, conditions_1.temperature, conditions_1.humidity
+                                             Startup Exclusion: true
+                                             Runtime Exclusion: false
+                                             Chunks excluded during startup: 0
+                                             ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
+                                                   Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
+                                                   Index Cond: ((_hyper_1_2_chunk_1.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                                   Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(62 rows)
+
+--should reorder only for mat_m1.
+:EXPLAIN
+select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec = regview.timec order by mat_m1.timec desc;
+                                                                                                                                                                                        QUERY PLAN                                                                                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Hash Join
+         Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+         Hash Cond: ((time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) = _materialized_hypertable_2.timec)
+         ->  GroupAggregate
+               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
+               Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               ->  Sort
+                     Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                     Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                     ->  Result
+                           Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                           ->  Append
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                       Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+         ->  Hash
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               ->  Append
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                                 Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Output: conditions_1.location, (time_bucket('@ 1 day'::interval, conditions_1.timec)), min(conditions_1.location), sum(conditions_1.temperature), sum(conditions_1.humidity)
+                           Group Key: (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.location
+                           ->  Sort
+                                 Output: conditions_1.location, (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.temperature, conditions_1.humidity
+                                 Sort Key: (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.location
+                                 ->  Result
+                                       Output: conditions_1.location, time_bucket('@ 1 day'::interval, conditions_1.timec), conditions_1.temperature, conditions_1.humidity
+                                       ->  Custom Scan (ChunkAppend) on public.conditions conditions_1
+                                             Output: conditions_1.location, conditions_1.timec, conditions_1.temperature, conditions_1.humidity
+                                             Startup Exclusion: true
+                                             Runtime Exclusion: false
+                                             Chunks excluded during startup: 0
+                                             ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
+                                                   Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
+                                                   Index Cond: ((_hyper_1_2_chunk_1.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                                   Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(47 rows)
+
+select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
+ locid | location |            timec             | minl | sumt | sumh 
+-------+----------+------------------------------+------+------+------
+     2 | NYC      | Fri Nov 02 17:00:00 2018 PDT | NYC  |      |     
+     2 | NYC      | Thu Nov 01 17:00:00 2018 PDT | NYC  |   30 |   25
+     2 | NYC      | Wed Oct 31 17:00:00 2018 PDT | NYC  |  325 |  200
+(3 rows)
+
+\set ECHO none
+---- Run the same queries with hash agg enabled now
+set enable_hashagg = true;
+\set ECHO none
+--- Run the queries directly on the table now
+set enable_hashagg = true;
+\set ECHO none
+-- diff results view select and table select
+:DIFF_CMD
+:DIFF_CMD2
+--check if the guc works , reordering will not work
+set timescaledb.enable_cagg_reorder_groupby = false;
+set enable_hashagg = false;
+:EXPLAIN
+select * from mat_m1 order by timec desc, location;
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
+   ->  Append
+         ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                     Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
+                     Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+               ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                     Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
+                     Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Result
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, conditions.timec, conditions.temperature, conditions.humidity
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone))
+(31 rows)
+
+-----------------------------------------------------------------------
+-- Test the cagg_watermark function. The watermark gives the point
+-- where to UNION raw and materialized data in real-time
+-- aggregation. Specifically, test that the watermark caching works as
+-- expected.
+-----------------------------------------------------------------------
+-- Insert some more data so that there is something to UNION in
+-- real-time aggregation.
+insert into conditions values ( '2018-12-02 20:10:00-08', 'SFO', 55, 45);
+insert into conditions values ( '2018-12-02 21:20:00-08', 'SFO', 65, 45);
+insert into conditions values ( '2018-12-02 20:30:00-08', 'NYC', 65, 45);
+insert into conditions values ( '2018-12-02 21:50:00-08', 'NYC', 45, 30);
+-- Test join of two caggs. Joining two caggs will force the cache to
+-- reset every time the watermark function is invoked on a different
+-- cagg in the same query.
+SELECT mat_hypertable_id AS mat_id,
+	   raw_hypertable_id AS raw_id,
+	   schema_name AS mat_schema,
+	   table_name AS mat_name,
+	   format('%I.%I', schema_name, table_name) AS mat_table
+FROM _timescaledb_catalog.continuous_agg ca, _timescaledb_catalog.hypertable h
+WHERE user_view_name='mat_m1'
+AND h.id = ca.mat_hypertable_id \gset
+BEGIN;
+-- Query without join
+SELECT m1.location, m1.timec, sumt, sumh
+FROM mat_m1 m1
+ORDER BY m1.location COLLATE "C", m1.timec DESC
+LIMIT 10;
+ location |            timec             | sumt | sumh 
+----------+------------------------------+------+------
+ NYC      | Sun Dec 02 16:00:00 2018 PST |  110 |   75
+ NYC      | Fri Nov 02 17:00:00 2018 PDT |      |     
+ NYC      | Thu Nov 01 17:00:00 2018 PDT |   30 |   25
+ NYC      | Wed Oct 31 17:00:00 2018 PDT |  325 |  200
+ NYC      | Mon Jan 01 16:00:00 2018 PST |   65 |   45
+ SFO      | Sun Dec 02 16:00:00 2018 PST |  120 |   90
+ SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45
+ SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45
+ por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100
+(9 rows)
+
+-- Query that joins two caggs. This should force the watermark cache
+-- to reset when the materialized hypertable ID changes. A hash join
+-- could potentially read all values from mat_m1 then all values from
+-- mat_m2. This would be the optimal situation for cagg_watermark
+-- caching. We want to avoid it in tests to see that caching doesn't
+-- do anything wrong in worse situations (e.g., a nested loop join).
+SET enable_hashjoin=false;
+SELECT m1.location, m1.timec, sumt, sumh, firsth, lasth, maxtemp, mintemp
+FROM mat_m1 m1 RIGHT JOIN mat_m2 m2
+ON (m1.location = m2.location
+AND m1.timec = m2.timec)
+ORDER BY m1.location COLLATE "C", m1.timec DESC
+LIMIT 10;
+ location |            timec             | sumt | sumh | firsth | lasth | maxtemp | mintemp 
+----------+------------------------------+------+------+--------+-------+---------+---------
+ NYC      | Sun Dec 02 16:00:00 2018 PST |  110 |   75 |     45 |    30 |      65 |      45
+ NYC      | Fri Nov 02 17:00:00 2018 PDT |      |      |        |       |         |        
+ NYC      | Thu Nov 01 17:00:00 2018 PDT |   30 |   25 |     10 |       |      20 |      10
+ NYC      | Wed Oct 31 17:00:00 2018 PDT |  325 |  200 |     30 |    50 |      85 |      45
+ NYC      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
+ SFO      | Sun Dec 02 16:00:00 2018 PST |  120 |   90 |     45 |    45 |      65 |      55
+ SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
+ SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45 |     45 |    45 |      55 |      55
+ por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100 |    100 |   100 |     100 |     100
+(9 rows)
+
+-- Show the current watermark
+SELECT _timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(:mat_id));
+         to_timestamp         
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+-- The watermark should, in this case, be the same as the invalidation
+-- threshold
+SELECT _timescaledb_internal.to_timestamp(watermark)
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :raw_id;
+         to_timestamp         
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+-- The watermark is the end of materialization (end of last bucket)
+-- while the MAX is the start of the last bucket
+SELECT max(timec) FROM :mat_table;
+             max              
+------------------------------
+ Fri Nov 02 17:00:00 2018 PDT
+(1 row)
+
+-- Drop the most recent chunk
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = :'mat_name';
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_2_3_chunk | Wed Nov 29 16:00:00 2017 PST | Wed Feb 07 16:00:00 2018 PST
+ _hyper_2_4_chunk | Wed Sep 05 17:00:00 2018 PDT | Wed Nov 14 16:00:00 2018 PST
+(2 rows)
+
+SELECT drop_chunks('mat_m1', newer_than=>'2018-01-01'::timestamptz);
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_2_4_chunk
+(1 row)
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = :'mat_name';
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_2_3_chunk | Wed Nov 29 16:00:00 2017 PST | Wed Feb 07 16:00:00 2018 PST
+(1 row)
+
+-- The watermark should be updated to reflect the dropped data (i.e.,
+-- the cache should be reset)
+SELECT _timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(:mat_id));
+         to_timestamp         
+------------------------------
+ Tue Jan 02 16:00:00 2018 PST
+(1 row)
+
+-- Since we removed the last chunk, the invalidation threshold doesn't
+-- move back, while the watermark does.
+SELECT _timescaledb_internal.to_timestamp(watermark)
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :raw_id;
+         to_timestamp         
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+-- Compare the new watermark to the MAX time in the table
+SELECT max(timec) FROM :mat_table;
+             max              
+------------------------------
+ Mon Jan 01 16:00:00 2018 PST
+(1 row)
+
+-- Try a subtransaction
+SAVEPOINT clear_cagg;
+SELECT m1.location, m1.timec, sumt, sumh, firsth, lasth, maxtemp, mintemp
+FROM mat_m1 m1 RIGHT JOIN mat_m2 m2
+ON (m1.location = m2.location
+AND m1.timec = m2.timec)
+ORDER BY m1.location COLLATE "C", m1.timec DESC
+LIMIT 10;
+ location |            timec             | sumt | sumh | firsth | lasth | maxtemp | mintemp 
+----------+------------------------------+------+------+--------+-------+---------+---------
+ NYC      | Sun Dec 02 16:00:00 2018 PST |  110 |   75 |     45 |    30 |      65 |      45
+ NYC      | Fri Nov 02 17:00:00 2018 PDT |      |      |        |       |         |        
+ NYC      | Thu Nov 01 17:00:00 2018 PDT |   30 |   25 |     10 |       |      20 |      10
+ NYC      | Wed Oct 31 17:00:00 2018 PDT |  325 |  200 |     30 |    50 |      85 |      45
+ NYC      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
+ SFO      | Sun Dec 02 16:00:00 2018 PST |  120 |   90 |     45 |    45 |      65 |      55
+ SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
+ SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45 |     45 |    45 |      55 |      55
+ por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100 |    100 |   100 |     100 |     100
+(9 rows)
+
+ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
+SELECT m1.location, m1.timec, sumt, sumh, firsth, lasth, maxtemp, mintemp
+FROM mat_m1 m1 RIGHT JOIN mat_m2 m2
+ON (m1.location = m2.location
+AND m1.timec = m2.timec)
+ORDER BY m1.location COLLATE "C" NULLS LAST, m1.timec DESC NULLS LAST, firsth NULLS LAST
+LIMIT 10;
+ location |            timec             | sumt | sumh | firsth | lasth | maxtemp | mintemp 
+----------+------------------------------+------+------+--------+-------+---------+---------
+ NYC      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
+ SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
+ SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45 |     45 |    45 |      55 |      55
+ por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100 |    100 |   100 |     100 |     100
+          |                              |      |      |     10 |       |      20 |      10
+          |                              |      |      |     30 |    50 |      85 |      45
+          |                              |      |      |     45 |    45 |      65 |      55
+          |                              |      |      |     45 |    30 |      65 |      45
+          |                              |      |      |        |       |         |        
+(9 rows)
+
+ROLLBACK;

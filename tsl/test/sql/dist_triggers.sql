@@ -28,7 +28,7 @@ FROM (
 ) a;
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
-
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null
