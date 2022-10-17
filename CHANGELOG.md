@@ -25,6 +25,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
 * #4756 Improve compression job IO performance
 * #4807 Fix segmentation fault during INSERT into compressed hypertable.
+* #4840 Fix performance regressions in the copy code
 
 **Thanks**
 * @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
