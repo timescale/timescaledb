@@ -91,6 +91,12 @@
 /* Stores multi-insert data related to a single relation in CopyFrom. */
 typedef struct TSCopyMultiInsertBuffer
 {
+	/*
+	 * Tuple description for inserted tuple slots. We use a copy of the result
+	 * relation tupdesc to disable reference counting for this tupdesc. It is
+	 * not needed and is wasting a lot of CPU in ResourceOwner.
+	 */
+	TupleDesc tupdesc;
 	TupleTableSlot *slots[MAX_BUFFERED_TUPLES]; /* Array to store tuples */
 	Point *point;								/* The point in space of this buffer */
 	BulkInsertState bistate;					/* BulkInsertState for this buffer */
@@ -182,7 +188,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
  * ResultRelInfo.
  */
 static TSCopyMultiInsertBuffer *
-TSCopyMultiInsertBufferInit(Point *point)
+TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point)
 {
 	TSCopyMultiInsertBuffer *buffer;
 
@@ -193,6 +199,17 @@ TSCopyMultiInsertBufferInit(Point *point)
 
 	buffer->point = palloc(POINT_SIZE(point->num_coords));
 	memcpy(buffer->point, point, POINT_SIZE(point->num_coords));
+
+	/*
+	 * Make a non-refcounted copy of tupdesc to avoid spending CPU in
+	 * ResourceOwner when creating a big number of table slots. This happens
+	 * because each new slot pins its tuple descriptor using PinTupleDesc, and
+	 * for reference-counting tuples this involves adding a new reference to
+	 * ResourceOwner, which is not very efficient for a large number of
+	 * references.
+	 */
+	buffer->tupdesc = CreateTupleDescCopyConstr(cis->rel->rd_att);
+	Assert(buffer->tupdesc->tdrefcount == -1);
 
 	return buffer;
 }
@@ -218,7 +235,7 @@ TSCopyMultiInsertInfoGetOrSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsert
 	/* No insert buffer for this chunk exists, create a new one */
 	if (!found)
 	{
-		entry->buffer = TSCopyMultiInsertBufferInit(point);
+		entry->buffer = TSCopyMultiInsertBufferInit(cis, point);
 	}
 
 	return entry->buffer;
@@ -438,6 +455,7 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 		ExecDropSingleTupleTableSlot(buffer->slots[i]);
 
 	pfree(buffer->point);
+	FreeTupleDesc(buffer->tupdesc);
 	pfree(buffer);
 }
 
@@ -573,7 +591,11 @@ TSCopyMultiInsertInfoNextFreeSlot(TSCopyMultiInsertInfo *miinfo,
 	Assert(nused < MAX_BUFFERED_TUPLES);
 
 	if (buffer->slots[nused] == NULL)
-		buffer->slots[nused] = table_slot_create(result_relation_info->ri_RelationDesc, NULL);
+	{
+		const TupleTableSlotOps *tts_cb =
+			table_slot_callbacks(result_relation_info->ri_RelationDesc);
+		buffer->slots[nused] = MakeSingleTupleTableSlot(buffer->tupdesc, tts_cb);
+	}
 	return buffer->slots[nused];
 }
 
