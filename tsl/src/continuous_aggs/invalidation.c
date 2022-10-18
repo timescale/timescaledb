@@ -552,11 +552,11 @@ invalidation_entry_reset(Invalidation *entry)
  * invalidations.
  */
 static void
-invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 bucket_width,
+invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid, int64 bucket_width,
 										 const ContinuousAggsBucketFunction *bucket_function)
 {
-	const int64 min_for_type = ts_time_get_min(timetype);
-	const int64 max_for_type = ts_time_get_max(timetype);
+	const int64 time_dimension_min = ts_time_get_min(time_type_oid);
+	const int64 time_dimension_max = ts_time_get_max(time_type_oid);
 	int64 min_bucket_start;
 	int64 max_bucket_end;
 
@@ -574,23 +574,28 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 
 	 * must be at the start of the "first" bucket or somewhere in the
 	 * bucket. If the min value falls on the exact start of the bucket we are
 	 * good. Otherwise, we need to move to the next full bucket. */
-	min_bucket_start = ts_time_saturating_add(min_for_type, bucket_width - 1, timetype);
-	min_bucket_start = ts_time_bucket_by_type(bucket_width, min_bucket_start, timetype);
+	min_bucket_start = ts_time_saturating_add(time_dimension_min, bucket_width - 1, time_type_oid);
+	min_bucket_start = ts_time_bucket_by_type(bucket_width, min_bucket_start, time_type_oid);
 
 	/* Compute the end of the "last" bucket for the time type. Remember that
 	 * invalidations are inclusive, so the "greatest" value should be the last
 	 * value of the last full bucket. Either the max value is already the last
 	 * value of the last bucket, or we need to return the last value of the
 	 * previous full bucket.  */
-	max_bucket_end = ts_time_bucket_by_type(bucket_width, max_for_type, timetype);
+	max_bucket_end = ts_time_bucket_by_type(bucket_width, time_dimension_max, time_type_oid);
 
 	/* Check if the max value was already the last value of the last bucket */
-	if (ts_time_saturating_add(max_bucket_end, bucket_width - 1, timetype) == max_for_type)
-		max_bucket_end = max_for_type;
+	if (ts_time_saturating_add(max_bucket_end, bucket_width - 1, time_type_oid) ==
+		time_dimension_max)
+	{
+		max_bucket_end = time_dimension_max;
+	}
 	else
+	{
 		/* The last bucket was partial. To get the end of previous bucket, we
 		 * need to move one step down from the partial last bucket. */
-		max_bucket_end = ts_time_saturating_sub(max_bucket_end, 1, timetype);
+		max_bucket_end = ts_time_saturating_sub(max_bucket_end, 1, time_type_oid);
+	}
 
 	if (inv->lowest_modified_value < min_bucket_start)
 		/* Below the min bucket, so treat as invalid to -infinity. */
@@ -600,7 +605,7 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 
 		inv->lowest_modified_value = INVAL_POS_INFINITY;
 	else
 		inv->lowest_modified_value =
-			ts_time_bucket_by_type(bucket_width, inv->lowest_modified_value, timetype);
+			ts_time_bucket_by_type(bucket_width, inv->lowest_modified_value, time_type_oid);
 
 	if (inv->greatest_modified_value < min_bucket_start)
 		/* Below the min bucket, so treat as invalid to -infinity. */
@@ -611,9 +616,9 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 
 	else
 	{
 		inv->greatest_modified_value =
-			ts_time_bucket_by_type(bucket_width, inv->greatest_modified_value, timetype);
+			ts_time_bucket_by_type(bucket_width, inv->greatest_modified_value, time_type_oid);
 		inv->greatest_modified_value =
-			ts_time_saturating_add(inv->greatest_modified_value, bucket_width - 1, timetype);
+			ts_time_saturating_add(inv->greatest_modified_value, bucket_width - 1, time_type_oid);
 	}
 }
 

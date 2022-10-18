@@ -41,7 +41,7 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool nulls[Natts_continuous_agg];
 		Datum values[Natts_continuous_agg];
-		bool repl[Natts_continuous_agg] = { false };
+		bool doReplace[Natts_continuous_agg] = { false };
 		bool should_free;
 		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 		HeapTuple new_tuple;
@@ -49,11 +49,11 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 
 		heap_deform_tuple(tuple, tupdesc, values, nulls);
 
-		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 			BoolGetDatum(materialized_only);
 
-		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
 
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);

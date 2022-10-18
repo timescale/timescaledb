@@ -132,7 +132,7 @@ ts_metadata_get_value(const char *metadata_key, Oid value_type, bool *isnull)
  *  the existing value if nothing was inserted.
  */
 Datum
-ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid value_type,
+ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid type,
 				   bool include_in_telemetry)
 {
 	Datum existing_value;
@@ -147,7 +147,7 @@ ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid value_typ
 
 	/* Check for row existence while we have the lock */
 	existing_value =
-		metadata_get_value_internal(metadata_key, value_type, &isnull, ShareRowExclusiveLock);
+		metadata_get_value_internal(metadata_key, type, &isnull, ShareRowExclusiveLock);
 
 	if (!isnull)
 	{
@@ -162,7 +162,7 @@ ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid value_typ
 	/* Insert into the catalog table for persistence */
 	values[AttrNumberGetAttrOffset(Anum_metadata_key)] = CStringGetDatum(key_data);
 	values[AttrNumberGetAttrOffset(Anum_metadata_value)] =
-		convert_type_to_text(metadata_value, value_type);
+		convert_type_to_text(metadata_value, type);
 	values[AttrNumberGetAttrOffset(Anum_metadata_include_in_telemetry)] =
 		BoolGetDatum(include_in_telemetry);
 
