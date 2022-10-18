@@ -23,13 +23,13 @@ SET ROLE :ROLE_1;
 
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
-select create_distributed_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '90 day');
+select create_distributed_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '270 day');
 
 create table uk_price_paid_space2(like uk_price_paid);
-select create_distributed_hypertable('uk_price_paid_space2', 'date', 'postcode2', 2, chunk_time_interval => interval '90 day');
+select create_distributed_hypertable('uk_price_paid_space2', 'date', 'postcode2', 2, chunk_time_interval => interval '270 day');
 
 create table uk_price_paid_space10(like uk_price_paid);
-select create_distributed_hypertable('uk_price_paid_space10', 'date', 'postcode2', 10, chunk_time_interval => interval '90 day');
+select create_distributed_hypertable('uk_price_paid_space10', 'date', 'postcode2', 10, chunk_time_interval => interval '270 day');
 
 
 \copy uk_price_paid_space2 from program 'zcat < data/prices-10k-random-1.tsv.gz';
