@@ -171,7 +171,7 @@ TSDLLEXPORT void ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs,
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
 
-extern TSDLLEXPORT void ts_materialization_invalidation_log_delete_inner(int32 materialization_id);
+extern TSDLLEXPORT void ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id);
 
 extern TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id);

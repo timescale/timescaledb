@@ -92,7 +92,7 @@ extern AsyncRequest *async_request_send_with_stmt_params_elevel_res_format(
 extern AsyncRequest *async_request_send_prepare(TSConnection *conn, const char *sql_statement,
 												int n_params);
 extern AsyncRequest *async_request_send_prepared_stmt(PreparedStmt *stmt,
-													  const char *const *paramValues);
+													  const char *const *param_values);
 extern AsyncRequest *async_request_send_prepared_stmt_with_params(PreparedStmt *stmt,
 																  StmtParams *params,
 																  int res_format);
@@ -107,7 +107,7 @@ extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request)
 extern AsyncResponse *async_request_cleanup_result(AsyncRequest *req, TimestampTz endtime);
 
 /* Returns on successful commands, throwing errors otherwise */
-extern void async_request_wait_ok_command(AsyncRequest *set);
+extern void async_request_wait_ok_command(AsyncRequest *req);
 extern PreparedStmt *async_request_wait_prepared_statement(AsyncRequest *request);
 
 /* Async Response */

@@ -41,9 +41,9 @@ extern int ts_chunk_index_delete(int32 chunk_id, const char *indexname, bool dro
 extern int ts_chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index);
 extern void ts_chunk_index_delete_by_name(const char *schema, const char *index_name,
 										  bool drop_index);
-extern int ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname);
+extern int ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *new_name);
 extern int ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid,
-										const char *newname);
+										const char *new_name);
 extern int ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name,
 									  const char *old_name, const char *new_name);
 extern int ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid,

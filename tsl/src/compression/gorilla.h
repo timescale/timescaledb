@@ -79,7 +79,7 @@ extern void gorilla_compressor_append_value(GorillaCompressor *compressor, uint6
 extern void *gorilla_compressor_finish(GorillaCompressor *compressor);
 
 extern DecompressionIterator *
-gorilla_decompression_iterator_from_datum_forward(Datum dictionary_compressed, Oid element_type);
+gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type);
 extern DecompressResult
 gorilla_decompression_iterator_try_next_forward(DecompressionIterator *iter);
 
@@ -88,7 +88,7 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 extern DecompressResult
 gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter);
 
-extern void gorilla_compressed_send(CompressedDataHeader *compressed, StringInfo buffer);
+extern void gorilla_compressed_send(CompressedDataHeader *header, StringInfo buffer);
 extern Datum gorilla_compressed_recv(StringInfo buf);
 
 extern Datum tsl_gorilla_compressor_append(PG_FUNCTION_ARGS);

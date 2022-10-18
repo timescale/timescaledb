@@ -54,13 +54,15 @@ ts_chunk_constraints_alloc(int size_hint, MemoryContext mctx)
 }
 
 ChunkConstraints *
-ts_chunk_constraints_copy(ChunkConstraints *ccs)
+ts_chunk_constraints_copy(ChunkConstraints *chunk_constraints)
 {
 	ChunkConstraints *copy = palloc(sizeof(ChunkConstraints));
 
-	memcpy(copy, ccs, sizeof(ChunkConstraints));
-	copy->constraints = palloc0(CHUNK_CONSTRAINTS_SIZE(ccs->capacity));
-	memcpy(copy->constraints, ccs->constraints, CHUNK_CONSTRAINTS_SIZE(ccs->num_constraints));
+	memcpy(copy, chunk_constraints, sizeof(ChunkConstraints));
+	copy->constraints = palloc0(CHUNK_CONSTRAINTS_SIZE(chunk_constraints->capacity));
+	memcpy(copy->constraints,
+		   chunk_constraints->constraints,
+		   CHUNK_CONSTRAINTS_SIZE(chunk_constraints->num_constraints));
 
 	return copy;
 }
@@ -899,7 +901,7 @@ chunk_constraint_rename_on_chunk_table(int32 chunk_id, const char *old_name, con
 }
 
 static void
-chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname)
+chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_name)
 {
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
@@ -916,8 +918,8 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 	heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
-	namestrcpy(&new_hypertable_constraint_name, newname);
-	chunk_constraint_choose_name(&new_chunk_constraint_name, newname, chunk_id);
+	namestrcpy(&new_hypertable_constraint_name, new_name);
+	chunk_constraint_choose_name(&new_chunk_constraint_name, new_name, chunk_id);
 
 	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 		NameGetDatum(&new_hypertable_constraint_name);
@@ -935,7 +937,7 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
 
 	ts_chunk_index_adjust_meta(chunk_id,
-							   newname,
+							   new_name,
 							   NameStr(*old_chunk_constraint_name),
 							   NameStr(new_chunk_constraint_name));
 
@@ -950,14 +952,14 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
  * Adjust internal metadata after index/constraint rename
  */
 int
-ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, const char *oldname,
-								const char *newname)
+ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
+								const char *old_name, const char *new_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
 	int count = 0;
 
-	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, oldname);
+	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, old_name);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -975,7 +977,7 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, 
 			CStringGetDatum(ht_constraint_name);
 		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
 		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
-			CStringGetDatum(newname);
+			CStringGetDatum(new_name);
 		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
 
 		new_tuple =
@@ -994,8 +996,8 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, 
 }
 
 int
-ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname,
-												 const char *newname)
+ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
+												 const char *new_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
@@ -1005,12 +1007,12 @@ ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old
 
 	ts_scanner_foreach(&iterator)
 	{
-		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), oldname))
+		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), old_name))
 			continue;
 
 		count++;
 		chunk_constraint_rename_hypertable_from_tuple(ts_scan_iterator_tuple_info(&iterator),
-													  newname);
+													  new_name);
 	}
 	return count;
 }

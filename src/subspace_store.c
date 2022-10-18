@@ -91,19 +91,19 @@ ts_subspace_store_init(const Hyperspace *space, MemoryContext mcxt, int16 max_it
 }
 
 void
-ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
+ts_subspace_store_add(SubspaceStore *subspace_store, const Hypercube *hypercube, void *object,
 					  void (*object_free)(void *))
 {
-	SubspaceStoreInternalNode *node = store->origin;
+	SubspaceStoreInternalNode *node = subspace_store->origin;
 	DimensionSlice *last = NULL;
-	MemoryContext old = MemoryContextSwitchTo(store->mcxt);
+	MemoryContext old = MemoryContextSwitchTo(subspace_store->mcxt);
 	int i;
 
-	Assert(hc->num_slices == store->num_dimensions);
+	Assert(hypercube->num_slices == subspace_store->num_dimensions);
 
-	for (i = 0; i < hc->num_slices; i++)
+	for (i = 0; i < hypercube->num_slices; i++)
 	{
-		const DimensionSlice *target = hc->slices[i];
+		const DimensionSlice *target = hypercube->slices[i];
 		DimensionSlice *match;
 
 		Assert(target->storage == NULL);
@@ -116,12 +116,13 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 			 * create one now. (There will always be one for time)
 			 */
 			Assert(last != NULL);
-			last->storage = subspace_store_internal_node_create(i == (hc->num_slices - 1));
+			last->storage = subspace_store_internal_node_create(i == (hypercube->num_slices - 1));
 			last->storage_free = subspace_store_internal_node_free;
 			node = last->storage;
 		}
 
-		Assert(store->max_items == 0 || node->descendants <= (size_t) store->max_items);
+		Assert(subspace_store->max_items == 0 ||
+			   node->descendants <= (size_t) subspace_store->max_items);
 
 		/*
 		 * We only call this function on a cache miss, so number of leaves
@@ -134,7 +135,7 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 			   node->vector->slices[0]->fd.dimension_id == target->fd.dimension_id);
 
 		/* Do we have enough space to store the object? */
-		if (store->max_items > 0 && node->descendants > store->max_items)
+		if (subspace_store->max_items > 0 && node->descendants > subspace_store->max_items)
 		{
 			/*
 			 * Always delete the slice corresponding to the earliest time
@@ -153,7 +154,7 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 			 */
 			Assert(i == 0);
 
-			Assert(store->max_items + 1 == node->descendants);
+			Assert(subspace_store->max_items + 1 == node->descendants);
 
 			ts_dimension_vec_remove_slice(&node->vector, i);
 
@@ -181,7 +182,8 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 			match = copy;
 		}
 
-		Assert(store->max_items == 0 || node->descendants <= (size_t) store->max_items);
+		Assert(subspace_store->max_items == 0 ||
+			   node->descendants <= (size_t) subspace_store->max_items);
 
 		last = match;
 		/* internal slices point to the next SubspaceStoreInternalNode */
@@ -195,18 +197,18 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 }
 
 void *
-ts_subspace_store_get(const SubspaceStore *store, const Point *target)
+ts_subspace_store_get(const SubspaceStore *subspace_store, const Point *target)
 {
 	int i;
-	DimensionVec *vec = store->origin->vector;
+	DimensionVec *vec = subspace_store->origin->vector;
 	DimensionSlice *match = NULL;
 
-	Assert(target->cardinality == store->num_dimensions);
+	Assert(target->cardinality == subspace_store->num_dimensions);
 
 	/* The internal compressed hypertable has no dimensions as
 	 * chunks are created explicitly by compress_chunk and linked
 	 * to the source chunk. */
-	if (store->num_dimensions == 0)
+	if (subspace_store->num_dimensions == 0)
 		return NULL;
 
 	for (i = 0; i < target->cardinality; i++)
@@ -223,14 +225,14 @@ ts_subspace_store_get(const SubspaceStore *store, const Point *target)
 }
 
 void
-ts_subspace_store_free(SubspaceStore *store)
+ts_subspace_store_free(SubspaceStore *subspace_store)
 {
-	subspace_store_internal_node_free(store->origin);
-	pfree(store);
+	subspace_store_internal_node_free(subspace_store->origin);
+	pfree(subspace_store);
 }
 
 MemoryContext
-ts_subspace_store_mcxt(const SubspaceStore *store)
+ts_subspace_store_mcxt(const SubspaceStore *subspace_store)
 {
-	return store->mcxt;
+	return subspace_store->mcxt;
 }

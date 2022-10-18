@@ -36,9 +36,9 @@ typedef struct Hypercube Hypercube;
 typedef struct ChunkScanCtx ChunkScanCtx;
 
 extern TSDLLEXPORT ChunkConstraints *ts_chunk_constraints_alloc(int size_hint, MemoryContext mctx);
-extern ChunkConstraints *ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint,
-															  MemoryContext mctx);
-extern ChunkConstraints *ts_chunk_constraints_copy(ChunkConstraints *constraints);
+extern ChunkConstraints *
+ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, MemoryContext mctx);
+extern ChunkConstraints *ts_chunk_constraints_copy(ChunkConstraints *chunk_constraints);
 extern int ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice,
 													   ChunkScanCtx *ctx, MemoryContext mctx);
 extern int ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSlice *slice,
@@ -73,10 +73,10 @@ extern int ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id,
 														 bool delete_metadata,
 														 bool drop_constraint);
 extern void ts_chunk_constraint_recreate(const ChunkConstraint *cc, Oid chunk_oid);
-extern int ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname,
-															const char *newname);
+extern int ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
+															const char *new_name);
 extern int ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
-										   const char *oldname, const char *newname);
+										   const char *old_name, const char *new_name);
 
 extern char *
 ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,

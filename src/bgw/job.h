@@ -58,7 +58,7 @@ extern void ts_bgw_job_set_scheduler_test_hook(scheduler_test_hook_type hook);
 extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
 extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
 											  Interval *next_interval);
-extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *jerr);
+extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *job_err);
 extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule_interval);
 extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
 #endif /* BGW_JOB_H */

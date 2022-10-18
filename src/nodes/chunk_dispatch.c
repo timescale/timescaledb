@@ -95,9 +95,9 @@ ts_chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
 }
 
 void
-ts_chunk_dispatch_destroy(ChunkDispatch *cd)
+ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch)
 {
-	ts_subspace_store_free(cd->cache);
+	ts_subspace_store_free(chunk_dispatch->cache);
 }
 
 static void

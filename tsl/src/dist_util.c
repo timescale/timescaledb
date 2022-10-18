@@ -31,7 +31,7 @@ static Datum dist_util_remote_srf_query(FunctionCallInfo fcinfo, const char *nod
 /* UUID associated with remote connection */
 static pg_uuid_t *peer_dist_id = NULL;
 
-static bool dist_util_set_id_with_uuid_check(Datum dist_uuid, bool check_uuid);
+static bool dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid);
 
 /* Requires non-null arguments */
 static bool

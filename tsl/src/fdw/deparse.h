@@ -49,7 +49,7 @@ extern List *build_tlist_to_deparse(RelOptInfo *foreignrel);
 extern void deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List *tlist,
 									List *remote_where, List *remote_having, List *pathkeys,
 									bool is_subquery, List **retrieved_attrs, List **params_list,
-									DataNodeChunkAssignment *swa);
+									DataNodeChunkAssignment *sca);
 
 extern const char *get_jointype_name(JoinType jointype);
 extern void deparseStringLiteral(StringInfo buf, const char *val);
