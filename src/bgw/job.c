@@ -793,7 +793,7 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 
 	Datum values[Natts_bgw_job] = { 0 };
 	bool isnull[Natts_bgw_job] = { 0 };
-	bool repl[Natts_bgw_job] = { 0 };
+	bool doReplace[Natts_bgw_job] = { 0 };
 
 	Datum old_schedule_interval =
 		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
@@ -819,34 +819,34 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		}
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] =
 			IntervalPGetDatum(&updated_job->fd.schedule_interval);
-		repl[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = true;
 	}
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] =
 		IntervalPGetDatum(&updated_job->fd.max_runtime);
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] =
 		Int32GetDatum(updated_job->fd.max_retries);
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] =
 		IntervalPGetDatum(&updated_job->fd.retry_period);
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] =
 		BoolGetDatum(updated_job->fd.scheduled);
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
 
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] =
 		NameGetDatum(&updated_job->fd.check_schema);
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] =
 		NameGetDatum(&updated_job->fd.check_name);
-	repl[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
 
 	if (strlen(NameStr(updated_job->fd.check_name)) == 0)
 	{
@@ -867,12 +867,12 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] =
 			Int32GetDatum(updated_job->fd.hypertable_id);
-		repl[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	}
 	else
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 
-	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, repl);
+	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, doReplace);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
 

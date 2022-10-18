@@ -957,7 +957,7 @@ ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char
 	ts_scanner_foreach(&iterator)
 	{
 		bool nulls[Natts_chunk_index];
-		bool repl[Natts_chunk_index] = { false };
+		bool doReplace[Natts_chunk_index] = { false };
 		Datum values[Natts_chunk_index];
 		bool should_free;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -968,11 +968,12 @@ ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char
 
 		values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
 			CStringGetDatum(ht_index_name);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
 		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = CStringGetDatum(newname);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
 
-		new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, repl);
+		new_tuple =
+			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, doReplace);
 
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);
