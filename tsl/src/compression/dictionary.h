@@ -31,13 +31,13 @@ extern void *dictionary_compressor_finish(DictionaryCompressor *compressor);
 
 extern DecompressionIterator *
 tsl_dictionary_decompression_iterator_from_datum_forward(Datum dictionary_compressed,
-														 Oid element_oid);
+														 Oid element_type);
 extern DecompressResult
 dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter);
 
 extern DecompressionIterator *
 tsl_dictionary_decompression_iterator_from_datum_reverse(Datum dictionary_compressed,
-														 Oid element_oid);
+														 Oid element_type);
 extern DecompressResult
 dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter);
 

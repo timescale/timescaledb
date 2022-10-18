@@ -156,17 +156,17 @@ align_and_zero(char *ptr, char type_align, Size *max_size)
 /* Inspired by datum_write in rangetypes.c. This reduces the max_size by the data length before
  * exiting */
 char *
-datum_to_bytes_and_advance(DatumSerializer *serializer, char *ptr, Size *max_size, Datum datum)
+datum_to_bytes_and_advance(DatumSerializer *serializer, char *start, Size *max_size, Datum datum)
 {
 	Size data_length;
 
 	if (serializer->type_by_val)
 	{
 		/* pass-by-value */
-		ptr = align_and_zero(ptr, serializer->type_align, max_size);
+		start = align_and_zero(start, serializer->type_align, max_size);
 		data_length = serializer->type_len;
 		check_allowed_data_len(data_length, *max_size);
-		store_att_byval(ptr, datum, data_length);
+		store_att_byval(start, datum, data_length);
 	}
 	else if (serializer->type_len == -1)
 	{
@@ -187,7 +187,7 @@ datum_to_bytes_and_advance(DatumSerializer *serializer, char *ptr, Size *max_siz
 			/* no alignment for short varlenas */
 			data_length = VARSIZE_SHORT(val);
 			check_allowed_data_len(data_length, *max_size);
-			memcpy(ptr, val, data_length);
+			memcpy(start, val, data_length);
 		}
 		else if (TYPE_IS_PACKABLE(serializer->type_len, serializer->type_storage) &&
 				 VARATT_CAN_MAKE_SHORT(val))
@@ -195,16 +195,16 @@ datum_to_bytes_and_advance(DatumSerializer *serializer, char *ptr, Size *max_siz
 			/* convert to short varlena -- no alignment */
 			data_length = VARATT_CONVERTED_SHORT_SIZE(val);
 			check_allowed_data_len(data_length, *max_size);
-			SET_VARSIZE_SHORT(ptr, data_length);
-			memcpy(ptr + 1, VARDATA(val), data_length - 1);
+			SET_VARSIZE_SHORT(start, data_length);
+			memcpy(start + 1, VARDATA(val), data_length - 1);
 		}
 		else
 		{
 			/* full 4-byte header varlena */
-			ptr = align_and_zero(ptr, serializer->type_align, max_size);
+			start = align_and_zero(start, serializer->type_align, max_size);
 			data_length = VARSIZE(val);
 			check_allowed_data_len(data_length, *max_size);
-			memcpy(ptr, val, data_length);
+			memcpy(start, val, data_length);
 		}
 	}
 	else if (serializer->type_len == -2)
@@ -213,22 +213,22 @@ datum_to_bytes_and_advance(DatumSerializer *serializer, char *ptr, Size *max_siz
 		Assert(serializer->type_align == 'c');
 		data_length = strlen(DatumGetCString(datum)) + 1;
 		check_allowed_data_len(data_length, *max_size);
-		memcpy(ptr, DatumGetPointer(datum), data_length);
+		memcpy(start, DatumGetPointer(datum), data_length);
 	}
 	else
 	{
 		/* fixed-length pass-by-reference */
-		ptr = align_and_zero(ptr, serializer->type_align, max_size);
+		start = align_and_zero(start, serializer->type_align, max_size);
 		Assert(serializer->type_len > 0);
 		data_length = serializer->type_len;
 		check_allowed_data_len(data_length, *max_size);
-		memcpy(ptr, DatumGetPointer(datum), data_length);
+		memcpy(start, DatumGetPointer(datum), data_length);
 	}
 
-	ptr += data_length;
+	start += data_length;
 	*max_size = *max_size - data_length;
 
-	return ptr;
+	return start;
 }
 
 typedef struct DatumDeserializer

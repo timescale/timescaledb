@@ -17,7 +17,7 @@ extern TSDLLEXPORT void ts_jsonb_add_bool(JsonbParseState *state, const char *ke
 extern TSDLLEXPORT void ts_jsonb_add_str(JsonbParseState *state, const char *key,
 										 const char *value);
 extern TSDLLEXPORT void ts_jsonb_add_interval(JsonbParseState *state, const char *key,
-											  Interval *value);
+											  Interval *interval);
 extern TSDLLEXPORT void ts_jsonb_add_int32(JsonbParseState *state, const char *key,
 										   const int32 value);
 extern TSDLLEXPORT void ts_jsonb_add_int64(JsonbParseState *state, const char *key,

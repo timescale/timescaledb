@@ -23,14 +23,14 @@ extern SubspaceStore *ts_subspace_store_init(const Hyperspace *space, MemoryCont
 											 int16 max_items);
 
 /* Store an object associate with the subspace represented by a hypercube */
-extern void ts_subspace_store_add(SubspaceStore *cache, const Hypercube *hc, void *object,
-								  void (*object_free)(void *));
+extern void ts_subspace_store_add(SubspaceStore *subspace_store, const Hypercube *hypercube,
+								  void *object, void (*object_free)(void *));
 
 /* Get the object stored for the subspace that a point is in.
  * Return the object stored or NULL if this subspace is not in the store.
  */
-extern void *ts_subspace_store_get(const SubspaceStore *cache, const Point *target);
-extern void ts_subspace_store_free(SubspaceStore *cache);
-extern MemoryContext ts_subspace_store_mcxt(const SubspaceStore *cache);
+extern void *ts_subspace_store_get(const SubspaceStore *subspace_store, const Point *target);
+extern void ts_subspace_store_free(SubspaceStore *subspace_store);
+extern MemoryContext ts_subspace_store_mcxt(const SubspaceStore *subspace_store);
 
 #endif /* TIMESCALEDB_SUBSPACE_STORE_H */

@@ -26,7 +26,7 @@ typedef struct Tablespaces
 
 extern Tablespace *ts_tablespaces_add(Tablespaces *tablespaces, const FormData_tablespace *form,
 									  Oid tspc_oid);
-extern bool ts_tablespaces_contain(const Tablespaces *tspcs, Oid tspc_oid);
+extern bool ts_tablespaces_contain(const Tablespaces *tablespaces, Oid tspc_oid);
 extern Tablespaces *ts_tablespace_scan(int32 hypertable_id);
 extern TSDLLEXPORT void ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid,
 													  bool if_not_attached);

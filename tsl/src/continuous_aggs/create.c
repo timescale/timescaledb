@@ -200,7 +200,7 @@ static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
 	char *table_access_method, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
+static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
 														  Query *userview_query, bool finalized);
 
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,

@@ -22,7 +22,7 @@ typedef struct DistCmdDescr
 extern DistCmdResult *ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors,
 																	 List *data_nodes,
 																	 bool transactional);
-extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *node_names,
+extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes,
 													   bool transactional);
 extern DistCmdResult *ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params,
 															  List *data_nodes, bool transactional);

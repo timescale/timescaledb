@@ -200,7 +200,7 @@ static void deparseReturningList(StringInfo buf, RangeTblEntry *rte, Index rtind
 static void deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte,
 							 bool qualify_col);
 static void deparseRelation(StringInfo buf, Relation rel);
-static void deparseExpr(Expr *expr, deparse_expr_cxt *context);
+static void deparseExpr(Expr *node, deparse_expr_cxt *context);
 static void deparseVar(Var *node, deparse_expr_cxt *context);
 static void deparseConst(Const *node, deparse_expr_cxt *context, int showtype);
 static void deparseParam(Param *node, deparse_expr_cxt *context);
