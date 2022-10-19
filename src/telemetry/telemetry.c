@@ -59,6 +59,11 @@
 #define REQ_BUILD_ARCHITECTURE "build_architecture"
 #define REQ_DATA_VOLUME "data_volume"
 
+#define REQ_NUM_POLICY_CAGG_FIXED "num_continuous_aggs_policies_fixed"
+#define REQ_NUM_POLICY_COMPRESSION_FIXED "num_compression_policies_fixed"
+#define REQ_NUM_POLICY_REORDER_FIXED "num_reorder_policies_fixed"
+#define REQ_NUM_POLICY_RETENTION_FIXED "num_retention_policies_fixed"
+#define REQ_NUM_USER_DEFINED_ACTIONS_FIXED "num_user_defined_actions_fixed"
 #define REQ_NUM_POLICY_CAGG "num_continuous_aggs_policies"
 #define REQ_NUM_POLICY_COMPRESSION "num_compression_policies"
 #define REQ_NUM_POLICY_REORDER "num_reorder_policies"
@@ -101,19 +106,42 @@ bgw_job_type_counts()
 		if (namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0)
 		{
 			if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
-				counts.policy_cagg++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_cagg_fixed++;
+				else
+					counts.policy_cagg++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_compression") == 0)
-				counts.policy_compression++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_compression_fixed++;
+				else
+					counts.policy_compression++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_reorder") == 0)
-				counts.policy_reorder++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_reorder_fixed++;
+				else
+					counts.policy_reorder++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_retention") == 0)
-				counts.policy_retention++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_retention_fixed++;
+				else
+					counts.policy_retention++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0)
 				counts.policy_telemetry++;
 		}
 		else
 		{
-			counts.user_defined_action++;
+			if (job->fd.fixed_schedule)
+				counts.user_defined_action_fixed++;
+			else
+				counts.user_defined_action++;
 		}
 	}
 
@@ -226,10 +254,15 @@ add_job_counts(JsonbParseState *state)
 	BgwJobTypeCount counts = bgw_job_type_counts();
 
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_CAGG, counts.policy_cagg);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_CAGG_FIXED, counts.policy_cagg_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_COMPRESSION, counts.policy_compression);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_COMPRESSION_FIXED, counts.policy_compression_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_REORDER, counts.policy_reorder);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_REORDER_FIXED, counts.policy_reorder_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_RETENTION, counts.policy_retention);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_RETENTION_FIXED, counts.policy_retention_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_USER_DEFINED_ACTIONS, counts.user_defined_action);
+	ts_jsonb_add_int32(state, REQ_NUM_USER_DEFINED_ACTIONS_FIXED, counts.user_defined_action_fixed);
 }
 
 static int64

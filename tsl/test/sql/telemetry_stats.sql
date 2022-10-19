@@ -242,6 +242,34 @@ SELECT
 	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates
 FROM relations;
 
+-- check telemetry for fixed schedule jobs works
+create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
+begin
+raise log 'this is job_test_fixed';
+end
+$$;
+
+create or replace procedure job_test_drifting(jobid int, config jsonb) language plpgsql as $$
+begin
+raise log 'this is job_test_drifting';
+end
+$$;
+-- before adding the jobs
+select get_telemetry_report()->'num_user_defined_actions_fixed';
+select get_telemetry_report()->'num_user_defined_actions';
+
+select add_job('job_test_fixed', '1 week');
+select add_job('job_test_drifting', '1 week', fixed_schedule => false);
+-- add continuous aggregate refresh policy for contagg
+select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, interval '3 weeks'); -- drifting
+select add_continuous_aggregate_policy('contagg_old', interval '3 weeks', NULL, interval '3 weeks', initial_start => now()); -- fixed
+-- add retention policy, fixed
+select add_retention_policy('hyper', interval '1 year', initial_start => now());
+-- add compression policy
+select add_compression_policy('hyper', interval '3 weeks', initial_start => now());
+select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
+select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
+select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
 DROP VIEW relations;
 DROP MATERIALIZED VIEW telemetry_report;
 
