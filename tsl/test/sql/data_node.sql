@@ -120,7 +120,8 @@ SET client_min_messages TO INFO;
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Create a distributed hypertable where no nodes can be selected
@@ -141,6 +142,8 @@ RESET ROLE;
 GRANT USAGE
    ON FOREIGN SERVER data_node_1, data_node_2
    TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
 SELECT node_name
   FROM timescaledb_information.data_nodes
@@ -186,6 +189,8 @@ RESET ROLE;
 GRANT USAGE
    ON FOREIGN SERVER data_node_3
    TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Now specify less slices than there are data nodes to generate a
@@ -390,6 +395,8 @@ SELECT node_name, database, node_created, database_created, extension_created FR
 GRANT USAGE
    ON FOREIGN SERVER data_node_4
    TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
 -- Recheck that ownership on data_node_4 is proper
 SELECT * FROM test.remote_exec(NULL, $$ SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'; $$);
@@ -441,7 +448,8 @@ SELECT node_name, database, node_created, database_created, extension_created FR
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 DROP TABLE disttable;
 
@@ -603,6 +611,8 @@ SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4');
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_5', host => 'localhost', database => :'DN_DBNAME_5');
 GRANT ALL ON FOREIGN SERVER data_node_4, data_node_5 TO PUBLIC;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 -- Create table as super user
 SET ROLE :ROLE_SUPERUSER;
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);

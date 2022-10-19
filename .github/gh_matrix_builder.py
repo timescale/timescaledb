@@ -123,15 +123,15 @@ m["include"].append(build_without_telemetry({"pg":PG14_LATEST}))
 m["include"].append(build_debug_config({"pg":15,"snapshot":"snapshot", 
 "tsdb_build_args":"-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON -DCODECOVERAGE=ON",
 # below tests are tracked as part of #4838
-      "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15' "
+      "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15 bgw_custom' "
 # below tests are tracked as part of #4832
       "IGNORES='pg_dump_unprivileged cagg_dump metadata pg_dump compression_hypertable "
 # below tests are tracked as part of #4833
-      "cagg_ddl_dist_ht telemetry_stats cagg_migrate_integer_dist_ht cagg_migrate_timestamp_dist_ht cagg_bgw_dist_ht chunk_api compression_bgw data_node dist_api_calls dist_commands dist_compression dist_copy_format_long dist_copy_long dist_ddl dist_move_chunk dist_partial_agg dist_policy dist_query exp_cagg_monthly exp_cagg_origin exp_cagg_timezone cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_multi_dist_ht continuous_aggs continuous_aggs_deprecated cagg_invalidation_dist_ht-15 dist_grant-15 remote_copy-15 partitionwise-15 "
+      "telemetry_stats dist_commands dist_ddl dist_query dist_partial_agg continuous_aggs continuous_aggs_deprecated "
 # below tests are tracked as part of #4834
       "compression compression_dml modify_exclusion rowsecurity-15 "
 # below tests are tracked as part of #4835
-      "parallel plan_hashagg query  partialize_finalize dist_util dist_distinct dist_distinct_pushdown dist_fetcher_type dist_gapfill dist_parallel_agg dist_queries dist_remote_error jit-15 debug_notice dist_chunk "
+      "parallel plan_hashagg query  partialize_finalize dist_distinct dist_fetcher_type dist_remote_error jit-15 "
 # below tests are tracked as part of #4837
       "remote_txn'"}))
 

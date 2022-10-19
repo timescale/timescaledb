@@ -18,7 +18,8 @@ SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
 SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
                             database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 

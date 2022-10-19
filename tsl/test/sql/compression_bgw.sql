@@ -5,6 +5,8 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 CREATE ROLE NOLOGIN_ROLE WITH nologin noinherit;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO NOLOGIN_ROLE;
 GRANT NOLOGIN_ROLE TO :ROLE_DEFAULT_PERM_USER WITH ADMIN OPTION;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
