@@ -364,8 +364,8 @@ WARNING:  telemetry could not connect to "noservice.timescale.com"
 SET timescaledb.telemetry_level=basic;
 SELECT * FROM jsonb_object_keys(get_telemetry_report()) AS key
 WHERE key != 'os_name_pretty';
-             key              
-------------------------------
+                key                 
+------------------------------------
  db_uuid
  license
  os_name
@@ -393,9 +393,14 @@ WHERE key != 'os_name_pretty';
  num_retention_policies
  num_compression_policies
  num_user_defined_actions
+ num_reorder_policies_fixed
  build_architecture_bit_size
  num_continuous_aggs_policies
-(29 rows)
+ num_retention_policies_fixed
+ num_compression_policies_fixed
+ num_user_defined_actions_fixed
+ num_continuous_aggs_policies_fixed
+(34 rows)
 
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT t FROM get_telemetry_report() t;
