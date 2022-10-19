@@ -36,6 +36,8 @@ FROM (
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \set IS_DISTRIBUTED TRUE
 \ir include/cagg_bgw_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -107,6 +109,9 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 -------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------------------+------------------+-------------------+-----------
 (0 rows)
 
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+psql:include/cagg_bgw_common.sql:72: WARNING:  no privileges were granted for "public"
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test_continuous_agg_table(time int, data int);
 \if :IS_DISTRIBUTED

@@ -20,7 +20,8 @@ FROM (
 ) a;
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \set IS_DISTRIBUTED TRUE
 
 \ir include/cagg_ddl_common.sql

@@ -68,9 +68,9 @@ SELECT ts_bgw_params_create();
 SELECT * FROM _timescaledb_config.bgw_job;
 SELECT * FROM timescaledb_information.job_stats;
 SELECT * FROM _timescaledb_catalog.continuous_agg;
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
 CREATE TABLE test_continuous_agg_table(time int, data int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10, replication_factor => 2);
