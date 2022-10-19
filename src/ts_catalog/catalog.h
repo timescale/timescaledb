@@ -1439,6 +1439,7 @@ extern TSDLLEXPORT CatalogDatabaseInfo *ts_catalog_database_info_get(void);
 extern TSDLLEXPORT Catalog *ts_catalog_get(void);
 extern void ts_catalog_reset(void);
 extern bool ts_is_catalog_table(Oid relid);
+extern bool ts_catalog_is_valid(void);
 
 /* Functions should operate on a passed-in Catalog struct */
 static inline Oid

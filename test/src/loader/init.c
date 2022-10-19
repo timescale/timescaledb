@@ -94,6 +94,13 @@ ts_catalog_reset()
 {
 }
 
+/* mock for extension.c */
+void ts_cache_invalidate_set_proxy_tables(Oid hypertable_proxy_oid, Oid bgw_proxy_oid);
+void
+ts_cache_invalidate_set_proxy_tables(Oid hypertable_proxy_oid, Oid bgw_proxy_oid)
+{
+}
+
 /* mock for guc.c */
 void ts_hypertable_cache_invalidate_callback(void);
 void

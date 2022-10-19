@@ -389,6 +389,12 @@ catalog_database_info_init(CatalogDatabaseInfo *info)
 		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
 }
 
+bool
+ts_catalog_is_valid(void)
+{
+	return catalog_is_valid(&s_catalog);
+}
+
 TSDLLEXPORT CatalogDatabaseInfo *
 ts_catalog_database_info_get()
 {
@@ -529,8 +535,6 @@ ts_catalog_reset(void)
 {
 	s_catalog.initialized = false;
 	database_info.database_id = InvalidOid;
-
-	ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
 }
 
 static CatalogTable

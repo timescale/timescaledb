@@ -30,6 +30,7 @@
 #include "guc.h"
 #include "extension_utils.c"
 #include "compat/compat.h"
+#include "cache_invalidate.h"
 
 #define TS_UPDATE_SCRIPT_CONFIG_VAR "timescaledb.update_script_stage"
 #define POST_UPDATE "post"
@@ -156,10 +157,12 @@ extension_set_state(enum ExtensionState newstate)
 			ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
 			extension_proxy_oid = get_proxy_table_relid();
 			ts_catalog_reset();
+			ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
 			break;
 		case EXTENSION_STATE_NOT_INSTALLED:
 			extension_proxy_oid = InvalidOid;
 			ts_catalog_reset();
+			ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
 			break;
 	}
 	extstate = newstate;
@@ -187,7 +190,6 @@ extension_update_state()
 	if (new_state == EXTENSION_STATE_NOT_INSTALLED)
 		new_state = EXTENSION_STATE_UNKNOWN;
 
-	extension_set_state(new_state);
 	/*
 	 * Update the extension oid. Note that it is only safe to run
 	 * get_extension_oid() when the extension state is 'CREATED' or
@@ -203,6 +205,8 @@ extension_update_state()
 	{
 		ts_extension_oid = InvalidOid;
 	}
+
+	extension_set_state(new_state);
 }
 
 Oid

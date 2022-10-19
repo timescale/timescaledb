@@ -99,6 +99,10 @@ cache_invalidate_relcache_callback(Datum arg, Oid relid)
 	{
 		ts_bgw_job_cache_invalidate_callback();
 	}
+	else if (ts_extension_is_loaded() && ts_catalog_is_valid() && ts_is_catalog_table(relid))
+	{
+		ts_catalog_reset();
+	}
 }
 
 /* Registration for given cache ids happens in non-TSL code when the extension
