@@ -83,7 +83,7 @@ jobs:
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true"; fi >>$GITHUB_OUTPUT
         cat regression.log
 
     - name: Coredumps
@@ -101,7 +101,7 @@ jobs:
               bt full
         EOT
           done
-          echo "::set-output name=coredumps::true"
+          echo "coredumps=true" >>$GITHUB_OUTPUT
           exit 1
         fi
 

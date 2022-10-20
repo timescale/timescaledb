@@ -75,7 +75,7 @@ jobs:
         } else {
           $version=grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!'
         }
-        echo "::set-output name=version::${version}"
+        echo "version=${version}" >>$GITHUB_OUTPUT
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
