@@ -16,6 +16,7 @@
 # if a job was actually run.
 
 import json
+import os
 import sys
 from ci_settings import PG12_EARLIEST, PG12_LATEST, PG13_EARLIEST, PG13_LATEST, PG14_EARLIEST, PG14_LATEST
 
@@ -181,5 +182,6 @@ if event_type != "pull_request":
   m["include"].append(build_debug_config({"pg":14,"snapshot":"snapshot", "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'"}))
 
 # generate command to set github action variable
-print(str.format("::set-output name=matrix::{0}",json.dumps(m)))
+with open(os.environ['GITHUB_OUTPUT'], "a") as output:
+  print(str.format("matrix={0}",json.dumps(m)), file=output)
 

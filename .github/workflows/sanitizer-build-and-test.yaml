@@ -117,11 +117,11 @@ jobs:
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
-          if coredumpctl -q list >/dev/null; then echo "::set-output name=coredumps::true"; fi
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
           # print OOM killer information
           sudo journalctl --system -q --facility=kern --grep "Killed process" || true
         fi
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
         cat regression.log
 

@@ -27,9 +27,9 @@ jobs:
       id: build_type
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          echo "::set-output name=build_type::['Debug']"
+          echo "build_type=['Debug']" >>$GITHUB_OUTPUT
         else
-          echo "::set-output name=build_type::['Debug','Release']"
+          echo "build_type=['Debug','Release']" >>$GITHUB_OUTPUT
         fi
 
   build:
@@ -176,14 +176,24 @@ jobs:
 
     - name: Show regression diffs
       if: always() && matrix.pg != '12'
+      shell: python
       id: collectlogs
-      shell: wsl-bash {0}
       run: |
-        find build_wsl -name regression.out -exec cat {} + > installcheck.log
-        find build_wsl -name regression.diffs -exec cat {} + > regression.log
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
-        cat regression.log
+        import re
+        import os
+        from pathlib import Path
+
+        for path in Path('build_wsl').rglob('regression.out'):
+          for line in path.open():
+            if re.search('failed', line, re.IGNORECASE):
+              print(line, end='')
+
+        for path in Path('build_wsl').rglob('regression.diffs'):
+          for line in path.open():
+            print(line, end='')
+        
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+          print('regression_diff=true', file=output)
 
     - name: Save regression diffs
       if: always() && matrix.pg != '12' && steps.collectlogs.outputs.regression_diff == 'true'
@@ -191,4 +201,3 @@ jobs:
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: regression.log
-

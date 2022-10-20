@@ -106,7 +106,7 @@ jobs:
         # wait for in progress coredumps
         sleep 10
         if coredumpctl list; then
-          echo "::set-output name=coredumps::true"
+          echo "coredumps=true" >>$GITHUB_OUTPUT
           false
         fi
 

@@ -108,7 +108,7 @@ jobs:
         sudo chmod a+rw .
         sudo find . -name regression.diffs -exec cat {} + > regression.log
         sudo find . -name postmaster.log -exec cat {} + > postgres.log
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
         cat regression.log
 
