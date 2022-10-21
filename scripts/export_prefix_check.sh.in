@@ -37,6 +37,7 @@ fi
 #    internal_sigreturn           gcc
 #    OnPrint                      gcc
 #    backtrace_uncompress_zdebug  libbacktrace
+#    reset_fn_list                used by llvm code coverage infrastructure
 # all of these symbols start with an additional leading '_' on macos
 exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
     | xargs -0 @NM@ ${DEFINED_ONLY} ${EXTERN_ONLY} \
@@ -71,6 +72,7 @@ exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
         -e '^_\?internal_sigreturn$' \
         -e '^_\?OnPrint$' \
         -e '^_\?backtrace_uncompress_zdebug$' \
+        -e '^reset_fn_list$' \
 )
 
 num_exports=$(echo "${exports}" | grep -v '^$' -c)

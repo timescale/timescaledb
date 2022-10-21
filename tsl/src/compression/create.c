@@ -918,7 +918,7 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 			bool orderby_time_default_matches = false;
 			ListCell *elem1, *elem2;
 			FormData_hypertable_compression *fd_elem1;
-			NameData colname1 = { { 0 } }, colname2 = { { 0 } };
+			NameData colname1 = { .data = { 0 } }, colname2 = { .data = { 0 } };
 			CompressedParsedCol *cpc_elem2;
 			/* If the orderby that's already set is only the time column DESC (which is the
 			 default), and we pass the default again, then no need to give an error */

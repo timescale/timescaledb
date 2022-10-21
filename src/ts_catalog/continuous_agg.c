@@ -1304,7 +1304,7 @@ ts_number_of_continuous_aggs()
 static int32
 find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
 {
-	short count = 0;
+	PG_USED_FOR_ASSERTS_ONLY short count = 0;
 	int32 htid = INVALID_HYPERTABLE_ID;
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);

@@ -40,8 +40,8 @@ validate_check_signature(Oid check)
 {
 	Oid proc = InvalidOid;
 	ObjectWithArgs *object;
-	NameData check_name = { 0 };
-	NameData check_schema = { 0 };
+	NameData check_name = { .data = { 0 } };
+	NameData check_schema = { .data = { 0 } };
 
 	namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
 	namestrcpy(&check_name, get_func_name(check));
@@ -80,8 +80,8 @@ job_add(PG_FUNCTION_ARGS)
 	NameData proc_name;
 	NameData proc_schema;
 	NameData owner_name;
-	NameData check_name = { 0 };
-	NameData check_schema = { 0 };
+	NameData check_name = { .data = { 0 } };
+	NameData check_schema = { .data = { 0 } };
 	Interval max_runtime = { .time = DEFAULT_MAX_RUNTIME };
 	Interval retry_period = { .time = DEFAULT_RETRY_PERIOD };
 	int32 job_id;
@@ -293,8 +293,8 @@ job_alter(PG_FUNCTION_ARGS)
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
 	BgwJob *job;
-	NameData check_name = { 0 };
-	NameData check_schema = { 0 };
+	NameData check_name = { .data = { 0 } };
+	NameData check_schema = { .data = { 0 } };
 	Oid check = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
 	char *check_name_str = NULL;
 	/* Added space for period and NULL */
@@ -370,7 +370,7 @@ job_alter(PG_FUNCTION_ARGS)
 
 	if (unregister_check)
 	{
-		NameData empty_namedata = { 0 };
+		NameData empty_namedata = { .data = { 0 } };
 		namestrcpy(&job->fd.check_schema, NameStr(empty_namedata));
 		namestrcpy(&job->fd.check_name, NameStr(empty_namedata));
 	}
