@@ -271,15 +271,6 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 }
 
 /*
- * Returns true if we have no buffered tuples.
- */
-static inline bool
-TSCopyMultiInsertInfoIsEmpty(TSCopyMultiInsertInfo *miinfo)
-{
-	return miinfo->bufferedTuples == 0;
-}
-
-/*
  * Write the tuples stored in 'buffer' out to the table.
  */
 static inline int
