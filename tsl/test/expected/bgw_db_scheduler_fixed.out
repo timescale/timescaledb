@@ -121,10 +121,13 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 
 -- empty
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-(1 row)
+ msg_no | application_name |                                                                     msg                                                                     
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 50, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.05 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.05 1999 PST                                                                                               +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.05 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+(3 rows)
 
 --
 -- Test running the scheduler with a job marked as unscheduled
@@ -186,13 +189,19 @@ SELECT * FROM timescaledb_information.job_stats;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                      msg                                                                      
+--------+------------------+-----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 50, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.05 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.05 1999 PST                                                                                                 +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.05 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 50, start is Fri Dec 31 16:00:00.05 1999 PST, quit_time is Fri Dec 31 16:00:00.1 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.1 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.1 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | unscheduled      | Execute job 1
-(4 rows)
+(8 rows)
 
 SELECT delete_job(1000);
  delete_job 
@@ -296,12 +305,15 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                     msg                                                                      
+--------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                               +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-(3 rows)
+(5 rows)
 
 --Test that the scheduler will not run job again if not enough time has passed
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
@@ -318,13 +330,19 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                       
+--------+------------------+-------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-(4 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.05 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.05 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.05 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+(8 rows)
 
 --After enough time has passed the scheduler will run the job again
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 50);
@@ -341,17 +359,28 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | test_job_1       | Execute job 1
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                       
+--------+------------------+-------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-(8 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.05 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.05 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.05 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 100, start is Fri Dec 31 16:00:00.05 1999 PST, quit_time is Fri Dec 31 16:00:00.15 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.15 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.1 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.15 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.15 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | test_job_1       | Execute job 1
+(15 rows)
 
 --Now it runs it one more time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(120, 100);
@@ -368,21 +397,37 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | test_job_1       | Execute job 1
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                       
+--------+------------------+-------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.05 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.05 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.05 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 100, start is Fri Dec 31 16:00:00.05 1999 PST, quit_time is Fri Dec 31 16:00:00.15 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.15 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.1 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.15 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.15 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-(12 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 120, start is Fri Dec 31 16:00:00.15 1999 PST, quit_time is Fri Dec 31 16:00:00.27 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.27 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.2 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.27 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.27 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | test_job_1       | Execute job 1
+(22 rows)
 
 --
 -- Test what happens when running a job that throws an error
@@ -420,13 +465,16 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                     msg                                                                      
+--------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                               +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-(4 rows)
+(6 rows)
 
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
          last_finish          | last_successful_finish | last_run_success 
@@ -456,18 +504,26 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                        
+--------+------------------+--------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-(9 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 225, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.25 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.204688 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.25 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      1 | test_job_2       | job 1001 threw an error
+      2 | test_job_2       | Error job 2
+(14 rows)
 
 -- as we have a job on a fixed_schedule, the next_start will not be more than the next scheduled slot
 -- If the calculated next_start is more than the next scheduled execution slot, then
@@ -487,23 +543,36 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                        
+--------+------------------+--------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 225, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.25 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.204688 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.25 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-(14 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 425, start is Fri Dec 31 16:00:00.25 1999 PST, quit_time is Fri Dec 31 16:00:00.675 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.675 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.589063 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.675 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.675 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      1 | test_job_2       | job 1001 threw an error
+      2 | test_job_2       | Error job 2
+(22 rows)
 
 -- will see 4 failures now 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(625); 
@@ -520,28 +589,46 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | test_job_2       | job 1001 threw an error
-      2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                        
+--------+------------------+--------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 225, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.25 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.204688 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.25 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 425, start is Fri Dec 31 16:00:00.25 1999 PST, quit_time is Fri Dec 31 16:00:00.675 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.675 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.589063 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.675 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.675 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-(19 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 625, start is Fri Dec 31 16:00:00.675 1999 PST, quit_time is Fri Dec 31 16:00:01.3 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:01.3 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.8 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:01.3 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:01.3 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      1 | test_job_2       | job 1001 threw an error
+      2 | test_job_2       | Error job 2
+(30 rows)
 
 -- will see 5 failures now because job executes again on its next scheduled slot (800ms after its initial start, which is 0)
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(825);
@@ -558,34 +645,57 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                            msg                            
---------+------------------+-----------------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                        
+--------+------------------+--------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 225, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.25 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.204688 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.25 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.25 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 425, start is Fri Dec 31 16:00:00.25 1999 PST, quit_time is Fri Dec 31 16:00:00.675 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.675 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.589063 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.675 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.675 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 625, start is Fri Dec 31 16:00:00.675 1999 PST, quit_time is Fri Dec 31 16:00:01.3 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:01.3 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.8 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:01.3 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:01.3 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 threw an error
       2 | test_job_2       | Error job 2
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 825, start is Fri Dec 31 16:00:01.3 1999 PST, quit_time is Fri Dec 31 16:00:02.125 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:02.125 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:01.5375 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:02.125 1999 PST                                                                                                   +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:02.125 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | test_job_2       | job 1001 reached max_retries after 5 consecutive failures
       2 | test_job_2       | job 1001 threw an error
       3 | test_job_2       | Error job 2
-(25 rows)
+(39 rows)
 
 -- Get status of failing job `test_job_2` to check it reached `max_retries` and
 -- the new `job_status` now is `Paused`
@@ -661,14 +771,19 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      2 | DB Scheduler     | terminating connection due to timeout
+ msg_no | application_name |                                                                     msg                                                                     
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 200, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.2 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.2 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.2 1999 PST
       3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      4 | DB Scheduler     | job 1002 failed
-(5 rows)
+      4 | DB Scheduler     | terminating connection due to timeout
+      5 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.2 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.2 1999 PST
+      6 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      7 | DB Scheduler     | job 1002 failed
+(8 rows)
 
 --Check that the scheduler does not kill a job with infinite timeout
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -703,13 +818,16 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                     msg                                                                      
+--------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 550, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.55 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.55 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.55 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(4 rows)
+(6 rows)
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
  ts_bgw_params_mock_wait_returns_immediately 
@@ -759,14 +877,17 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                         msg                         
---------+------------------+-----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                     msg                                                                     
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 300, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.3 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.3 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.3 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | terminating connection due to administrator command
-      2 | DB Scheduler     | job 1004 failed
-(5 rows)
+      4 | DB Scheduler     | job 1004 failed
+(7 rows)
 
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
@@ -790,19 +911,27 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                         msg                         
---------+------------------+-----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                      msg                                                                      
+--------+------------------+-----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 300, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.3 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.3 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.3 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | terminating connection due to administrator command
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      2 | DB Scheduler     | job 1004 failed
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 900, start is Fri Dec 31 16:00:00.3 1999 PST, quit_time is Fri Dec 31 16:00:01.2 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:01.2 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.823438 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      4 | DB Scheduler     | job 1004 failed
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:01.2 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:01.2 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(10 rows)
+(15 rows)
 
 --Test sending a SIGHUP to a job
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -854,10 +983,11 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                      msg                      
---------+------------------+-----------------------------------------------
-      0 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
-(1 row)
+ msg_no | application_name |                                                         msg                                                          
+--------+------------------+----------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is -1, start is Fri Dec 31 16:00:00 1999 PST, quit_time is infinity
+      1 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
+(2 rows)
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
@@ -928,14 +1058,17 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                         msg                         
---------+------------------+-----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      2 | DB Scheduler     | terminating connection due to administrator command
+ msg_no | application_name |                                                                     msg                                                                     
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 500, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.5 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      4 | DB Scheduler     | terminating connection due to administrator command
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | terminating connection due to administrator command
-(5 rows)
+(7 rows)
 
 --After a SIGTERM to scheduler and jobs, the jobs are considered crashed and there is a imposed wait of 5 min before a job can be run.
 --See that there is no run again because of the crash-imposed wait (not run with the 10ms retry_period)
@@ -967,20 +1100,31 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                         msg                         
---------+------------------+-----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      2 | DB Scheduler     | terminating connection due to administrator command
-      0 | test_job_3_long  | Before sleep job 3
-      1 | test_job_3_long  | terminating connection due to administrator command
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                       msg                                                                        
+--------+------------------+--------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 500, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.5 1999 PST
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 500, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.5 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      4 | DB Scheduler     | terminating connection due to administrator command
+      0 | test_job_3_long  | Before sleep job 3
+      1 | test_job_3_long  | terminating connection due to administrator command
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 400000, start is Fri Dec 31 16:00:00.5 1999 PST, quit_time is Fri Dec 31 16:06:40.5 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:06:40.5 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:05:00.5 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:06:40.5 1999 PST                                                                                                     +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:06:40.5 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(11 rows)
+(18 rows)
 
 CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
@@ -1112,16 +1256,19 @@ ORDER BY job_id;
 (6 rows)
 
 SELECT * FROM sorted_bgw_log WHERE application_name = 'DB Scheduler' ORDER BY application_name, msg_no;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
+ msg_no | application_name |                                                                     msg                                                                     
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25000, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:25 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Registered new background worker
       3 | DB Scheduler     | [TESTING] Registered new background worker
       4 | DB Scheduler     | [TESTING] Registered new background worker
       5 | DB Scheduler     | [TESTING] Registered new background worker
-      6 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-(7 rows)
+      6 | DB Scheduler     | [TESTING] Registered new background worker
+      7 | DB Scheduler     | quit_time is Fri Dec 31 16:00:25 1999 PST                                                                                                  +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:25 1999 PST
+      8 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+(9 rows)
 
 SELECT ts_bgw_params_destroy();
  ts_bgw_params_destroy 
@@ -1176,12 +1323,15 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                     msg                                                                      
+--------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler     | [TESTING] Registered new background worker
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                               +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_4       | Execute job 4
-(3 rows)
+(5 rows)
 
 -- Now just make sure that the job actually runs in 200ms
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
@@ -1200,16 +1350,24 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | test_job_4       | Execute job 4
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                                                                        msg                                                                        
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
       1 | DB Scheduler     | [TESTING] Registered new background worker
-      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      2 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_4       | Execute job 4
-(7 rows)
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 200, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:00.225 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.225 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.2 1999 PST
+      2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.225 1999 PST                                                                                                    +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.225 1999 PST
+      5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | test_job_4       | Execute job 4
+(12 rows)
 
 -- Test updating jobs list
 TRUNCATE bgw_log;
@@ -1543,25 +1701,42 @@ SELECT ts_bgw_params_reset_time(500000, true);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      1 | DB Scheduler     | [TESTING] Registered new background worker
+ msg_no | application_name |                                                                     msg                                                                     
+--------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler     | IN ts_bgw_scheduler_process, run_for_interval_ms is 500, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.5 1999 PST
+      1 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | another          | Execute job 1
       3 | DB Scheduler     | [TESTING] Registered new background worker
-      4 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | another          | Execute job 1
+      4 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
       5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      6 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      7 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      8 | DB Scheduler     | [TESTING] Registered new background worker
-      9 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | another          | Execute job 1
+      6 | DB Scheduler     | [TESTING] Registered new background worker
+      7 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+      8 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | another          | Execute job 1
+      9 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+     10 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+     11 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+     12 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+     13 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+     14 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+     15 | DB Scheduler     | [TESTING] Registered new background worker
+     16 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+     17 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | new_job          | Execute job 1
-     10 | DB Scheduler     | [TESTING] Registered new background worker
-     11 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+     18 | DB Scheduler     | [TESTING] Registered new background worker
+     19 | DB Scheduler     | quit_time is Fri Dec 31 16:00:00.5 1999 PST                                                                                                +
+        |                  | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.5 1999 PST
+     20 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | new_job          | Execute job 1
-(16 rows)
+(25 rows)
 
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
@@ -1661,6 +1836,11 @@ select * from _timescaledb_config.bgw_job;
 (3 rows)
 
 -- now wait for scheduler to run the policies
+SELECT * FROM sorted_bgw_log;
+ msg_no | application_name | msg 
+--------+------------------+-----
+(0 rows)
+
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -1674,6 +1854,22 @@ SELECT * from _timescaledb_internal.bgw_job_stat;
    1027 | Fri Dec 31 16:00:00 1999 PST     | Fri Dec 31 16:00:00 1999 PST     | Sat Jan 15 16:00:00 2000 PST     | Fri Dec 31 16:00:00 1999 PST     | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0 |     0
    1028 | Fri Dec 31 16:00:00.005 1999 PST | Fri Dec 31 16:00:00.005 1999 PST | Fri Jan 21 16:00:00.005 2000 PST | Fri Dec 31 16:00:00.005 1999 PST | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0 |     0
 (3 rows)
+
+SELECT * from sorted_bgw_log;
+ msg_no |              application_name              |                                                                     msg                                                                      
+--------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler                               | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler                               | [TESTING] Registered new background worker
+      2 | DB Scheduler                               | [TESTING] Registered new background worker
+      3 | DB Scheduler                               | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                               +
+        |                                            | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.005 1999 PST
+      4 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      5 | DB Scheduler                               | [TESTING] Registered new background worker
+      6 | DB Scheduler                               | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                               +
+        |                                            | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      7 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | Refresh Continuous Aggregate Policy [1028] | refreshing continuous aggregate "cagg_scheduler" in window [ Sun Oct 31 17:00:00 2021 PDT, Sun Jul 31 17:00:00 2022 PDT ]
+(9 rows)
 
 SELECT show_chunks('test_table_scheduler');
               show_chunks               
@@ -1730,7 +1926,7 @@ initial_start => :'init'::timestamptz + interval '15 ms', timezone => 'Europe/Be
                1031
 (1 row)
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000); -- hopefully enough time for the reorder policy to run before scheduler wakes up again?
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -1757,4 +1953,29 @@ select job_id, last_start, last_finish, next_start, last_successful_finish from 
    1030 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | Mon Jul 31 16:00:00.01 2000 PDT  | Fri Dec 31 16:00:00.025 1999 PST
    1031 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | Sat Jan 15 16:00:00.015 2000 PST | Fri Dec 31 16:00:00.025 1999 PST
 (6 rows)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |              application_name              |                                                                        msg                                                                         
+--------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | DB Scheduler                               | IN ts_bgw_scheduler_process, run_for_interval_ms is 25, start is Fri Dec 31 16:00:00 1999 PST, quit_time is Fri Dec 31 16:00:00.025 1999 PST
+      1 | DB Scheduler                               | [TESTING] Registered new background worker
+      2 | DB Scheduler                               | [TESTING] Registered new background worker
+      3 | DB Scheduler                               | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                     +
+        |                                            | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.005 1999 PST
+      4 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      5 | DB Scheduler                               | [TESTING] Registered new background worker
+      6 | DB Scheduler                               | quit_time is Fri Dec 31 16:00:00.025 1999 PST                                                                                                     +
+        |                                            | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:00.025 1999 PST
+      7 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | Refresh Continuous Aggregate Policy [1028] | refreshing continuous aggregate "cagg_scheduler" in window [ Sun Oct 31 17:00:00 2021 PDT, Sun Jul 31 17:00:00 2022 PDT ]
+      0 | DB Scheduler                               | IN ts_bgw_scheduler_process, run_for_interval_ms is 1000, start is Fri Dec 31 16:00:00.025 1999 PST, quit_time is Fri Dec 31 16:00:01.025 1999 PST
+      1 | DB Scheduler                               | [TESTING] Registered new background worker
+      2 | DB Scheduler                               | [TESTING] Registered new background worker
+      3 | DB Scheduler                               | [TESTING] Registered new background worker
+      4 | DB Scheduler                               | quit_time is Fri Dec 31 16:00:01.025 1999 PST                                                                                                     +
+        |                                            | , earliest_wakeup_to_start_next_job is Fri Dec 31 16:00:01.025 1999 PST
+      5 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | User-Defined Action [1029]                 | this is job_test_fixed
+      0 | User-Defined Action [1030]                 | this is job_test_fixed
+(17 rows)
 

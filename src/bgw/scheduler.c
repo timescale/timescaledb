@@ -29,6 +29,7 @@
 #include <pgstat.h>
 #include <tcop/tcopprot.h>
 #include <nodes/pg_list.h>
+#include <utils/builtins.h>
 
 #include "compat/compat.h"
 #include "extension.h"
@@ -765,6 +766,12 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	ereport(DEBUG1, (errmsg("database scheduler starting for database %u", MyDatabaseId)));
 
+	elog(LOG, "IN %s, run_for_interval_ms is %d, start is %s, quit_time is %s", 
+	__func__,
+	run_for_interval_ms,
+	DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(start))),
+	DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(quit_time)))
+	);
 	/*
 	 * on SIGTERM the process will usually die from the CHECK_FOR_INTERRUPTS
 	 * in the die() called from the sigterm handler. Child reaping is then
@@ -779,6 +786,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		/* start jobs, and then check when to next wake up */
 		start_scheduled_jobs(bgw_register);
 		next_wakeup = least_timestamp(next_wakeup, earliest_wakeup_to_start_next_job());
+		elog(LOG, "quit_time is %s\n, earliest_wakeup_to_start_next_job is %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(quit_time))), 
+		DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(next_wakeup))));
+		// elog(LOG, "earliest wakeup (next scheduled start time for a job) %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, next_wakeup)));
 		next_wakeup = least_timestamp(next_wakeup, earliest_job_timeout());
 
 		pgstat_report_activity(STATE_IDLE, NULL);
