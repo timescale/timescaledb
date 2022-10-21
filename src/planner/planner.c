@@ -1073,8 +1073,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 
 	if (reltype == TS_REL_HYPERTABLE &&
 #if PG14_GE
-		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE ||
-		 root->parse->commandType == CMD_UPDATE)
+		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE /*||
+		 root->parse->commandType == CMD_UPDATE*/)
 #else
 		/*
 		 * For PG < 14 commandType will be CMD_SELECT even when planning DELETE so we
@@ -1426,14 +1426,17 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 		{
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 
-#if PG14_GE
 			/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
 			 * the codepath for earlier versions is different. */
-			if (mt->operation == CMD_INSERT || mt->operation == CMD_UPDATE ||
-				mt->operation == CMD_DELETE)
-#else
-			if (mt->operation == CMD_INSERT)
+			if (
+				mt->operation == CMD_INSERT
+#if PG14
+				|| mt->operation == CMD_UPDATE
 #endif
+#if PG14_GE
+				|| mt->operation == CMD_DELETE
+#endif
+				)
 			{
 				RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 				Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
