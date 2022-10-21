@@ -699,7 +699,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
 			/* add the proc_schema, proc_name to the jsonb */
-			NameData proc_schema = { 0 }, proc_name = { 0 };
+			NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
 			JsonbParseState *parse_state = NULL;

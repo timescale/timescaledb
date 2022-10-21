@@ -1911,7 +1911,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 {
 	ScanIterator iterator;
 	Chunk *chunk = NULL;
-	int count = 0;
+	PG_USED_FOR_ASSERTS_ONLY int count = 0;
 
 	Assert(chunk_id != 0);
 

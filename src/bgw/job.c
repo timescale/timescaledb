@@ -588,7 +588,7 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 	/* Take a share lock on the table to prevent concurrent data changes during scan. This lock will
 	 * be released after the scan */
 	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, ShareLock, mctx);
-	int num_found = 0;
+	PG_USED_FOR_ASSERTS_ONLY int num_found = 0;
 	BgwJob *job = NULL;
 	LOCKTAG tag;
 
@@ -1135,7 +1135,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
 	TimestampTz start_time = DT_NOBEGIN, finish_time = DT_NOBEGIN;
-	NameData proc_schema = { 0 }, proc_name = { 0 };
+	NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
 
 	PG_TRY();
 	{
