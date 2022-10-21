@@ -1397,10 +1397,10 @@ ts_bgw_job_validate_schedule_interval(Interval *schedule_interval)
 
 	if (has_month && (has_day || has_time))
 		ereport(ERROR,
-				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("month intervals cannot have day or time component"),
-				errdetail("Fixed schedule jobs do not support such schedule intervals."),
-				errhint("Express the interval in terms of days or time instead."));
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("month intervals cannot have day or time component"),
+				 errdetail("Fixed schedule jobs do not support such schedule intervals."),
+				 errhint("Express the interval in terms of days or time instead.")));
 }
 
 char *
