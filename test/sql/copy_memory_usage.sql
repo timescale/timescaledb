@@ -50,16 +50,9 @@ set timescaledb.max_cached_chunks_per_hypertable = 3;
 
 select count(*) from portal_memory_log;
 
---- Check the memory usage of the PortalContext. Ensure that the copy commands do
---- not allocate memory in this context and the context does not grow. Allow 10%
---- change of memory usage to account for some randomness.
-select bytes as bytes_begin from portal_memory_log order by id asc limit 1 \gset
-select bytes as bytes_end from portal_memory_log order by id desc limit 1 \gset
-
--- We'll only compare the biggest runs, because the smaller ones have variance
--- due to new chunks being created and other unknown reasons. Allow 10% change of
--- memory usage to account for some randomness.
+-- Check that the memory doesn't increase with file size by using linear regression.
 select * from portal_memory_log where (
-   select abs(:bytes_begin - :bytes_end) / :bytes_begin::float > 0.1
+    select regr_slope(bytes, id - 1) / regr_intercept(bytes, id - 1)::float > 0.05
+        from portal_memory_log
 );
 
