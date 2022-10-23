@@ -21,6 +21,8 @@
 
 #include "export.h"
 
+#define PG_MAJOR_MIN 12
+
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 #define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
 #define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
