@@ -48,8 +48,8 @@ get_space_dimension(Oid relid, AttrNumber varattno)
  * the space dimension. This is the equality operator between
  * left and right in the btree operator family.
  */
-static bool
-is_valid_space_operator(Oid opno, Oid left, Oid right)
+bool
+ts_is_equality_operator(Oid opno, Oid left, Oid right)
 {
 	TypeCacheEntry *tce;
 
@@ -96,7 +96,7 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 		return false;
 
 	Const *value = lsecond_node(Const, op->args);
-	if (!is_valid_space_operator(op->opno, var->vartype, value->consttype))
+	if (!ts_is_equality_operator(op->opno, var->vartype, value->consttype))
 		return false;
 
 	/*
@@ -130,7 +130,7 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	if (arr->multidims || !op->useOr || var->varlevelsup != 0)
 		return false;
 
-	if (!is_valid_space_operator(op->opno, var->vartype, arr->element_typeid))
+	if (!ts_is_equality_operator(op->opno, var->vartype, arr->element_typeid))
 		return false;
 
 	/*

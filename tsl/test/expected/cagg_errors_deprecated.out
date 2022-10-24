@@ -32,27 +32,6 @@ select * from conditions , mat_t1 WITH NO DATA;
 ERROR:  unsupported combination of storage parameters
 DETAIL:  A continuous aggregate does not support standard storage parameters.
 HINT:  Use only parameters with the "timescaledb." prefix when creating a continuous aggregate.
--- join multiple tables
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
-as
-select location, count(*) from conditions , mat_t1
-where conditions.location = mat_t1.c
-group by location WITH NO DATA;
-ERROR:  only one hypertable allowed in continuous aggregate view
--- join multiple tables WITH explicit JOIN
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
-as
-select location, count(*) from conditions JOIN mat_t1 ON true
-where conditions.location = mat_t1.c
-group by location WITH NO DATA;
-ERROR:  only one hypertable allowed in continuous aggregate view
--- LATERAL multiple tables
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
-as
-select location, count(*) from conditions,
-LATERAL (Select * from mat_t1 where c = conditions.location) q
-group by location WITH NO DATA;
-ERROR:  only one hypertable allowed in continuous aggregate view
 --non-hypertable
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as

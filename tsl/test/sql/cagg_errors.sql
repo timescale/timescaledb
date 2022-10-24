@@ -29,27 +29,6 @@ CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous, check_option = LO
 as
 select * from conditions , mat_t1 WITH NO DATA;
 
--- join multiple tables
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-as
-select location, count(*) from conditions , mat_t1
-where conditions.location = mat_t1.c
-group by location WITH NO DATA;
-
--- join multiple tables WITH explicit JOIN
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-as
-select location, count(*) from conditions JOIN mat_t1 ON true
-where conditions.location = mat_t1.c
-group by location WITH NO DATA;
-
--- LATERAL multiple tables
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-as
-select location, count(*) from conditions,
-LATERAL (Select * from mat_t1 where c = conditions.location) q
-group by location WITH NO DATA;
-
 
 --non-hypertable
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
