@@ -150,7 +150,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_partial_agg.sql.in
     dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in
-    continuous_aggs.sql.in)
+    continuous_aggs.sql.in
+    cagg_joins.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()

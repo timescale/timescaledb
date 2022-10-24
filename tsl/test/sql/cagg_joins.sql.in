@@ -1,0 +1,308 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+
+CREATE TABLE conditions(
+  day DATE NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL,
+device_id int NOT NULL);
+SELECT create_hypertable(
+  'conditions', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-06-14', 'Moscow', 26,1),
+  ('2021-06-15', 'Moscow', 22,2),
+  ('2021-06-16', 'Moscow', 24,3),
+  ('2021-06-17', 'Moscow', 24,4),
+  ('2021-06-18', 'Moscow', 27,4),
+  ('2021-06-19', 'Moscow', 28,4),
+  ('2021-06-20', 'Moscow', 30,1),
+  ('2021-06-21', 'Moscow', 31,1),
+  ('2021-06-22', 'Moscow', 34,1),
+  ('2021-06-23', 'Moscow', 34,2),
+  ('2021-06-24', 'Moscow', 34,2),
+  ('2021-06-25', 'Moscow', 32,3),
+  ('2021-06-26', 'Moscow', 32,3),
+  ('2021-06-27', 'Moscow', 31,3);
+
+CREATE TABLE conditions_dup AS SELECT * FROM conditions;
+SELECT create_hypertable(
+  'conditions_dup', 'day',
+  chunk_time_interval => INTERVAL '1 day',
+  migrate_data => true
+);
+CREATE TABLE devices ( device_id int not null, name text, location text);
+INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
+
+CREATE TABLE devices_dup AS SELECT * FROM devices;
+CREATE VIEW devices_view AS SELECT * FROM devices;
+
+--Create a cagg with join between a hypertable and a normal table
+-- with equality condition on inner join type
+CREATE MATERIALIZED VIEW conditions_summary_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_reorder
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM devices, conditions
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_2
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_2_reorder
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM devices JOIN conditions ON conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_3
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM devices JOIN conditions USING (device_id)
+GROUP BY name, bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_3_reorder
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices USING (device_id)
+GROUP BY name, bucket;
+
+--Error out for old format cagg definition
+CREATE MATERIALIZED VIEW conditions_summary_daily_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   devices.device_id device_id,
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket, devices.device_id;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   devices.device_id device_id,
+   name
+FROM conditions JOIN devices
+ON conditions.device_id = devices.device_id
+GROUP BY name, bucket, devices.device_id;
+
+CREATE  TABLE mat_t1( a integer, b integer,c TEXT);
+
+-- Error out LATERAL multiple tables old format
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+as
+select temperature, count(*) from conditions,
+LATERAL (Select * from mat_t1 where a = conditions.temperature) q
+group by temperature WITH NO DATA;
+
+-- Error out for LATERAL multiple tables in new format
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+as
+select temperature, count(*) from conditions,
+LATERAL (Select * from mat_t1 where a = conditions.temperature) q
+group by temperature WITH NO DATA;
+
+--Error out if from clause has view
+CREATE MATERIALIZED VIEW conditions_summary_daily_view
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   devices_view.device_id,
+   name
+FROM conditions, devices_view
+WHERE conditions.device_id = devices_view.device_id
+GROUP BY name, bucket, devices_view.device_id;
+
+-- Nested CAgg over a CAgg with join
+CREATE MATERIALIZED VIEW cagg_on_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
+       SUM(avg) AS temperature
+FROM conditions_summary_daily
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW cagg_on_cagg CASCADE;
+
+--Error out when real time aggregation is enabled
+CREATE MATERIALIZED VIEW conditions_summary_daily_realtime
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+CREATE TABLE cities(name text, currency text);
+INSERT INTO cities VALUES ('Berlin', 'EUR'), ('London', 'PND');
+
+--Error out when from clause has sub selects
+CREATE MATERIALIZED VIEW conditions_summary_subselect
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN (SELECT * FROM devices WHERE location in (SELECT name from cities where currency = 'EUR')) dev ON conditions.device_id = dev.device_id
+GROUP BY name, bucket;
+
+DROP TABLE cities CASCADE;
+
+--Error out when join is between two hypertables
+CREATE MATERIALIZED VIEW conditions_summary_daily_ht
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', conditions.day) AS bucket,
+   AVG(conditions.temperature),
+   MAX(conditions.temperature),
+   MIN(conditions.temperature)
+FROM conditions, conditions_dup
+WHERE conditions.device_id = conditions_dup.device_id
+GROUP BY bucket;
+
+--Error out when join is between two normal tables
+CREATE MATERIALIZED VIEW conditions_summary_daily_nt
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT AVG(devices.device_id),
+   MAX(devices.device_id),
+   MIN(devices.device_id),
+   devices.name,
+   devices.location
+FROM devices, devices_dup
+WHERE devices.device_id = devices_dup.device_id
+GROUP BY devices.name, devices.location;
+
+--Error out when join is on non-equality condition
+CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id <> devices.device_id
+GROUP BY name, bucket;
+
+--Unsupported join condition
+CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id AND
+      conditions.city like '%cow*'
+GROUP BY name, bucket;
+
+--Unsupported join condition
+CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id OR
+      conditions.city like '%cow*'
+GROUP BY name, bucket;
+
+--Error out when join type is not inner
+CREATE MATERIALIZED VIEW conditions_summary_daily_outer
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions FULL JOIN devices
+ON conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   devices.device_id device_id,
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket, devices.device_id;
+
+--Errors out for join between cagg and normal table
+CREATE MATERIALIZED VIEW conditions_summary_daily_nested
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
+   devices.name
+FROM conditions_summary_daily_cagg cagg, devices
+WHERE cagg.device_id = devices.device_id
+GROUP BY devices.name, bucket;
+
+--Error out for join between cagg and hypertable
+CREATE MATERIALIZED VIEW conditions_summary_daily_nested
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
+   cagg.name,
+   conditions.temperature
+FROM conditions_summary_daily_cagg cagg, conditions
+WHERE cagg.device_id = conditions.device_id
+GROUP BY conditions.temperature, bucket, cagg.name;
+
+DROP TABLE conditions CASCADE;
+DROP TABLE devices CASCADE;
+DROP TABLE conditions_dup CASCADE;
+DROP TABLE devices_dup CASCADE;

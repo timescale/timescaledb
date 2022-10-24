@@ -20,3 +20,4 @@
 /telemetry_stats-*.sql
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
+/cagg_joins-*.sql
