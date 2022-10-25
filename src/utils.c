@@ -347,6 +347,38 @@ ts_internal_to_time_value(int64 value, Oid type)
 	}
 }
 
+TSDLLEXPORT int64
+ts_internal_to_time_int64(int64 value, Oid type)
+{
+	if (TS_TIME_IS_NOBEGIN(value, type))
+		return ts_time_datum_get_nobegin(type);
+
+	if (TS_TIME_IS_NOEND(value, type))
+		return ts_time_datum_get_noend(type);
+
+	switch (type)
+	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+			return value;
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
+			 * compatibility */
+			return DatumGetInt64(
+				DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value)));
+		case DATEOID:
+			return DatumGetInt64(
+				DirectFunctionCall1(ts_pg_unix_microseconds_to_date, Int64GetDatum(value)));
+		default:
+			elog(ERROR,
+				 "unknown time type \"%s\" in ts_internal_to_time_value",
+				 format_type_be(type));
+			pg_unreachable();
+	}
+}
+
 TSDLLEXPORT char *
 ts_internal_to_time_string(int64 value, Oid type)
 {

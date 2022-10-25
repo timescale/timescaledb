@@ -1153,11 +1153,62 @@ ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_n
 	return chunk;
 }
 
+#if PG14_GE
+#define OSM_CHUNK_INSERT_CHECK_HOOK "osm_chunk_insert_check_hook"
+typedef int (*ts_osm_chunk_insert_hook_type)(Oid ht_oid, int64 range_start, int64 range_end);
+static ts_osm_chunk_insert_hook_type
+get_osm_chunk_insert_hook()
+{
+	ts_osm_chunk_insert_hook_type *func_ptr =
+		(ts_osm_chunk_insert_hook_type *) find_rendezvous_variable(OSM_CHUNK_INSERT_CHECK_HOOK);
+	return *func_ptr;
+}
+#endif
+
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
+#if PG14_GE
+	ts_osm_chunk_insert_hook_type insert_func_ptr = get_osm_chunk_insert_hook();
+
+	if (insert_func_ptr)
+	{
+		/* OSM only uses first dimension . doesn't work with multinode tables yet*/
+		Dimension *dim = &ht->space->dimensions[0];
+		/* convert to PG timestamp from timescaledb internal format */
+		int64 range_start =
+			ts_internal_to_time_int64(cube->slices[0]->fd.range_start, dim->fd.column_type);
+		int64 range_end =
+			ts_internal_to_time_int64(cube->slices[0]->fd.range_end, dim->fd.column_type);
+		int chunk_exists = insert_func_ptr(ht->main_table_relid, range_start, range_end);
+		if (chunk_exists)
+		{
+			Oid outfuncid = InvalidOid;
+			bool isvarlena;
+
+			Datum start_ts =
+				ts_internal_to_time_value(cube->slices[0]->fd.range_start, dim->fd.column_type);
+			Datum end_ts =
+				ts_internal_to_time_value(cube->slices[0]->fd.range_end, dim->fd.column_type);
+			getTypeOutputInfo(dim->fd.column_type, &outfuncid, &isvarlena);
+			Assert(!isvarlena);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("distributed hypertable member cannot create chunk on its own"),
+					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
+							"new chunk "
+							"with range  [%s %s] failed",
+							NameStr(ht->fd.schema_name),
+							NameStr(ht->fd.table_name),
+							DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+							DatumGetCString(OidFunctionCall1(outfuncid, end_ts))),
+					 errhint(
+						 "Hypertable has tiered data with time range that overlaps the insert")));
+		}
+	}
+#endif
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 

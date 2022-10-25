@@ -67,6 +67,7 @@ extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_
  * Convert a column from the internal time representation into the specified type
  */
 extern TSDLLEXPORT Datum ts_internal_to_time_value(int64 value, Oid type);
+extern TSDLLEXPORT int64 ts_internal_to_time_int64(int64 value, Oid type);
 extern TSDLLEXPORT Datum ts_internal_to_interval_value(int64 value, Oid type);
 extern TSDLLEXPORT char *ts_internal_to_time_string(int64 value, Oid type);
 
