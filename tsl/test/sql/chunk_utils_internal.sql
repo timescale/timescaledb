@@ -31,6 +31,13 @@ CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 
+--mock hooks for OSM intercation with timescaledb
+CREATE OR REPLACE FUNCTION ts_setup_osm_hook( ) RETURNS VOID
+AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION ts_undo_osm_hook( ) RETURNS VOID
+AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
+
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE test1.hyper1 (time bigint, temp float);
 
@@ -273,6 +280,17 @@ SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1;
 SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 01:00' ORDER BY 1;
 
 SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1; 
+
+--TEST insert into a OSM chunk fails. actually any insert will fail. But we just need
+-- to mock the hook and make sure the timescaledb code works correctly.
+
+SELECT ts_setup_osm_hook();
+\set ON_ERROR_STOP 0
+--the mock hook returns true always. so cannot create a new chunk on the hypertable
+INSERT INTO ht_try VALUES ('2022-06-05 01:00', 222, 222);
+\set ON_ERROR_STOP 1
+SELECT ts_undo_osm_hook();
+
 -- TEST error have to be hypertable owner to attach a chunk to it
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 \set ON_ERROR_STOP 0
@@ -375,6 +393,7 @@ SELECT chunk_name, range_start, range_end
 FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
+
 
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER

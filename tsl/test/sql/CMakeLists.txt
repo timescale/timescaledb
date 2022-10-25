@@ -97,7 +97,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES modify_exclusion.sql chunk_utils_internal.sql)
+  list(APPEND TEST_FILES modify_exclusion.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES chunk_utils_internal.sql)
+  endif()
 endif()
 
 set(SOLO_TESTS
