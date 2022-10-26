@@ -107,10 +107,18 @@ jobs:
         icacls ${{ env.TABLESPACE2 }} /grant runneradmin:F /T
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postgres.log
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;SHOW data_directory;SELECT version();'
+        echo "PG version:"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
+        echo "Log configuration:"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW logging_collector;'
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;'
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_directory;'
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
+        echo "Data directory:"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Setup WSL
       if: matrix.pg != '12'
@@ -155,7 +163,7 @@ jobs:
         ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=us --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postgres.log"
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
@@ -201,3 +209,11 @@ jobs:
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: regression.log
+
+    - name: Save postgres log
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: Postgres log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: postgres.log
+
