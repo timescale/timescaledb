@@ -2539,6 +2539,31 @@ INSERT INTO hyper SELECT t, ceil((random() * 5))::int, random() * 80
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-05'::timestamptz, '1 minute') as t;
 ANALYZE hyper;
 --
+-- Ensure single query multi-statement command is blocked
+--
+-- Issue #4818
+--
+CREATE TABLE disttable(time timestamptz NOT NULL, device int);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            21 | public      | disttable  | t
+(1 row)
+
+CREATE OR REPLACE PROCEDURE test_dist_multi_stmt_command()
+LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE 'ANALYZE disttable; ANALYZE disttable';
+END
+$$;
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+-- unsupported
+\set ON_ERROR_STOP 0
+CALL test_dist_multi_stmt_command();
+ERROR:  nested commands are not supported on distributed hypertable
+\set ON_ERROR_STOP 1
+DROP TABLE disttable;
+--
 -- Test hypertable distributed defaults
 --
 SHOW timescaledb.hypertable_distributed_default;
@@ -2563,7 +2588,7 @@ ERROR:  local hypertables cannot set replication_factor
 SELECT create_hypertable('drf_test', 'time', distributed=>true, replication_factor=>1);
    create_hypertable    
 ------------------------
- (21,public,drf_test,t)
+ (22,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2581,7 +2606,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', distributed=>false);
    create_hypertable    
 ------------------------
- (22,public,drf_test,t)
+ (23,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2596,7 +2621,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', distributed=>true);
    create_hypertable    
 ------------------------
- (23,public,drf_test,t)
+ (24,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2613,7 +2638,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', distributed=>false);
    create_hypertable    
 ------------------------
- (24,public,drf_test,t)
+ (25,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2628,7 +2653,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', distributed=>true);
    create_hypertable    
 ------------------------
- (25,public,drf_test,t)
+ (26,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2652,7 +2677,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', distributed=>true);
    create_hypertable    
 ------------------------
- (26,public,drf_test,t)
+ (27,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2670,7 +2695,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
    create_hypertable    
 ------------------------
- (27,public,drf_test,t)
+ (28,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2687,7 +2712,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
    create_hypertable    
 ------------------------
- (28,public,drf_test,t)
+ (29,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2721,7 +2746,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time');
    create_hypertable    
 ------------------------
- (29,public,drf_test,t)
+ (30,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2738,7 +2763,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time');
    create_hypertable    
 ------------------------
- (30,public,drf_test,t)
+ (31,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
@@ -2756,7 +2781,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('drf_test', 'time');
    create_hypertable    
 ------------------------
- (31,public,drf_test,t)
+ (32,public,drf_test,t)
 (1 row)
 
 DROP TABLE drf_test;
@@ -2768,7 +2793,7 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_distributed_hypertable('drf_test', 'time');
  create_distributed_hypertable 
 -------------------------------
- (32,public,drf_test,t)
+ (33,public,drf_test,t)
 (1 row)
 
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
