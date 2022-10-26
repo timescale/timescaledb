@@ -117,6 +117,21 @@ dist_ddl_error_if_not_allowed_data_node_session(void)
 }
 
 static void
+dist_ddl_error_if_multi_command(const ProcessUtilityArgs *args)
+{
+	List *parsetree_list;
+
+	/* Parse the SQL string into a list of raw parse trees */
+	parsetree_list = pg_parse_query(args->query_string);
+
+	/* Prevent 'command;command' execution */
+	if (list_length(parsetree_list) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("nested commands are not supported on distributed hypertable")));
+}
+
+static void
 dist_ddl_state_add_remote_command(const char *cmd)
 {
 	MemoryContext mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
@@ -313,6 +328,9 @@ dist_ddl_state_set_hypertable(const ProcessUtilityArgs *args)
 	 */
 	if (num_hypertables > 1)
 		dist_ddl_error_raise_unsupported();
+
+	/* Prevent execution of several commands in one query string */
+	dist_ddl_error_if_multi_command(args);
 
 	/* Get the distributed hypertable */
 	ht =

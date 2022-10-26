@@ -731,6 +731,29 @@ FROM generate_series('2019-01-01'::timestamptz, '2019-01-05'::timestamptz, '1 mi
 ANALYZE hyper;
 
 --
+-- Ensure single query multi-statement command is blocked
+--
+-- Issue #4818
+--
+CREATE TABLE disttable(time timestamptz NOT NULL, device int);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+
+CREATE OR REPLACE PROCEDURE test_dist_multi_stmt_command()
+LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE 'ANALYZE disttable; ANALYZE disttable';
+END
+$$;
+
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CALL test_dist_multi_stmt_command();
+\set ON_ERROR_STOP 1
+
+DROP TABLE disttable;
+--
 -- Test hypertable distributed defaults
 --
 SHOW timescaledb.hypertable_distributed_default;
