@@ -2421,13 +2421,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	}
 
 	if (finalized)
-	{ /* This continuous aggregate does not have partials, do not check for defects. */
+	{
+		/* This continuous aggregate does not have partials, do not check for defects. */
 		relation_close(user_view_rel, NoLock);
-		elog(INFO,
-			 "Skipping check for defects of aggregate without partials "
-			 "\"%s.%s\"",
-			 schema,
-			 relname);
 		return;
 	}
 
