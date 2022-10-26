@@ -188,10 +188,11 @@ extern void ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id);
 extern TSDLLEXPORT ContinuousAggViewType ts_continuous_agg_view_type(FormData_continuous_agg *data,
 																	 const char *schema,
 																	 const char *name);
-extern void ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema);
-extern void ts_continuous_agg_rename_view(const char *old_schema, const char *name,
-										  const char *new_schema, const char *new_name,
-										  ObjectType *object_type);
+extern TSDLLEXPORT void ts_continuous_agg_rename_schema_name(const char *old_schema,
+															 const char *new_schema);
+extern TSDLLEXPORT void ts_continuous_agg_rename_view(const char *old_schema, const char *old_name,
+													  const char *new_schema, const char *new_name,
+													  ObjectType *object_type);
 
 extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
 
