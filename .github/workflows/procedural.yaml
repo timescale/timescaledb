@@ -48,7 +48,7 @@ jobs:
         if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
         uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
         with:
-          remove-labels: 'need-more-info'
+          remove-labels: 'need-more-info, no-activity'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Move to waiting for engineering column
         if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
