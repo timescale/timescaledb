@@ -251,9 +251,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     add_compile_options(-Wno-strict-overflow)
   endif()
 
+  # -Wclobbered produces false positives on gcc < 9
+  if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_C_COMPILER_VERSION VERSION_LESS 9)
+    add_compile_options(-Wno-clobbered)
+  endif()
+
   if(CMAKE_COMPILER_IS_GNUCC)
     add_compile_options(
-      -Wno-clobbered
       # Seems to be broken in GCC 11 with designated initializers.
       -Wno-missing-field-initializers)
   endif()

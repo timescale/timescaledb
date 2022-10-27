@@ -418,6 +418,7 @@ async_response_report_error(AsyncResponse *res, int elevel)
 					remote_result_elog(aresult->result, elevel);
 					break;
 				default:
+				{
 					PG_TRY();
 					{
 						elog(elevel, "unexpected response status %u", status);
@@ -428,6 +429,7 @@ async_response_report_error(AsyncResponse *res, int elevel)
 						PG_RE_THROW();
 					}
 					PG_END_TRY();
+				}
 			}
 			break;
 		}

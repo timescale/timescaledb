@@ -759,7 +759,8 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	Connection *conn;
 	HttpRequest *req;
 	HttpResponseState *rsp;
-	bool started = false;
+	/* Declared volatile to suppress the incorrect -Wclobbered warning. */
+	volatile bool started = false;
 	bool snapshot_set = false;
 	const char *volatile json = NULL;
 
