@@ -66,6 +66,7 @@ echo "formatting"
 
 cd ${TEMP_DIR}
 
+${CLANG_FORMAT:-clang-format} --version
 ${CLANG_FORMAT:-clang-format} -Wno-error=unknown ${CLANG_FORMAT_FLAGS} ${FILE_NAMES}
 
 cd ${CURR_DIR}

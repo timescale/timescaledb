@@ -466,7 +466,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				RestrictInfo *ri = lfirst_node(RestrictInfo, lc_ri);
 
 				if (ri->right_em && IsA(ri->right_em->em_expr, Var) &&
-					castNode(Var, ri->right_em->em_expr)->varno == info->compressed_rel->relid)
+					(Index) castNode(Var, ri->right_em->em_expr)->varno ==
+						info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->right_em->em_expr);
 					if (is_compressed_column(info, var->varattno))
@@ -476,7 +477,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					}
 				}
 				if (ri->left_em && IsA(ri->left_em->em_expr, Var) &&
-					castNode(Var, ri->left_em->em_expr)->varno == info->compressed_rel->relid)
+					(Index) castNode(Var, ri->left_em->em_expr)->varno ==
+						info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->left_em->em_expr);
 					if (is_compressed_column(info, var->varattno))
@@ -630,7 +632,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			Var *chunk_var = castNode(Var, lfirst(lc2));
 
 			/* skip vars that aren't from the uncompressed chunk */
-			if (chunk_var->varno != info->chunk_rel->relid)
+			if ((Index) chunk_var->varno != info->chunk_rel->relid)
 			{
 				continue;
 			}
@@ -756,7 +758,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		char *column_name;
 		AttrNumber compressed_attno;
 		FormData_hypertable_compression *compressioninfo;
-		if (var->varno != context->chunk_rel->relid)
+		if ((Index) var->varno != context->chunk_rel->relid)
 			return (Node *) var;
 
 		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
@@ -879,7 +881,7 @@ get_compression_info_for_em(Node *node, EMCreationContext *context)
 		FormData_hypertable_compression *col_info;
 		char *column_name;
 		Var *var = castNode(Var, node);
-		if (var->varno != context->uncompressed_relid_idx)
+		if ((Index) var->varno != context->uncompressed_relid_idx)
 			return NULL;
 
 		/* we can't add an EM for system attributes or whole-row refs */
@@ -911,7 +913,7 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 {
 	/* based on adjust_appendrel_attrs_mutator */
 	Assert(context->current_col_info != NULL);
-	Assert(var->varno == context->uncompressed_relid_idx);
+	Assert((Index) var->varno == context->uncompressed_relid_idx);
 	Assert(var->varattno > 0);
 
 	var = (Var *) copyObject(var);
@@ -956,7 +958,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 
 		var = castNode(Var, cur_em->em_expr);
 
-		if (var->varno != info->chunk_rel->relid)
+		if ((Index) var->varno != info->chunk_rel->relid)
 			continue;
 
 		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
@@ -1323,7 +1325,7 @@ find_restrictinfo_equality(RelOptInfo *chunk_rel, CompressionInfo *info)
 				else
 					continue;
 
-				if (var->varno != chunk_rel->relid || var->varattno <= 0)
+				if ((Index) var->varno != chunk_rel->relid || var->varattno <= 0)
 					continue;
 
 				if (IsA(other, Const) || IsA(other, Param))

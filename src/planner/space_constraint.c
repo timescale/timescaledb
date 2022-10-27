@@ -102,7 +102,7 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 	/*
 	 * Check that the constraint is actually on a partitioning column.
 	 */
-	Assert(var->varno <= (Index) list_length(rtable));
+	Assert((int) var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 
@@ -136,7 +136,7 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	/*
 	 * Check that the constraint is actually on a partitioning column.
 	 */
-	Assert(var->varno <= (Index) list_length(rtable));
+	Assert((int) var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 

@@ -907,7 +907,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 				varno_assigned = true;
 			}
 
-			if (varno != var->varno)
+			if (varno != (Index) var->varno)
 				return;
 		}
 		/* We only allow constants apart from vars, but we ignore them */

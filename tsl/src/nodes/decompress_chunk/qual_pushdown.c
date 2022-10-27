@@ -96,7 +96,7 @@ get_compression_info_from_var(QualPushdownContext *context, Var *var)
 {
 	char *column_name;
 	/* Not on the chunk we expect */
-	if (var->varno != context->chunk_rel->relid)
+	if ((Index) var->varno != context->chunk_rel->relid)
 		return NULL;
 
 	/* ignore system attibutes or whole row references */

@@ -1592,7 +1592,7 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 			SortGroupClause *outer_sc = (SortGroupClause *) lfirst(lc);
 			TargetEntry *outer_tle = get_sortgroupclause_tle(outer_sc, outer_tlist);
 			not_found = true;
-			if (IsA(outer_tle->expr, Var) && (((Var *) outer_tle->expr)->varno == rtno))
+			if (IsA(outer_tle->expr, Var) && ((Index) ((Var *) outer_tle->expr)->varno == rtno))
 			{
 				int outer_attno = ((Var *) outer_tle->expr)->varattno;
 				TargetEntry *subq_tle = list_nth(subq->targetList, outer_attno - 1);

@@ -74,7 +74,7 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	Var *var = linitial_node(Var, op->args);
 	if (var->varlevelsup != 0)
 		return false;
-	Assert(var->varno <= (Index) list_length(rtable));
+	Assert((int) var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 
 	/*

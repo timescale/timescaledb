@@ -142,7 +142,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				 * ts_is_partitioning_column would return the correct
 				 * answer for those as well
 				 */
-				if (var->varno == rel->relid && var->varattno > 0 &&
+				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
 					ts_is_partitioning_column(ht, var->varattno))
 				{
 					path->runtime_exclusion_children = true;
@@ -461,11 +461,17 @@ find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_con
 			Assert(IsA(left, Var) && IsA(right, Var));
 
 			/* Is this a join condition referencing our hypertable */
-			if ((left->varno == sort_relid && right->varno == ht_relid &&
-				 left->varattno == sort_var->varattno) ||
-				(left->varno == ht_relid && right->varno == sort_relid &&
+			if (((Index) left->varno == sort_relid && (Index) right->varno == ht_relid &&
+				 left->varattno == sort_var->varattno))
+			{
+				return right;
+			}
+
+			if (((Index) left->varno == ht_relid && (Index) right->varno == sort_relid &&
 				 right->varattno == sort_var->varattno))
-				return left->varno == sort_relid ? right : left;
+			{
+				return left;
+			}
 		}
 	}
 

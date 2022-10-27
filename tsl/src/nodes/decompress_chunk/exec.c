@@ -208,7 +208,7 @@ constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 	{
 		Var *var = castNode(Var, node);
 
-		if (var->varno != ctx->chunk_index)
+		if ((Index) var->varno != ctx->chunk_index)
 			return node;
 
 		if (var->varattno == TableOidAttributeNumber)

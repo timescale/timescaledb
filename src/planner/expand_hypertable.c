@@ -856,7 +856,8 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 			if (IsA(left, Var) && IsA(right, Var))
 			{
 				Var *ht_var =
-					castNode(Var, castNode(Var, left)->varno == ctx->rel->relid ? left : right);
+					castNode(Var,
+							 (Index) castNode(Var, left)->varno == ctx->rel->relid ? left : right);
 				TypeCacheEntry *tce = lookup_type_cache(ht_var->vartype, TYPECACHE_EQ_OPR);
 
 				if (op->opno == tce->eq_opr)
@@ -1570,12 +1571,12 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 		 * check this join condition refers to current hypertable
 		 * our Var might be on either side of the expression
 		 */
-		if (linitial_node(Var, op->args)->varno == rel->relid)
+		if ((Index) linitial_node(Var, op->args)->varno == rel->relid)
 		{
 			rel_var = linitial_node(Var, op->args);
 			other_var = lsecond_node(Var, op->args);
 		}
-		else if (lsecond_node(Var, op->args)->varno == rel->relid)
+		else if ((Index) lsecond_node(Var, op->args)->varno == rel->relid)
 		{
 			rel_var = lsecond_node(Var, op->args);
 			other_var = linitial_node(Var, op->args);
