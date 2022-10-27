@@ -1002,7 +1002,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 		char *sep = "";
 		RelOptInfo *scanrel = context->scanrel;
 
-		Assert(varno > 0 && varno < root->simple_rel_array_size);
+		Assert(varno > 0 && varno < (Index) root->simple_rel_array_size);
 		context->scanrel = root->simple_rel_array[varno];
 
 		appendStringInfoString(buf, "DISTINCT ON (");
@@ -1560,11 +1560,10 @@ static int
 append_values_params(DeparsedInsertStmt *stmt, StringInfo buf, int pindex)
 {
 	bool first = true;
-	int i;
 
 	appendStringInfoChar(buf, '(');
 
-	for (i = 0; i < stmt->num_target_attrs; i++)
+	for (unsigned int i = 0; i < stmt->num_target_attrs; i++)
 	{
 		if (!first)
 			appendStringInfoString(buf, ", ");

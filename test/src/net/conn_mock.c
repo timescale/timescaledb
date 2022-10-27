@@ -20,8 +20,8 @@ typedef struct MockConnection
 {
 	Connection conn;
 	char recv_buf[MOCK_MAX_BUF_SIZE];
-	int recv_buf_offset;
-	int recv_buf_len;
+	size_t recv_buf_offset;
+	size_t recv_buf_len;
 } MockConnection;
 
 static int

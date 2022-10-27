@@ -15,7 +15,7 @@ TS_TEST_FN(ts_test_scanner)
 	ScanIterator it;
 	Relation chunkrel;
 	int32 chunk_id[2] = { -1, -1 };
-	int i = 0;
+	size_t i = 0;
 
 	/* Test pre-open relation */
 	it = ts_chunk_scan_iterator_create(CurrentMemoryContext);

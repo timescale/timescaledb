@@ -61,9 +61,8 @@ apply_fdw_and_server_options(TsFdwRelInfo *fpinfo)
 	ListCell *lc;
 	ForeignDataWrapper *fdw = GetForeignDataWrapper(fpinfo->server->fdwid);
 	List *options[] = { fdw->options, fpinfo->server->options };
-	int i;
 
-	for (i = 0; i < lengthof(options); i++)
+	for (size_t i = 0; i < lengthof(options); i++)
 	{
 		foreach (lc, options[i])
 		{

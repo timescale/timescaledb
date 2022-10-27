@@ -16,13 +16,6 @@
 #endif
 
 #ifdef USE_TELEMETRY
-typedef enum TelemetryLevel
-{
-	TELEMETRY_OFF,
-	TELEMETRY_NO_FUNCTIONS,
-	TELEMETRY_BASIC,
-} TelemetryLevel;
-
 /* Define which level means on. We use this object to have at least one object
  * of type TelemetryLevel in the code, otherwise pgindent won't work for the
  * type */
@@ -87,7 +80,7 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
 #ifdef USE_TELEMETRY
-int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
+TelemetryLevel ts_guc_telemetry_level = TELEMETRY_DEFAULT;
 char *ts_telemetry_cloud = NULL;
 #endif
 
@@ -453,7 +446,7 @@ _guc_init(void)
 	DefineCustomEnumVariable("timescaledb.telemetry_level",
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
-							 &ts_guc_telemetry_level,
+							 (int *) &ts_guc_telemetry_level,
 							 TELEMETRY_DEFAULT,
 							 telemetry_level_options,
 							 PGC_USERSET,

@@ -112,7 +112,7 @@ static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
-static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, int rtno, List *outer_sortcl,
+static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sortcl,
 										List *outer_tlist);
 
 /*
@@ -918,12 +918,11 @@ rte_should_expand(const RangeTblEntry *rte)
 static void
 reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
-	Index i;
 	bool set_pathlist_for_current_rel = false;
 	double total_pages;
 	bool reenabled_inheritance = false;
 
-	for (i = 1; i < root->simple_rel_array_size; i++)
+	for (int i = 1; i < root->simple_rel_array_size; i++)
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
 
@@ -961,7 +960,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 			 */
 			if (in_rte == rte)
 			{
-				Assert(rti == i);
+				Assert(rti == (Index) i);
 				set_pathlist_for_current_rel = true;
 			}
 		}
@@ -971,14 +970,14 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		return;
 
 	total_pages = 0;
-	for (i = 1; i < root->simple_rel_array_size; i++)
+	for (int i = 1; i < root->simple_rel_array_size; i++)
 	{
 		RelOptInfo *brel = root->simple_rel_array[i];
 
 		if (brel == NULL)
 			continue;
 
-		Assert(brel->relid == i); /* sanity check on array */
+		Assert(brel->relid == (Index) i); /* sanity check on array */
 
 		if (IS_DUMMY_REL(brel))
 			continue;
@@ -1286,7 +1285,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 					rel->tuples = (double) uncompressed_chunk->rd_rel->reltuples;
 					if (rel->pages == 0)
 						rel->allvisfrac = 0.0;
-					else if (uncompressed_chunk->rd_rel->relallvisible >= rel->pages)
+					else if (uncompressed_chunk->rd_rel->relallvisible >= (int32) rel->pages)
 						rel->allvisfrac = 1.0;
 					else
 						rel->allvisfrac =
@@ -1573,7 +1572,7 @@ check_cagg_view_rte(RangeTblEntry *rte)
 * outer_tlist - outer query's target list
 */
 static void
-cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, int rtno, List *outer_sortcl,
+cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sortcl,
 							List *outer_tlist)
 {
 	bool not_found = true;

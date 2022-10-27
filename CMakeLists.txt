@@ -200,6 +200,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     -Wempty-body
     -Wvla
     -Wall
+    -Wextra
+    # The SQL function arguments macro PG_FUNCTION_ARGS often inroduces unused
+    # arguments.
+    -Wno-unused-parameter
     -Wundef
     -Wmissing-prototypes
     -Wpointer-arith
@@ -240,6 +244,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # strict overflow check produces false positives on gcc < 8
   if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_C_COMPILER_VERSION VERSION_LESS 8)
     add_compile_options(-Wno-strict-overflow)
+  endif()
+
+  if(CMAKE_COMPILER_IS_GNUCC)
+    add_compile_options(
+      -Wno-clobbered
+      # Seems to be broken in GCC 11 with designated initializers.
+      -Wno-missing-field-initializers)
   endif()
 
   # On UNIX, the compiler needs to support -fvisibility=hidden to hide symbols

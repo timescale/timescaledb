@@ -1466,7 +1466,7 @@ Datum
 tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
-	CompressedDataHeader header = { { 0 } };
+	CompressedDataHeader header = { .vl_len_ = { 0 } };
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 

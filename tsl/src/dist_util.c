@@ -402,7 +402,7 @@ dist_util_remote_srf_query(FunctionCallInfo fcinfo, const char *node_name, const
 	funcctx = SRF_PERCALL_SETUP();
 	result = ts_dist_cmd_get_result_by_node_name(funcctx->user_fctx, node_name);
 
-	if (funcctx->call_cntr < PQntuples(result))
+	if (funcctx->call_cntr < (uint64) PQntuples(result))
 	{
 		HeapTuple tuple;
 		char **fields = palloc(sizeof(char *) * PQnfields(result));

@@ -347,7 +347,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 			foreach (lc, root->append_rel_list)
 			{
 				AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
-				if (appinfo->parent_relid == parent)
+				if (appinfo->parent_relid == (Index) parent)
 				{
 					RelOptInfo *parent_rel = root->simple_rel_array[appinfo->parent_relid];
 					RelOptInfo *child_rel = root->simple_rel_array[appinfo->child_relid];

@@ -396,7 +396,6 @@ policy_invoke_recompress_chunk(Chunk *chunk)
 	Oid restype;
 	Oid func_oid;
 	List *args = NIL;
-	int i;
 	bool isnull;
 	Const *argarr[RECOMPRESS_CHUNK_NARGS] = {
 		makeConst(REGCLASSOID,
@@ -421,7 +420,7 @@ policy_invoke_recompress_chunk(Chunk *chunk)
 	/* Prepare the function expr with argument list */
 	get_func_result_type(func_oid, &restype, NULL);
 
-	for (i = 0; i < lengthof(argarr); i++)
+	for (size_t i = 0; i < lengthof(argarr); i++)
 		args = lappend(args, argarr[i]);
 
 	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);

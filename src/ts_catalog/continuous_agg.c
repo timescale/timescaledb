@@ -378,7 +378,7 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	}
 }
 
-TSDLLEXPORT const CaggsInfo
+TSDLLEXPORT CaggsInfo
 ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 {
 	CaggsInfo all_caggs_info;
@@ -470,7 +470,6 @@ bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
 static const ContinuousAggsBucketFunction *
 bucket_function_deserialize(const char *str)
 {
-	int i;
 	char *begin, *end, *strings[4];
 	ContinuousAggsBucketFunction *bf;
 
@@ -479,7 +478,7 @@ bucket_function_deserialize(const char *str)
 		return NULL;
 
 	begin = pstrdup(str);
-	for (i = 0; i < lengthof(strings); i++)
+	for (size_t i = 0; i < lengthof(strings); i++)
 	{
 		end = strstr(begin, ";");
 		if (end == NULL)

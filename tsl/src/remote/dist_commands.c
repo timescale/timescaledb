@@ -138,7 +138,7 @@ ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors, List *data
 
 	results = ts_dist_cmd_collect_responses(requests);
 	list_free(requests);
-	Assert(ts_dist_cmd_response_count(results) == list_length(data_nodes));
+	Assert(ts_dist_cmd_response_count(results) == (Size) list_length(data_nodes));
 
 	return results;
 }
@@ -301,9 +301,7 @@ ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes)
 PGresult *
 ts_dist_cmd_get_result_by_node_name(DistCmdResult *response, const char *node_name)
 {
-	int i;
-
-	for (i = 0; i < response->num_responses; ++i)
+	for (size_t i = 0; i < response->num_responses; ++i)
 	{
 		DistCmdResponse *resp = &response->responses[i];
 
@@ -350,10 +348,9 @@ ts_dist_cmd_response_count(DistCmdResult *result)
 long
 ts_dist_cmd_total_row_count(DistCmdResult *result)
 {
-	int i;
 	long num_rows = 0;
 
-	for (i = 0; i < result->num_responses; ++i)
+	for (size_t i = 0; i < result->num_responses; ++i)
 	{
 		DistCmdResponse *resp = &result->responses[i];
 

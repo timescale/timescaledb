@@ -932,7 +932,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *
 		*num_chunks = list_length(chunk_oids);
 		Chunk **chunks = (Chunk **) palloc(sizeof(Chunk *) * *num_chunks);
 
-		for (int i = 0; i < *num_chunks; i++)
+		for (unsigned int i = 0; i < *num_chunks; i++)
 		{
 			chunks[i] = ts_chunk_get_by_relid(list_nth_oid(chunk_oids, i),
 											  /* fail_if_not_found = */ true);
@@ -999,7 +999,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 	int order_attno;
 	Chunk **unlocked_chunks = NULL;
 	Chunk **chunks = NULL;
-	unsigned int unlocked_chunk_count = 0;
+	int unlocked_chunk_count = 0;
 	Oid prev_chunk_oid = InvalidOid;
 	bool chunk_sort_needed = false;
 	int i;
@@ -1360,10 +1360,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.join_level = 0,
 	};
 	Index first_chunk_index = 0;
-	Index i;
 
 	/* double check our permissions are valid */
-	Assert(rti != parse->resultRelation);
+	Assert(rti != (Index) parse->resultRelation);
 
 	oldrc = get_plan_rowmark(root->rowMarks, rti);
 
@@ -1525,8 +1524,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	i = 0;
-	for (i = 0; i < list_length(inh_oids); i++)
+	for (int i = 0; i < list_length(inh_oids); i++)
 	{
 		Index child_rtindex = first_chunk_index + i;
 		/* build_simple_rel will add the child to the relarray */

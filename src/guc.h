@@ -32,10 +32,19 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
+
 #ifdef USE_TELEMETRY
-extern int ts_guc_telemetry_level;
+typedef enum TelemetryLevel
+{
+	TELEMETRY_OFF,
+	TELEMETRY_NO_FUNCTIONS,
+	TELEMETRY_BASIC,
+} TelemetryLevel;
+
+extern TelemetryLevel ts_guc_telemetry_level;
 extern char *ts_telemetry_cloud;
 #endif
+
 extern TSDLLEXPORT char *ts_guc_license;
 extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;

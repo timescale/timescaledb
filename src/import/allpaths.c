@@ -153,7 +153,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		RelOptInfo *childrel;
 
 		/* append_rel_list contains all append rels; ignore others */
-		if (appinfo->parent_relid != parentRTindex)
+		if (appinfo->parent_relid != (Index) parentRTindex)
 			continue;
 
 		/* Re-locate the child RTE and RelOptInfo */
@@ -565,7 +565,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		ListCell *childvars;
 
 		/* append_rel_list contains all append rels; ignore others */
-		if (appinfo->parent_relid != parentRTindex)
+		if (appinfo->parent_relid != (Index) parentRTindex)
 			continue;
 
 		childRTindex = appinfo->child_relid;

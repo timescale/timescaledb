@@ -118,7 +118,7 @@ typedef struct ChunkStubScanCtx
 } ChunkStubScanCtx;
 
 static bool
-chunk_stub_is_valid(const ChunkStub *stub, unsigned int expected_slices)
+chunk_stub_is_valid(const ChunkStub *stub, int16 expected_slices)
 {
 	return stub && stub->id > 0 && stub->constraints && expected_slices == stub->cube->num_slices &&
 		   stub->cube->num_slices == stub->constraints->num_dimension_constraints;
@@ -3793,10 +3793,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 						List **affected_data_nodes)
 
 {
-	uint64 i = 0;
 	uint64 num_chunks = 0;
 	Chunk *chunks;
-	List *dropped_chunk_names = NIL;
 	const char *schema_name, *table_name;
 	const int32 hypertable_id = ht->fd.id;
 	bool has_continuous_aggs;
@@ -3866,8 +3864,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 
 	if (has_continuous_aggs)
 	{
-		int i;
-
 		/* Exclusively lock all chunks, and invalidate the continuous
 		 * aggregates in the regions covered by the chunks. We do this in two
 		 * steps: first lock all the chunks and then invalidate the
@@ -3878,7 +3874,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * this transaction, which allows moving the invalidation threshold
 		 * without having to worry about new invalidations while
 		 * refreshing. */
-		for (i = 0; i < num_chunks; i++)
+		for (uint64 i = 0; i < num_chunks; i++)
 		{
 			LockRelationOid(chunks[i].table_id, ExclusiveLock);
 
@@ -3893,7 +3889,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * The invalidation will allow the refresh command on a continuous
 		 * aggregate to see that this region was dropped and and will
 		 * therefore be able to refresh accordingly.*/
-		for (i = 0; i < num_chunks; i++)
+		for (uint64 i = 0; i < num_chunks; i++)
 		{
 			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
 			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
@@ -3902,7 +3898,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		}
 	}
 
-	for (i = 0; i < num_chunks; i++)
+	List *dropped_chunk_names = NIL;
+	for (uint64 i = 0; i < num_chunks; i++)
 	{
 		char *chunk_name;
 		ListCell *lc;

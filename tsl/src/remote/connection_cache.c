@@ -29,8 +29,8 @@ typedef struct ConnectionCacheEntry
 {
 	TSConnectionId id;
 	TSConnection *conn;
-	int32 foreign_server_hashvalue; /* Hash of server OID for cache invalidation */
-	int32 role_hashvalue;			/* Hash of role OID for cache invalidation */
+	uint32 foreign_server_hashvalue; /* Hash of server OID for cache invalidation */
+	uint32 role_hashvalue;			 /* Hash of role OID for cache invalidation */
 	bool invalidated;
 } ConnectionCacheEntry;
 

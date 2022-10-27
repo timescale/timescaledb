@@ -44,7 +44,7 @@ print_result(int elevel, const char *server_name, const PGresult *pg_result)
 	FILE *result_stream;
 	File tmpfile;
 	char *result_text = NULL;
-	size_t result_text_size = 0;
+	int result_text_size = 0;
 	PQprintOpt print_opt = {
 		.header = 1,
 		.align = 1,

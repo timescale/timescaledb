@@ -853,7 +853,7 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
 #define DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT "_dist_hyper_%d"
-static const int MAXIMUM_PREFIX_LENGTH = NAMEDATALEN - 16;
+static const size_t MAXIMUM_PREFIX_LENGTH = NAMEDATALEN - 16;
 
 static void
 hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
@@ -1328,7 +1328,11 @@ table_has_replica_identity(const Relation rel)
 	return rel->rd_rel->relreplident != REPLICA_IDENTITY_DEFAULT;
 }
 
-static bool inline table_has_rules(Relation rel) { return rel->rd_rules != NULL; }
+inline static bool
+table_has_rules(Relation rel)
+{
+	return rel->rd_rules != NULL;
+}
 
 bool
 ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
@@ -2386,7 +2390,7 @@ typedef struct AccumHypertable
 } AccumHypertable;
 
 bool
-ts_is_partitioning_column(const Hypertable *ht, Index column_attno)
+ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 {
 	uint16 i;
 
@@ -2551,7 +2555,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	ChunkSizingInfo *chunk_sizing_info;
 	Relation rel;
 	rel = table_open(table_relid, AccessExclusiveLock);
-	int32 row_size = MAXALIGN(SizeofHeapTupleHeader);
+	Size row_size = MAXALIGN(SizeofHeapTupleHeader);
 	/* estimate tuple width of compressed hypertable */
 	for (int i = 1; i <= RelationGetNumberOfAttributes(rel); i++)
 	{
@@ -2568,7 +2572,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	{
 		ereport(WARNING,
 				(errmsg("compressed row size might exceed maximum row size"),
-				 errdetail("Estimated row size of compressed hypertable is %u. This exceeds the "
+				 errdetail("Estimated row size of compressed hypertable is %zu. This exceeds the "
 						   "maximum size of %zu and can cause compression of chunks to fail.",
 						   row_size,
 						   MaxHeapTupleSize)));

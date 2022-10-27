@@ -174,7 +174,7 @@ create_distributed_restore_point(PG_FUNCTION_ARGS)
 	{
 		int result_index = funcctx->call_cntr - 1;
 
-		if (result_index < ts_dist_cmd_response_count(result_cmd))
+		if (result_index < (int) ts_dist_cmd_response_count(result_cmd))
 		{
 			const char *node_name;
 			PGresult *result =
