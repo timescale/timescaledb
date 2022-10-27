@@ -439,7 +439,7 @@ get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_sc
 	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
 	 * the parent hypertable while the IndexPath will be on a Chunk.
 	 * For a normal table they point to the same relation and we are done here. */
-	if (var->varno == rel->relid)
+	if ((Index) var->varno == rel->relid)
 		return var;
 
 	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
@@ -688,7 +688,7 @@ fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber scankey_attno
 	Assert(index->indexkeys[scankey_attno - 1] != 0);
 	Var *node = linitial_node(Var, pull_var_clause(linitial(op->args), 0));
 
-	Assert(((Var *) node)->varno == index->rel->relid &&
+	Assert((Index) ((Var *) node)->varno == index->rel->relid &&
 		   ((Var *) node)->varattno == index->indexkeys[scankey_attno - 1]);
 
 	Var *result = (Var *) copyObject(node);

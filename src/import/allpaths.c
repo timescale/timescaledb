@@ -713,7 +713,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 				int pndx = parentvar->varattno - rel->min_attr;
 				int32 child_width = 0;
 
-				if (IsA(childvar, Var) && ((Var *) childvar)->varno == childrel->relid)
+				if (IsA(childvar, Var) && (Index) ((Var *) childvar)->varno == childrel->relid)
 				{
 					int cndx = ((Var *) childvar)->varattno - childrel->min_attr;
 
