@@ -820,8 +820,11 @@ ExecModifyTable(PlanState *pstate)
 			bool isNull;
 
 			relkind = resultRelInfo->ri_RelationDesc->rd_rel->relkind;
-			/* Since this is a hypertable relkind should always be RELKIND_RELATION. */
-			Assert(relkind == RELKIND_RELATION);
+			/* Since this is a hypertable relkind should be RELKIND_RELATION for a local
+			 * chunk or  RELKIND_FOREIGN_TABLE for a chunk that is a foreign table
+			 * (OSM chunks)
+			 */
+			Assert(relkind == RELKIND_RELATION || relkind == RELKIND_FOREIGN_TABLE);
 
 			if (relkind == RELKIND_RELATION || relkind == RELKIND_MATVIEW ||
 				relkind == RELKIND_PARTITIONED_TABLE)
