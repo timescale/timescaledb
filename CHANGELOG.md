@@ -26,9 +26,11 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4756 Improve compression job IO performance
 * #4807 Fix segmentation fault during INSERT into compressed hypertable.
 * #4840 Fix performance regressions in the copy code
+* #4823 Fix a crash that could occur when using nested user-defined functions with hypertables.
 
 **Thanks**
 * @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
+* @jflambert for reporting a crash with nested user-defined functions.
 
 ## 2.8.1 (2022-10-06)
 

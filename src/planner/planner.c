@@ -158,11 +158,7 @@ void
 add_baserel_cache_entry_for_chunk(Oid chunk_reloid, uint32 chunk_status, Hypertable *hypertable)
 {
 	Assert(hypertable != NULL);
-
-	if (ts_baserel_info == NULL)
-	{
-		return;
-	}
+	Assert(ts_baserel_info != NULL);
 
 	bool found = false;
 	BaserelInfoEntry *entry = BaserelInfo_insert(ts_baserel_info, chunk_reloid, &found);
@@ -444,8 +440,12 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
-	bool reset_fetcher_type = false;
-	bool reset_baserel_info = false;
+	/*
+	 * Volatile is needed because these are the local variables that are
+	 * modified between setjmp/longjmp calls.
+	 */
+	volatile bool reset_fetcher_type = false;
+	volatile bool reset_baserel_info = false;
 
 	/*
 	 * If we are in an aborted transaction, reject all queries.
@@ -553,6 +553,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				 * or portal memory contexts could also be suitable, but they
 				 * don't exist for SPI calls.
 				 */
+				MemoryContextStats(CurrentMemoryContext);
 				ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
 													 /* nelements = */ 1,
 													 /* private_data = */ NULL);
@@ -593,23 +594,34 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				if (subplan)
 					ts_hypertable_modify_fixup_tlist(subplan);
 			}
+		}
 
-			if (reset_fetcher_type)
-			{
-				ts_data_node_fetcher_scan_type = AutoFetcherType;
-			}
+		if (reset_baserel_info)
+		{
+			Assert(ts_baserel_info != NULL);
+			BaserelInfo_destroy(ts_baserel_info);
+			ts_baserel_info = NULL;
+		}
 
-			if (reset_baserel_info && ts_baserel_info)
-			{
-				BaserelInfo_destroy(ts_baserel_info);
-				ts_baserel_info = NULL;
-			}
+		if (reset_fetcher_type)
+		{
+			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 	}
 	PG_CATCH();
 	{
-		ts_baserel_info = NULL;
-		ts_data_node_fetcher_scan_type = AutoFetcherType;
+		if (reset_baserel_info)
+		{
+			Assert(ts_baserel_info != NULL);
+			BaserelInfo_destroy(ts_baserel_info);
+			ts_baserel_info = NULL;
+		}
+
+		if (reset_fetcher_type)
+		{
+			ts_data_node_fetcher_scan_type = AutoFetcherType;
+		}
+
 		/* Pop the cache, but do not release since caches are auto-released on
 		 * error */
 		planner_hcache_pop(false);
