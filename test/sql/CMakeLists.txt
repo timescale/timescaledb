@@ -3,6 +3,7 @@ include(GenerateTestSchedule)
 set(TEST_FILES
     alter.sql
     alternate_users.sql
+    baserel_cache.sql
     broken_tables.sql
     chunks.sql
     chunk_adaptive.sql
