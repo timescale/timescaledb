@@ -46,8 +46,8 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	MemoryContext orig_mcxt;
 	Chunk **locked_chunks = NULL;
 	Chunk **unlocked_chunks = NULL;
-	unsigned int locked_chunk_count = 0;
-	unsigned int unlocked_chunk_count = 0;
+	int locked_chunk_count = 0;
+	int unlocked_chunk_count = 0;
 	ListCell *lc;
 	int remote_chunk_count = 0;
 

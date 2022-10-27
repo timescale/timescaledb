@@ -122,7 +122,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
 
-static void inline extension_check(void);
+inline static void extension_check(void);
 #if PG14_LT
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query);
 #else
@@ -708,7 +708,8 @@ _PG_init(void)
 	ProcessUtility_hook = loader_process_utility_hook;
 }
 
-static void inline do_load()
+inline static void
+do_load()
 {
 	char *version = extension_version();
 	char soname[MAX_SO_NAME_LEN];
@@ -782,7 +783,8 @@ static void inline do_load()
 	post_parse_analyze_hook = old_hook;
 }
 
-static void inline extension_check()
+inline static void
+extension_check()
 {
 	enum ExtensionState state = extension_current_state();
 

@@ -122,12 +122,14 @@ get_proxy_table_relid()
 	return get_relname_relid(EXTENSION_PROXY_TABLE, nsid);
 }
 
-static bool inline extension_exists()
+inline static bool
+extension_exists()
 {
 	return OidIsValid(get_extension_oid(EXTENSION_NAME, true));
 }
 
-static bool inline extension_is_transitioning()
+inline static bool
+extension_is_transitioning()
 {
 	/*
 	 * Determine whether the extension is being created or upgraded (as a

@@ -107,7 +107,6 @@ get_show_upper_mask(const char *paths, size_t paths_len)
 static bool
 set_debug_flag(const char *flag_string, size_t length, DebugOptimizerFlags *flags)
 {
-	int i;
 	char *end;
 	size_t flag_length;
 
@@ -121,7 +120,7 @@ set_debug_flag(const char *flag_string, size_t length, DebugOptimizerFlags *flag
 		flag_length = length;
 	}
 
-	for (i = 0; i < sizeof(g_flag_names) / sizeof(*g_flag_names); ++i)
+	for (size_t i = 0; i < sizeof(g_flag_names) / sizeof(*g_flag_names); ++i)
 		if (strncmp(g_flag_names[i].name, flag_string, flag_length) == 0)
 			switch (g_flag_names[i].flag)
 			{

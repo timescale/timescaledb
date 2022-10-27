@@ -207,7 +207,7 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 	ExprContext *econtext;
 	FuncExpr *fexpr;
 	List *args = NIL;
-	int i, num_results = 0;
+	int num_results = 0;
 	SetExprState *state;
 	Oid restype;
 	Oid func_oid;
@@ -242,7 +242,7 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 	/* Prepare the function expr with argument list */
 	get_func_result_type(func_oid, &restype, NULL);
 
-	for (i = 0; i < lengthof(argarr); i++)
+	for (size_t i = 0; i < lengthof(argarr); i++)
 		args = lappend(args, argarr[i]);
 
 	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);

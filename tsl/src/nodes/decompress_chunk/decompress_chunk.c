@@ -88,7 +88,7 @@ make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *ex
 	/* Because SortGroupClause doesn't carry collation, consult the expr */
 	collation = exprCollation((Node *) expr);
 
-	Assert(compressed_relid < root->simple_rel_array_size);
+	Assert(compressed_relid < (Index) root->simple_rel_array_size);
 	return ts_make_pathkey_from_sortinfo(root,
 										 expr,
 										 NULL,

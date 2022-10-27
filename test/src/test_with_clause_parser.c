@@ -240,7 +240,7 @@ TS_TEST_FN(ts_test_with_clause_parse)
 	funcctx = SRF_PERCALL_SETUP();
 
 	result = funcctx->user_fctx;
-	if (result == NULL || result->i >= TS_ARRAY_LEN(test_args))
+	if (result == NULL || (size_t) result->i >= TS_ARRAY_LEN(test_args))
 		SRF_RETURN_DONE(funcctx);
 
 	values = palloc0(sizeof(*values) * funcctx->tuple_desc->natts);

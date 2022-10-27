@@ -76,7 +76,6 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	List *parsed;
 	ListCell *lc;
 	SelectStmt *select;
-	short index = 0;
 	List *collist = NIL;
 	RawStmt *raw;
 
@@ -119,6 +118,7 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	if (select->sortClause != NIL)
 		throw_segment_by_error(inpstr);
 
+	short index = 0;
 	foreach (lc, select->groupClause)
 	{
 		ColumnRef *cf;
@@ -161,7 +161,6 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 	List *parsed;
 	ListCell *lc;
 	SelectStmt *select;
-	short index = 0;
 	List *collist = NIL;
 	RawStmt *raw;
 
@@ -203,6 +202,7 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 	if (select->groupClause != NIL)
 		throw_order_by_error(inpstr);
 
+	short index = 0;
 	foreach (lc, select->sortClause)
 	{
 		SortBy *sort_by;

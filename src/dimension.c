@@ -1493,7 +1493,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
 		.num_slices = PG_ARGISNULL(2) ? DatumGetInt32(-1) : PG_GETARG_INT32(2),
 		.num_slices_is_set = !PG_ARGISNULL(2),
-		.interval_datum = PG_ARGISNULL(3) ? DatumGetInt32(-1) : PG_GETARG_DATUM(3),
+		.interval_datum = PG_ARGISNULL(3) ? Int32GetDatum(-1) : PG_GETARG_DATUM(3),
 		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),

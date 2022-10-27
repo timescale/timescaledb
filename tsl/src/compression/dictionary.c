@@ -49,7 +49,7 @@ typedef struct DictionaryCompressed
 static void
 pg_attribute_unused() assertions(void)
 {
-	DictionaryCompressed test_val = { { 0 } };
+	DictionaryCompressed test_val = { .vl_len_ = { 0 } };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(DictionaryCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
@@ -240,7 +240,7 @@ compressor_get_serialization_info(DictionaryCompressor *compressor)
 		sizes.value_array[dict_item->index] = dict_item->key;
 		sizes.num_distinct += 1;
 	}
-	for (int i = 0; i < sizes.num_distinct; i++)
+	for (uint32 i = 0; i < sizes.num_distinct; i++)
 	{
 		array_compressor_append(array_comp, sizes.value_array[i]);
 	}
@@ -281,7 +281,7 @@ dictionary_compressed_from_serialization_info(DictionaryCompressorSerializationI
 														sizes.dictionary_size,
 														sizes.dictionary_serialization_info);
 
-	Assert(data - (char *) bitmap == sizes.total_size);
+	Assert((Size) (data - (char *) bitmap) == sizes.total_size);
 	return bitmap;
 }
 
@@ -390,7 +390,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 																	 bitmap->element_type,
 																	 /* has_nulls */ false);
 
-	for (int i = 0; i < bitmap->num_distinct; i++)
+	for (uint32 i = 0; i < bitmap->num_distinct; i++)
 	{
 		DecompressResult res = array_decompression_iterator_try_next_forward(dictionary_iterator);
 		Assert(!res.is_null);

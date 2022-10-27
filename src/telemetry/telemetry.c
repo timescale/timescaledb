@@ -171,7 +171,6 @@ char_in_valid_version_digits(const char c)
 bool
 ts_validate_server_version(const char *json, VersionResult *result)
 {
-	int i;
 	Datum version = DirectFunctionCall2(json_object_field_text,
 										CStringGetTextDatum(json),
 										PointerGetDatum(cstring_to_text(TS_VERSION_JSON_FIELD)));
@@ -192,7 +191,7 @@ ts_validate_server_version(const char *json, VersionResult *result)
 		return false;
 	}
 
-	for (i = 0; i < strlen(result->versionstr); i++)
+	for (size_t i = 0; i < strlen(result->versionstr); i++)
 	{
 		if (!isalpha(result->versionstr[i]) && !isdigit(result->versionstr[i]) &&
 			!char_in_valid_version_digits(result->versionstr[i]))
@@ -274,11 +273,9 @@ get_database_size()
 static void
 add_related_extensions(JsonbParseState *state)
 {
-	int i;
-
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 
-	for (i = 0; i < sizeof(related_extensions) / sizeof(char *); i++)
+	for (size_t i = 0; i < sizeof(related_extensions) / sizeof(char *); i++)
 	{
 		const char *ext = related_extensions[i];
 
@@ -462,7 +459,7 @@ add_function_call_telemetry(JsonbParseState *state)
 	}
 
 	visible_extensions[0] = "timescaledb";
-	for (int i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
+	for (size_t i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
 		visible_extensions[i] = related_extensions[i - 1];
 
 	functions =

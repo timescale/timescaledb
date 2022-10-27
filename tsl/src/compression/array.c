@@ -40,7 +40,7 @@ typedef struct ArrayCompressed
 static void
 pg_attribute_unused() assertions(void)
 {
-	ArrayCompressed test_val = { { 0 } };
+	ArrayCompressed test_val = { .vl_len_ = { 0 } };
 	Simple8bRleSerialized test_simple8b = { 0 };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(ArrayCompressed) ==

@@ -24,16 +24,16 @@
 typedef struct SubspaceStoreInternalNode
 {
 	DimensionVec *vector;
-	size_t descendants;
+	uint16 descendants;
 	bool last_internal_node;
 } SubspaceStoreInternalNode;
 
 typedef struct SubspaceStore
 {
 	MemoryContext mcxt;
-	int16 num_dimensions;
+	uint16 num_dimensions;
 	/* limit growth of store by  limiting number of slices in first dimension,	0 for no limit */
-	int16 max_items;
+	uint16 max_items;
 	SubspaceStoreInternalNode *origin; /* origin of the tree */
 } SubspaceStore;
 

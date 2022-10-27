@@ -26,7 +26,7 @@
  * if the column is not a space dimension.
  */
 static Dimension *
-get_space_dimension(Oid relid, Index varattno)
+get_space_dimension(Oid relid, AttrNumber varattno)
 {
 	Hypertable *ht = ts_planner_get_hypertable(relid, CACHE_FLAG_CHECK);
 	if (!ht)
@@ -102,7 +102,7 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 	/*
 	 * Check that the constraint is actually on a partitioning column.
 	 */
-	Assert(var->varno <= list_length(rtable));
+	Assert(var->varno <= (Index) list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 
@@ -136,7 +136,7 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	/*
 	 * Check that the constraint is actually on a partitioning column.
 	 */
-	Assert(var->varno <= list_length(rtable));
+	Assert(var->varno <= (Index) list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 

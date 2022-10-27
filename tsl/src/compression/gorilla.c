@@ -62,7 +62,7 @@ typedef struct CompressedGorillaData
 static void
 pg_attribute_unused() assertions(void)
 {
-	GorillaCompressed test_val = { { 0 } };
+	GorillaCompressed test_val = { .vl_len_ = { 0 } };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(GorillaCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
@@ -804,7 +804,7 @@ gorilla_compressed_send(CompressedDataHeader *header, StringInfo buf)
 Datum
 gorilla_compressed_recv(StringInfo buf)
 {
-	GorillaCompressed header = { { 0 } };
+	GorillaCompressed header = { .vl_len_ = { 0 } };
 	CompressedGorillaData data = {
 		.header = &header,
 	};

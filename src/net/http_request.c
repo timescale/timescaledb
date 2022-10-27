@@ -233,7 +233,7 @@ ts_http_request_build(HttpRequest *req, size_t *buf_size)
 		if (content_length != -1)
 		{
 			/* make sure it's equal to body_len */
-			if (content_length != req->body_len)
+			if ((size_t) content_length != req->body_len)
 			{
 				return NULL;
 			}

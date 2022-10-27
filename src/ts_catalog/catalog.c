@@ -312,7 +312,7 @@ typedef struct InternalFunctionDef
 	int args;
 } InternalFunctionDef;
 
-const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
+static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,

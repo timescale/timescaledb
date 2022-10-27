@@ -265,7 +265,7 @@ stmt_params_free(StmtParams *params)
 	MemoryContextDelete(params->mctx);
 }
 
-const int *
+int *
 stmt_params_formats(StmtParams *stmt_params)
 {
 	if (stmt_params)
@@ -273,7 +273,7 @@ stmt_params_formats(StmtParams *stmt_params)
 	return NULL;
 }
 
-const int *
+int *
 stmt_params_lengths(StmtParams *stmt_params)
 {
 	if (stmt_params)
@@ -289,7 +289,7 @@ stmt_params_values(StmtParams *stmt_params)
 	return NULL;
 }
 
-const int
+int
 stmt_params_num_params(StmtParams *stmt_params)
 {
 	if (stmt_params)
@@ -297,7 +297,7 @@ stmt_params_num_params(StmtParams *stmt_params)
 	return 0;
 }
 
-const int
+int
 stmt_params_total_values(StmtParams *stmt_params)
 {
 	if (stmt_params)
@@ -306,7 +306,7 @@ stmt_params_total_values(StmtParams *stmt_params)
 	return 0;
 }
 
-const int
+int
 stmt_params_converted_tuples(StmtParams *stmt_params)
 {
 	return stmt_params->converted_tuples;

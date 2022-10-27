@@ -501,7 +501,6 @@ initialize_func_info()
 	Oid pg_nsp = get_namespace_oid("pg_catalog", false);
 	HeapTuple tuple;
 	Relation rel;
-	int i;
 
 	func_hash = hash_create("func_cache",
 							_MAX_CACHE_FUNCTIONS,
@@ -510,7 +509,7 @@ initialize_func_info()
 
 	rel = table_open(ProcedureRelationId, AccessShareLock);
 
-	for (i = 0; i < _MAX_CACHE_FUNCTIONS; i++)
+	for (size_t i = 0; i < _MAX_CACHE_FUNCTIONS; i++)
 	{
 		FuncInfo *finfo = &funcinfo[i];
 		Oid namespaceoid = pg_nsp;
