@@ -3849,7 +3849,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	const char *schema_name, *table_name;
 	const int32 hypertable_id = ht->fd.id;
 	bool has_continuous_aggs;
-	List *data_nodes = NIL;
 	const MemoryContext oldcontext = CurrentMemoryContext;
 	ScanTupLock tuplock = {
 		.waitpolicy = LockWaitBlock,
@@ -3949,6 +3948,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		}
 	}
 
+	List *data_nodes = NIL;
 	List *dropped_chunk_names = NIL;
 	for (uint64 i = 0; i < num_chunks; i++)
 	{
@@ -4190,8 +4190,14 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	List *dc_temp = NIL;
 	List *dc_names = NIL;
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	int64 older_than = PG_INT64_MAX;
-	int64 newer_than = PG_INT64_MIN;
+
+	/*
+	 * Marked volatile to suppress the -Wclobbered warning. The warning is
+	 * actually incorrect because these values are not used after longjmp.
+	 */
+	volatile int64 older_than = PG_INT64_MAX;
+	volatile int64 newer_than = PG_INT64_MIN;
+
 	bool verbose;
 	int elevel;
 	List *data_node_oids = NIL;

@@ -288,14 +288,21 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 								bool launch_failure)
 {
 	float8 jitter = calculate_jitter_percent();
-	/* consecutive failures includes this failure */
-	TimestampTz res = 0;
+
+	/*
+	 * Have to be declared volatile because they are modified between
+	 * setjmp/longjmp calls.
+	 */
+	volatile TimestampTz res = 0;
 	volatile bool res_set = false;
-	TimestampTz last_finish = finish_time;
+	volatile TimestampTz last_finish = finish_time;
+
+	/* consecutive failures includes this failure */
 	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
 																		  consecutive_failures);
-	MemoryContext oldctx;
 	Assert(consecutive_failures > 0 && multiplier < 63);
+
+	MemoryContext oldctx;
 	/* 2^(consecutive_failures) - 1, at most 2^20 */
 	int64 max_slots = (INT64CONST(1) << (int64) multiplier) - INT64CONST(1);
 	int64 rand_backoff = random() % (max_slots * USECS_PER_SEC);
