@@ -150,21 +150,21 @@ SELECT
 
 CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
+
+-- should resume the execution
+CALL cagg_migrate('conditions_summary_daily');
+SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
 
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
 CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
+CALL cagg_migrate('conditions_summary_daily');
 \set ON_ERROR_STOP 1
 
-DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
-ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
-
-CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
-SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
-
+-- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 
--- policies for test
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
 SELECT add_continuous_aggregate_policy('conditions_summary_daily', '30 days'::interval, '1 day'::interval, '1 hour'::interval);
@@ -182,8 +182,8 @@ AND hypertable_name = :'MAT_TABLE_NAME'
 AND job_id >= 1000;
 
 -- execute the migration
-DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
-ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+DROP MATERIALIZED VIEW conditions_summary_daily_new;
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 CALL cagg_migrate('conditions_summary_daily');
 
 SELECT
@@ -225,11 +225,9 @@ SELECT * FROM conditions_summary_daily
 EXCEPT
 SELECT * FROM conditions_summary_daily_new;
 
-
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
-ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -241,8 +239,7 @@ SELECT * FROM conditions_summary_daily_new;
 \set ON_ERROR_STOP 1
 
 -- test migration overriding the new cagg and removing the old
-DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
-ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 DROP MATERIALIZED VIEW conditions_summary_daily;
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
@@ -256,8 +253,7 @@ SELECT * FROM conditions_summary_daily_old;
 \set ON_ERROR_STOP 1
 
 -- permissions test
-DELETE FROM _timescaledb_catalog.continuous_agg_migrate_plan;
-ALTER SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq RESTART;
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 DROP MATERIALIZED VIEW conditions_summary_daily;
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
