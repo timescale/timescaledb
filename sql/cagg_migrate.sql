@@ -16,6 +16,7 @@ $BODY$
         SELECT 1
         FROM _timescaledb_catalog.continuous_agg_migrate_plan
         WHERE mat_hypertable_id = _hypertable_id
+        AND end_ts IS NOT NULL
     );
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
@@ -85,6 +86,17 @@ DECLARE
 BEGIN
     IF _timescaledb_internal.cagg_migrate_plan_exists(_cagg_data.mat_hypertable_id) IS TRUE THEN
         RAISE EXCEPTION 'plan already exists for materialized hypertable %', _cagg_data.mat_hypertable_id;
+    END IF;
+
+    -- If exist steps for this migration means that it's resuming the execution
+    IF EXISTS (
+        SELECT 1
+        FROM _timescaledb_catalog.continuous_agg_migrate_plan_step
+        WHERE mat_hypertable_id = _cagg_data.mat_hypertable_id
+    ) THEN
+        RAISE WARNING 'resuming the migration of the continuous aggregate "%.%"',
+            _cagg_data.user_view_schema, _cagg_data.user_view_name;
+        RETURN;
     END IF;
 
     INSERT INTO
