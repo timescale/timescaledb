@@ -533,6 +533,17 @@ COPY test1.copy_test FROM STDIN DELIMITER ',';
 2021-01-01 01:10:00+01,1
 \.
 
+--Utility functions -check index creation on hypertable with OSM chunk
+-- Indexes are not created on OSM chunks, they are skipped as these are foreign tables
+\c :TEST_DBNAME :ROLE_4
+CREATE INDEX hyper_constr_mid_idx ON hyper_constr( mid, time);
+SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
+DROP INDEX hyper_constr_mid_idx;
+
+CREATE INDEX hyper_constr_mid_idx ON hyper_constr(mid, time) WITH (timescaledb.transaction_per_chunk);
+SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
+DROP INDEX hyper_constr_mid_idx;
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
