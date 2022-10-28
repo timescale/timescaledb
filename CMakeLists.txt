@@ -241,6 +241,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     message(STATUS "Compiler does not support -Wimplicit-fallthrough")
   endif()
 
+  check_c_compiler_flag(-Wnewline-eof CC_SUPPORTS_NEWLINE_EOF)
+  if(CC_SUPPORTS_NEWLINE_EOF)
+    add_compile_options(-Wnewline-eof)
+  endif()
+
   # strict overflow check produces false positives on gcc < 8
   if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_C_COMPILER_VERSION VERSION_LESS 8)
     add_compile_options(-Wno-strict-overflow)
