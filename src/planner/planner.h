@@ -106,7 +106,6 @@ extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
 
-extern void add_baserel_cache_entry_for_chunk(Oid chunk_reloid, uint32 chunk_status,
-											  Hypertable *hypertable);
+extern void add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable);
 
 #endif /* TIMESCALEDB_PLANNER_H */

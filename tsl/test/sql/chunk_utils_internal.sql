@@ -44,8 +44,8 @@ CREATE TABLE test1.hyper1 (time bigint, temp float);
 SELECT create_hypertable('test1.hyper1', 'time', chunk_time_interval => 10);
 
 INSERT INTO test1.hyper1 VALUES (10, 0.5);
-
 INSERT INTO test1.hyper1 VALUES (30, 0.5);
+
 SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME",
        range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
@@ -61,22 +61,70 @@ WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
 
+-- Freeze and check trigger
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
 
 SELECT * from test1.hyper1 ORDER BY 1;
 
 -- TEST updates and deletes on frozen chunk should fail
 \set ON_ERROR_STOP 0
-UPDATE test1.hyper1 SET temp = 40 WHERE time = 20;
-UPDATE test1.hyper1 SET temp = 40 WHERE temp = 0.5;
+
 SELECT * from test1.hyper1 ORDER BY 1;
 
+-- Value (time = 20) does not exist
+UPDATE test1.hyper1 SET temp = 40 WHERE time = 20;
+-- Frozen chunk is affected
+UPDATE test1.hyper1 SET temp = 40 WHERE temp = 0.5;
+-- Frozen chunk is affected
+UPDATE test1.hyper1 SET temp = 40 WHERE time = 10;
+-- Frozen chunk is affected
+DELETE FROM test1.hyper1 WHERE time = 10;
+
+SELECT * from test1.hyper1 ORDER BY 1;
+
+BEGIN;
 DELETE FROM test1.hyper1 WHERE time = 20;
 DELETE FROM test1.hyper1 WHERE temp = 0.5;
+ROLLBACK;
+
+-- TEST update on unfrozen chunk should be possible
+BEGIN;
+SELECT * FROM test1.hyper1;
+UPDATE test1.hyper1 SET temp = 40 WHERE time = 30;
+SELECT * FROM test1.hyper1;
+ROLLBACK;
+
+-- Test with cast (chunk path pruning can not be done during query planning)
+BEGIN;
+SELECT * FROM test1.hyper1 WHERE time = 30;
+UPDATE test1.hyper1 SET temp = 40 WHERE time = 30::text::float;
+SELECT * FROM test1.hyper1 WHERE time = 30;
+ROLLBACK;
+
+-- TEST delete on unfrozen chunks should be possible
+BEGIN;
 SELECT * from test1.hyper1 ORDER BY 1;
+DELETE FROM test1.hyper1 WHERE time = 30;
+SELECT * from test1.hyper1 ORDER BY 1;
+ROLLBACK;
+
+-- Test with cast
+BEGIN;
+SELECT * FROM test1.hyper1 WHERE time = 30;
+DELETE FROM test1.hyper1 WHERE time = 30::text::float;
+SELECT * FROM test1.hyper1 WHERE time = 30;
+ROLLBACK;
 
 -- TEST inserts into a frozen chunk fails
 INSERT INTO test1.hyper1 VALUES ( 11, 11);
+
+-- Test truncating table should fail
+TRUNCATE test1.hyper1;
+
+SELECT * from test1.hyper1 ORDER BY 1;
+
 \set ON_ERROR_STOP 1
 
 --insert into non-frozen chunk works
@@ -89,9 +137,18 @@ FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
 
 SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
 
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
+
 --verify status in catalog
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
+
+-- Test update works after unfreeze
+UPDATE test1.hyper1 SET temp = 40;
+
+-- Test delete works after unfreeze
+DELETE FROM test1.hyper1;
+
 --unfreezing again works
 SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
 SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
@@ -169,6 +226,10 @@ SELECT  compress_chunk( :'CHNAME');
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.drop_chunk(:'CHNAME');
 \set ON_ERROR_STOP 1
+
+-- Prepare table for CAGG tests
+TRUNCATE test1.hyper1;
+INSERT INTO test1.hyper1(time, temp) values(30, 0.5), (31, 31);
 
 --TEST drop_chunk in the presence of caggs. Does not affect cagg data
 CREATE OR REPLACE FUNCTION hyper_dummy_now() RETURNS BIGINT
@@ -268,7 +329,8 @@ SELECT * FROM ht_try ORDER BY 1;
 
 SELECT relname, relowner::regrole FROM pg_class
 WHERE relname in ( select chunk_name FROM chunk_view 
-                   WHERE hypertable_name = 'ht_try' );
+                   WHERE hypertable_name = 'ht_try' )
+ORDER BY relname;
 
 SELECT inhrelid::regclass
 FROM pg_inherits WHERE inhparent = 'ht_try'::regclass ORDER BY 1;
@@ -394,6 +456,117 @@ FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
 
+----- TESTS for copy into frozen chunk ------------
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE test1.copy_test (
+    "time" timestamptz NOT NULL,
+    "value" double precision NOT NULL
+);
+
+SELECT create_hypertable('test1.copy_test', 'time', chunk_time_interval => interval '1 day');
+
+COPY test1.copy_test FROM STDIN DELIMITER ',';
+2020-01-01 01:10:00+01,1
+2021-01-01 01:10:00+01,1
+\.
+
+-- Freeze one of the chunks
+SELECT chunk_schema || '.' ||  chunk_name as "COPY_CHNAME", chunk_name as "COPY_CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'copy_test' and hypertable_schema = 'test1'
+ORDER BY chunk_name LIMIT 1
+\gset
+
+SELECT _timescaledb_internal.freeze_chunk( :'COPY_CHNAME');
+
+-- Check state
+SELECT table_name, status
+FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+
+\set ON_ERROR_STOP 0
+-- Copy should fail because one of che chunks is frozen
+COPY test1.copy_test FROM STDIN DELIMITER ',';
+2020-01-01 01:10:00+01,1
+2021-01-01 01:10:00+01,1
+\.
+\set ON_ERROR_STOP 1
+
+-- Count existing rows
+SELECT COUNT(*) FROM test1.copy_test;
+
+-- Test dump & restore
+\c postgres :ROLE_SUPERUSER
+\! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+
+\c :TEST_DBNAME
+
+-- Make sure tables was droped by pg_dump_aux_dump.sh
+\set ON_ERROR_STOP 0
+SELECT * FROM test1.copy_test;
+\set ON_ERROR_STOP 1
+
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+
+--\! cp dump/pg_dump.sql /tmp/dump.sql
+SELECT timescaledb_pre_restore();
+\! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
+SELECT timescaledb_post_restore();
+SELECT _timescaledb_internal.stop_background_workers();
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- Make sure the chunk is still frozen
+-- Check trigger
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
+
+-- Check state
+SELECT table_name, status
+FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+
+\set ON_ERROR_STOP 0
+-- Copy should fail because one of che chunks is frozen
+COPY test1.copy_test FROM STDIN DELIMITER ',';
+2020-01-01 01:10:00+01,1
+2021-01-01 01:10:00+01,1
+\.
+\set ON_ERROR_STOP 1
+
+-- Count existing rows
+SELECT COUNT(*) FROM test1.copy_test;
+
+-- Check unfreeze restored chunk
+SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
+
+-- Check trigger
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
+
+-- Check state
+SELECT table_name, status
+FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+
+-- Copy should work now 
+COPY test1.copy_test FROM STDIN DELIMITER ',';
+2020-01-01 01:10:00+01,1
+2021-01-01 01:10:00+01,1
+\.
+
+-- Test that unfreeze works even if somebody has dropped one the block triggers
+SELECT _timescaledb_internal.freeze_chunk( :'COPY_CHNAME');
+
+SELECT table_name, status
+FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
+DROP TRIGGER frozen_chunk_modify_blocker_row ON :COPY_CHNAME;
+
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
+SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
+SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
+
+SELECT table_name, status
+FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
 
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER

@@ -1396,7 +1396,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
 		 */
-		add_baserel_cache_entry_for_chunk(chunks[i]->table_id, chunks[i]->fd.status, ht);
+		add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
 	}
 
 	/* nothing to do here if we have no chunks and no data nodes */
