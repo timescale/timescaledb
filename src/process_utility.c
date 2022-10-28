@@ -2486,7 +2486,11 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	Assert(!hypertable_is_distributed(ht));
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-
+	if (IS_OSM_CHUNK(chunk)) /*cannot create index on foreign OSM chunk */
+	{
+		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
+		return;
+	}
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
 	indexinfo = BuildIndexInfo(hypertable_index_rel);
@@ -2569,25 +2573,32 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 * being ALTERed or DROPed during this part of index creation.
 	 */
 	chunk_rel = table_open(chunk_relid, ShareLock);
-	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
-
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	/*
 	 * Validation happens when creating the hypertable's index, which goes
 	 * through the usual DefineIndex mechanism.
 	 */
-	indexinfo = BuildIndexInfo(hypertable_index_rel);
-	if (chunk_index_columns_changed(info->extended_options.n_ht_atts, RelationGetDescr(chunk_rel)))
-		ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
+	if (!IS_OSM_CHUNK(chunk)) /*cannot create index on foreign OSM chunk */
+	{
+		hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
+		indexinfo = BuildIndexInfo(hypertable_index_rel);
+		if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
+										RelationGetDescr(chunk_rel)))
+			ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
 
-	ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
-												   hypertable_index_rel,
-												   chunk->fd.id,
-												   chunk_rel,
-												   indexinfo);
+		ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
+													   hypertable_index_rel,
+													   chunk->fd.id,
+													   chunk_rel,
+													   indexinfo);
 
-	index_close(hypertable_index_rel, NoLock);
+		index_close(hypertable_index_rel, NoLock);
+	}
+	else
+	{
+		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
+	}
 	table_close(chunk_rel, NoLock);
 
 	ts_catalog_restore_user(&sec_ctx);
