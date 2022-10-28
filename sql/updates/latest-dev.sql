@@ -390,3 +390,12 @@ CREATE FUNCTION @extschema@.alter_data_node(
 	available              BOOLEAN = NULL
 ) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, available BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_data_node_alter' LANGUAGE C VOLATILE;
+
+-- Trigger that blocks modifications on frozen chunks
+CREATE OR REPLACE FUNCTION _timescaledb_internal.frozen_chunk_modify_blocker() RETURNS trigger
+   LANGUAGE plpgsql STRICT AS
+$BODY$
+BEGIN
+     RAISE EXCEPTION 'unable to modify frozen chunk %s', TG_TABLE_NAME;
+END;
+$BODY$ SET search_path TO pg_catalog, pg_temp;

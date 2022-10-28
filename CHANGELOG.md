@@ -29,6 +29,7 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4840 Fix performance regressions in the copy code
 * #4823 Fix a crash that could occur when using nested user-defined functions with hypertables
 * #4898 Fix cagg migration failure when trying to resume
+* #4906 Fix a performance regression in the query planner by speeding up frozen chunk state checks
 * #4910 Fix a typo in process_compressed_data_out
 * #4955 Fix cagg migration for hypertables using timestamp without timezone
 * #4968 Check for interrupts in gapfill main loop
