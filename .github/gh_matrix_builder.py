@@ -17,6 +17,7 @@
 
 import json
 import os
+import subprocess
 import sys
 from ci_settings import (
     PG12_EARLIEST,
@@ -49,18 +50,19 @@ def build_debug_config(overrides):
     # compiler.
     base_config = dict(
         {
-            "name": "Debug",
             "build_type": "Debug",
-            "pg_extra_args": "--enable-debug --enable-cassert",
-            "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
-            "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed'",
-            "coverage": True,
-            "extra_packages": "clang-14 llvm-14 llvm-14-dev llvm-14-tools",
-            "llvm_config": "llvm-config-14",
-            "clang": "clang-14",
-            "os": "ubuntu-22.04",
             "cc": "gcc",
+            "clang": "clang-14",
+            "coverage": True,
             "cxx": "g++",
+            "extra_packages": "clang-14 llvm-14 llvm-14-dev llvm-14-tools",
+            "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed'",
+            "llvm_config": "llvm-config-14",
+            "name": "Debug",
+            "os": "ubuntu-22.04",
+            "pg_extra_args": "--enable-debug --enable-cassert",
+            "pginstallcheck": True,
+            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
     )
     base_config.update(overrides)
@@ -117,16 +119,18 @@ def build_apache_config(overrides):
 def macos_config(overrides):
     base_config = dict(
         {
-            "pg": PG12_LATEST,
-            "os": "macos-11",
             "cc": "clang",
-            "cxx": "clang++",
-            # the current github macos image has a buggy llvm installation so we build without llvm on mac
-            "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include --without-llvm",
-            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
+            "clang": "clang",
             "coverage": False,
-            "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed bgw_launcher pg_dump remote_connection compressed_collation'",
+            "cxx": "clang++",
             "extra_packages": "",
+            "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed bgw_launcher pg_dump remote_connection compressed_collation'",
+            "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
+            "os": "macos-11",
+            "pg": PG12_LATEST,
+            "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
+            "pginstallcheck": True,
+            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
         }
     )
     base_config.update(overrides)
@@ -149,7 +153,7 @@ m["include"].append(
         {
             "pg": 15,
             "snapshot": "snapshot",
-            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON -DCODECOVERAGE=ON",
+            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON",
             # below tests are tracked as part of #4838
             "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15 bgw_custom' "
             # below tests are tracked as part of #4832
@@ -178,7 +182,7 @@ if event_type != "pull_request":
         # The early releases don't build with llvm 14.
         "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
         "installcheck_args": "SKIPS='chunk_utils tablespace telemetry' IGNORES='cluster-12 cagg_policy debug_notice dist_gapfill_pushdown-12'",
-        "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
+        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
     }
     m["include"].append(build_debug_config(pg12_debug_earliest))
 
@@ -188,7 +192,7 @@ if event_type != "pull_request":
         # The early releases don't build with llvm 14.
         "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
         "installcheck_args": "SKIPS='001_extension' IGNORES='dist_gapfill_pushdown-13'",
-        "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
+        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
     }
     m["include"].append(build_debug_config(pg13_debug_earliest))
 
@@ -224,12 +228,70 @@ if event_type != "pull_request":
     m["include"].append(
         build_debug_config(
             {
+                "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'",
                 "pg": 14,
                 "snapshot": "snapshot",
-                "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'",
             }
         )
     )
+else:
+    # Check if we need to check for the flaky tests. Determine which test files
+    # have been changed in the PR.
+    p = subprocess.Popen(
+        f"git diff --name-only {sys.argv[2]} -- '**test/sql/*.sql' '**test/sql/*.sql.in'",
+        stdout=subprocess.PIPE,
+        shell=True,
+    )
+    (output, err) = p.communicate()
+    p_status = p.wait()
+    if p_status != 0:
+        print(
+            f'git diff failed: code {p_status}, output "{output}", stderr "{err}"',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    tests = []
+    test_count = 1
+    for f in output.decode().split("\n"):
+        print(f)
+        if not f:
+            continue
+        test_count += 1
+        if test_count > 10:
+            print(
+                f"too many ({test_count}) changed tests, won't run the flaky check",
+                file=sys.stderr,
+            )
+            print("full list:", file=sys.stderr)
+            print(output, file=sys.stderr)
+            tests = ""
+            break
+        basename = os.path.basename(f)
+        splitted = basename.split(".")
+        name = splitted[0]
+        ext = splitted[-1]
+        if ext == "in":
+            # Account for the version number.
+            tests.append(name + "-*")
+        elif ext == "sql":
+            tests.append(name)
+        else:
+            # Should've been filtered out above.
+            print(f"unknown extension '{ext}' for test file '{f}'", file=sys.stderr)
+            sys.exit(1)
+
+    if tests:
+        m["include"].append(
+            build_debug_config(
+                {
+                    "coverage": False,
+                    "installcheck_args": f'TESTS="{" ".join(tests * 20)}"',
+                    "name": "Flaky Check Debug",
+                    "pg": PG14_LATEST,
+                    "pginstallcheck": False,
+                }
+            )
+        )
 
 # generate command to set github action variable
 with open(os.environ["GITHUB_OUTPUT"], "a") as output:
