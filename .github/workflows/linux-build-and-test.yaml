@@ -15,10 +15,18 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
+
     - name: Build matrix
       id: set-matrix
-      run: python .github/gh_matrix_builder.py ${{ github.event_name }}
-
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+          git fetch origin ${{ github.base_ref }}:base
+          .github/gh_matrix_builder.py ${{ github.event_name }} base
+        else
+          .github/gh_matrix_builder.py ${{ github.event_name }}
+        fi
+    
   regress:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
@@ -100,14 +108,14 @@ jobs:
     - name: Test telemetry without OpenSSL
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
-        BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DUSE_OPENSSL=OFF
+        BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF
         make -j $MAKE_JOBS -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DLINTER_STRICT=ON
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DLINTER_STRICT=ON
         make -j $MAKE_JOBS -C build
         make -C build install
 
@@ -121,6 +129,7 @@ jobs:
         make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
 
     - name: pginstallcheck
+      if: matrix.pginstallcheck
       run: make -C build pginstallcheck
 
     - name: coverage
