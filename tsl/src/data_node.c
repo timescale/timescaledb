@@ -1314,7 +1314,7 @@ data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, b
 									bool block_chunks)
 {
 	int affected = 0;
-	bool all_hypertables = table_id == InvalidOid ? true : false;
+	bool all_hypertables = !OidIsValid(table_id);
 	List *hypertable_data_nodes = NIL;
 	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 

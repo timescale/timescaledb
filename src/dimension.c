@@ -937,7 +937,7 @@ ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value, O
 	{
 		if (NULL != dim->partitioning)
 			*restype = dim->partitioning->partfunc.rettype;
-		else if (const_datum_type != InvalidOid)
+		else if (OidIsValid(const_datum_type))
 			*restype = const_datum_type;
 		else
 			*restype = dim->fd.column_type;

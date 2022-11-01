@@ -405,7 +405,7 @@ dimension_values_create_from_array(Const *c, bool user_or)
 
 	/* it's an array type, lets get the base element type */
 	base_el_type = get_element_type(c->consttype);
-	if (base_el_type == InvalidOid)
+	if (!OidIsValid(base_el_type))
 		elog(ERROR,
 			 "invalid base element type for array type: \"%s\"",
 			 format_type_be(c->consttype));

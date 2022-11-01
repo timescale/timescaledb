@@ -202,8 +202,7 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	{
 		TypeCacheEntry *tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-		if (tce->hash_proc == InvalidOid &&
-			ts_partitioning_func_is_closed_default(schema, partfunc))
+		if (!OidIsValid(tce->hash_proc) && ts_partitioning_func_is_closed_default(schema, partfunc))
 			elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
 	}
 
@@ -448,7 +447,7 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 		fcinfo->flinfo->fn_extra = pfc;
 	}
 
-	if (pfc->tce->hash_proc == InvalidOid)
+	if (!OidIsValid(pfc->tce->hash_proc))
 		elog(ERROR, "could not find hash function for type %u", pfc->argtype);
 
 	/* use the supplied collation, if it exists, otherwise use the default for

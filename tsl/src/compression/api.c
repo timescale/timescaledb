@@ -319,7 +319,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.
 	 */
-	if (!previous_chunk || previous_chunk->fd.compressed_chunk_id == InvalidOid)
+	if (!previous_chunk || !OidIsValid(previous_chunk->fd.compressed_chunk_id))
 		return NULL;
 
 	Assert(previous_chunk->cube->num_slices > 0);

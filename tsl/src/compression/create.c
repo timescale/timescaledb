@@ -303,7 +303,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 				cc->col_meta[colno].orderby_nullsfirst = ordercol->nullsfirst;
 			}
 		}
-		if (attroid == InvalidOid)
+		if (!OidIsValid(attroid))
 		{
 			attroid = compresseddata_oid; /* default type for column */
 			cc->col_meta[colno].algo_id = get_default_algorithm_id(attr->atttypid);

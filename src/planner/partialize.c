@@ -112,7 +112,7 @@ has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref)
 	List *name = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(TS_PARTIALFN));
 
 	partialfnoid = LookupFuncName(name, lengthof(argtyp), argtyp, false);
-	Assert(partialfnoid != InvalidOid);
+	Assert(OidIsValid(partialfnoid));
 	state.fnoid = partialfnoid;
 	check_for_partialize_function_call((Node *) parse->targetList, &state);
 

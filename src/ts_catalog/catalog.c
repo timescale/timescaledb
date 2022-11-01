@@ -384,7 +384,7 @@ catalog_database_info_init(CatalogDatabaseInfo *info)
 	info->schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
 	info->owner_uid = catalog_owner();
 
-	if (info->schema_id == InvalidOid)
+	if (!OidIsValid(info->schema_id))
 		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
 }
 
@@ -426,7 +426,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		schema_oid = get_namespace_oid(table_ary[i].schema_name, false);
 		id = get_relname_relid(table_ary[i].table_name, schema_oid);
 
-		if (id == InvalidOid)
+		if (!OidIsValid(id))
 			elog(ERROR,
 				 "OID lookup failed for table \"%s.%s\"",
 				 table_ary[i].schema_name,
@@ -441,7 +441,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		{
 			id = get_relname_relid(index_ary[i].names[j], schema_oid);
 
-			if (id == InvalidOid)
+			if (!OidIsValid(id))
 				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);
 
 			tables_info[i].index_ids[j] = id;

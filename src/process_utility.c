@@ -3891,7 +3891,7 @@ process_create_rule_start(ProcessUtilityArgs *args)
 {
 	RuleStmt *stmt = (RuleStmt *) args->parsetree;
 
-	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
+	if (!OidIsValid(ts_hypertable_relid(stmt->relation)))
 		return DDL_CONTINUE;
 
 	ereport(ERROR,

@@ -690,12 +690,12 @@ convert_strings_to_type_id(Datum *input_strings)
 										input_strings[ENCODED_TYPE_NAMESPACE]);
 	Oid result;
 
-	Assert(arg_namespace != InvalidOid);
+	Assert(OidIsValid(arg_namespace));
 	result = GetSysCacheOid2(TYPENAMENSP,
 							 Anum_pg_type_oid,
 							 input_strings[ENCODED_TYPE_NAME],
 							 ObjectIdGetDatum(arg_namespace));
-	Assert(result != InvalidOid);
+	Assert(OidIsValid(result));
 	return result;
 }
 
@@ -708,14 +708,14 @@ convert_strings_to_op_id(Datum *input_strings)
 	Oid rarg = convert_strings_to_type_id(RargSubarrayForOpArray(input_strings));
 	Oid result;
 
-	Assert(proc_namespace != InvalidOid);
+	Assert(OidIsValid(proc_namespace));
 	result = GetSysCacheOid4(OPERNAMENSP,
 							 Anum_pg_operator_oid,
 							 input_strings[ENCODED_OP_NAME],
 							 ObjectIdGetDatum(larg),
 							 ObjectIdGetDatum(rarg),
 							 ObjectIdGetDatum(proc_namespace));
-	Assert(result != InvalidOid);
+	Assert(OidIsValid(result));
 	return result;
 }
 
@@ -766,7 +766,7 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 		 * and other projects
 		 */
 #define PG_STATS_KINDS_MAX 99
-		if (kind == InvalidOid || kind > PG_STATS_KINDS_MAX)
+		if (!OidIsValid(kind) || kind > PG_STATS_KINDS_MAX)
 		{
 			nulls[numbers_idx] = true;
 			nulls[values_idx] = true;
@@ -995,7 +995,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 		int nelems;
 		Datum *decoded_data;
 
-		if (value_oid == InvalidOid)
+		if (!OidIsValid(value_oid))
 		{
 			nulls[i++] = true;
 			continue;
@@ -1193,7 +1193,7 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 		 * for assignment by the core PostgreSQL project. Beyond that are for PostGIS
 		 * and other projects
 		 */
-		if (slot_kinds[i] == InvalidOid || slot_kinds[i] > PG_STATS_KINDS_MAX)
+		if (!OidIsValid(slot_kinds[i]) || slot_kinds[i] > PG_STATS_KINDS_MAX)
 			continue;
 
 		for (k = 0; k < STRINGS_PER_OP_OID; ++k)

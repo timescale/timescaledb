@@ -934,8 +934,8 @@ cagg_agg_validate(Node *node, void *context)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("ordered set/hypothetical aggregates are not supported")));
 		}
-		if (aggform->aggcombinefn == InvalidOid ||
-			(aggform->aggtranstype == INTERNALOID && aggform->aggdeserialfn == InvalidOid))
+		if (!OidIsValid(aggform->aggcombinefn) ||
+			(aggform->aggtranstype == INTERNALOID && !OidIsValid(aggform->aggdeserialfn)))
 		{
 			ReleaseSysCache(aggtuple);
 			ereport(ERROR,

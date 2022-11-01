@@ -1240,7 +1240,8 @@ ts_is_hypertable(Oid relid)
 {
 	if (!OidIsValid(relid))
 		return false;
-	return hypertable_relid_lookup(relid) != InvalidOid;
+
+	return OidIsValid(hypertable_relid_lookup(relid));
 }
 
 /*
@@ -1640,7 +1641,7 @@ ts_hypertable_check_partitioning(const Hypertable *ht, int32 id_of_updated_dimen
 {
 	const Dimension *dim;
 
-	Assert(id_of_updated_dimension != InvalidOid);
+	Assert(OidIsValid(id_of_updated_dimension));
 
 	dim = ts_hyperspace_get_dimension_by_id(ht->space, id_of_updated_dimension);
 

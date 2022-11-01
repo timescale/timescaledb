@@ -697,7 +697,7 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 		return SEQUENCE_NUM_GAP;
 
 	/* If there is a suitable index, use index scan otherwise fallback to heap scan. */
-	bool is_index_scan = index_oid != InvalidOid;
+	bool is_index_scan = OidIsValid(index_oid);
 
 	int i, num_scankeys = 0;
 	int32 result = 0;
