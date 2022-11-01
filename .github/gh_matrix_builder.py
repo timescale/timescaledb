@@ -155,11 +155,9 @@ m["include"].append(
             "snapshot": "snapshot",
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON",
             # below tests are tracked as part of #4838
-            "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15 bgw_custom' "
-            # below tests are tracked as part of #4832
-            "IGNORES='pg_dump_unprivileged cagg_dump metadata pg_dump compression_hypertable "
+            "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15 bgw_custom cagg_dump' "
             # below tests are tracked as part of #4833
-            "telemetry_stats dist_commands dist_ddl dist_query dist_partial_agg continuous_aggs continuous_aggs_deprecated "
+            "IGNORES='telemetry_stats dist_commands dist_ddl dist_query dist_partial_agg continuous_aggs continuous_aggs_deprecated "
             # below tests are tracked as part of #4834
             "compression compression_dml modify_exclusion rowsecurity-15 "
             # below tests are tracked as part of #4835
