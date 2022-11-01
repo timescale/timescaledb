@@ -558,7 +558,7 @@ lock_associated_compressed_chunk(int32 chunk_id, bool *has_compressed_chunk)
 	{
 		Oid compress_chunk_relid =
 			ts_chunk_get_relid(compressed_chunk_id, /* missing_ok = */ false);
-		Assert(compress_chunk_relid != InvalidOid);
+		Assert(OidIsValid(compress_chunk_relid));
 
 		*has_compressed_chunk = true;
 		return table_open(compress_chunk_relid, RowExclusiveLock);

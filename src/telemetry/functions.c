@@ -81,7 +81,7 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 		SysScanDesc scan;
 		Oid extension_id = visible_extension_ids[i];
 
-		if (extension_id == InvalidOid)
+		if (!OidIsValid(extension_id))
 			continue;
 
 		// Look in the (referenced object class, referenced object) index for

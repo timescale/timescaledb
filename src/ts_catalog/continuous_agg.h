@@ -26,7 +26,7 @@
 			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
 		else                                                                                       \
 			(newuid) = InvalidOid;                                                                 \
-		if ((newuid) != InvalidOid)                                                                \
+		if (OidIsValid((newuid)))                                                                  \
 		{                                                                                          \
 			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
 			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
@@ -36,7 +36,7 @@
 #define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
 	do                                                                                             \
 	{                                                                                              \
-		if ((newuid) != InvalidOid)                                                                \
+		if (OidIsValid((newuid)))                                                                  \
 			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
 	} while (0);
 

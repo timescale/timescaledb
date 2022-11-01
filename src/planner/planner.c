@@ -690,7 +690,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		/*
 		 * This is a chunk. Look up the hypertable for it.
 		 */
-		if (parent_reloid != InvalidOid)
+		if (OidIsValid(parent_reloid))
 		{
 			/* Sanity check on the caller-specified hypertable reloid. */
 			Assert(ts_hypertable_id_to_relid(hypertable_id) == parent_reloid);

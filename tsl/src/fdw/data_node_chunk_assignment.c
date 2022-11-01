@@ -87,7 +87,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 			break;
 		}
 	}
-	Assert(remote_chunk_relid != InvalidOid);
+	Assert(OidIsValid(remote_chunk_relid));
 
 	/*
 	 * Fill the data node chunk assignment struct.

@@ -117,7 +117,7 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 	(to_type *) ts_create_struct_from_slot(slot, mctx, sizeof(to_type), sizeof(form_type));
 
 /* note PG10 has_superclass but PG96 does not so use this */
-#define is_inheritance_child(relid) (ts_inheritance_parent_relid(relid) != InvalidOid)
+#define is_inheritance_child(relid) (OidIsValid(ts_inheritance_parent_relid((relid))))
 
 #define is_inheritance_parent(relid)                                                               \
 	(find_inheritance_children(table_relid, AccessShareLock) != NIL)

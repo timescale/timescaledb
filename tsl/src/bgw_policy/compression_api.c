@@ -148,7 +148,7 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 	{
 		expected_type = INTERVALOID;
 	}
-	if (expected_type != InvalidOid)
+	if (OidIsValid(expected_type))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

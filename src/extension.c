@@ -197,7 +197,7 @@ extension_update_state()
 	if (new_state == EXTENSION_STATE_CREATED || new_state == EXTENSION_STATE_TRANSITIONING)
 	{
 		ts_extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
-		Assert(ts_extension_oid != InvalidOid);
+		Assert(OidIsValid(ts_extension_oid));
 	}
 	else
 	{
@@ -241,7 +241,7 @@ ts_extension_schema_oid(void)
 	systable_endscan(scandesc);
 	table_close(rel, AccessShareLock);
 
-	if (schema == InvalidOid)
+	if (!OidIsValid(schema))
 		elog(ERROR, "extension schema not found");
 	return schema;
 }
