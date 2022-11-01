@@ -30,8 +30,9 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4823 Fix a crash that could occur when using nested user-defined functions with hypertables.
 
 **Thanks**
-* @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
 * @jflambert for reporting a crash with nested user-defined functions.
+* @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
+* @xvaara for helping reproduce a bug with bitmap scans in transparent decompression
 
 ## 2.8.1 (2022-10-06)
 

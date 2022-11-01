@@ -114,8 +114,6 @@ GROUP BY
  _timescaledb_internal._hyper_
 (1 row)
 
--- make sure we get bitmapheapscan
-SET enable_indexscan TO FALSE;
 SELECT
   *
 FROM
