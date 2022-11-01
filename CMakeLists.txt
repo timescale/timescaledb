@@ -389,7 +389,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
 
 find_program(
   CLANG_FORMAT
-  NAMES clang-format clang-format-14
+  NAMES clang-format-14 clang-format
   PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin /opt/bin
   DOC "The path to clang-format")
 
