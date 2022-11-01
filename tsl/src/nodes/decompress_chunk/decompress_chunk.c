@@ -426,6 +426,17 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		DecompressChunkPath *path;
 
 		/*
+		 * We skip any BitmapScan paths here as supporting those
+		 * would require fixing up the internal scan. Since we
+		 * currently do not do this BitmapScans would be generated
+		 * when we have a parameterized path on a compressed column
+		 * that would have invalid references due to our
+		 * EquivalenceClasses.
+		 */
+		if (IsA(child_path, BitmapHeapPath))
+			continue;
+
+		/*
 		 * Filter out all paths that try to JOIN the compressed chunk on the
 		 * hypertable or the uncompressed chunk
 		 * Ideally, we wouldn't create these paths in the first place.

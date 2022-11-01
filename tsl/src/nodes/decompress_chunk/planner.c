@@ -394,19 +394,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		}
 		indexplan->qual = indexqual;
 	}
-	else if (IsA(compressed_path, BitmapHeapPath))
-	{
-		/* To increase performance, we should remove quals that are redundant with the Bitmap scan
-		 * Code from create_bitmap_scan_plan does something similar, and could be used as a starting
-		 * point.
-		 */
-		foreach (lc, clauses)
-		{
-			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			decompress_plan->scan.plan.qual =
-				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
-		}
-	}
 	else
 	{
 		foreach (lc, clauses)
