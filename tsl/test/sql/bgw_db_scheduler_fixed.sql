@@ -703,6 +703,8 @@ FROM test_table_scheduler
 GROUP BY time_bucket('1 month', time)
 WITH NO DATA;
 
+SELECT set_chunk_time_interval('_timescaledb_internal._materialized_hypertable_2', interval '36500 days');
+
 select show_chunks('test_table_scheduler');
 
 alter table test_table_scheduler set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
@@ -717,7 +719,7 @@ SELECT * from _timescaledb_internal.bgw_job_stat;
 
 SELECT show_chunks('test_table_scheduler');
 select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;
-select avg_a from cagg_scheduler;
+select avg_a from cagg_scheduler ORDER BY 1;
 -- test the API for add_job too
 create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
 begin
@@ -737,4 +739,14 @@ initial_start => :'init'::timestamptz + interval '15 ms', timezone => 'Europe/Be
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
 select * from _timescaledb_config.bgw_job order by id;
-select job_id, last_start, last_finish, next_start, last_successful_finish from _timescaledb_internal.bgw_job_stat order by job_id;
+
+SELECT
+  job_id,
+  date_trunc('second',last_start) AS last_start,
+  date_trunc('second',last_finish) AS last_finish,
+  date_trunc('second',next_start) AS next_start,
+  last_successful_finish
+FROM _timescaledb_internal.bgw_job_stat
+ORDER BY job_id;
+
+
