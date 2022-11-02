@@ -232,7 +232,7 @@ process_compressed_data_out(PG_FUNCTION_ARGS)
 {
 	ts_license_enable_module_loading();
 
-	if (ts_cm_functions->compressed_data_in != process_compressed_data_in)
+	if (ts_cm_functions->compressed_data_out != process_compressed_data_out)
 		return ts_cm_functions->compressed_data_out(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
