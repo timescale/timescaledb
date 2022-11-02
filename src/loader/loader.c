@@ -496,7 +496,8 @@ static void
 check_uuid(const char *label)
 {
 	const MemoryContext oldcontext = CurrentMemoryContext;
-	const char *uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
+	/* Volatile is to work around the incorrect GCC -Wclobbered diagnostics. */
+	const char *volatile uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
 	if (!uuid || strncmp(label, SECLABEL_DIST_TAG, uuid - label) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
