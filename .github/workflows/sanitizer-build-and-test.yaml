@@ -66,12 +66,12 @@ jobs:
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }}
-      id: cache-postgresql
-      uses: actions/cache@v3
-      with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}
+    # - name: Cache PostgreSQL ${{ matrix.pg }}
+    #   id: cache-postgresql
+    #   uses: actions/cache@v3
+    #   with:
+    #     path: ~/${{ env.PG_SRC_DIR }}
+    #     key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
