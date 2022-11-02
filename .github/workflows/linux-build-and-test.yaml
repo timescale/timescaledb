@@ -73,13 +73,13 @@ jobs:
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
-      id: cache-postgresql
-      if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@v3
-      with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}${{ env.CACHE_SUFFIX }}
+    # - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+    #   id: cache-postgresql
+    #   if: matrix.snapshot != 'snapshot'
+    #   uses: actions/cache@v3
+    #   with:
+    #     path: ~/${{ env.PG_SRC_DIR }}
+    #     key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}${{ env.CACHE_SUFFIX }}
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.build_type }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
