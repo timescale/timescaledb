@@ -33,7 +33,8 @@ extern TSDLLEXPORT List *ts_bgw_job_find_by_proc_and_hypertable_id(const char *p
 																   int32 hypertable_id);
 
 extern bool ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx);
-
+TSDLLEXPORT bool ts_lock_job_id(int32 job_id, LOCKMODE mode, bool session_lock, LOCKTAG *tag,
+								bool block);
 TSDLLEXPORT BgwJob *ts_bgw_job_find(int job_id, MemoryContext mctx, bool fail_if_not_found);
 
 extern bool ts_bgw_job_has_timeout(BgwJob *job);

@@ -20,6 +20,7 @@
 #include "job_api.h"
 #include "hypertable_cache.h"
 #include "bgw/timer.h"
+#include "debug_assert.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -201,9 +202,23 @@ static BgwJob *
 find_job(int32 job_id, bool null_job_id, bool missing_ok)
 {
 	BgwJob *job;
+	bool got_lock;
+	LOCKTAG tag;
 
 	if (null_job_id && !missing_ok)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("job ID cannot be NULL")));
+
+	/* The job table manipulation functions in job.c use an advisory lock
+	 * rather than a row lock to prevent the job from being modified while
+	 * running. Since we use this function to find a job for either running
+	 * manually or for altering it, we need to grab that advisory lock here as
+	 * well. */
+	got_lock = ts_lock_job_id(job_id,
+							  RowShareLock,
+							  /* session_lock */ false,
+							  &tag,
+							  /* block */ true);
+	Ensure(got_lock, "could not get lock on job id %d", job_id);
 
 	job = ts_bgw_job_find(job_id, CurrentMemoryContext, !missing_ok);
 
