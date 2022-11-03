@@ -175,7 +175,7 @@ SELECT add_continuous_aggregate_policy('conditions_summary_daily', '50'::integer
 SELECT add_compression_policy('conditions_summary_daily', '100'::integer);
 \endif
 
-SELECT job_id, application_name, proc_schema, proc_name, scheduled, hypertable_schema, hypertable_name, config
+SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
@@ -203,7 +203,7 @@ WHERE
 
 \d+ conditions_summary_daily_new
 
-SELECT job_id, application_name, proc_schema, proc_name, scheduled, hypertable_schema, hypertable_name, config
+SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
@@ -225,9 +225,17 @@ SELECT * FROM conditions_summary_daily
 EXCEPT
 SELECT * FROM conditions_summary_daily_new;
 
+CREATE VIEW cagg_jobs AS
+SELECT user_view_schema AS schema, user_view_name AS name, bgw_job.*
+FROM _timescaledb_config.bgw_job
+JOIN _timescaledb_catalog.continuous_agg ON mat_hypertable_id = hypertable_id
+ORDER BY bgw_job.id;
+
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
+-- check policies before the migration
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -237,11 +245,19 @@ CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
 \set ON_ERROR_STOP 1
+-- check policies after the migration
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
+-- should return the old cagg jobs
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily_old';
+-- should return no rows because the cagg was overwritten
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily_new';
 
 -- test migration overriding the new cagg and removing the old
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 DROP MATERIALIZED VIEW conditions_summary_daily;
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
+-- check policies before the migration
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -251,6 +267,12 @@ SELECT * FROM conditions_summary_daily_new;
 -- should fail because the old cagg was removed
 SELECT * FROM conditions_summary_daily_old;
 \set ON_ERROR_STOP 1
+-- check policies after the migration
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
+-- should return no rows because the old cagg was removed
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily_old';
+-- should return no rows because the cagg was overwritten
+SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily_new';
 
 -- permissions test
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
