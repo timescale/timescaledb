@@ -130,6 +130,12 @@ BEGIN
         _interval_value := _time_interval::TEXT;
         _interval_type  := 'interval';
         _watermark      := COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
+
+        IF _bucket_column_type = 'timestamp with timezone' THEN
+            _watermark := COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
+        ELSE
+            _watermark := COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamp)::TEXT;
+        END IF;
     END IF;
 
     -- get all scheduled policies except the refresh
@@ -193,9 +199,9 @@ BEGIN
     INSERT INTO
         _timescaledb_catalog.continuous_agg_migrate_plan_step (mat_hypertable_id, type, config)
     VALUES
+        (_cagg_data.mat_hypertable_id, 'COPY POLICIES', _policies || jsonb_build_object('cagg_name_new', _cagg_name_new)),
         (_cagg_data.mat_hypertable_id, 'OVERRIDE CAGG', jsonb_build_object('cagg_name_new', _cagg_name_new, 'override', _override, 'drop_old', _drop_old)),
         (_cagg_data.mat_hypertable_id, 'DROP OLD CAGG', jsonb_build_object('cagg_name_new', _cagg_name_new, 'override', _override, 'drop_old', _drop_old)),
-        (_cagg_data.mat_hypertable_id, 'COPY POLICIES', _policies || jsonb_build_object('cagg_name_new', _cagg_name_new)),
         (_cagg_data.mat_hypertable_id, 'ENABLE POLICIES', NULL);
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -291,6 +297,8 @@ DECLARE
     _mat_hypertable_id INTEGER;
     _policies INTEGER[];
     _new_policies INTEGER[];
+    _bgw_job _timescaledb_config.bgw_job;
+    _policy_id INTEGER;
 BEGIN
     IF _plan_step.config->>'policies' IS NULL THEN
         RETURN;
@@ -307,28 +315,37 @@ BEGIN
     WHERE user_view_schema = _cagg_data.user_view_schema
     AND user_view_name = _plan_step.config->>'cagg_name_new';
 
-    WITH jobs AS (
-        SELECT application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, config
+    -- create a temp table with all policies we'll copy
+    CREATE TEMP TABLE bgw_job_temp ON COMMIT DROP AS
+        SELECT *
         FROM _timescaledb_config.bgw_job
         WHERE id = ANY(_policies)
-    ),
-    insert_new_policies AS (
-        INSERT INTO
-            _timescaledb_config.bgw_job (
-                application_name, schedule_interval, max_runtime, max_retries,
-                retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config
-            )
-        SELECT application_name, schedule_interval, max_runtime, max_retries, retry_period,
-               proc_schema, proc_name, owner, scheduled, _mat_hypertable_id, config
-        FROM jobs
-        RETURNING id
-    )
-    SELECT array_agg(id)
-    INTO _new_policies
-    FROM insert_new_policies;
+        ORDER BY id;
 
+    -- iterate over the policies and update the necessary fields
+    FOR _bgw_job IN
+        SELECT *
+        FROM _timescaledb_config.bgw_job
+        WHERE id = ANY(_policies)
+        ORDER BY id
+    LOOP
+        _policy_id := nextval('_timescaledb_config.bgw_job_id_seq');
+        _new_policies := _new_policies || _policy_id;
+        UPDATE bgw_job_temp
+            SET id = _policy_id,
+                application_name = replace(application_name::text, _bgw_job.id::text, _policy_id::text)::name,
+                config = jsonb_set(_bgw_job.config, '{mat_hypertable_id}', _mat_hypertable_id::text::jsonb, false),
+                hypertable_id = _mat_hypertable_id
+        WHERE id = _bgw_job.id;
+    END LOOP;
+
+    -- insert new policies
+    INSERT INTO _timescaledb_config.bgw_job
+    SELECT * FROM bgw_job_temp ORDER BY id;
+
+    -- update the "ENABLE POLICIES" step with new policies
     UPDATE _timescaledb_catalog.continuous_agg_migrate_plan_step
-    SET config = json_build_object('policies', _new_policies)
+    SET config = jsonb_build_object('policies', _new_policies || _policies)
     WHERE type = 'ENABLE POLICIES'
     AND mat_hypertable_id = _plan_step.mat_hypertable_id;
 END;
@@ -412,19 +429,17 @@ BEGIN
 
     _stmt := 'ALTER MATERIALIZED VIEW %I.%I RENAME TO %I;';
 
-    IF (_plan_step.config->>'override')::BOOLEAN IS TRUE THEN
-        EXECUTE format (
-            _stmt,
-            _cagg_data.user_view_schema, _cagg_data.user_view_name,
-            replace(_plan_step.config->>'cagg_name_new', '_new', '_old')
-        );
+    EXECUTE format (
+        _stmt,
+        _cagg_data.user_view_schema, _cagg_data.user_view_name,
+        replace(_plan_step.config->>'cagg_name_new', '_new', '_old')
+    );
 
-        EXECUTE format (
-            _stmt,
-            _cagg_data.user_view_schema, _plan_step.config->>'cagg_name_new',
-            _cagg_data.user_view_name
-        );
-    END IF;
+    EXECUTE format (
+        _stmt,
+        _cagg_data.user_view_schema, _plan_step.config->>'cagg_name_new',
+        _cagg_data.user_view_name
+    );
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
