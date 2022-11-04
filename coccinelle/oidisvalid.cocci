@@ -16,8 +16,8 @@ symbol InvalidOid;
 expression oid;
 @@
 
-/* use OidIsValid() instead of comparing against InvalidOid */
 - (oid != InvalidOid)
++ /* use OidIsValid() instead of comparing against InvalidOid */
 + OidIsValid(oid)
 
 @@
@@ -25,6 +25,25 @@ symbol InvalidOid;
 expression oid;
 @@
 
-/* use OidIsValid() instead of comparing against InvalidOid */
+- (InvalidOid != oid)
++ /* use OidIsValid() instead of comparing against InvalidOid */
++ OidIsValid(oid)
+
+@@
+symbol InvalidOid;
+expression oid;
+@@
+
 - (oid == InvalidOid)
++ /* use OidIsValid() instead of comparing against InvalidOid */
 + !OidIsValid(oid)
+
+@@
+symbol InvalidOid;
+expression oid;
+@@
+
+- (InvalidOid == oid)
++ /* use OidIsValid() instead of comparing against InvalidOid */
++ !OidIsValid(oid)
+

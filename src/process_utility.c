@@ -3339,7 +3339,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				relation = partstmt->name;
 				Assert(NULL != relation);
 
-				if (InvalidOid != ts_hypertable_relid(relation))
+				if (OidIsValid(ts_hypertable_relid(relation)))
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
