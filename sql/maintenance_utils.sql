@@ -68,18 +68,24 @@ BEGIN
 
     -- Chunk names are in the internal catalog, but we only care about
     -- the chunk name here.
+    -- status bits:
+    -- 1: compressed
+    -- 2: compressed unordered
+    -- 4: frozen
+    -- 8: compressed partial
+
     chunk_name := parse_ident(chunk::text);
-    CASE status
-    WHEN 0 THEN
+    CASE 
+    WHEN status = 0 THEN
         RAISE EXCEPTION 'call compress_chunk instead of recompress_chunk';
-    WHEN 1 THEN
+    WHEN status = 1 THEN
         IF if_not_compressed THEN
             RAISE NOTICE 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
             RETURN;
         ELSE
             RAISE EXCEPTION 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
         END IF;
-    WHEN 3 THEN
+    WHEN status = 3 OR status = 9 OR status = 11 THEN
         PERFORM @extschema@.decompress_chunk(chunk);
         COMMIT;
         -- SET LOCAL is only active until end of transaction.
@@ -87,6 +93,8 @@ BEGIN
         -- want to bleed out search_path to caller, so we do SET LOCAL
         -- again after COMMIT
         SET LOCAL search_path TO pg_catalog, pg_temp;
+    ELSE
+        RAISE EXCEPTION 'unexpected chunk status % in chunk "%"', status, chunk_name[array_upper(chunk_name,1)];
     END CASE;
     PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
 END

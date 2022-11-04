@@ -168,7 +168,7 @@ extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_relid(Oid relid);
 extern TSDLLEXPORT int32 ts_chunk_get_compressed_chunk_id(int32 chunk_id);
 extern bool ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id,
 														   int32 *chunk_status);
-extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
+extern TSDLLEXPORT Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
 							bool missing_ok);
@@ -187,6 +187,7 @@ extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, in
 											 MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
+extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
@@ -202,6 +203,7 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 									 const char *table_name, Oid chunk_table_relid, bool *created);
 extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_partial(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
 																	 int32 chunk_status,
