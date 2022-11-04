@@ -588,7 +588,7 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 	/* Take a share lock on the table to prevent concurrent data changes during scan. This lock will
 	 * be released after the scan */
 	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, ShareLock, mctx);
-	PG_USED_FOR_ASSERTS_ONLY int num_found = 0;
+	List *jobs = NIL;
 	BgwJob *job = NULL;
 	LOCKTAG tag;
 
@@ -606,9 +606,26 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		job = bgw_job_from_tupleinfo(ti, sizeof(BgwJob));
-		Assert(num_found == 0);
-		num_found++;
+		jobs = lappend(jobs, job);
 	}
+
+	if (list_length(jobs) > 1)
+	{
+		ListCell *cell;
+		foreach (cell, jobs)
+		{
+			BgwJob *job = (BgwJob *) lfirst(cell);
+			ereport(LOG,
+					(errmsg("more than one job with same job_id %d", bgw_job_id),
+					 errdetail("job_id: %d, application_name: %s, procedure: %s.%s, scheduled: %s",
+							   job->fd.id,
+							   NameStr(job->fd.application_name),
+							   quote_identifier(NameStr(job->fd.proc_schema)),
+							   quote_identifier(NameStr(job->fd.proc_name)),
+							   job->fd.scheduled ? "true" : "false")));
+		}
+	}
+	Assert(list_length(jobs) <= 1);
 
 	return job;
 }
