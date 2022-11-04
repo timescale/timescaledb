@@ -175,6 +175,11 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
  *
  */
 #define CHUNK_STATUS_FROZEN 4
+/*
+ * A chunk is in this state when it is compressed but also has uncompressed tuples
+ * in the uncompressed chunk.
+ */
+#define CHUNK_STATUS_COMPRESSED_PARTIAL 8
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -3507,7 +3512,15 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 bool
 ts_chunk_set_unordered(Chunk *chunk)
 {
+	Assert(ts_chunk_is_compressed(chunk));
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_UNORDERED);
+}
+
+bool
+ts_chunk_set_partial(Chunk *chunk)
+{
+	Assert(ts_chunk_is_compressed(chunk));
+	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
 }
 
 /*No inserts,updates and deletes are permitted on a frozen chunk.
@@ -3605,7 +3618,8 @@ chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id
 		form.compressed_chunk_id = INVALID_CHUNK_ID;
 		form.status =
 			ts_clear_flags_32(form.status,
-							  CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED);
+							  CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
+								  CHUNK_STATUS_COMPRESSED_PARTIAL);
 	}
 	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
@@ -4373,7 +4387,7 @@ ts_chunk_get_compression_status(int32 chunk_id)
 	return st;
 }
 
-/*Note that only a compressed chunk can have unordered flag set */
+/* Note that only a compressed chunk can have unordered flag set */
 bool
 ts_chunk_is_unordered(const Chunk *chunk)
 {
@@ -4384,6 +4398,13 @@ bool
 ts_chunk_is_compressed(const Chunk *chunk)
 {
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
+}
+
+/* Note that only a compressed chunk can have partial flag set */
+bool
+ts_chunk_is_partial(const Chunk *chunk)
+{
+	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED_PARTIAL);
 }
 
 static const char *
