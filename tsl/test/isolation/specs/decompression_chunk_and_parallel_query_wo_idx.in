@@ -42,7 +42,7 @@ setup {
 
    SELECT count(*) FROM sensor_data;
    
-   ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby = 'sensor_id, cpu');
+   ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby = 'sensor_id');
 
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
    SELECT compression_status FROM chunk_compression_stats('sensor_data');
