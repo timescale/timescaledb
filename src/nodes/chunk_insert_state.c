@@ -111,32 +111,6 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	return rri;
 }
 
-static inline ResultRelInfo *
-create_compress_chunk_result_relation_info(ChunkDispatch *dispatch, Relation compress_rel)
-{
-	ResultRelInfo *rri = makeNode(ResultRelInfo);
-	ResultRelInfo *rri_orig = dispatch->hypertable_result_rel_info;
-	Index hyper_rti = rri_orig->ri_RangeTableIndex;
-
-	InitResultRelInfo(rri, compress_rel, hyper_rti, NULL, dispatch->estate->es_instrument);
-
-	/* RLS policies are not supported if compression is enabled */
-	Assert(rri_orig->ri_WithCheckOptions == NULL && rri_orig->ri_WithCheckOptionExprs == NULL);
-	Assert(rri_orig->ri_projectReturning == NULL);
-#if PG14_LT
-	rri->ri_junkFilter = rri_orig->ri_junkFilter;
-#endif
-
-	/* compressed rel chunk is on data node. Does not need any FDW access on AN */
-	rri->ri_FdwState = NULL;
-	rri->ri_usesFdwDirectModify = false;
-	rri->ri_FdwRoutine = NULL;
-	/* constraints are executed on the orig base chunk. So we do
-	 * not call create_chunk_rri_constraint_expr here
-	 */
-	return rri;
-}
-
 static ProjectionInfo *
 get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_clauses,
 									   TupleConversionMap *map, Index varno, Oid rowtype,
@@ -542,32 +516,6 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	}
 }
 
-/* Assumption: we have acquired a lock on the chunk table. This is
- *      important because lock acquisition order is always orignal chunk,
- *      followed by compressed chunk to prevent deadlocks.
- * We now try to acquire a lock on the compressed chunk, if one exists.
- * Note that the insert could have been blocked by a recompress_chunk operation.
- * So the compressed chunk could have moved under us. We need to refetch the chunk
- * to get the correct compressed chunk id (github issue 3400)
- */
-static Relation
-lock_associated_compressed_chunk(int32 chunk_id, bool *has_compressed_chunk)
-{
-	int32 compressed_chunk_id = ts_chunk_get_compressed_chunk_id(chunk_id);
-	if (compressed_chunk_id)
-	{
-		Oid compress_chunk_relid =
-			ts_chunk_get_relid(compressed_chunk_id, /* missing_ok = */ false);
-		Assert(OidIsValid(compress_chunk_relid));
-
-		*has_compressed_chunk = true;
-		return table_open(compress_chunk_relid, RowExclusiveLock);
-	}
-
-	*has_compressed_chunk = false;
-	return NULL;
-}
-
 /*
  * Create new insert chunk state.
  *
@@ -577,15 +525,13 @@ lock_associated_compressed_chunk(int32 chunk_id, bool *has_compressed_chunk)
 extern ChunkInsertState *
 ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 {
-	int cagg_trig_nargs = 0;
-	int32 cagg_trig_args[2] = { 0, 0 };
 	ChunkInsertState *state;
-	Relation rel, parent_rel, compress_rel = NULL;
+	Relation rel, parent_rel;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-	ResultRelInfo *resrelinfo, *relinfo;
+	ResultRelInfo *relinfo;
 	bool has_compressed_chunk = (chunk->fd.compressed_chunk_id != 0);
 
 	/* permissions NOT checked here; were checked at hypertable level */
@@ -593,9 +539,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support row-level security")));
-
-	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
-		elog(ERROR, "insert is not on a table");
+	Assert(chunk->relkind == RELKIND_RELATION || chunk->relkind == RELKIND_FOREIGN_TABLE);
 
 	ts_chunk_validate_chunk_status_for_operation(chunk->table_id,
 												 chunk->fd.status,
@@ -617,28 +561,23 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 				 errmsg("insert into a compressed chunk that has primary or unique constraint is "
 						"not supported")));
 	}
-	compress_rel = lock_associated_compressed_chunk(chunk->fd.id, &has_compressed_chunk);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
-	if (!has_compressed_chunk)
-		resrelinfo = relinfo;
-	else
-	{
-		/* insert the tuple into the compressed chunk instead */
-		resrelinfo = create_compress_chunk_result_relation_info(dispatch, compress_rel);
-	}
-	CheckValidResultRel(resrelinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
+	CheckValidResultRel(relinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;
 	state->rel = rel;
-	state->result_relation_info = resrelinfo;
+	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
 
-	if (resrelinfo->ri_RelationDesc->rd_rel->relhasindex &&
-		resrelinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(resrelinfo, onconflict_action != ONCONFLICT_NONE);
+	state->chunk_compressed = ts_chunk_is_compressed(chunk);
+	if (state->chunk_compressed)
+		state->chunk_partial = ts_chunk_is_partial(chunk);
+
+	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
+		ExecOpenIndices(relinfo, onconflict_action != ONCONFLICT_NONE);
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{
@@ -658,42 +597,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		 */
 		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
 			elog(ERROR, "statement trigger on chunk table not supported");
-
-		/* AFTER ROW triggers do not work since we redirect the insert
-		 * to the compressed chunk. We still want cagg triggers to fire.
-		 * We'll call them directly. But raise an error if there are
-		 * other triggers
-		 */
-		if (has_compressed_chunk && tg->trig_insert_after_row)
-		{
-			StringInfo trigger_list = makeStringInfo();
-			Assert(tg->numtriggers > 0);
-			for (int i = 0; i < tg->numtriggers; i++)
-			{
-				if (strncmp(tg->triggers[i].tgname,
-							CAGGINVAL_TRIGGER_NAME,
-							strlen(CAGGINVAL_TRIGGER_NAME)) == 0)
-				{
-					/* collect arg information here */
-					cagg_trig_nargs = tg->triggers[i].tgnargs;
-					cagg_trig_args[0] = atol(tg->triggers[i].tgargs[0]);
-					if (cagg_trig_nargs > 1)
-						cagg_trig_args[1] = atol(tg->triggers[i].tgargs[1]);
-					continue;
-				}
-				if (i > 0)
-					appendStringInfoString(trigger_list, ", ");
-				appendStringInfoString(trigger_list, tg->triggers[i].tgname);
-			}
-			if (trigger_list->len != 0)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("after insert row trigger on compressed chunk not supported"),
-						 errdetail("Triggers: %s", trigger_list->data),
-						 errhint("Decompress the chunk first before inserting into it.")));
-			}
-		}
 	}
 
 	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
@@ -708,32 +611,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 										  gettext_noop("could not convert row type"));
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
-
-	if (has_compressed_chunk)
-	{
-		CompressChunkInsertState *compress_info = palloc0(sizeof(CompressChunkInsertState));
-		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
-		/* this is true as compressed chunks are not created on access node */
-		Assert(chunk->relkind != RELKIND_FOREIGN_TABLE);
-		Assert(compress_rel != NULL);
-		compress_info->compress_rel = compress_rel;
-		Assert(ts_cm_functions->compress_row_init != NULL);
-		/* need a way to convert from chunk tuple to compressed chunk tuple */
-		compress_info->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
-		compress_info->orig_result_relation_info = relinfo;
-		if (cagg_trig_nargs > 0) /*we found a cagg trigger earlier */
-		{
-			compress_info->has_cagg_trigger = true;
-			compress_info->cagg_trig_nargs = cagg_trig_nargs;
-			compress_info->cagg_trig_args[0] = cagg_trig_args[0];
-			compress_info->cagg_trig_args[1] = cagg_trig_args[1];
-		}
-		state->compress_info = compress_info;
-	}
-	else
-	{
-		state->compress_info = NULL;
-	}
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
@@ -751,7 +628,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		RangeTblEntry *rte =
-			rt_fetch(resrelinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
+			rt_fetch(relinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
 
 		Assert(rte != NULL);
 
@@ -765,10 +642,10 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		 * the FDW. Instead exploit the FdwPrivate pointer to pass on the
 		 * chunk insert state to DataNodeDispatch so that it knows which data nodes
 		 * to insert into. */
-		resrelinfo->ri_FdwState = state;
+		relinfo->ri_FdwState = state;
 	}
-	else if (resrelinfo->ri_FdwRoutine && !resrelinfo->ri_usesFdwDirectModify &&
-			 resrelinfo->ri_FdwRoutine->BeginForeignModify)
+	else if (relinfo->ri_FdwRoutine && !relinfo->ri_usesFdwDirectModify &&
+			 relinfo->ri_FdwRoutine->BeginForeignModify)
 	{
 		/*
 		 * If this is a chunk located one or more data nodes, setup the
@@ -792,11 +669,11 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		 * tsl/src/fdw/timescaledb_fdw.c).
 		 */
 		fdwprivate = lappend(list_copy(fdwprivate), state);
-		resrelinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
-													  resrelinfo,
-													  fdwprivate,
-													  0,
-													  dispatch->eflags);
+		relinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
+												   relinfo,
+												   fdwprivate,
+												   0,
+												   dispatch->eflags);
 	}
 
 	MemoryContextSwitchTo(old_mcxt);
@@ -809,41 +686,18 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
 	ResultRelInfo *rri = state->result_relation_info;
 
+	if (state->chunk_compressed && !state->chunk_partial)
+	{
+		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
+		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+		ts_chunk_set_partial(chunk);
+	}
+
 	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)
 		rri->ri_FdwRoutine->EndForeignModify(state->estate, rri);
 
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);
-
-	/*
-	 * The chunk search functions may leak memory, so switch to a temporary
-	 * memory context.
-	 */
-	MemoryContext old_context = MemoryContextSwitchTo(GetPerTupleMemoryContext(state->estate));
-	if (state->compress_info)
-	{
-		ResultRelInfo *orig_chunk_rri = state->compress_info->orig_result_relation_info;
-		Oid chunk_relid = RelationGetRelid(orig_chunk_rri->ri_RelationDesc);
-		ts_cm_functions->compress_row_end(state->compress_info->compress_state);
-		ts_cm_functions->compress_row_destroy(state->compress_info->compress_state);
-		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-		if (!ts_chunk_is_unordered(chunk))
-			ts_chunk_set_unordered(chunk);
-		table_close(state->compress_info->compress_rel, NoLock);
-	}
-	else if (RelationGetForm(state->result_relation_info->ri_RelationDesc)->relkind ==
-			 RELKIND_FOREIGN_TABLE)
-	{
-		/* If a distributed chunk shows compressed status on AN,
-		 * we mark it as unordered , because the insert now goes into
-		 * a previously compressed chunk
-		 */
-		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
-		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
-			ts_chunk_set_unordered(chunk);
-	}
-	MemoryContextSwitchTo(old_context);
 
 	table_close(state->rel, NoLock);
 	if (state->slot)
@@ -906,32 +760,4 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 							   state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	else
 		MemoryContextDelete(state->mctx);
-}
-
-/* invoke cagg trigger on a compressed chunk. AFTER Row Triggers on
- * compressed chunks do not work with the PG framework - so we explicitly
- * call the underlying C function. Note that in the case of a distr. ht, this
- * trigger is executed on the AN.
- * Parameters:
- * chunk_rel : chunk that will be modified (original chunk)
- * chunk_tuple: tuple to be inserted into the chunk (before being transformed
- *            into compressed format)
- */
-void
-ts_compress_chunk_invoke_cagg_trigger(CompressChunkInsertState *compress_info, Relation chunk_rel,
-									  HeapTuple chunk_tuple)
-{
-	Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
-	int32 hypertable_id = compress_info->cagg_trig_args[0];
-	int32 parent_hypertable_id = compress_info->cagg_trig_args[1];
-	bool is_distributed_ht = (compress_info->cagg_trig_nargs == 2);
-	Assert((compress_info->cagg_trig_nargs == 1 && parent_hypertable_id == 0) ||
-		   (compress_info->cagg_trig_nargs == 2 && parent_hypertable_id > 0));
-	ts_cm_functions->continuous_agg_call_invalidation_trigger(hypertable_id,
-															  chunk_rel,
-															  chunk_tuple,
-															  NULL /* chunk_newtuple */,
-															  false /* update */,
-															  is_distributed_ht,
-															  parent_hypertable_id);
 }

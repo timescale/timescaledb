@@ -1392,11 +1392,11 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 
 		/*
 		 * For remote copy, we don't use chunk insert states on the AN.
-		 * So we need to explicitly set the chunk as unordered when copies
+		 * So we need to explicitly set the chunk as partial when copies
 		 * are directed to previously compressed chunks.
 		 */
-		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
-			ts_chunk_set_unordered(chunk);
+		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_partial(chunk)))
+			ts_chunk_set_partial(chunk);
 
 		/*
 		 * Schedule the row for sending to the data nodes containing the chunk.

@@ -40,7 +40,7 @@ INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 11, 16, 'new' ;
 SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-     2
+     1
 (1 row)
 
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, i +5, 'clay'
@@ -48,7 +48,7 @@ FROM (Select generate_series(10, 20, 1) i ) q;
 SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    13
+     1
 (1 row)
 
 SELECT count(*) from test1;
@@ -62,7 +62,7 @@ COPY test1 FROM STDIN DELIMITER ',';
 SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    14
+     1
 (1 row)
 
 -- multi row copy
@@ -70,7 +70,7 @@ COPY test1 FROM STDIN DELIMITER ',';
 SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    17
+     1
 (1 row)
 
 --Verify that all the data went into the initial chunk
@@ -151,7 +151,7 @@ ALTER TABLE test1 ADD COLUMN newtcol varchar(400);
 SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    19
+     1
 (1 row)
 
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 100, 101, 'prev101', 'this is the newtcol101';
@@ -176,7 +176,7 @@ SELECT * FROM test1 WHERE b = 16 order by 1, 2, 3, 4, 5;
 SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    26
+     1
 (1 row)
 
 SELECT count(*)
@@ -192,7 +192,7 @@ COPY test1 FROM STDIN DELIMITER ',';
 SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    30
+     1
 (1 row)
 
 SELECT count(*)
@@ -665,21 +665,16 @@ CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
-ERROR:  after insert row trigger on compressed chunk not supported
-DETAIL:  Triggers: t4_ar
-HINT:  Decompress the chunk first before inserting into it.
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-ERROR:  after insert row trigger on compressed chunk not supported
-DETAIL:  Triggers: t4_ar
-HINT:  Decompress the chunk first before inserting into it.
-CONTEXT:  COPY trigger_test, line 1: "2000-01-01 01:00:00-05,1,0"
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     1
+     3
 (1 row)
 
 BEGIN;
@@ -691,7 +686,7 @@ NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Sun Dec 31 22:0
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     3
+     5
 (1 row)
 
 ROLLBACK;
@@ -700,15 +695,15 @@ DROP TRIGGER t4_ar ON trigger_test;
 CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
 \set ON_ERROR_STOP 0
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
-ERROR:  after insert row trigger on compressed chunk not supported
+NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-ERROR:  after insert row trigger on compressed chunk not supported
+NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 \set ON_ERROR_STOP 1
 -- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     1
+     5
 (1 row)
 
 DROP trigger t4_constraint ON trigger_test;
@@ -730,7 +725,7 @@ CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTIO
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     2
+     6
 (1 row)
 
 BEGIN;
@@ -742,11 +737,15 @@ NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_18_chunk: ("Fri Jan 01 00
 SELECT * FROM trigger_test ORDER BY 1 ,2, 5;
              time             | device | value | addcolv | addcoli 
 ------------------------------+--------+-------+---------+---------
+ Fri Dec 31 22:00:00 1999 PST |      1 |     0 |         |        
+ Fri Dec 31 22:00:00 1999 PST |      1 |     0 |         |        
  Sat Jan 01 00:00:00 2000 PST |      1 |   111 | eleven  |     111
  Sat Jan 01 00:00:00 2000 PST |      1 |     1 |         |        
+ Sat Jan 01 00:00:00 2000 PST |      1 |     0 |         |        
+ Sat Jan 01 00:00:00 2000 PST |      1 |     0 |         |        
  Fri Jan 01 00:00:00 2010 PST |     10 |    10 | ten     |     222
  Fri Jan 01 00:00:00 2010 PST |     10 |   110 | ten     |     222
-(4 rows)
+(8 rows)
 
 ROLLBACK;
 DROP TABLE trigger_test;
@@ -791,27 +790,32 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 INSERT INTO test_ordering SELECT 1;
 -- should not be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                        QUERY PLAN                         
------------------------------------------------------------
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Sort
    Sort Key: _hyper_13_20_chunk."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-         ->  Seq Scan on compress_hyper_14_21_chunk
-(4 rows)
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Seq Scan on _hyper_13_20_chunk
+(6 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
+ Merge Append
+   Sort Key: _hyper_13_20_chunk."time"
    ->  Sort
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Seq Scan on compress_hyper_14_21_chunk
+   ->  Sort
+         Sort Key: _hyper_13_20_chunk."time"
+         ->  Seq Scan on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
-(7 rows)
+(10 rows)
 
 --insert into compressed + uncompressed chunk
 INSERT INTO test_ordering VALUES (21), (22),(113);
@@ -844,17 +848,20 @@ NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
+ Merge Append
+   Sort Key: _hyper_13_20_chunk."time"
    ->  Sort
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Seq Scan on compress_hyper_14_21_chunk
+   ->  Sort
+         Sort Key: _hyper_13_20_chunk."time"
+         ->  Seq Scan on _hyper_13_20_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
          ->  Sort
                Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
                ->  Seq Scan on compress_hyper_14_23_chunk
-(10 rows)
+(13 rows)
 
 -- TEST cagg triggers with insert into compressed chunk
 CREATE TABLE conditions (

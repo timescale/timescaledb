@@ -417,7 +417,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            3 | _hyper_14_62_chunk
+            9 | _hyper_14_62_chunk
 (1 row)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
@@ -482,7 +482,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            3 | _hyper_14_62_chunk
+            9 | _hyper_14_62_chunk
             0 | _hyper_14_65_chunk
 (2 rows)
 
@@ -543,7 +543,7 @@ INSERT INTO metrics SELECT '2000-01-01';
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            3
+            9
 (1 row)
 
 -- should recompress
@@ -577,7 +577,7 @@ INSERT INTO metrics SELECT '2000-01-01';
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            3
+            9
 (1 row)
 
 -- still nothing to do since we disabled recompress
@@ -586,7 +586,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            3
+            9
 (1 row)
 
 -- reenable recompress in compress job
@@ -635,7 +635,7 @@ INSERT INTO metrics SELECT '2000-01-01';
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            3
+            9
 (1 row)
 
 CALL run_job(:JOB_RECOMPRESS);
@@ -643,7 +643,7 @@ CALL run_job(:JOB_RECOMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 SELECT delete_job(:JOB_RECOMPRESS);

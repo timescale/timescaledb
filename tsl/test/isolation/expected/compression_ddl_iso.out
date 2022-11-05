@@ -327,7 +327,7 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     3
+     9
 (1 row)
 
 
@@ -353,7 +353,7 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     3
+     9
 (1 row)
 
 step LockChunk1: 

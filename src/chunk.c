@@ -4351,9 +4351,11 @@ ts_chunk_get_compression_status(int32 chunk_id)
 				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED);
 			bool status_is_unordered =
 				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED_UNORDERED);
+			bool status_is_partial =
+				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED_PARTIAL);
 			if (status_is_compressed)
 			{
-				if (status_is_unordered)
+				if (status_is_unordered || status_is_partial)
 					st = CHUNK_COMPRESS_UNORDERED;
 				else
 					st = CHUNK_COMPRESS_ORDERED;

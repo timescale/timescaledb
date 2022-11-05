@@ -35,7 +35,7 @@ static Node *modify_expression(Node *node, QualPushdownContext *context);
 
 void
 pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
-			   List *compression_info)
+			   List *compression_info, bool chunk_partial)
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
@@ -83,7 +83,7 @@ pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_
 		}
 		/* We need to check the restriction clause on the decompress node if the clause can't be
 		 * pushed down or needs re-checking */
-		if (!context.can_pushdown || context.needs_recheck)
+		if (!context.can_pushdown || context.needs_recheck || chunk_partial)
 		{
 			decompress_clauses = lappend(decompress_clauses, ri);
 		}

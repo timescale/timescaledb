@@ -466,9 +466,9 @@ where hypertable_id = (select id from _timescaledb_catalog.hypertable
 order by id;
  id |    table_name    | status 
 ----+------------------+--------
-  1 | _hyper_1_1_chunk |      3
-  2 | _hyper_1_2_chunk |      3
-  3 | _hyper_1_3_chunk |      3
+  1 | _hyper_1_1_chunk |      9
+  2 | _hyper_1_2_chunk |      9
+  3 | _hyper_1_3_chunk |      9
 (3 rows)
 
 --running job second time, wait for it to complete
