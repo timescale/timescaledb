@@ -931,7 +931,7 @@ SELECT count(*) from test_recomp_int where val = 10;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            3
+ _dist_hyper_6_24_chunk |            9
 (1 row)
 
 SELECT
@@ -961,7 +961,7 @@ insert into test_recomp_int select generate_series(5,7), 10;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            3
+ _dist_hyper_6_24_chunk |            9
 (1 row)
 
 --run the compression policy job, it will recompress chunks that are unordered
@@ -1004,7 +1004,7 @@ INSERT INTO test_recomp_int VALUES( 65, 10);
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            3
+ _dist_hyper_6_24_chunk |            9
  _dist_hyper_6_25_chunk |            0
  _dist_hyper_6_26_chunk |            0
 (3 rows)
@@ -1024,7 +1024,7 @@ ORDER BY chunk;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            3
+ _dist_hyper_6_24_chunk |            9
  _dist_hyper_6_25_chunk |            1
  _dist_hyper_6_26_chunk |            1
 (3 rows)
@@ -1034,9 +1034,9 @@ COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            3
- _dist_hyper_6_25_chunk |            3
- _dist_hyper_6_26_chunk |            3
+ _dist_hyper_6_24_chunk |            9
+ _dist_hyper_6_25_chunk |            9
+ _dist_hyper_6_26_chunk |            9
 (3 rows)
 
 SELECT time_bucket(20, time), count(*)
@@ -1069,7 +1069,7 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 ------------------------+--------------
  _dist_hyper_6_24_chunk |            1
  _dist_hyper_6_25_chunk |            1
- _dist_hyper_6_26_chunk |            3
+ _dist_hyper_6_26_chunk |            9
 (3 rows)
 
 CALL run_job(:compressjob_id);
@@ -1225,7 +1225,7 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' ORDER BY 1;
        chunk_name       | chunk_status | dropped | comp_id 
 ------------------------+--------------+---------+---------
- _dist_hyper_6_24_chunk |            3 | f       |        
+ _dist_hyper_6_24_chunk |            9 | f       |        
  _dist_hyper_6_25_chunk |            1 | f       |        
  _dist_hyper_6_26_chunk |            1 | f       |        
  _dist_hyper_6_28_chunk |            0 | f       |        

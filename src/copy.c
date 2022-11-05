@@ -712,13 +712,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 {
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
-	/* if copies are directed to a chunk that is compressed, we redirect
-	 * them to the internal compressed chunk. But we still
-	 * need to check triggers, constrainst etc. against the original
-	 * chunk (not the internal compressed chunk).
-	 * check_resultRelInfo saves that information
-	 */
-	ResultRelInfo *check_resultRelInfo = NULL;
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *singleslot;
@@ -965,10 +958,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 
 		currentTupleInsertMethod = insertMethod;
 
-		/* Insert tuples into compressed chunks tuple by tuple */
-		if (cis->compress_info)
-			currentTupleInsertMethod = CIM_SINGLE;
-
 		/* Determine which triggers exist on this chunk */
 		has_before_insert_row_trig =
 			(cis->result_relation_info->ri_TrigDesc &&
@@ -1047,21 +1036,14 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 		estate->es_result_relation_info = resultRelInfo;
 #endif
 
-		if (cis->compress_info != NULL)
-			check_resultRelInfo = cis->compress_info->orig_result_relation_info;
-		else
-			check_resultRelInfo = resultRelInfo;
-
 		/* Set the right relation for triggers */
-		ts_tuptableslot_set_table_oid(myslot,
-									  RelationGetRelid(check_resultRelInfo->ri_RelationDesc));
+		ts_tuptableslot_set_table_oid(myslot, RelationGetRelid(resultRelInfo->ri_RelationDesc));
 
 		skip_tuple = false;
 
 		/* BEFORE ROW INSERT Triggers */
-		if (check_resultRelInfo->ri_TrigDesc &&
-			check_resultRelInfo->ri_TrigDesc->trig_insert_before_row)
-			skip_tuple = !ExecBRInsertTriggers(estate, check_resultRelInfo, myslot);
+		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
+			skip_tuple = !ExecBRInsertTriggers(estate, resultRelInfo, myslot);
 
 		if (!skip_tuple)
 		{
@@ -1072,110 +1054,72 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 			List *recheckIndexes = NIL;
 
 			/* Compute stored generated columns */
-			if (check_resultRelInfo->ri_RelationDesc->rd_att->constr &&
-				check_resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
-				ExecComputeStoredGeneratedCompat(check_resultRelInfo, estate, myslot, CMD_INSERT);
+			if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
+				resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+				ExecComputeStoredGeneratedCompat(resultRelInfo, estate, myslot, CMD_INSERT);
 
 			/*
 			 * If the target is a plain table, check the constraints of
 			 * the tuple.
 			 */
-			if (check_resultRelInfo->ri_FdwRoutine == NULL &&
-				check_resultRelInfo->ri_RelationDesc->rd_att->constr)
+			if (resultRelInfo->ri_FdwRoutine == NULL &&
+				resultRelInfo->ri_RelationDesc->rd_att->constr)
 			{
-				Assert(check_resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
-				ExecConstraints(check_resultRelInfo, myslot, estate);
+				Assert(resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
+				ExecConstraints(resultRelInfo, myslot, estate);
 			}
 
-			if (cis->compress_info)
+			if (currentTupleInsertMethod == CIM_SINGLE)
 			{
-				Assert(currentTupleInsertMethod == CIM_SINGLE);
-
-				TupleTableSlot *compress_slot =
-					ts_cm_functions->compress_row_exec(cis->compress_info->compress_state, myslot);
-				/* After Row triggers do not work with compressed chunks. So
-				 * explicitly call cagg trigger here
-				 */
-				if (cis->compress_info->has_cagg_trigger)
-				{
-					HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) myslot;
-					if (!hslot->tuple)
-						hslot->tuple = heap_form_tuple(myslot->tts_tupleDescriptor,
-													   myslot->tts_values,
-													   myslot->tts_isnull);
-					ts_compress_chunk_invoke_cagg_trigger(cis->compress_info,
-														  cis->rel,
-														  hslot->tuple);
-				}
-
+				/* OK, store the tuple and create index entries for it */
 				table_tuple_insert(resultRelInfo->ri_RelationDesc,
-								   compress_slot,
+								   myslot,
 								   mycid,
 								   ti_options,
 								   bistate);
+
 				if (resultRelInfo->ri_NumIndices > 0)
 					recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
-																 compress_slot,
+																 myslot,
 																 estate,
 																 false,
 																 false,
 																 NULL,
 																 NIL);
+				/* AFTER ROW INSERT Triggers */
+				ExecARInsertTriggers(estate,
+									 resultRelInfo,
+									 myslot,
+									 recheckIndexes,
+									 NULL /* transition capture */);
 			}
 			else
 			{
-				if (currentTupleInsertMethod == CIM_SINGLE)
+				/*
+				 * The slot previously might point into the per-tuple
+				 * context. For batching it needs to be longer lived.
+				 */
+				ExecMaterializeSlot(myslot);
+
+				/* Add this tuple to the tuple buffer */
+				TSCopyMultiInsertInfoStore(&multiInsertInfo,
+										   resultRelInfo,
+										   buffer,
+										   myslot,
+										   ccstate->cstate);
+
+				/*
+				 * If enough inserts have queued up, then flush all
+				 * buffers out to their tables.
+				 */
+				if (TSCopyMultiInsertInfoIsFull(&multiInsertInfo))
 				{
-					/* OK, store the tuple and create index entries for it */
-					table_tuple_insert(resultRelInfo->ri_RelationDesc,
-									   myslot,
-									   mycid,
-									   ti_options,
-									   bistate);
+					ereport(DEBUG2,
+							(errmsg("flush called with %d bytes and %d buffered tuples",
+									multiInsertInfo.bufferedBytes,
+									multiInsertInfo.bufferedTuples)));
 
-					if (resultRelInfo->ri_NumIndices > 0)
-						recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
-																	 myslot,
-																	 estate,
-																	 false,
-																	 false,
-																	 NULL,
-																	 NIL);
-					/* AFTER ROW INSERT Triggers */
-					ExecARInsertTriggers(estate,
-										 check_resultRelInfo,
-										 myslot,
-										 recheckIndexes,
-										 NULL /* transition capture */);
-				}
-				else
-				{
-					/*
-					 * The slot previously might point into the per-tuple
-					 * context. For batching it needs to be longer lived.
-					 */
-					ExecMaterializeSlot(myslot);
-
-					/* Add this tuple to the tuple buffer */
-					TSCopyMultiInsertInfoStore(&multiInsertInfo,
-											   resultRelInfo,
-											   buffer,
-											   myslot,
-											   ccstate->cstate);
-
-					/*
-					 * If enough inserts have queued up, then flush all
-					 * buffers out to their tables.
-					 */
-					if (TSCopyMultiInsertInfoIsFull(&multiInsertInfo))
-					{
-						ereport(DEBUG2,
-								(errmsg("Flush called with %d bytes and %d buffered tuples",
-										multiInsertInfo.bufferedBytes,
-										multiInsertInfo.bufferedTuples)));
-
-						TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
-					}
+					TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
 				}
 			}
 

@@ -7,4 +7,4 @@
 #include <postgres.h>
 
 void pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
-					List *compression_info);
+					List *compression_info, bool chunk_partial);

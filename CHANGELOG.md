@@ -7,6 +7,7 @@ accidentally triggering the load of a previous DB version.**
 ## Unreleased
 
 **Bugfixes**
+* #4926 Fix corruption when inserting into compressed chunks
 * #5101 Fix enabling compression on caggs with renamed columns
 
 ## 2.9.0 (2022-12-15)
