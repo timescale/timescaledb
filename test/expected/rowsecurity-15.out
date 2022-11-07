@@ -1723,8 +1723,8 @@ SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
  Result
    ->  Append
          ->  Seq Scan on s2 s2_1
@@ -1745,50 +1745,51 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
                Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
    SubPlan 2
      ->  Limit
-           ->  Custom Scan (ChunkAppend) on s1
-                 ->  Seq Scan on s1 s1_1
-                       Filter: (hashed SubPlan 1)
-                       SubPlan 1
-                         ->  Append
-                               ->  Seq Scan on s2 s2_10
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_27_chunk s2_11
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_28_chunk s2_12
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_29_chunk s2_13
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_30_chunk s2_14
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_31_chunk s2_15
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_32_chunk s2_16
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                               ->  Seq Scan on _hyper_7_33_chunk s2_17
-                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                 ->  Seq Scan on _hyper_6_16_chunk s1_2
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_17_chunk s1_3
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_18_chunk s1_4
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_19_chunk s1_5
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_20_chunk s1_6
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_21_chunk s1_7
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_22_chunk s1_8
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_23_chunk s1_9
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_24_chunk s1_10
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_25_chunk s1_11
-                       Filter: (hashed SubPlan 1)
-                 ->  Seq Scan on _hyper_6_26_chunk s1_12
-                       Filter: (hashed SubPlan 1)
-(63 rows)
+           ->  Result
+                 ->  Custom Scan (ChunkAppend) on s1
+                       ->  Seq Scan on s1 s1_1
+                             Filter: (hashed SubPlan 1)
+                             SubPlan 1
+                               ->  Append
+                                     ->  Seq Scan on s2 s2_10
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_27_chunk s2_11
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_28_chunk s2_12
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_29_chunk s2_13
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_30_chunk s2_14
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_31_chunk s2_15
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_32_chunk s2_16
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_33_chunk s2_17
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_6_16_chunk s1_2
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_17_chunk s1_3
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_18_chunk s1_4
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_19_chunk s1_5
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_20_chunk s1_6
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_21_chunk s1_7
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_22_chunk s1_8
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_23_chunk s1_9
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_24_chunk s1_10
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_25_chunk s1_11
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_26_chunk s1_12
+                             Filter: (hashed SubPlan 1)
+(64 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p2 ON s2 USING (x in (select a from s1 where b like '%d2%'));
@@ -2265,17 +2266,18 @@ INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
  Custom Scan (HypertableModify)
    ->  Update on b1
          Update on _hyper_8_41_chunk b1_1
-         ->  Custom Scan (ChunkAppend) on b1
-               Chunks excluded during startup: 0
-               ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk b1_1
-                     Index Cond: ((a > 0) AND (a = 4))
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-(8 rows)
+         ->  Result
+               ->  Custom Scan (ChunkAppend) on b1
+                     Chunks excluded during startup: 0
+                     ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk b1_1
+                           Index Cond: ((a > 0) AND (a = 4))
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+(9 rows)
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
