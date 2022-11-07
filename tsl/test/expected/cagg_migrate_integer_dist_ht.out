@@ -86,12 +86,12 @@ CREATE TABLE conditions (
     RETURNS integer LANGUAGE SQL STABLE AS
     $$
         SELECT coalesce(max(time), 0)
-        FROM conditions
+        FROM public.conditions
     $$;
     \if :IS_DISTRIBUTED
         CALL distributed_exec (
             $DIST$
-            CREATE OR REPLACE FUNCTION integer_now() RETURNS integer LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM conditions $$;
+            CREATE OR REPLACE FUNCTION integer_now() RETURNS integer LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;
             $DIST$
         );
     \endif
@@ -342,9 +342,9 @@ AND hypertable_name = :'NEW_MAT_TABLE_NAME'
 AND job_id >= 1000;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner        | scheduled | fixed_schedule |                            config                             | next_start | initial_start |   hypertable_schema   |      hypertable_name       |     check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+-----------------------+-------------------------------------------
-   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 3, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_internal | policy_compression_check
+   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 6, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_internal | policy_compression_check
    1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 6} |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_internal | policy_refresh_continuous_aggregate_check
-   1003 | Retention Policy [1003]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 3}                       |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_internal | policy_retention_check
+   1003 | Retention Policy [1003]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 6}                       |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_internal | policy_retention_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -504,9 +504,9 @@ psql:include/cagg_migrate_common.sql:246: ERROR:  relation "conditions_summary_d
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                            config                             |     check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------+-----------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1006 | Retention Policy [1006]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | cluster_super_user | t         | f              |               |             8 | {"drop_after": 400, "hypertable_id": 3}                       | _timescaledb_internal | policy_retention_check                    | 
+ public | conditions_summary_daily | 1006 | Retention Policy [1006]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | cluster_super_user | t         | f              |               |             8 | {"drop_after": 400, "hypertable_id": 8}                       | _timescaledb_internal | policy_retention_check                    | 
  public | conditions_summary_daily | 1007 | Refresh Continuous Aggregate Policy [1007] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |             8 | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 8} | _timescaledb_internal | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1008 | Compression Policy [1008]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | cluster_super_user | t         | f              |               |             8 | {"hypertable_id": 3, "compress_after": 100}                   | _timescaledb_internal | policy_compression_check                  | 
+ public | conditions_summary_daily | 1008 | Compression Policy [1008]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | cluster_super_user | t         | f              |               |             8 | {"hypertable_id": 8, "compress_after": 100}                   | _timescaledb_internal | policy_compression_check                  | 
 (3 rows)
 
 -- should return the old cagg jobs
@@ -542,6 +542,9 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:261: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 psql:include/cagg_migrate_common.sql:261: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:261: NOTICE:  job 1002 not found, skipping
+psql:include/cagg_migrate_common.sql:261: NOTICE:  job 1001 not found, skipping
+psql:include/cagg_migrate_common.sql:261: NOTICE:  job 1000 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -582,9 +585,9 @@ psql:include/cagg_migrate_common.sql:268: ERROR:  relation "conditions_summary_d
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                             config                             |     check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+----------------------------------------------------------------+-----------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1009 | Retention Policy [1009]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | cluster_super_user | t         | f              |               |            10 | {"drop_after": 400, "hypertable_id": 3}                        | _timescaledb_internal | policy_retention_check                    | 
+ public | conditions_summary_daily | 1009 | Retention Policy [1009]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention                    | cluster_super_user | t         | f              |               |            10 | {"drop_after": 400, "hypertable_id": 10}                       | _timescaledb_internal | policy_retention_check                    | 
  public | conditions_summary_daily | 1010 | Refresh Continuous Aggregate Policy [1010] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            10 | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 10} | _timescaledb_internal | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1011 | Compression Policy [1011]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | cluster_super_user | t         | f              |               |            10 | {"hypertable_id": 3, "compress_after": 100}                    | _timescaledb_internal | policy_compression_check                  | 
+ public | conditions_summary_daily | 1011 | Compression Policy [1011]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression                  | cluster_super_user | t         | f              |               |            10 | {"hypertable_id": 10, "compress_after": 100}                   | _timescaledb_internal | policy_compression_check                  | 
 (3 rows)
 
 -- should return no rows because the old cagg was removed
@@ -681,6 +684,40 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                 12 |      18 | FINISHED | ENABLE POLICIES  | 
 (18 rows)
 
+RESET ROLE;
+-- according to the official documentation trying to execute a procedure with
+-- transaction control statements inside an explicit transaction should fail:
+-- https://www.postgresql.org/docs/current/sql-call.html
+-- `If CALL is executed in a transaction block, then the called procedure cannot
+--  execute transaction control statements. Transaction control statements are only
+--  allowed if CALL is executed in its own transaction.`
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
+psql:include/cagg_migrate_common.sql:348: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+DROP MATERIALIZED VIEW conditions_summary_daily_new;
+psql:include/cagg_migrate_common.sql:349: NOTICE:  drop cascades to 10 other objects
+\set ON_ERROR_STOP 0
+BEGIN;
+-- should fail with `invalid transaction termination`
+CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:354: ERROR:  invalid transaction termination
+ROLLBACK;
+\set ON_ERROR_STOP 1
+CREATE FUNCTION execute_migration() RETURNS void AS
+$$
+BEGIN
+    CALL cagg_migrate('conditions_summary_daily');
+    RETURN;
+END;
+$$
+LANGUAGE plpgsql;
+\set ON_ERROR_STOP 0
+-- execute migration inside a plpgsql function
+BEGIN;
+-- should fail with `invalid transaction termination`
+SELECT execute_migration();
+psql:include/cagg_migrate_common.sql:371: ERROR:  invalid transaction termination
+ROLLBACK;
+\set ON_ERROR_STOP 1
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DATA_NODE_1;
