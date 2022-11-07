@@ -45,13 +45,13 @@ CREATE TABLE conditions (
     RETURNS integer LANGUAGE SQL STABLE AS
     $$
         SELECT coalesce(max(time), 0)
-        FROM conditions
+        FROM public.conditions
     $$;
 
     \if :IS_DISTRIBUTED
         CALL distributed_exec (
             $DIST$
-            CREATE OR REPLACE FUNCTION integer_now() RETURNS integer LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM conditions $$;
+            CREATE OR REPLACE FUNCTION integer_now() RETURNS integer LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;
             $DIST$
         );
     \endif
@@ -336,3 +336,38 @@ EXCEPT
 SELECT * FROM conditions_summary_daily_new;
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
+
+RESET ROLE;
+
+-- according to the official documentation trying to execute a procedure with
+-- transaction control statements inside an explicit transaction should fail:
+-- https://www.postgresql.org/docs/current/sql-call.html
+-- `If CALL is executed in a transaction block, then the called procedure cannot
+--  execute transaction control statements. Transaction control statements are only
+--  allowed if CALL is executed in its own transaction.`
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
+DROP MATERIALIZED VIEW conditions_summary_daily_new;
+
+\set ON_ERROR_STOP 0
+BEGIN;
+-- should fail with `invalid transaction termination`
+CALL cagg_migrate('conditions_summary_daily');
+ROLLBACK;
+\set ON_ERROR_STOP 1
+
+CREATE FUNCTION execute_migration() RETURNS void AS
+$$
+BEGIN
+    CALL cagg_migrate('conditions_summary_daily');
+    RETURN;
+END;
+$$
+LANGUAGE plpgsql;
+
+\set ON_ERROR_STOP 0
+-- execute migration inside a plpgsql function
+BEGIN;
+-- should fail with `invalid transaction termination`
+SELECT execute_migration();
+ROLLBACK;
+\set ON_ERROR_STOP 1

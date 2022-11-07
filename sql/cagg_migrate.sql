@@ -255,10 +255,8 @@ BEGIN
         INTO _policies
         FROM jsonb_array_elements_text( (_plan_step.config->'policies') );
 
-        UPDATE _timescaledb_config.bgw_job
-        SET scheduled = FALSE
-        WHERE id = ANY(_policies)
-        AND scheduled IS TRUE;
+        PERFORM @extschema@.alter_job(job_id, scheduled => FALSE)
+        FROM unnest(_policies) job_id;
     END IF;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -278,10 +276,10 @@ BEGIN
         INTO _policies
         FROM jsonb_array_elements_text( (_plan_step.config->'policies') );
 
-        UPDATE _timescaledb_config.bgw_job
-        SET scheduled = TRUE
-        WHERE id = ANY(_policies)
-        AND scheduled IS FALSE;
+        -- set the `if_exists=>TRUE` because the cagg can be removed if the user
+        -- set `drop_old=>TRUE` during the migration
+        PERFORM @extschema@.alter_job(job_id, scheduled => TRUE, if_exists => TRUE)
+        FROM unnest(_policies) job_id;
     END IF;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -299,6 +297,7 @@ DECLARE
     _new_policies INTEGER[];
     _bgw_job _timescaledb_config.bgw_job;
     _policy_id INTEGER;
+    _config JSONB;
 BEGIN
     IF _plan_step.config->>'policies' IS NULL THEN
         RETURN;
@@ -331,10 +330,12 @@ BEGIN
     LOOP
         _policy_id := nextval('_timescaledb_config.bgw_job_id_seq');
         _new_policies := _new_policies || _policy_id;
+        _config := jsonb_set(_bgw_job.config, '{mat_hypertable_id}', _mat_hypertable_id::text::jsonb, false);
+        _config := jsonb_set(_config, '{hypertable_id}', _mat_hypertable_id::text::jsonb, false);
         UPDATE bgw_job_temp
             SET id = _policy_id,
                 application_name = replace(application_name::text, _bgw_job.id::text, _policy_id::text)::name,
-                config = jsonb_set(_bgw_job.config, '{mat_hypertable_id}', _mat_hypertable_id::text::jsonb, false),
+                config = _config,
                 hypertable_id = _mat_hypertable_id
         WHERE id = _bgw_job.id;
     END LOOP;
@@ -492,6 +493,12 @@ BEGIN
         AND step_id OPERATOR(pg_catalog.=) _plan_step.step_id;
         COMMIT;
 
+        -- SET LOCAL is only active until end of transaction.
+        -- While we could use SET at the start of the function we do not
+        -- want to bleed out search_path to caller, so we do SET LOCAL
+        -- again after COMMIT
+        SET LOCAL search_path TO pg_catalog, pg_temp;
+
         -- reload the step data for enable policies because the COPY DATA step update it
         IF _plan_step.type OPERATOR(pg_catalog.=) 'ENABLE POLICIES' THEN
             SELECT *
@@ -510,6 +517,12 @@ BEGIN
         WHERE mat_hypertable_id OPERATOR(pg_catalog.=) _plan_step.mat_hypertable_id
         AND step_id OPERATOR(pg_catalog.=) _plan_step.step_id;
         COMMIT;
+
+        -- SET LOCAL is only active until end of transaction.
+        -- While we could use SET at the start of the function we do not
+        -- want to bleed out search_path to caller, so we do SET LOCAL
+        -- again after COMMIT
+        SET LOCAL search_path TO pg_catalog, pg_temp;
     END LOOP;
 END;
 $BODY$;
@@ -528,6 +541,10 @@ DECLARE
     _cagg_name_new TEXT;
     _cagg_data _timescaledb_catalog.continuous_agg;
 BEGIN
+    -- procedures with SET clause cannot execute transaction
+    -- control so we adjust search_path in procedure body
+    SET LOCAL search_path TO pg_catalog, pg_temp;
+
     SELECT nspname, relname
     INTO _cagg_schema, _cagg_name
     FROM pg_catalog.pg_class
@@ -543,6 +560,12 @@ BEGIN
     -- create new migration plan
     CALL _timescaledb_internal.cagg_migrate_create_plan(_cagg_data, _cagg_name_new, override, drop_old);
     COMMIT;
+
+    -- SET LOCAL is only active until end of transaction.
+    -- While we could use SET at the start of the function we do not
+    -- want to bleed out search_path to caller, so we do SET LOCAL
+    -- again after COMMIT
+    SET LOCAL search_path TO pg_catalog, pg_temp;
 
     -- execute the migration plan
     CALL _timescaledb_internal.cagg_migrate_execute_plan(_cagg_data);
