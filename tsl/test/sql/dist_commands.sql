@@ -35,6 +35,7 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 SELECT _timescaledb_internal.invoke_distributed_commands();
@@ -49,6 +50,7 @@ SELECT * FROM disttable1;
 \dt
 SELECT * FROM disttable1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Verify failed insert command gets fully rolled back
@@ -95,6 +97,7 @@ AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node'
 SELECT is_access_node_session_on_data_node();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT is_access_node_session_on_data_node();
 
@@ -116,6 +119,7 @@ CREATE OR REPLACE PROCEDURE distributed_exec_direct_function_call(
        node_list name[] = NULL,
        transactional BOOLEAN = TRUE)
 AS :TSL_MODULE_PATHNAME, 'ts_test_direct_function_call' LANGUAGE C;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Invalid input
@@ -157,7 +161,7 @@ SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 CALL distributed_exec('CREATE ROLE dist_test_role');
 $$);
 \set ON_ERROR_STOP 1
-SELECT * FROM test.remote_exec(NULL, $$ SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'; $$);
+SELECT * FROM test.remote_exec(NULL, $$ SELECT 1 from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'; $$);
 DROP ROLE DIST_TEST_ROLE;
 \set ON_ERROR_STOP 0
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
@@ -217,6 +221,7 @@ DROP EXTENSION postgres_fdw;
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DATA_NODE_1');
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DATA_NODE_2');
 GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
 \set ON_ERROR_STOP 0
 CALL distributed_exec('CREATE DATABASE dist_commands_magic',

@@ -1352,7 +1352,7 @@ WHERE user_view_name = 'cashflows'
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
 \d+ 'cashflows'
 
-SELECT * FROM cashflows;
+SELECT * FROM cashflows ORDER BY bucket, amount, cashflow, cashflow2;
 
 -- Indexes on not finalized caggs are not allowed
 \set ON_ERROR_STOP 0
