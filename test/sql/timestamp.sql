@@ -219,6 +219,28 @@ FROM unnest(ARRAY[
     TIMESTAMP '2011-01-02 01:08:00'
     ]) AS time;
 
+--offset with infinity
+-- timestamp
+SELECT time, time_bucket(INTERVAL '1 week', time, INTERVAL '1 day')
+FROM unnest(ARRAY[
+    timestamp '-Infinity',
+    timestamp 'Infinity'
+    ]) AS time;
+
+-- timestamptz
+SELECT time, time_bucket(INTERVAL '1 week', time, INTERVAL '1 day')
+FROM unnest(ARRAY[
+    timestamp with time zone '-Infinity',
+    timestamp with time zone 'Infinity'
+    ]) AS time;
+
+-- Date
+SELECT date, time_bucket(INTERVAL '1 week', date, INTERVAL '1 day')
+FROM unnest(ARRAY[
+    date '-Infinity',
+    date 'Infinity'
+    ]) AS date;
+
 --example to align with an origin
 SELECT time, time_bucket(INTERVAL '5 minute', time - (TIMESTAMP '2011-01-02 00:02:00' - TIMESTAMP 'epoch')) +  (TIMESTAMP '2011-01-02 00:02:00'-TIMESTAMP 'epoch')
 FROM unnest(ARRAY[

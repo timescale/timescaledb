@@ -373,6 +373,43 @@ FROM unnest(ARRAY[
  Sun Jan 02 01:08:00 2011        | Sun Jan 02 01:08:00 2011
 (4 rows)
 
+--offset with infinity
+-- timestamp
+SELECT time, time_bucket(INTERVAL '1 week', time, INTERVAL '1 day')
+FROM unnest(ARRAY[
+    timestamp '-Infinity',
+    timestamp 'Infinity'
+    ]) AS time;
+   time    | time_bucket 
+-----------+-------------
+ -infinity | -infinity
+ infinity  | infinity
+(2 rows)
+
+-- timestamptz
+SELECT time, time_bucket(INTERVAL '1 week', time, INTERVAL '1 day')
+FROM unnest(ARRAY[
+    timestamp with time zone '-Infinity',
+    timestamp with time zone 'Infinity'
+    ]) AS time;
+   time    | time_bucket 
+-----------+-------------
+ -infinity | -infinity
+ infinity  | infinity
+(2 rows)
+
+-- Date
+SELECT date, time_bucket(INTERVAL '1 week', date, INTERVAL '1 day')
+FROM unnest(ARRAY[
+    date '-Infinity',
+    date 'Infinity'
+    ]) AS date;
+   date    | time_bucket 
+-----------+-------------
+ -infinity | -infinity
+ infinity  | infinity
+(2 rows)
+
 --example to align with an origin
 SELECT time, time_bucket(INTERVAL '5 minute', time - (TIMESTAMP '2011-01-02 00:02:00' - TIMESTAMP 'epoch')) +  (TIMESTAMP '2011-01-02 00:02:00'-TIMESTAMP 'epoch')
 FROM unnest(ARRAY[

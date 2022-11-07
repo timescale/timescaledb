@@ -234,6 +234,26 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 	}
 }
 
+TS_FUNCTION_INFO_V1(ts_timestamp_offset_bucket);
+
+TSDLLEXPORT Datum
+ts_timestamp_offset_bucket(PG_FUNCTION_ARGS)
+{
+	Datum period = PG_GETARG_DATUM(0);
+	Datum timestamp = PG_GETARG_DATUM(1);
+
+	if (TIMESTAMP_NOT_FINITE(DatumGetTimestamp(timestamp)))
+		PG_RETURN_DATUM(timestamp);
+
+	/* Apply offset. */
+	timestamp = DirectFunctionCall2(timestamp_mi_interval, timestamp, PG_GETARG_DATUM(2));
+	timestamp = DirectFunctionCall2(ts_timestamp_bucket, period, timestamp);
+
+	/* Remove offset. */
+	timestamp = DirectFunctionCall2(timestamp_pl_interval, timestamp, PG_GETARG_DATUM(2));
+	PG_RETURN_DATUM(timestamp);
+}
+
 TS_FUNCTION_INFO_V1(ts_timestamptz_bucket);
 
 TSDLLEXPORT Datum
@@ -279,6 +299,26 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 
 		PG_RETURN_TIMESTAMPTZ(result);
 	}
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_offset_bucket);
+
+TSDLLEXPORT Datum
+ts_timestamptz_offset_bucket(PG_FUNCTION_ARGS)
+{
+	Datum period = PG_GETARG_DATUM(0);
+	Datum timestamp = PG_GETARG_DATUM(1);
+
+	if (TIMESTAMP_NOT_FINITE(DatumGetTimestampTz(timestamp)))
+		PG_RETURN_DATUM(timestamp);
+
+	/* Apply offset. */
+	timestamp = DirectFunctionCall2(timestamptz_mi_interval, timestamp, PG_GETARG_DATUM(2));
+	timestamp = DirectFunctionCall2(ts_timestamptz_bucket, period, timestamp);
+
+	/* Remove offset. */
+	timestamp = DirectFunctionCall2(timestamptz_pl_interval, timestamp, PG_GETARG_DATUM(2));
+	PG_RETURN_DATUM(timestamp);
 }
 
 TS_FUNCTION_INFO_V1(ts_timestamptz_timezone_bucket);
@@ -400,6 +440,28 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 		TIME_BUCKET_TS(period, timestamp, result, origin_ts);
 		PG_RETURN_DATUM(DirectFunctionCall1(timestamp_date, TimestampGetDatum(result)));
 	}
+}
+
+TS_FUNCTION_INFO_V1(ts_date_offset_bucket);
+
+TSDLLEXPORT Datum
+ts_date_offset_bucket(PG_FUNCTION_ARGS)
+{
+	Datum period = PG_GETARG_DATUM(0);
+	Datum date = PG_GETARG_DATUM(1);
+
+	if (DATE_NOT_FINITE(DatumGetDateADT(date)))
+		PG_RETURN_DATUM(date);
+
+	/* Apply offset. */
+	Datum time = DirectFunctionCall2(date_mi_interval, date, PG_GETARG_DATUM(2));
+	date = DirectFunctionCall1(timestamp_date, time);
+	date = DirectFunctionCall2(ts_date_bucket, period, date);
+
+	/* Remove offset. */
+	time = DirectFunctionCall2(date_pl_interval, date, PG_GETARG_DATUM(2));
+	date = DirectFunctionCall1(timestamp_date, time);
+	PG_RETURN_DATUM(date);
 }
 
 /* when working with time_buckets stored in our catalog, we may not know ahead of time which

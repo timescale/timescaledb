@@ -147,9 +147,9 @@ ORDER BY MetricMinuteTs DESC;
                                                                                 QUERY PLAN                                                                                 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
+   Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time", '@ 30 secs'::interval)) DESC
    ->  HashAggregate
-         Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)
+         Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time", '@ 30 secs'::interval)
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
