@@ -99,7 +99,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES modify_exclusion.sql)
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql)
   endif()
@@ -132,6 +131,11 @@ set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
+
+# This test runs only with PG version >= 14
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
+  set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
+endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -168,6 +172,16 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
                  COPYONLY)
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
+
+foreach(TEST_FILES_GE_14 ${TEST_FILES_ON_VERSION_GE_14})
+  string(LENGTH ${TEST_FILES_GE_14} TEST_FILES_GE_14_NAME_LEN)
+  math(EXPR TEST_FILES_GE_14_NAME_LEN ${TEST_FILES_GE_14_NAME_LEN}-7)
+  string(SUBSTRING ${TEST_FILES_GE_14} 0 ${TEST_FILES_GE_14_NAME_LEN} TEMPLATE)
+  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
+  configure_file(${TEST_FILES_GE_14} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE}
+                 COPYONLY)
+  list(APPEND TEST_FILES ${TEST_FILE})
+endforeach(TEST_FILES_GE_14)
 
 if(NOT TEST_GROUP_SIZE)
   set(PARALLEL_GROUP_SIZE 10)
