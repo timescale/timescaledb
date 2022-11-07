@@ -25,6 +25,7 @@ FROM (
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
 -- Presence of non-distributed hypertables on data nodes should not cause issues
 CALL distributed_exec('CREATE TABLE local(time timestamptz, measure int)', ARRAY[:'DATA_NODE_1',:'DATA_NODE_3']);
@@ -105,15 +106,15 @@ TRUNCATE disttable;
 -- RENAME TO
 ALTER TABLE disttable RENAME TO disttable2;
 
-SELECT true FROM pg_tables WHERE tablename = 'disttable2';
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable2';
 \c :DATA_NODE_1
-SELECT true FROM pg_tables WHERE tablename = 'disttable2';
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable2';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SET ROLE :ROLE_1;
 ALTER TABLE disttable2 RENAME TO disttable;
-SELECT true FROM pg_tables WHERE tablename = 'disttable';
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable';
 \c :DATA_NODE_1
-SELECT true FROM pg_tables WHERE tablename = 'disttable';
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SET ROLE :ROLE_1;
 
@@ -634,6 +635,7 @@ CREATE EVENT TRIGGER test_event_trigger_sqldrop ON sql_drop
     WHEN TAG IN ('drop table')
     EXECUTE FUNCTION test_event_trigger_sql_drop_function();
 
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Test DROP inside event trigger on local table (should not crash)

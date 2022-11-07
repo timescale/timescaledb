@@ -59,7 +59,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_migrate_timestamp.sql
     cagg_migrate_timestamp_dist_ht.sql
     cagg_multi.sql
-    continuous_aggs.sql
     continuous_aggs_deprecated.sql
     cagg_tableam.sql
     cagg_usage.sql
@@ -145,7 +144,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_hypertable.sql.in
     remote_copy.sql.in
     dist_grant.sql.in
-    cagg_invalidation_dist_ht.sql.in)
+    cagg_invalidation_dist_ht.sql.in
+    continuous_aggs.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support

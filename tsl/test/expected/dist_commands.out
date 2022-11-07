@@ -40,6 +40,7 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_distributed_commands();
 INFO:  db_dist_commands_1 result: PGRES_COMMAND_OK
@@ -98,6 +99,7 @@ SELECT * FROM disttable1;
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 -- Verify failed insert command gets fully rolled back
 \set ON_ERROR_STOP 0
@@ -157,6 +159,7 @@ SELECT is_access_node_session_on_data_node();
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT is_access_node_session_on_data_node();
  is_access_node_session_on_data_node 
@@ -210,6 +213,7 @@ CREATE OR REPLACE PROCEDURE distributed_exec_direct_function_call(
        node_list name[] = NULL,
        transactional BOOLEAN = TRUE)
 AS :TSL_MODULE_PATHNAME, 'ts_test_direct_function_call' LANGUAGE C;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 -- Invalid input
 \set ON_ERROR_STOP 0
@@ -286,28 +290,28 @@ CALL distributed_exec('CREATE ROLE dist_test_role');
 $$);
 ERROR:  [db_dist_commands_x]: role "dist_test_role" already exists
 \set ON_ERROR_STOP 1
-SELECT * FROM test.remote_exec(NULL, $$ SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'; $$);
-NOTICE:  [db_dist_commands_1]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
+SELECT * FROM test.remote_exec(NULL, $$ SELECT 1 from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'; $$);
+NOTICE:  [db_dist_commands_1]:  SELECT 1 from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
 NOTICE:  [db_dist_commands_1]:
-bool
-----
-t   
+?column?
+--------
+       1
 (1 row)
 
 
-NOTICE:  [db_dist_commands_2]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
+NOTICE:  [db_dist_commands_2]:  SELECT 1 from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
 NOTICE:  [db_dist_commands_2]:
-bool
-----
-t   
+?column?
+--------
+       1
 (1 row)
 
 
-NOTICE:  [db_dist_commands_3]:  SELECT true from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
+NOTICE:  [db_dist_commands_3]:  SELECT 1 from pg_catalog.pg_roles WHERE rolname = 'dist_test_role'
 NOTICE:  [db_dist_commands_3]:
-bool
-----
-t   
+?column?
+--------
+       1
 (1 row)
 
 
@@ -409,6 +413,7 @@ SELECT node_name, database, node_created, database_created, extension_created FR
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 \set ON_ERROR_STOP 0
 CALL distributed_exec('CREATE DATABASE dist_commands_magic',
        node_list => '{dist_commands_1}');
