@@ -1,6 +1,7 @@
 /continuous_aggs_compression-*.sql
 /constify_now-*.sql
 /decompress_join-*.sql
+/dist_distinct-*.sql
 /dist_remote_error-*.sql
 /dist_remote_error.text
 /gapfill-*.sql

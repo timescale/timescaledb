@@ -9,6 +9,7 @@
 /delete-*.sql
 /insert-*.sql
 /insert_many-*.sql
+/parallel-*.sql
 /partitioning-*.sql
 /partitionwise-*.sql
 /plan_expand_hypertable-*.sql
@@ -16,5 +17,6 @@
 /plan_hypertable_cache-*.sql
 /plan_hypertable_inline-*.sql
 /plan_ordered_append-*.sql
+/query-*.sql
 /rowsecurity-*.sql
 /update-*.sql
