@@ -286,14 +286,15 @@ BEGIN;
 
   :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval))
-         ->  Result
+         Group Key: (time_bucket('@ 1 min'::interval, hyper_1."time", '@ 30 secs'::interval))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: time_bucket('@ 1 min'::interval, hyper_1."time", '@ 30 secs'::interval) DESC
                ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(5 rows)
+(6 rows)
 
   :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;

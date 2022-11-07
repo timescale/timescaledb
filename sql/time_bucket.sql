@@ -23,6 +23,14 @@ CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIM
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE, origin DATE) RETURNS DATE
 	AS '@MODULE_PATHNAME@', 'ts_date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
+--bucketing with offset
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL) RETURNS TIMESTAMP
+	AS '@MODULE_PATHNAME@', 'ts_timestamp_offset_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, "offset" INTERVAL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_timestamptz_offset_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE, "offset" INTERVAL) RETURNS DATE
+	AS '@MODULE_PATHNAME@', 'ts_date_offset_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
 -- bucketing with timezone
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ DEFAULT NULL, "offset" INTERVAL DEFAULT NULL) RETURNS TIMESTAMPTZ
 	AS '@MODULE_PATHNAME@', 'ts_timestamptz_timezone_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
@@ -42,23 +50,3 @@ CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INT, ts INT, "of
 	AS '@MODULE_PATHNAME@', 'ts_int32_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width BIGINT, ts BIGINT, "offset" BIGINT) RETURNS BIGINT
 	AS '@MODULE_PATHNAME@', 'ts_int64_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
-
--- If an interval is given as the third argument, the bucket alignment is offset by the interval.
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
-    RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE PARALLEL SAFE STRICT AS
-$BODY$
-    SELECT @extschema@.time_bucket(bucket_width, ts OPERATOR(pg_catalog.-) "offset") OPERATOR(pg_catalog.+) "offset";
-$BODY$;
-
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, "offset" INTERVAL)
-    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE PARALLEL SAFE STRICT AS
-$BODY$
-    SELECT @extschema@.time_bucket(bucket_width, ts OPERATOR(pg_catalog.-) "offset") OPERATOR(pg_catalog.+) "offset";
-$BODY$;
-
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE, "offset" INTERVAL)
-    RETURNS DATE LANGUAGE SQL IMMUTABLE PARALLEL SAFE STRICT AS
-$BODY$
-    SELECT (@extschema@.time_bucket(bucket_width, ts OPERATOR(pg_catalog.-) "offset") OPERATOR(pg_catalog.+) "offset")::pg_catalog.date;
-$BODY$;
-
