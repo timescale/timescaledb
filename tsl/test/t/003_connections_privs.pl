@@ -49,7 +49,7 @@ my ($cmdret, $stdout, $stderr) = $an->psql(
 	SELECT node_name, user_name, invalidated
    	FROM _timescaledb_internal.show_connection_cache()
 	WHERE user_name='alice';
-	
+
 ]);
 
 # Expected output:
