@@ -40,6 +40,10 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
+CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command_nothrow()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command_nothrow'
+LANGUAGE C STRICT;
 GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_distributed_commands();
@@ -50,6 +54,10 @@ INFO:  db_dist_commands_1 result: PGRES_COMMAND_OK
 INFO:  db_dist_commands_2 result: PGRES_COMMAND_OK
 INFO:  db_dist_commands_1 result: PGRES_COMMAND_OK
 INFO:  db_dist_commands_2 result: PGRES_COMMAND_OK
+INFO:  db_dist_commands_1 result: PGRES_TUPLES_OK
+INFO:  db_dist_commands_2 result: PGRES_TUPLES_OK
+INFO:  db_dist_commands_3 result: PGRES_TUPLES_OK
+INFO:  db_dist_commands_1 result: PGRES_TUPLES_OK
  invoke_distributed_commands 
 -----------------------------
  
@@ -117,6 +125,18 @@ SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
 (0 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- nothrow does not use transactions. Only test that this errors out
+SELECT _timescaledb_internal.invoke_faulty_distributed_command_nothrow();
+INFO:  db_dist_commands_1 error message: ERROR:  column "broken" does not exist
+LINE 1: SELECT broken
+               ^
+
+ invoke_faulty_distributed_command_nothrow 
+-------------------------------------------
+ 
+(1 row)
 
 -- Test connection session identity
 \c :TEST_DBNAME :ROLE_SUPERUSER

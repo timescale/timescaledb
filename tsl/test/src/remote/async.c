@@ -206,6 +206,7 @@ test_node_death()
 	PGresult *pg_res;
 	AsyncRequestSet *set;
 	RemoteNodeKiller rnk;
+	const char *node_name = NULL, *errmsg;
 
 	/* killed node causes an error response, then a communication error */
 	remote_node_killer_init(&rnk, conn, DTXN_EVENT_ANY);
@@ -221,6 +222,11 @@ test_node_death()
 
 	/* This will throw if elevel == ERROR so set to DEBUG1 */
 	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
+	errmsg = async_response_get_error_message(response, &node_name);
+
+	//	char *seg = (char *) (unsigned long) -8;
+	//	elog(INFO,"segfault here %s", seg);
+	TestAssertTrue(strstr(errmsg, "terminating connection due to administrator command"));
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_COMMUNICATION_ERROR);
 	elog(WARNING, "Expect warning about communication error:");
 	async_response_report_error(response, WARNING);
@@ -298,6 +304,64 @@ test_timeout()
 }
 
 static void
+test_timeout_nothrow()
+{
+	TSConnection *conn = get_connection();
+	TSConnection *conn_2 = get_connection();
+	AsyncRequestSet *set;
+	AsyncResponse *response;
+	PGresult *pg_result;
+
+	response = async_request_wait_any_response(async_request_send(conn_2, "BEGIN;"));
+	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
+	TestAssertTrue(async_response_get_error_message(response, NULL) == NULL);
+	async_request_wait_any_response(async_request_send(conn_2, "LOCK \"S 1\".\"T 1\""));
+
+	async_request_wait_any_response(async_request_send(conn, "BEGIN;"));
+	set = async_request_set_create();
+	async_request_set_add_sql(set, conn, "LOCK \"S 1\".\"T 1\"");
+	response = async_request_set_wait_any_response_deadline(
+		set, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 100));
+	TestAssertTrue(async_response_get_type(response) == RESPONSE_TIMEOUT);
+	TestAssertTrue(
+		strcmp(async_response_get_error_message(response, NULL), "async requests timed out") == 0);
+
+	/* cancel the locked query and do another query */
+	TestAssertTrue(remote_connection_cancel_query(conn));
+	/* the txn is aborted and is waiting for rollback */
+	response = async_request_wait_any_response(async_request_send(conn, "SELECT 1;"));
+
+	/* since we do not throw, we need to manually check PGresults */
+	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
+	pg_result = async_response_result_get_pg_result((AsyncResponseResult *) response);
+	TestAssertTrue(PQresultStatus(pg_result) == PGRES_FATAL_ERROR);
+	TestAssertTrue(strcmp(PQresultErrorMessage(pg_result),
+						  "ERROR:  current transaction is aborted, commands ignored until end of "
+						  "transaction block\n") == 0);
+	PQclear(pg_result);
+
+	response = async_request_wait_any_response(async_request_send(conn, "ABORT;"));
+	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
+	pg_result = async_response_result_get_pg_result((AsyncResponseResult *) response);
+	TestAssertTrue(PQresultStatus(pg_result) == PGRES_COMMAND_OK);
+	TestAssertTrue(strcmp(PQcmdStatus(pg_result), "ROLLBACK") == 0);
+	TestAssertTrue(async_response_get_error_message(response, NULL) == NULL);
+	PQclear(pg_result);
+
+	response = async_request_wait_any_response(async_request_send(conn, "SELECT 1;"));
+	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
+	pg_result = async_response_result_get_pg_result((AsyncResponseResult *) response);
+	TestAssertTrue(PQresultStatus(pg_result) == PGRES_TUPLES_OK);
+	PQclear(pg_result);
+
+	/* release conn_2 lock */
+	async_request_wait_any_response(async_request_send(conn_2, "COMMIT;"));
+
+	remote_connection_close(conn);
+	remote_connection_close(conn_2);
+}
+
+static void
 test_multiple_reqests()
 {
 	TSConnection *conn = get_connection();
@@ -330,6 +394,7 @@ ts_test_remote_async(PG_FUNCTION_ARGS)
 	test_node_death();
 	test_multiple_reqests();
 	test_timeout();
+	test_timeout_nothrow();
 
 	PG_RETURN_VOID();
 }

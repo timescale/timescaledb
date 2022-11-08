@@ -131,10 +131,7 @@ ts_dist_health_check(PG_FUNCTION_ARGS)
 							 get_namespace_name(fnamespaceid),
 							 get_func_name(fcinfo->flinfo->fn_oid));
 			data_node_list = data_node_get_node_name_list();
-			result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(cmd->data,
-																		NULL,
-																		data_node_list,
-																		true);
+			result = ts_dist_cmd_invoke_on_data_nodes_no_throw(cmd->data, NULL, data_node_list);
 			funcctx->user_fctx = result;
 			list_free(data_node_list);
 		}
@@ -172,15 +169,6 @@ ts_dist_health_check(PG_FUNCTION_ARGS)
 			{
 				/*
 				 * Produce a tuple from a data node's response.
-				 *
-				 * TODO: Currently, the remote commands to data nodes will
-				 * either succeed or throw an error if one of the data nodes
-				 * cannot be contacted. Therefore, the access node will never
-				 * produce a result showing a data node as unhealthy (unless a
-				 * node is in recovery). This needs to be changed so that
-				 * connection issues (or errors from data node) won't result
-				 * in throwing an error here. Instead, the result should be
-				 * "unhealthy" with the appropriate error string if available.
 				 */
 				const char *node_name = "";
 				NameData data_node_name;
@@ -197,9 +185,22 @@ ts_dist_health_check(PG_FUNCTION_ARGS)
 					NameGetDatum(&data_node_name);
 				if (PQresultStatus(pgres) != PGRES_TUPLES_OK)
 				{
-					values[AttrNumberGetAttrOffset(Anum_health_error)] =
-						CStringGetTextDatum(PQresultErrorMessage(pgres));
+					/* ts_dist_cmd_invoke_on_data_nodes_nothrow can't
+					 * create a PGresult with an error message set.
+					 * Therefore DistResponse gets checked first */
+					const char *errmsg;
+					if ((errmsg = ts_dist_cmd_get_error_by_index(result, call_cnt - 1)))
+						values[AttrNumberGetAttrOffset(Anum_health_error)] =
+							CStringGetTextDatum(errmsg);
+					else if (PQresultErrorMessage(pgres))
+						values[AttrNumberGetAttrOffset(Anum_health_error)] =
+							CStringGetTextDatum(PQresultErrorMessage(pgres));
+
 					nulls[AttrNumberGetAttrOffset(Anum_health_error)] = false;
+					values[AttrNumberGetAttrOffset(Anum_health_healthy)] = BoolGetDatum(false);
+					nulls[AttrNumberGetAttrOffset(Anum_health_healthy)] = false;
+					values[AttrNumberGetAttrOffset(Anum_health_in_recovery)] = BoolGetDatum(false);
+					nulls[AttrNumberGetAttrOffset(Anum_health_in_recovery)] = false;
 				}
 				else if (PQnfields(pgres) != funcctx->tuple_desc->natts)
 				{

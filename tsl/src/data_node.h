@@ -20,6 +20,7 @@ extern ForeignServer *data_node_get_foreign_server(const char *node_name, AclMod
 												   bool fail_on_aclcheck, bool missing_ok);
 extern ForeignServer *data_node_get_foreign_server_by_oid(Oid foreign_server_oid, AclMode mode);
 
+extern TSConnection *data_node_get_connection_nothrow(const char *const data_node, char **errmsg);
 extern TSConnection *data_node_get_connection(const char *const data_node,
 											  RemoteTxnPrepStmtOption const ps_opt,
 											  bool transactional);

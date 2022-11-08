@@ -251,6 +251,17 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 }
 
 TSConnection *
+data_node_get_connection_nothrow(const char *const data_node, char **errmsg)
+{
+	const ForeignServer *server;
+
+	Assert(data_node != NULL);
+	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false, false);
+
+	return remote_connection_open_nothrow(server->serverid, GetUserId(), errmsg);
+}
+
+TSConnection *
 data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption const ps_opt,
 						 bool transactional)
 {

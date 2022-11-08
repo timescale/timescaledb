@@ -104,6 +104,7 @@ extern bool async_request_set_single_row_mode(AsyncRequest *req);
 extern TSConnection *async_request_get_connection(AsyncRequest *req);
 extern AsyncResponseResult *async_request_wait_ok_result(AsyncRequest *request);
 extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request);
+extern AsyncResponse *async_request_wait_any_response(AsyncRequest *request);
 extern AsyncResponse *async_request_cleanup_result(AsyncRequest *req, TimestampTz endtime);
 
 /* Returns on successful commands, throwing errors otherwise */
@@ -116,6 +117,7 @@ extern void async_response_report_error(AsyncResponse *res, int elevel);
 extern void async_response_report_error_or_close(AsyncResponse *res, int elevel);
 
 extern AsyncResponseType async_response_get_type(AsyncResponse *res);
+extern char *async_response_get_error_message(AsyncResponse *res, const char **node_name);
 extern void async_response_result_close(AsyncResponseResult *res);
 extern PGresult *async_response_result_get_pg_result(AsyncResponseResult *res);
 extern void *async_response_result_get_user_data(AsyncResponseResult *res);

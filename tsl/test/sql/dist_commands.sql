@@ -35,6 +35,11 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
+
+CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command_nothrow()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command_nothrow'
+LANGUAGE C STRICT;
 GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
@@ -62,6 +67,10 @@ SELECT _timescaledb_internal.invoke_faulty_distributed_command();
 SELECT * from disttable2;
 \c :DATA_NODE_2
 SELECT * from disttable2;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- nothrow does not use transactions. Only test that this errors out
+SELECT _timescaledb_internal.invoke_faulty_distributed_command_nothrow();
 
 -- Test connection session identity
 \c :TEST_DBNAME :ROLE_SUPERUSER

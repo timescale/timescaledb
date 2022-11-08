@@ -79,6 +79,7 @@ typedef struct AsyncResponseResult
 typedef struct AsyncResponseCommunicationError
 {
 	AsyncResponse base;
+	TSConnectionError *errmsg;
 	AsyncRequest *request;
 } AsyncResponseCommunicationError;
 
@@ -86,6 +87,7 @@ typedef struct AsyncResponseError
 {
 	AsyncResponse base;
 	const char *errmsg;
+	AsyncRequest *request;
 } AsyncResponseError;
 
 typedef struct AsyncRequestSet
@@ -300,9 +302,12 @@ static AsyncResponseCommunicationError *
 async_response_communication_error_create(AsyncRequest *req)
 {
 	AsyncResponseCommunicationError *ares = palloc0(sizeof(AsyncResponseCommunicationError));
+	TSConnectionError *errmsg = palloc(sizeof(TSConnectionError));
+	remote_connection_get_error(req->conn, errmsg);
 
 	*ares = (AsyncResponseCommunicationError){
 		.base = { .type = RESPONSE_COMMUNICATION_ERROR },
+		.errmsg = errmsg,
 		.request = req,
 	};
 
@@ -322,14 +327,13 @@ async_response_timeout_create()
 }
 
 static AsyncResponse *
-async_response_error_create(const char *errmsg)
+async_response_error_create(const char *errmsg, AsyncRequest *req)
 {
 	AsyncResponseError *ares = palloc0(sizeof(AsyncResponseError));
 
-	*ares = (AsyncResponseError){
-		.base = { .type = RESPONSE_ERROR },
-		.errmsg = pstrdup(errmsg),
-	};
+	*ares = (AsyncResponseError){ .base = { .type = RESPONSE_ERROR },
+								  .errmsg = pstrdup(errmsg),
+								  .request = req };
 
 	return &ares->base;
 }
@@ -355,6 +359,60 @@ async_response_close(AsyncResponse *res)
 			pfree(res);
 			break;
 	}
+}
+
+/* Return an error message or NULL for an async reponse. Optionally fill in node_name */
+char *
+async_response_get_error_message(AsyncResponse *res, const char **node_name)
+{
+	char *errmsg = NULL;
+	switch (res->type)
+	{
+		case RESPONSE_RESULT:
+		case RESPONSE_ROW:
+			if (node_name)
+				*node_name = remote_connection_node_name(
+					async_request_get_connection(((AsyncResponseResult *) res)->request));
+
+			break;
+		case RESPONSE_TIMEOUT:
+			/* A timeout does not cause an errormessage unto itself, and we also don't know the node
+			 */
+			errmsg = pstrdup("async requests timed out");
+
+			break;
+		case RESPONSE_COMMUNICATION_ERROR:
+		{
+			AsyncResponseCommunicationError *arc = (AsyncResponseCommunicationError *) res;
+			TSConnectionError *err = arc->errmsg;
+			if (node_name)
+				*node_name = err->nodename;
+
+			int errcode = err->remote.errcode != 0 ? err->remote.errcode :
+													 (err->errcode);
+			errmsg = psprintf("%s %s",
+							  unpack_sql_state(errcode),
+							  err->remote.msg ? err->remote.msg : err->connmsg);
+
+			break;
+		}
+		case RESPONSE_ERROR:
+		{
+			AsyncResponseError *are = (AsyncResponseError *) res;
+			if (are->request && node_name)
+				*node_name =
+					remote_connection_node_name(async_request_get_connection(are->request));
+
+			errmsg = pstrdup(are->errmsg);
+
+			break;
+		}
+		default:
+			errmsg = pstrdup("invalid AsyncResponse state");
+
+			break;
+	}
+	return errmsg;
 }
 
 AsyncResponseType
@@ -494,6 +552,47 @@ async_request_wait_any_result(AsyncRequest *req)
 	return result;
 }
 
+/*
+ * The same convenience function as async_request_wait_any_result,
+ * with the difference that it returns AsyncResults instead of throwing
+ */
+AsyncResponse *
+async_request_wait_any_response(AsyncRequest *req)
+{
+	AsyncRequestSet set = { 0 };
+	AsyncResponse *response;
+
+	async_request_set_add(&set, req);
+	response = async_request_set_wait_any_response(&set);
+
+	if (response == NULL)
+		response = async_response_error_create("expected response for the remote tuple "
+											   "request, but received none",
+											   req);
+
+	/* Make sure to drain the connection only if we've retrieved complete response set */
+	if (response->type == RESPONSE_RESULT)
+	{
+		AsyncResponse *extra;
+		bool got_extra = false;
+
+		/* Must drain any remaining response until NULL */
+		while ((extra = async_request_set_wait_any_response(&set)))
+		{
+			async_response_close(extra);
+			got_extra = true;
+		}
+
+		if (got_extra)
+		{
+			async_response_close(response);
+			response = async_response_error_create("request must be for one sql statement", req);
+		}
+	}
+
+	return response;
+}
+
 AsyncResponseResult *
 async_request_wait_ok_result(AsyncRequest *req)
 {
@@ -533,20 +632,22 @@ async_request_cleanup_result(AsyncRequest *req, TimestampTz endtime)
 	{
 		case DEFERRED:
 			if (remote_connection_is_processing(req->conn))
-				return async_response_error_create(
-					psprintf("request already in progress on port %d", PostPortNumber));
+				return async_response_error_create(psprintf("request already in progress on port "
+															"%d",
+															PostPortNumber),
+												   req);
 
 			req = async_request_send_internal(req, WARNING);
 
 			if (req == NULL)
-				return async_response_error_create("failed to send deferred request");
+				return async_response_error_create("failed to send deferred request", req);
 
 			Assert(req->state == EXECUTING);
 			break;
 		case EXECUTING:
 			break;
 		case COMPLETED:
-			return async_response_error_create("request already completed");
+			return async_response_error_create("request already completed", req);
 	}
 
 	switch (remote_connection_drain(conn, endtime, &last_res))
@@ -558,7 +659,7 @@ async_request_cleanup_result(AsyncRequest *req, TimestampTz endtime)
 			rsp = &async_response_communication_error_create(req)->base;
 			break;
 		case CONN_NO_RESPONSE:
-			rsp = async_response_error_create("no response during cleanup");
+			rsp = async_response_error_create("no response during cleanup", req);
 			break;
 		case CONN_OK:
 			Assert(last_res != NULL);
@@ -627,14 +728,16 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 			case DEFERRED:
 				if (remote_connection_is_processing(req->conn))
 				{
-					return async_response_error_create(
-						psprintf("request already in progress on port %d", PostPortNumber));
+					return async_response_error_create(psprintf("request already in progress on "
+																"port %d",
+																PostPortNumber),
+													   req);
 				}
 
 				req = async_request_send_internal(req, WARNING);
 
 				if (req == NULL)
-					return async_response_error_create("failed to send deferred request");
+					return async_response_error_create("failed to send deferred request", req);
 
 				Assert(req->state == EXECUTING);
 				TS_FALLTHROUGH;
@@ -659,7 +762,9 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 				}
 				break;
 			case COMPLETED:
-				return async_response_error_create("request already completed");
+			{
+				return async_response_error_create("request already completed", req);
+			}
 		}
 	}
 
@@ -739,9 +844,10 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 			 * Sanity check on the wait result: we haven't requested anything
 			 * other than my latch or the socket becoming readable.
 			 */
-			result = async_response_error_create(
-				psprintf("Unexpected event 0x%X while waiting for async request result",
-						 event.events));
+			result = async_response_error_create(psprintf("Unexpected event 0x%X while waiting for "
+														  "async request result",
+														  event.events),
+												 wait_req);
 			break;
 		}
 

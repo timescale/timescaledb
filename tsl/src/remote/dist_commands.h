@@ -19,6 +19,13 @@ typedef struct DistCmdDescr
 
 } DistCmdDescr;
 
+extern DistCmdResult *ts_dist_cmd_invoke_on_all_data_nodes_no_throw(const char *sql,
+																	const char *search_path);
+
+extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes_no_throw(const char *sql,
+																const char *search_path,
+																List *data_nodes);
+
 extern DistCmdResult *ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors,
 																	 List *data_nodes,
 																	 bool transactional);
@@ -32,6 +39,7 @@ extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes_using_search_path(const c
 																		 const char *search_path,
 																		 List *node_names,
 																		 bool transactional);
+
 extern DistCmdResult *ts_dist_cmd_invoke_on_all_data_nodes(const char *sql);
 extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_all_data_nodes(FunctionCallInfo fcinfo);
 extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInfo fcinfo,
@@ -39,6 +47,7 @@ extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInf
 extern Datum ts_dist_cmd_get_single_scalar_result_by_index(DistCmdResult *result, Size index,
 														   bool *isnull, const char **node_name);
 extern void ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes);
+extern const char *ts_dist_cmd_get_error_by_index(DistCmdResult *response, Size index);
 extern PGresult *ts_dist_cmd_get_result_by_node_name(DistCmdResult *response,
 													 const char *node_name);
 extern PGresult *ts_dist_cmd_get_result_by_index(DistCmdResult *response, Size index,

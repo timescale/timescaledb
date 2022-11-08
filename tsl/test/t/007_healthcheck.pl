@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use AccessNode;
 use DataNode;
-use Test::More tests => 4;
+use Test::More tests => 8;
 
 #Initialize all the multi-node instances
 my $an  = AccessNode->create('an');
@@ -26,16 +26,33 @@ dn2|t|f|], 'Health check shows healthy AN and two healthy DNs');
 # Stop a data node to simulate failure
 $dn1->stop('fast');
 
-# Health check will currently fail with an error when a data node
-# cannot be contacted. This should be fixed so that the health check
-# instead returns a negative status for the node.
 my ($ret, $stdout, $stderr) = $an->psql('postgres',
 	'SELECT * FROM _timescaledb_internal.health() ORDER BY 1 NULLS FIRST;');
 
-# psql return error code 3 in case of failure in script
-is($ret, qq(3), "expect error code 3 due to failed data node");
+is($ret, qq(0), "PSQL finishes statement without error");
+
+# On data node failure, _timescaledb_internal.health() prints an arbitrary
+# connection string in the error message. Instead of a parser, this is solved
+# by a multiline regexp. If you are reading this, I'm sorry.
+like(
+	$stdout,
+	qr/
+		^\|t\|f\|\n
+		^dn1\|f\|f\|.*connect(ion)?\sto\sserver.*
+		^dn2\|t\|f\|$
+		/smx,
+	"Health check shows unhealthy DN with connection error next to healthy DN and AN"
+);
+$dn1->start();
+
+# Test onlining of a DataNode
+$an->psql_is(
+	'postgres',
+	'SELECT * FROM _timescaledb_internal.health() ORDER BY 1 NULLS FIRST',
+	q[|t|f|
+dn1|t|f|
+dn2|t|f|], 'Health check shows healthy AN and two healthy DNs');
 
 done_testing();
 
 1;
-
