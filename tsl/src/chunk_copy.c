@@ -49,6 +49,7 @@
 #include "dist_util.h"
 
 #define CCS_INIT "init"
+#define CCS_DROP_STALE_CHUNK "drop_stale_chunk"
 #define CCS_CREATE_EMPTY_CHUNK "create_empty_chunk"
 #define CCS_CREATE_EMPTY_COMPRESSED_CHUNK "create_empty_compressed_chunk"
 #define CCS_CREATE_PUBLICATION "create_publication"
@@ -406,6 +407,22 @@ chunk_copy_stage_init_cleanup(ChunkCopy *cc)
 }
 
 static void
+chunk_copy_stage_drop_stale_chunk(ChunkCopy *cc)
+{
+	/*
+	 * Stale chunk is a chunk which exists only on a data node without
+	 * access node awareness.
+	 *
+	 * Drop the stale chunk on the dst_node if it exists, before processing
+	 * to other stages.
+	 */
+	chunk_api_call_chunk_drop_replica(cc->chunk,
+									  NameStr(cc->fd.dest_node_name),
+									  cc->dst_server->serverid,
+									  true);
+}
+
+static void
 chunk_copy_stage_create_empty_chunk(ChunkCopy *cc)
 {
 	/* Create an empty chunk table on the dst_node */
@@ -430,7 +447,8 @@ chunk_copy_stage_create_empty_chunk_cleanup(ChunkCopy *cc)
 	 */
 	chunk_api_call_chunk_drop_replica(cc->chunk,
 									  NameStr(cc->fd.dest_node_name),
-									  cc->dst_server->serverid);
+									  cc->dst_server->serverid,
+									  false);
 }
 
 static void
@@ -958,12 +976,18 @@ chunk_copy_stage_delete_chunk(ChunkCopy *cc)
 
 	chunk_api_call_chunk_drop_replica(cc->chunk,
 									  NameStr(cc->fd.source_node_name),
-									  cc->src_server->serverid);
+									  cc->src_server->serverid,
+									  false);
 }
 
 static const ChunkCopyStage chunk_copy_stages[] = {
 	/* Initial Marker */
 	{ CCS_INIT, chunk_copy_stage_init, chunk_copy_stage_init_cleanup },
+
+	/*
+	 * Drop stale chunk on the dst node, if it exists.
+	 */
+	{ CCS_DROP_STALE_CHUNK, chunk_copy_stage_drop_stale_chunk, NULL },
 
 	/*
 	 * Create empty chunk table on the dst node.

@@ -255,6 +255,38 @@ SELECT chunk_schema || '.' ||  chunk_name, data_nodes
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'dist_test';
 
+DROP TABLE dist_test;
+
+-- Ensure stale chunks are handled during chunk copy
+CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+-- create stale chunk
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
+CREATE TABLE _timescaledb_internal._dist_hyper_4_13_chunk(time timestamp NOT NULL, device int, temp float);
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+-- ensure stale chunk cannot be copied
+\set ON_ERROR_STOP 0
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_4_13_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
+\set ON_ERROR_STOP 1
+
+-- try to copy chunk copy to a node with stale chunk table exists
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_4_13_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+-- ensure copy succeded
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM _timescaledb_internal._dist_hyper_4_13_chunk ORDER BY time;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP TABLE dist_test;
+
 RESET ROLE;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

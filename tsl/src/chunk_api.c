@@ -1742,7 +1742,8 @@ chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk
 }
 
 void
-chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid serverid)
+chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid serverid,
+								  bool if_exists)
 {
 	const char *drop_cmd;
 	List *data_nodes;
@@ -1757,7 +1758,8 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	 * before invoking this function.
 	 */
 
-	drop_cmd = psprintf("DROP TABLE %s.%s",
+	drop_cmd = psprintf("DROP TABLE %s%s.%s",
+						if_exists ? "IF EXISTS " : "",
 						quote_identifier(chunk->fd.schema_name.data),
 						quote_identifier(chunk->fd.table_name.data));
 	data_nodes = list_make1((char *) node_name);

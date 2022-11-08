@@ -611,6 +611,167 @@ WHERE hypertable_name = 'dist_test';
  _timescaledb_internal._dist_hyper_3_12_chunk | {db_dist_move_chunk_3}
 (4 rows)
 
+DROP TABLE dist_test;
+-- Ensure stale chunks are handled during chunk copy
+CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+ create_distributed_hypertable 
+-------------------------------
+ (4,public,dist_test,t)
+(1 row)
+
+INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+SELECT * from show_chunks('dist_test');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_4_13_chunk
+ _timescaledb_internal._dist_hyper_4_14_chunk
+ _timescaledb_internal._dist_hyper_4_15_chunk
+ _timescaledb_internal._dist_hyper_4_16_chunk
+(4 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_4_13_chunk
+_timescaledb_internal._dist_hyper_4_16_chunk
+(2 rows)
+
+
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_4_14_chunk
+(1 row)
+
+
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_4_15_chunk
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- create stale chunk
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
+CREATE TABLE _timescaledb_internal._dist_hyper_4_13_chunk(time timestamp NOT NULL, device int, temp float);
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+-- ensure stale chunk cannot be copied
+\set ON_ERROR_STOP 0
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_4_13_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
+ERROR:  chunk "_dist_hyper_4_13_chunk" does not exist on source data node "db_dist_move_chunk_2"
+\set ON_ERROR_STOP 1
+-- try to copy chunk copy to a node with stale chunk table exists
+CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_4_13_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_1]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_4_13_chunk
+_timescaledb_internal._dist_hyper_4_16_chunk
+(2 rows)
+
+
+NOTICE:  [db_dist_move_chunk_2]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_2]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_4_14_chunk
+_timescaledb_internal._dist_hyper_4_13_chunk
+(2 rows)
+
+
+NOTICE:  [db_dist_move_chunk_3]:  SELECT * from show_chunks('dist_test')
+NOTICE:  [db_dist_move_chunk_3]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_4_15_chunk
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- ensure copy succeded
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM _timescaledb_internal._dist_hyper_4_13_chunk ORDER BY time;
+           time           | device | temp 
+--------------------------+--------+------
+ Fri Mar 02 01:00:00 2018 |      1 |  0.1
+ Fri Mar 02 02:00:00 2018 |      1 |  0.1
+ Fri Mar 02 06:00:00 2018 |      8 |  0.1
+ Fri Mar 02 07:00:00 2018 |     10 |  0.1
+ Fri Mar 02 08:00:00 2018 |      8 |  0.1
+ Fri Mar 02 09:00:00 2018 |      8 |  0.1
+ Fri Mar 02 13:00:00 2018 |      6 |  0.1
+ Fri Mar 02 15:00:00 2018 |      6 |  0.1
+ Fri Mar 02 21:00:00 2018 |      6 |  0.1
+ Sat Mar 03 01:00:00 2018 |     10 |  0.1
+ Sat Mar 03 04:00:00 2018 |      1 |  0.1
+ Sat Mar 03 05:00:00 2018 |      6 |  0.1
+ Sat Mar 03 07:00:00 2018 |     10 |  0.1
+ Sat Mar 03 09:00:00 2018 |      1 |  0.1
+ Sat Mar 03 11:00:00 2018 |      8 |  0.1
+ Sat Mar 03 14:00:00 2018 |      6 |  0.1
+ Sat Mar 03 16:00:00 2018 |      6 |  0.1
+ Sat Mar 03 18:00:00 2018 |     10 |  0.1
+ Sat Mar 03 21:00:00 2018 |     10 |  0.1
+ Sat Mar 03 22:00:00 2018 |      8 |  0.1
+ Sat Mar 03 23:00:00 2018 |     10 |  0.1
+ Sun Mar 04 01:00:00 2018 |      1 |  0.1
+ Sun Mar 04 03:00:00 2018 |      6 |  0.1
+ Sun Mar 04 08:00:00 2018 |     10 |  0.1
+ Sun Mar 04 10:00:00 2018 |      6 |  0.1
+ Sun Mar 04 11:00:00 2018 |     10 |  0.1
+ Sun Mar 04 16:00:00 2018 |      6 |  0.1
+ Sun Mar 04 17:00:00 2018 |      1 |  0.1
+ Sun Mar 04 20:00:00 2018 |     10 |  0.1
+ Sun Mar 04 21:00:00 2018 |      8 |  0.1
+ Mon Mar 05 03:00:00 2018 |     10 |  0.1
+ Mon Mar 05 04:00:00 2018 |      8 |  0.1
+ Mon Mar 05 06:00:00 2018 |      8 |  0.1
+ Mon Mar 05 09:00:00 2018 |      8 |  0.1
+ Mon Mar 05 10:00:00 2018 |     10 |  0.1
+ Mon Mar 05 11:00:00 2018 |     10 |  0.1
+ Mon Mar 05 20:00:00 2018 |     10 |  0.1
+ Mon Mar 05 22:00:00 2018 |      6 |  0.1
+ Tue Mar 06 01:00:00 2018 |      1 |  0.1
+ Tue Mar 06 05:00:00 2018 |      6 |  0.1
+ Tue Mar 06 07:00:00 2018 |      8 |  0.1
+ Tue Mar 06 08:00:00 2018 |      8 |  0.1
+ Tue Mar 06 09:00:00 2018 |     10 |  0.1
+ Tue Mar 06 11:00:00 2018 |      8 |  0.1
+ Tue Mar 06 12:00:00 2018 |     10 |  0.1
+ Tue Mar 06 14:00:00 2018 |      8 |  0.1
+ Tue Mar 06 18:00:00 2018 |     10 |  0.1
+ Tue Mar 06 21:00:00 2018 |      8 |  0.1
+ Tue Mar 06 22:00:00 2018 |      6 |  0.1
+ Tue Mar 06 23:00:00 2018 |      1 |  0.1
+ Wed Mar 07 00:00:00 2018 |     10 |  0.1
+ Wed Mar 07 02:00:00 2018 |      8 |  0.1
+ Wed Mar 07 06:00:00 2018 |      8 |  0.1
+ Wed Mar 07 08:00:00 2018 |      1 |  0.1
+ Wed Mar 07 10:00:00 2018 |      8 |  0.1
+ Wed Mar 07 13:00:00 2018 |     10 |  0.1
+ Wed Mar 07 18:00:00 2018 |      1 |  0.1
+ Wed Mar 07 20:00:00 2018 |      8 |  0.1
+(58 rows)
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP TABLE dist_test;
 RESET ROLE;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

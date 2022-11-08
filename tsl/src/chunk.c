@@ -398,7 +398,7 @@ chunk_drop_replica(PG_FUNCTION_ARGS)
 				 errmsg("cannot drop the last chunk replica"),
 				 errdetail("Dropping the last chunk replica could lead to data loss.")));
 
-	chunk_api_call_chunk_drop_replica(chunk, node_name, server->serverid);
+	chunk_api_call_chunk_drop_replica(chunk, node_name, server->serverid, false);
 
 	PG_RETURN_VOID();
 }

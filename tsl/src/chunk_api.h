@@ -25,6 +25,6 @@ extern Datum chunk_create_empty_table(PG_FUNCTION_ARGS);
 extern void chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk,
 													const char *node_name);
 extern void chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name,
-											  Oid serverid);
+											  Oid serverid, bool if_exists);
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */
