@@ -108,5 +108,7 @@ extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *nod
 
 extern void add_baserel_cache_entry_for_chunk(Oid chunk_reloid, uint32 chunk_status,
 											  Hypertable *hypertable);
+TsRelType
+ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht);
 
 #endif /* TIMESCALEDB_PLANNER_H */

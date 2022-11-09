@@ -717,8 +717,8 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
  * This makes use of cache warming that happened during Query preprocessing in
  * the first planner hook.
  */
-static TsRelType
-classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht)
+TsRelType
+ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht)
 {
 	Assert(ht != NULL);
 	*ht = NULL;
@@ -1353,7 +1353,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 		return join_involves_hypertable(root, rel);
 
 	Hypertable *ht;
-	return classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
+	return ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
 }
 
 /*

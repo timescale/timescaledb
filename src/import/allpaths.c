@@ -593,8 +593,9 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * excluded by our hypertable expansion code, so we don't need to
 		 * check this again.
 		 */
+		Hypertable *ht;
 		bool exclusion_already_checked = (root->parse->commandType == CMD_SELECT)
-			&& (ts_classify_relation(root, childrel, NULL) == TS_REL_CHUNK_CHILD);
+			&& (ts_classify_relation(root, childrel, &ht) == TS_REL_CHUNK_CHILD);
 		if (!exclusion_already_checked
 			&& relation_excluded_by_constraints(root, childrel, childRTE))
 		{
