@@ -70,6 +70,14 @@ jobs:
         git config --global core.eol lf
     - name: Checkout TimescaleDB source
       uses: actions/checkout@v3
+
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
       # the directory containing the binaries, the runs with a cache
@@ -82,7 +90,8 @@ jobs:
       id: cache-postgresql
       with:
         path: ~\PostgreSQL\${{ matrix.pg }}
-        key: ${{ runner.os }}-build-pg${{ matrix.pkg_version }}
+        key: ${{ runner.os }}-build-pg${{ matrix.pkg_version }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}
+
     - name: Install PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |

@@ -63,6 +63,16 @@ jobs:
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl libtest-most-perl ${{ env.extra_packages }}
 
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v3
+
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
@@ -71,10 +81,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}
-
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+        key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}
 
     - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -87,6 +94,13 @@ jobs:
         make -j $MAKE_JOBS
         make -j $MAKE_JOBS -C src/test/isolation
         make -j $MAKE_JOBS -C contrib/postgres_fdw
+
+    - name: Upload config.log
+      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: ~/${{ env.PG_SRC_DIR }}/config.log
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
