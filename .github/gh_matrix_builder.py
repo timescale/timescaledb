@@ -230,9 +230,11 @@ if event_type != "pull_request":
     )
 else:
     # Check if we need to check for the flaky tests. Determine which test files
-    # have been changed in the PR.
+    # have been changed in the PR. The sql files might include other files that
+    # change independently, and might be .in templates, so it's easier to look
+    # at the output files. They are also the same for the isolation tests.
     p = subprocess.Popen(
-        f"git diff --name-only {sys.argv[2]} -- '**test/sql/*.sql' '**test/sql/*.sql.in'",
+        f"git diff --name-only {sys.argv[2]} -- '**expected/*.out'",
         stdout=subprocess.PIPE,
         shell=True,
     )
@@ -244,7 +246,7 @@ else:
             file=sys.stderr,
         )
         sys.exit(1)
-    tests = []
+    tests = set()
     test_count = 1
     for f in output.decode().split("\n"):
         print(f)
@@ -258,20 +260,18 @@ else:
             )
             print("full list:", file=sys.stderr)
             print(output, file=sys.stderr)
-            tests = ""
+            tests = set()
             break
         basename = os.path.basename(f)
         splitted = basename.split(".")
         name = splitted[0]
         ext = splitted[-1]
-        if ext == "in":
+        if ext == "out":
             # Account for the version number.
-            tests.append(name + "-*")
-        elif ext == "sql":
-            tests.append(name)
+            tests.add(name)
         else:
             # Should've been filtered out above.
-            print(f"unknown extension '{ext}' for test file '{f}'", file=sys.stderr)
+            print(f"unknown extension '{ext}' for test output file '{f}'", file=sys.stderr)
             sys.exit(1)
 
     if tests:
@@ -279,7 +279,7 @@ else:
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(tests * 20)}"',
+                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
                     "name": "Flaky Check Debug",
                     "pg": PG14_LATEST,
                     "pginstallcheck": False,
