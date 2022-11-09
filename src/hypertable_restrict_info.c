@@ -425,6 +425,9 @@ static void
 hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerInfo *root,
 										   RestrictInfo *ri)
 {
+	// fprintf(stderr, "new ri for hypertable:\n");
+	// my_print(ri);
+
 	bool added = false;
 
 	Expr *e = ri->clause;
@@ -466,8 +469,12 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 	}
 
 	if (added)
+	{
+		// fprintf(stderr, "added\n");
 		hri->num_base_restrictions++;
+	}
 }
+
 
 void
 ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,

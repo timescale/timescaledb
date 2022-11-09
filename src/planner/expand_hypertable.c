@@ -1139,11 +1139,14 @@ static Chunk **
 get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 		   unsigned int *num_chunks)
 {
+	// mybt();
+
 	bool reverse;
 	int order_attno;
 
 	if (ctx->chunk_exclusion_func != NULL)
 	{
+		// fprintf(stderr, "explicit chunks!\n");
 		return get_explicit_chunks(ctx, root, rel, ht, num_chunks);
 	}
 
@@ -1154,6 +1157,12 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	 * infrastructure to deduce the appropriate chunks using our range
 	 * exclusion
 	 */
+	// fprintf(stderr, "ctx restrictions:\n");
+	// my_print(ctx->restrictions);
+
+	// fprintf(stderr, "rel:\n");
+	// my_print(rel);
+
 	ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
 
 	/*
@@ -1378,9 +1387,14 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Assert(ctx.join_level == 0);
 
 	rel->baserestrictinfo = remove_exclusion_fns(rel->baserestrictinfo);
+	ctx.restrictions = list_copy(rel->baserestrictinfo);
 
 	if (ctx.propagate_conditions != NIL)
+	{
+		// fprintf(stderr, "propagate:\n");
+		// my_print(ctx.propagate_conditions);
 		propagate_join_quals(root, rel, &ctx);
+	}
 
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;

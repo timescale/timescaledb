@@ -596,6 +596,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		Hypertable *ht;
 		bool exclusion_already_checked = (root->parse->commandType == CMD_SELECT)
 			&& (ts_classify_relation(root, childrel, &ht) == TS_REL_CHUNK_CHILD);
+		//exclusion_already_checked = false;
 		if (!exclusion_already_checked
 			&& relation_excluded_by_constraints(root, childrel, childRTE))
 		{
