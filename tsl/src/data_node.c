@@ -1776,9 +1776,21 @@ drop_data_node_database(const ForeignServer *server)
 		 * has to rerun the command without drop_database=>true set. We
 		 * don't force removal if there are other connections to the
 		 * database out of caution. If the user wants to forcefully remove
-		 * the database, they can do it manually. */
-		remote_connection_cmdf_ok(conn, "DROP DATABASE %s", quote_identifier(dbname));
+		 * the database, they can do it manually. From PG15, the backend
+		 * executing the DROP forces all other backends to close all smgr
+		 * fds using the ProcSignalBarrier mechanism. To allow this backend
+		 * to handle that interrupt, send the DROP request using the async
+		 * API. */
+		char *cmd;
+		AsyncRequest *req;
+
+		cmd = psprintf("DROP DATABASE %s", quote_identifier(dbname));
+		req = async_request_send(conn, cmd);
+		Assert(NULL != req);
+		async_request_wait_ok_result(req);
 		remote_connection_close(conn);
+		pfree(req);
+		pfree(cmd);
 	}
 	else
 		ereport(ERROR,
