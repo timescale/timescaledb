@@ -60,6 +60,16 @@ static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo 
 static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
 							   List *pathkeys);
 
+static bool
+is_compressed_column(CompressionInfo *info, AttrNumber attno)
+{
+	char *column_name = get_attname(info->compressed_rte->relid, attno, false);
+	FormData_hypertable_compression *column_info =
+		get_column_compressioninfo(info->hypertable_compression_info, column_name);
+
+	return column_info->algo_id != 0;
+}
+
 /*
  * Like ts_make_pathkey_from_sortop but passes down the compressed relid so that existing
  * equivalence members that are marked as childen are properly checked.
@@ -78,7 +88,7 @@ make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *ex
 	/* Because SortGroupClause doesn't carry collation, consult the expr */
 	collation = exprCollation((Node *) expr);
 
-	Assert(compressed_relid < root->simple_rel_array_size);
+	Assert(compressed_relid < (Index) root->simple_rel_array_size);
 	return ts_make_pathkey_from_sortinfo(root,
 										 expr,
 										 NULL,
@@ -177,6 +187,8 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		ListCell *lc;
 		char *column_name;
 		Oid sortop;
+		Oid opfamily, opcintype;
+		int16 strategy;
 
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
@@ -210,6 +222,20 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 
 			sortop =
 				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_strategy);
+			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			{
+				if (type_is_enum(var->vartype))
+				{
+					sortop = get_opfamily_member(pk->pk_opfamily,
+												 ANYENUMOID,
+												 ANYENUMOID,
+												 pk->pk_strategy);
+				}
+				else
+				{
+					elog(ERROR, "sort operator lookup failed for column \"%s\"", column_name);
+				}
+			}
 			pk = make_pathkey_from_compressed(root,
 											  info->compressed_rel->relid,
 											  (Expr *) var,
@@ -400,6 +426,17 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		DecompressChunkPath *path;
 
 		/*
+		 * We skip any BitmapScan paths here as supporting those
+		 * would require fixing up the internal scan. Since we
+		 * currently do not do this BitmapScans would be generated
+		 * when we have a parameterized path on a compressed column
+		 * that would have invalid references due to our
+		 * EquivalenceClasses.
+		 */
+		if (IsA(child_path, BitmapHeapPath))
+			continue;
+
+		/*
 		 * Filter out all paths that try to JOIN the compressed chunk on the
 		 * hypertable or the uncompressed chunk
 		 * Ideally, we wouldn't create these paths in the first place.
@@ -421,6 +458,48 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * subquery that references the hypertable is a parent of compressed_rel as well.
 			 */
 			if (bms_overlap(parent_relids, child_path->param_info->ppi_req_outer))
+				continue;
+
+			ListCell *lc_ri;
+			bool references_compressed = false;
+			/*
+			 * Check if this path is parameterized on a compressed
+			 * column. Ideally those paths wouldn't be generated
+			 * in the first place but since we create compressed
+			 * EquivalenceMembers for all EquivalenceClasses these
+			 * Paths can happen and will fail at execution since
+			 * the left and right side of the expression are not
+			 * compatible. Therefore we skip any Path that is
+			 * parameterized on a compressed column here.
+			 */
+			foreach (lc_ri, child_path->param_info->ppi_clauses)
+			{
+				RestrictInfo *ri = lfirst_node(RestrictInfo, lc_ri);
+
+				if (ri->right_em && IsA(ri->right_em->em_expr, Var) &&
+					(Index) castNode(Var, ri->right_em->em_expr)->varno ==
+						info->compressed_rel->relid)
+				{
+					Var *var = castNode(Var, ri->right_em->em_expr);
+					if (is_compressed_column(info, var->varattno))
+					{
+						references_compressed = true;
+						break;
+					}
+				}
+				if (ri->left_em && IsA(ri->left_em->em_expr, Var) &&
+					(Index) castNode(Var, ri->left_em->em_expr)->varno ==
+						info->compressed_rel->relid)
+				{
+					Var *var = castNode(Var, ri->left_em->em_expr);
+					if (is_compressed_column(info, var->varattno))
+					{
+						references_compressed = true;
+						break;
+					}
+				}
+			}
+			if (references_compressed)
 				continue;
 		}
 
@@ -564,7 +643,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			Var *chunk_var = castNode(Var, lfirst(lc2));
 
 			/* skip vars that aren't from the uncompressed chunk */
-			if (chunk_var->varno != info->chunk_rel->relid)
+			if ((Index) chunk_var->varno != info->chunk_rel->relid)
 			{
 				continue;
 			}
@@ -690,7 +769,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		char *column_name;
 		AttrNumber compressed_attno;
 		FormData_hypertable_compression *compressioninfo;
-		if (var->varno != context->chunk_rel->relid)
+		if ((Index) var->varno != context->chunk_rel->relid)
 			return (Node *) var;
 
 		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
@@ -813,7 +892,7 @@ get_compression_info_for_em(Node *node, EMCreationContext *context)
 		FormData_hypertable_compression *col_info;
 		char *column_name;
 		Var *var = castNode(Var, node);
-		if (var->varno != context->uncompressed_relid_idx)
+		if ((Index) var->varno != context->uncompressed_relid_idx)
 			return NULL;
 
 		/* we can't add an EM for system attributes or whole-row refs */
@@ -845,7 +924,7 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 {
 	/* based on adjust_appendrel_attrs_mutator */
 	Assert(context->current_col_info != NULL);
-	Assert(var->varno == context->uncompressed_relid_idx);
+	Assert((Index) var->varno == context->uncompressed_relid_idx);
 	Assert(var->varattno > 0);
 
 	var = (Var *) copyObject(var);
@@ -890,7 +969,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 
 		var = castNode(Var, cur_em->em_expr);
 
-		if (var->varno != info->chunk_rel->relid)
+		if ((Index) var->varno != info->chunk_rel->relid)
 			continue;
 
 		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
@@ -1257,7 +1336,7 @@ find_restrictinfo_equality(RelOptInfo *chunk_rel, CompressionInfo *info)
 				else
 					continue;
 
-				if (var->varno != chunk_rel->relid || var->varattno <= 0)
+				if ((Index) var->varno != chunk_rel->relid || var->varattno <= 0)
 					continue;
 
 				if (IsA(other, Const) || IsA(other, Param))

@@ -39,7 +39,7 @@ typedef struct DeltaDeltaCompressed
 static void
 pg_attribute_unused() assertions(void)
 {
-	DeltaDeltaCompressed test_val = { { 0 } };
+	DeltaDeltaCompressed test_val = { .vl_len_ = { 0 } };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(DeltaDeltaCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
@@ -702,5 +702,5 @@ static inline uint64
 zig_zag_decode(uint64 value)
 {
 	/* ZigZag turns negative numbers into odd ones, and positive numbers into even ones*/
-	return (value >> 1) ^ (uint64) - (int64)(value & 1);
+	return (value >> 1) ^ (uint64) - (int64) (value & 1);
 }

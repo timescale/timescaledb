@@ -6,18 +6,142 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+This version adds time_bucket_gapfill function that allows
+specifying the timezone to bucket for. Unfortunately this introduces
+an ambiguity with some previous call variations when an untyped
+start/finish argument is passed to time_bucket_gapfill. Some queries
+might need to be adjusted and either explicitly name the positional
+argument or resolve the type ambiguity by casting to the intended type.
+
 **Features**
-* #4374 Remove constified now() constraints from plan
-* #4393 Support intervals with day component when constifying now()
-* #4397 Support intervals with month component when constifying now()
+* #4650 Show warnings when not following best practices
+* #4670 Add timezone support to time_bucket_gapfill
+* #4718 Add ability to merge chunks while compressing
+* #4786 Extend the now() optimization to also apply to CURRENT_TIMESTAMP
 
 **Bugfixes**
-* #4486 Adding boolean column with default value doesn't work on compressed table
-* #4575 Fix use of `get_partition_hash` and `get_partition_for_key` inside an IMMUTABLE function
+* #4673 Fix now() constification for VIEWs
+* #4681 Fix compression_chunk_size primary key
+* #4696 Report warning when enabling compression on hypertable
+* #4745 Fix FK constraint violation error while insert into hypertable which references partitioned table
+* #4756 Improve compression job IO performance
+* #4807 Fix segmentation fault during INSERT into compressed hypertable.
+* #4840 Fix performance regressions in the copy code
+* #4823 Fix a crash that could occur when using nested user-defined functions with hypertables.
 
 **Thanks**
-@janko for reporting
-@AlmiS for reporting error on `get_partition_hash` executed inside an IMMUTABLE function
+* @jflambert for reporting a crash with nested user-defined functions.
+* @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
+* @xvaara for helping reproduce a bug with bitmap scans in transparent decompression
+
+## 2.8.1 (2022-10-06)
+
+This release is a patch release. We recommend that you upgrade at the
+next available opportunity.
+
+**Bugfixes**
+* #4454 Keep locks after reading job status
+* #4658 Fix error when querying a compressed hypertable with compress_segmentby on an enum column
+* #4671 Fix a possible error while flushing the COPY data
+* #4675 Fix bad TupleTableSlot drop
+* #4676 Fix a deadlock when decompressing chunks and performing SELECTs
+* #4685 Fix chunk exclusion for space partitions in SELECT FOR UPDATE queries
+* #4694 Change parameter names of cagg_migrate procedure
+* #4698 Do not use row-by-row fetcher for parameterized plans
+* #4711 Remove support for procedures as custom checks
+* #4712 Fix assertion failure in constify_now
+* #4713 Fix Continuous Aggregate migration policies
+* #4720 Fix chunk exclusion for prepared statements and dst changes
+* #4726 Fix gapfill function signature
+* #4737 Fix join on time column of compressed chunk
+* #4738 Fix error when waiting for remote COPY to finish
+* #4739 Fix continuous aggregate migrate check constraint
+* #4760 Fix segfault when INNER JOINing hypertables
+* #4767 Fix permission issues on index creation for CAggs
+
+**Thanks**
+* @boxhock and @cocowalla for reporting a segfault when JOINing hypertables
+* @carobme for reporting constraint error during continuous aggregate migration
+* @choisnetm, @dustinsorensen, @jayadevanm and @joeyberkovitz for reporting a problem with JOINs on compressed hypertables
+* @daniel-k for reporting a background worker crash
+* @justinpryzby for reporting an error when compressing very wide tables
+* @maxtwardowski for reporting problems with chunk exclusion and space partitions
+* @yuezhihan for reporting GROUP BY error when having compress_segmentby on an enum column
+
+## 2.8.0 (2022-08-30)
+
+This release adds major new features since the 2.7.2 release.
+We deem it moderate priority for upgrading.
+
+This release includes these noteworthy features:
+
+* time_bucket now supports bucketing by month, year and timezone
+* Improve performance of bulk SELECT and COPY for distributed hypertables
+* 1 step CAgg policy management
+* Migrate Continuous Aggregates to the new format
+
+**Features**
+* #4188 Use COPY protocol in row-by-row fetcher
+* #4307 Mark partialize_agg as parallel safe
+* #4380 Enable chunk exclusion for space dimensions in UPDATE/DELETE
+* #4384 Add schedule_interval to policies
+* #4390 Faster lookup of chunks by point
+* #4393 Support intervals with day component when constifying now()
+* #4397 Support intervals with month component when constifying now()
+* #4405 Support ON CONFLICT ON CONSTRAINT for hypertables
+* #4412 Add telemetry about replication
+* #4415 Drop remote data when detaching data node
+* #4416 Handle TRUNCATE TABLE on chunks
+* #4425 Add parameter check_config to alter_job
+* #4430 Create index on Continuous Aggregates
+* #4439 Allow ORDER BY on continuous aggregates
+* #4443 Add stateful partition mappings
+* #4484 Use non-blocking data node connections for COPY
+* #4495 Support add_dimension() with existing data
+* #4502 Add chunks to baserel cache on chunk exclusion
+* #4545 Add hypertable distributed argument and defaults
+* #4552 Migrate Continuous Aggregates to the new format
+* #4556 Add runtime exclusion for hypertables
+* #4561 Change get_git_commit to return full commit hash
+* #4563 1 step CAgg policy management
+* #4641 Allow bucketing by month, year, century in time_bucket and time_bucket_gapfill
+* #4642 Add timezone support to time_bucket
+
+**Bugfixes**
+* #4359 Create composite index on segmentby columns
+* #4374 Remove constified now() constraints from plan
+* #4416 Handle TRUNCATE TABLE on chunks
+* #4478 Synchronize chunk cache sizes
+* #4486 Adding boolean column with default value doesn't work on compressed table
+* #4512 Fix unaligned pointer access
+* #4519 Throw better error message on incompatible row fetcher settings
+* #4549 Fix dump_meta_data for windows
+* #4553 Fix timescaledb_post_restore GUC handling
+* #4573 Load TSL library on compressed_data_out call
+* #4575 Fix use of `get_partition_hash` and `get_partition_for_key` inside an IMMUTABLE function
+* #4577 Fix segfaults in compression code with corrupt data
+* #4580 Handle default privileges on CAggs properly
+* #4582 Fix assertion in GRANT .. ON ALL TABLES IN SCHEMA
+* #4583 Fix partitioning functions
+* #4589 Fix rename for distributed hypertable
+* #4601 Reset compression sequence when group resets
+* #4611 Fix a potential OOM when loading large data sets into a hypertable
+* #4624 Fix heap buffer overflow
+* #4627 Fix telemetry initialization
+* #4631 Ensure TSL library is loaded on database upgrades
+* #4646 Fix time_bucket_ng origin handling
+* #4647 Fix the error "SubPlan found with no parent plan" that occurred if using joins in RETURNING clause.
+
+**Thanks**
+* @AlmiS for reporting error on `get_partition_hash` executed inside an IMMUTABLE function
+* @Creatation for reporting an issue with renaming hypertables
+* @janko for reporting an issue when adding bool column with default value to compressed hypertable
+* @jayadevanm for reporting error of TRUNCATE TABLE on compressed chunk
+* @michaelkitson for reporting permission errors using default privileges on Continuous Aggregates
+* @mwahlhuetter for reporting error in joins in RETURNING clause
+* @ninjaltd and @mrksngl for reporting a potential OOM when loading large data sets into a hypertable
+* @PBudmark for reporting an issue with dump_meta_data.sql on Windows
+* @ssmoss for reporting an issue with time_bucket_ng origin handling
 
 ## 2.7.2 (2022-07-26)
 
@@ -2335,6 +2459,7 @@ complete, depending on the size of your database**
 **Thanks**
 * @yadid for reporting a segfault (fixed in 50c8c4c)
 * @ryan-shaw for reporting tuples not being correctly converted to a chunk's rowtype (fixed in 645b530)
+* @yuezhihan for reporting GROUP BY error when setting compress_segmentby with an enum column
 
 ## 0.4.0 (2017-08-21)
 
@@ -2493,3 +2618,4 @@ the next release.
 * [72f754a] use PostgreSQL's own `hash_any` function as default partfunc (thanks @robin900)
 * [39f4c0f] Remove sample data instructions and point to docs site
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
+

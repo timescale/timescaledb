@@ -313,3 +313,51 @@ ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
 -- also add one without IF NOT EXISTS 
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
+
+--github issue 3481
+--GROUP BY error when setting compress_segmentby with an enum column
+
+CREATE TYPE an_enum_type AS ENUM ('home', 'school');
+
+CREATE TABLE test (
+	time timestamp NOT NULL,
+	enum_col an_enum_type NOT NULL
+);
+
+SELECT create_hypertable(
+    'test', 'time'
+);
+INSERT INTO test VALUES ('2001-01-01 00:00', 'home'),
+                        ('2001-01-01 01:00', 'school'),
+                        ('2001-01-01 02:00', 'home');
+
+--enable compression on enum_col
+ALTER TABLE test SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'enum_col',
+	timescaledb.compress_orderby = 'time'
+);
+
+--below queries will pass before chunks are compressed
+SELECT 1 FROM test GROUP BY enum_col;
+EXPLAIN SELECT DISTINCT 1 FROM test;
+
+--compress chunks
+SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
+
+--below query should pass after chunks are compressed
+SELECT 1 FROM test GROUP BY enum_col;
+EXPLAIN SELECT DISTINCT 1 FROM test;
+
+--github issue 4398
+SELECT format('CREATE TABLE data_table AS SELECT now() AS tm, %s', array_to_string(array_agg(format('125 AS c%s',a)), ', ')) FROM generate_series(1,550)a \gexec
+CREATE TABLE ts_table (LIKE data_table);
+SELECT * FROM create_hypertable('ts_table', 'tm');
+--should report a warning
+\set VERBOSITY terse
+ALTER TABLE ts_table SET(timescaledb.compress, timescaledb.compress_segmentby = 'c1',
+					   timescaledb.compress_orderby = 'tm');
+INSERT INTO ts_table SELECT * FROM data_table;
+--cleanup tables
+DROP TABLE data_table cascade;
+DROP TABLE ts_table cascade;

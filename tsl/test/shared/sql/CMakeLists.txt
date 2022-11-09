@@ -1,10 +1,10 @@
 set(TEST_FILES_SHARED
     cagg_compression.sql
+    classify_relation.sql
     constify_timestamptz_op_interval.sql
     constraint_exclusion_prepared.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
-    dist_distinct.sql
     dist_distinct_pushdown.sql
     dist_fetcher_type.sql
     dist_gapfill.sql
@@ -14,8 +14,13 @@ set(TEST_FILES_SHARED
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in generated_columns.sql.in ordered_append.sql.in
-    ordered_append_join.sql.in transparent_decompress_chunk.sql.in)
+    decompress_join.sql.in
+    gapfill.sql.in
+    generated_columns.sql.in
+    ordered_append.sql.in
+    ordered_append_join.sql.in
+    transparent_decompress_chunk.sql.in
+    dist_distinct.sql.in)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED compression_dml.sql memoize.sql)

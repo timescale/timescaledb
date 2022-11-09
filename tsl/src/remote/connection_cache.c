@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <access/tupdesc.h>
 #include <access/htup_details.h>
+#include <access/xact.h>
 #include <postmaster/postmaster.h>
 #include <utils/builtins.h>
 #include <utils/syscache.h>
@@ -22,13 +23,14 @@
 #include "connection_cache.h"
 
 static Cache *connection_cache = NULL;
+static bool ignore_connection_invalidation = false;
 
 typedef struct ConnectionCacheEntry
 {
 	TSConnectionId id;
 	TSConnection *conn;
-	int32 foreign_server_hashvalue; /* Hash of server OID for cache invalidation */
-	int32 role_hashvalue;			/* Hash of role OID for cache invalidation */
+	uint32 foreign_server_hashvalue; /* Hash of server OID for cache invalidation */
+	uint32 role_hashvalue;			 /* Hash of role OID for cache invalidation */
 	bool invalidated;
 } ConnectionCacheEntry;
 
@@ -91,6 +93,12 @@ connection_cache_get_key(CacheQuery *query)
 	return (TSConnectionId *) query->data;
 }
 
+void
+remote_connection_cache_invalidation_ignore(bool value)
+{
+	ignore_connection_invalidation = value;
+}
+
 /*
  * Check if a connection needs to be remade.
  *
@@ -102,6 +110,8 @@ connection_cache_get_key(CacheQuery *query)
 static bool
 connection_should_be_remade(const ConnectionCacheEntry *entry)
 {
+	bool invalidated;
+
 	if (NULL == entry->conn)
 		return true;
 
@@ -126,8 +136,10 @@ connection_should_be_remade(const ConnectionCacheEntry *entry)
 	 * an async call was aborted. The connection could also have been
 	 * invalidated, but we only care if we aren't still processing a
 	 * transaction. */
-	if (remote_connection_get_status(entry->conn) == CONN_PROCESSING ||
-		(entry->invalidated && remote_connection_xact_depth_get(entry->conn) == 0))
+
+	invalidated = !ignore_connection_invalidation && entry->invalidated &&
+				  remote_connection_xact_depth_get(entry->conn) == 0;
+	if (remote_connection_get_status(entry->conn) == CONN_PROCESSING || invalidated)
 		return true;
 
 	return false;
@@ -392,7 +404,7 @@ static const char *conn_status_str[] = {
 };
 
 static const char *conn_txn_status_str[] = {
-	[PQTRANS_IDLE] = "IDLE",	   [PQTRANS_ACTIVE] = "ACTIVE",   [PQTRANS_INTRANS] = "INTRANS",
+	[PQTRANS_IDLE] = "IDLE",	   [PQTRANS_ACTIVE] = "ACTIVE",	  [PQTRANS_INTRANS] = "INTRANS",
 	[PQTRANS_INERROR] = "INERROR", [PQTRANS_UNKNOWN] = "UNKNOWN",
 };
 
@@ -487,10 +499,18 @@ remote_connection_cache_show(PG_FUNCTION_ARGS)
 	SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 }
 
+static void
+connection_cache_xact_callback(XactEvent event, void *arg)
+{
+	/* Reset ignore_connection_invalidation to default value */
+	remote_connection_cache_invalidation_ignore(false);
+}
+
 void
 _remote_connection_cache_init(void)
 {
 	connection_cache = connection_cache_create();
+	RegisterXactCallback(connection_cache_xact_callback, NULL);
 }
 
 void

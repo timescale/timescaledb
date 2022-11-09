@@ -77,8 +77,8 @@ typedef struct MutatorContext
 } MutatorContext;
 
 static bool find_first_last_aggs_walker(Node *node, List **context);
-static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *flinfo, Oid eqop, Oid sortop,
-								  bool nulls_first);
+static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop,
+								  Oid sortop, bool nulls_first);
 static void first_last_qp_callback(PlannerInfo *root, void *extra);
 static Node *mutate_aggref_node(Node *node, MutatorContext *context);
 static void replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path);
@@ -162,9 +162,9 @@ initialize_func_strategy(FuncStrategy *func_strategy, char *name, int nargs, Oid
 static FuncStrategy *
 get_func_strategy(Oid func_oid)
 {
-	if (first_func_strategy.func_oid == InvalidOid)
+	if (!OidIsValid(first_func_strategy.func_oid))
 		initialize_func_strategy(&first_func_strategy, "first", 2, first_last_arg_types);
-	if (last_func_strategy.func_oid == InvalidOid)
+	if (!OidIsValid(last_func_strategy.func_oid))
 		initialize_func_strategy(&last_func_strategy, "last", 2, first_last_arg_types);
 	if (first_func_strategy.func_oid == func_oid)
 		return &first_func_strategy;
@@ -248,7 +248,7 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	if (!parse->hasAggs)
 		return;
 
-	Assert(!parse->setOperations);  /* shouldn't get here if a setop */
+	Assert(!parse->setOperations);	/* shouldn't get here if a setop */
 	Assert(parse->rowMarks == NIL); /* nor if FOR UPDATE */
 
 	/*
@@ -478,7 +478,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		sort_tce = lookup_type_cache(sort_oid, TYPECACHE_BTREE_OPFAMILY);
 		aggsortop =
 			get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy->strategy);
-		if (aggsortop == InvalidOid)
+		if (!OidIsValid(aggsortop))
 			elog(ERROR,
 				 "Cannot resolve sort operator for function \"%s\" and type \"%s\"",
 				 format_procedure(aggref->aggfnoid),

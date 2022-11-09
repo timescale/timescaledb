@@ -4,23 +4,29 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/typcache.h>
-#include <utils/lsyscache.h>
+
+#include <catalog/pg_inherits.h>
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <utils/typcache.h>
 
 #include "hypertable_restrict_info.h"
-#include "dimension.h"
-#include "utils.h"
-#include "dimension_slice.h"
+
 #include "chunk.h"
-#include "hypercube.h"
-#include "dimension_vector.h"
-#include "partitioning.h"
 #include "chunk_scan.h"
+#include "dimension.h"
+#include "dimension_slice.h"
+#include "dimension_vector.h"
+#include "hypercube.h"
+#include "partitioning.h"
 #include "scan_iterator.h"
+#include "utils.h"
+
+#include <inttypes.h>
+#include <tcop/tcopprot.h>
 
 typedef struct DimensionRestrictInfo
 {
@@ -47,7 +53,7 @@ typedef struct DimensionValues
 {
 	List *values;
 	bool use_or; /* ORed or ANDed values */
-	Oid type;	/* Oid type for values */
+	Oid type;	 /* Oid type for values */
 } DimensionValues;
 
 static DimensionRestrictInfoOpen *
@@ -84,6 +90,29 @@ dimension_restrict_info_create(const Dimension *d)
 		default:
 			elog(ERROR, "unknown dimension type");
 			return NULL;
+	}
+}
+
+/*
+ * Check if the restriction on this dimension is trivial, that is, the entire
+ * range of the dimension matches.
+ */
+static bool
+dimension_restrict_info_is_trivial(const DimensionRestrictInfo *dri)
+{
+	switch (dri->dimension->type)
+	{
+		case DIMENSION_TYPE_OPEN:
+		{
+			DimensionRestrictInfoOpen *open = (DimensionRestrictInfoOpen *) dri;
+			return open->lower_strategy == InvalidStrategy &&
+				   open->upper_strategy == InvalidStrategy;
+		}
+		case DIMENSION_TYPE_CLOSED:
+			return ((DimensionRestrictInfoClosed *) dri)->strategy == InvalidStrategy;
+		default:
+			Assert(false);
+			return false;
 	}
 }
 
@@ -376,7 +405,7 @@ dimension_values_create_from_array(Const *c, bool user_or)
 
 	/* it's an array type, lets get the base element type */
 	base_el_type = get_element_type(c->consttype);
-	if (base_el_type == InvalidOid)
+	if (!OidIsValid(base_el_type))
 		elog(ERROR,
 			 "invalid base element type for array type: \"%s\"",
 			 format_type_be(c->consttype));
@@ -494,6 +523,8 @@ scan_and_append_slices(ScanIterator *it, int old_nkeys, DimensionVec **dv, bool 
 	return *dv;
 }
 
+/* search dimension_slice catalog table for slices that meet hri restriction
+ */
 static List *
 gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 {
@@ -524,6 +555,25 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 														   open->lower_strategy,
 														   open->lower_bound);
 
+				/*
+				 * If we have a condition on the second index column
+				 * range_start, use a backward scan direction, so that the index
+				 * is able to use the second column as well to choose the
+				 * starting point for the scan.
+				 * If not, prefer forward direction, because backwards scan is
+				 * slightly slower for some reason.
+				 * Ideally we need some other index type than btree for this,
+				 * because the btree index is not so suited for queries like
+				 * "find an interval that contains a given point", which is what
+				 * we're doing here.
+				 * There is a comment in the Postgres code (_bt_start()) that
+				 * explains the logic of selecting a starting point for a btree
+				 * index scan in more detail.
+				 */
+				it.ctx.scandirection = open->upper_strategy != InvalidStrategy ?
+										   BackwardScanDirection :
+										   ForwardScanDirection;
+
 				dv = scan_and_append_slices(&it, old_nkeys, &dv, false);
 				break;
 			}
@@ -532,36 +582,28 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 				const DimensionRestrictInfoClosed *closed =
 					(const DimensionRestrictInfoClosed *) dri;
 
-				if (closed->strategy == BTEqualStrategyNumber)
+				/* Shouldn't have trivial restriction infos here. */
+				Assert(closed->strategy == BTEqualStrategyNumber);
+
+				ListCell *cell;
+				foreach (cell, closed->partitions)
 				{
-					/* slice_end >= value && slice_start <= value */
-					ListCell *cell;
+					int32 partition = lfirst_int(cell);
 
-					foreach (cell, closed->partitions)
-					{
-						int32 partition = lfirst_int(cell);
-
-						ts_dimension_slice_scan_iterator_set_range(&it,
-																   dri->dimension->fd.id,
-																   BTLessEqualStrategyNumber,
-																   partition,
-																   BTGreaterEqualStrategyNumber,
-																   partition);
-
-						dv = scan_and_append_slices(&it, old_nkeys, &dv, true);
-					}
-				}
-				else
-				{
+					/*
+					 * slice_end >= value && slice_start <= value.
+					 * See the comment about scan direction above.
+					 */
+					it.ctx.scandirection = BackwardScanDirection;
 					ts_dimension_slice_scan_iterator_set_range(&it,
 															   dri->dimension->fd.id,
-															   InvalidStrategy,
-															   -1,
-															   InvalidStrategy,
-															   -1);
-					dv = scan_and_append_slices(&it, old_nkeys, &dv, false);
-				}
+															   BTLessEqualStrategyNumber,
+															   partition,
+															   BTGreaterEqualStrategyNumber,
+															   partition);
 
+					dv = scan_and_append_slices(&it, old_nkeys, &dv, true);
+				}
 				break;
 			}
 			default:
@@ -595,11 +637,77 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 Chunk **
 ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht,
-									   LOCKMODE lockmode, unsigned int *num_chunks)
+									   unsigned int *num_chunks)
 {
-	List *dimension_vecs = gather_restriction_dimension_vectors(hri);
-	Assert(hri->num_dimensions == ht->space->num_dimensions);
-	return ts_chunk_scan_by_constraints(ht->space, dimension_vecs, lockmode, num_chunks);
+	/*
+	 * Remove the dimensions for which we don't have a restriction, that is,
+	 * the entire range of the dimension matches. Such dimensions do not
+	 * influence the result set, because their every slice matches, so we can
+	 * just ignore them when searching for the matching chunks.
+	 */
+	const int old_dimensions = hri->num_dimensions;
+	hri->num_dimensions = 0;
+	for (int i = 0; i < old_dimensions; i++)
+	{
+		DimensionRestrictInfo *dri = hri->dimension_restriction[i];
+		if (!dimension_restrict_info_is_trivial(dri))
+		{
+			hri->dimension_restriction[hri->num_dimensions] = dri;
+			hri->num_dimensions++;
+		}
+	}
+
+	List *chunk_ids = NIL;
+	if (hri->num_dimensions == 0)
+	{
+		/*
+		 * No restrictions on hyperspace. Just enumerate all the chunks.
+		 */
+		chunk_ids = ts_chunk_get_chunk_ids_by_hypertable_id(ht->fd.id);
+	}
+	else
+	{
+		/*
+		 * Have some restrictions, enumerate the matching dimension slices.
+		 */
+		List *dimension_vectors = gather_restriction_dimension_vectors(hri);
+		if (list_length(dimension_vectors) == 0)
+		{
+			/*
+			 * No dimension slices match for some dimension for which there is
+			 * a restriction. This means that no chunks match.
+			 */
+			chunk_ids = NIL;
+		}
+		else
+		{
+			/* Find the chunks matching these dimension slices. */
+			chunk_ids = ts_chunk_id_find_in_subspace(ht, dimension_vectors);
+		}
+
+		/*
+		 * Always include the OSM chunk if we have one. It has some virtual
+		 * dimension slices (at the moment, (+inf, +inf) slice for time, but it
+		 * used to be different and might change again.) So sometimes it will
+		 * match and sometimes it won't, so we have to check if it's already
+		 * there not to add a duplicate.
+		 */
+		int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+		if (osm_chunk_id != 0 && !list_member_int(chunk_ids, osm_chunk_id))
+		{
+			chunk_ids = lappend_int(chunk_ids, osm_chunk_id);
+		}
+	}
+
+	/*
+	 * Sort the ids to have more favorable (closer to sequential) data access
+	 * patterns to our catalog tables and indexes.
+	 * We don't care about the locking order here, because this code uses
+	 * AccessShareLock that doesn't conflict with itself.
+	 */
+	chunk_ids = list_sort_compat(chunk_ids, list_int_cmp_compat);
+
+	return ts_chunk_scan_by_chunk_ids(ht->space, chunk_ids, num_chunks);
 }
 
 /*
@@ -642,8 +750,8 @@ chunk_cmp_reverse(const void *c1, const void *c2)
  */
 Chunk **
 ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
-											   Chunk **chunks, LOCKMODE lockmode, bool reverse,
-											   List **nested_oids, unsigned int *num_chunks)
+											   Chunk **chunks, bool reverse, List **nested_oids,
+											   unsigned int *num_chunks)
 {
 	List *slot_chunk_oids = NIL;
 	DimensionSlice *slice = NULL;
@@ -651,7 +759,7 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 
 	if (chunks == NULL)
 	{
-		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
+		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, num_chunks);
 	}
 
 	if (*num_chunks == 0)

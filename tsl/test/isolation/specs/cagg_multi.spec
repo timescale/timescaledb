@@ -42,14 +42,14 @@ step "I1"	{ INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_
 step "I2"   { INSERT INTO ts_continuous_test SELECT 40, 1000 ; }
 
 session "R1"
-setup { SET client_min_messages TO LOG; }
+setup { SET client_min_messages TO NOTICE; }
 step "Refresh1"	{ CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); }
 
 session "R1_sel"
 step "Refresh1_sel"	{ select * from continuous_view_1 where bkt = 0 or bkt > 30 }
 
 session "R2"
-setup { SET client_min_messages TO LOG; }
+setup { SET client_min_messages TO NOTICE; }
 step "Refresh2"	{ CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL); }
 
 session "R2_sel"

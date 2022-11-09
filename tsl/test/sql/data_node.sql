@@ -27,8 +27,8 @@ ORDER BY dimension_id, range_start;
 GRANT SELECT ON hypertable_partitions TO :ROLE_1;
 
 -- Add data nodes using TimescaleDB data_node management API.
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', 'localhost', database => :'DN_DBNAME_2');
 \set ON_ERROR_STOP 0
 -- Add again
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
@@ -60,10 +60,10 @@ DROP SERVER data_node_1, data_node_2;
 \set ON_ERROR_STOP 1
 
 -- Should not generate error with if_not_exists option
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2',
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2',
                             if_not_exists => true);
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
 
 -- Altering the host, dbname, and port should work via ALTER SERVER
@@ -85,12 +85,12 @@ ALTER SERVER data_node_3 VERSION '2';
 ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 
 -- List foreign data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 SELECT * FROM delete_data_node('data_node_3');
 
 -- List data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Deleting a non-existing data node generates error
@@ -100,13 +100,13 @@ SELECT * FROM delete_data_node('data_node_3');
 -- Deleting non-existing data node with "if_exists" set does not generate error
 SELECT * FROM delete_data_node('data_node_3', if_exists => true);
 
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM delete_data_node('data_node_2');
 
 -- No data nodes left
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 SELECT * FROM hypertable_partitions;
 
 -- Cleanup databases
@@ -117,10 +117,11 @@ DROP DATABASE :DN_DBNAME_2;
 DROP DATABASE :DN_DBNAME_3;
 SET client_min_messages TO INFO;
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
-
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Create a distributed hypertable where no nodes can be selected
@@ -141,8 +142,10 @@ RESET ROLE;
 GRANT USAGE
    ON FOREIGN SERVER data_node_1, data_node_2
    TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
-SELECT node_name, "options"
+SELECT node_name
   FROM timescaledb_information.data_nodes
 ORDER BY node_name;
 
@@ -186,6 +189,8 @@ RESET ROLE;
 GRANT USAGE
    ON FOREIGN SERVER data_node_3
    TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Now specify less slices than there are data nodes to generate a
@@ -206,7 +211,7 @@ FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
 INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
 
 -- Chunk mapping created
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 DROP TABLE disttable;
 
@@ -384,12 +389,14 @@ WHERE num_slices IS NOT NULL
 AND column_name = 'device';
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4',
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4',
                             if_not_exists => true);
 -- Now let ROLE_1 use data_node_4 since it owns this "disttable"
 GRANT USAGE
    ON FOREIGN SERVER data_node_4
    TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
 -- Recheck that ownership on data_node_4 is proper
 SELECT * FROM test.remote_exec(NULL, $$ SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'; $$);
@@ -415,7 +422,7 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -434,17 +441,15 @@ DROP DATABASE :DN_DBNAME_3;
 DROP DATABASE :DN_DBNAME_4;
 
 -- there should be no data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 -- let's add some
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => :'DN_DBNAME_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => :'DN_DBNAME_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => :'DN_DBNAME_3');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 DROP TABLE disttable;
 
@@ -603,9 +608,11 @@ SELECT * FROM detach_data_node('data_node_2', 'disttable', force => true);
 
 -- Let's add more data nodes
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4');
-SELECT * FROM add_data_node('data_node_5', host => 'localhost', database => :'DN_DBNAME_5');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_5', host => 'localhost', database => :'DN_DBNAME_5');
 GRANT ALL ON FOREIGN SERVER data_node_4, data_node_5 TO PUBLIC;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 -- Create table as super user
 SET ROLE :ROLE_SUPERUSER;
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);
@@ -759,7 +766,7 @@ SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN
 \set ON_ERROR_STOP 1
 
 -- Providing the password on the command line should work
-SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6', password => :'ROLE_3_PASS');
+SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6', password => :'ROLE_3_PASS');
 
 SELECT * FROM delete_data_node('data_node_6');
 

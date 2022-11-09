@@ -269,14 +269,6 @@ INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uui
 -- environmental variables that originally called this psql command. Sadly
 -- vars passed to psql do not work in \! commands so we can't do it that way.
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
 \c :TEST_DBNAME
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
@@ -555,27 +547,29 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
-        ORDER BY objid::text DESC;
+        ORDER BY objid::regclass::text COLLATE "C";
                        objid                       
 ---------------------------------------------------
- timescaledb_experimental.chunk_replication_status
- timescaledb_information.compression_settings
- timescaledb_information.dimensions
- timescaledb_information.chunks
- timescaledb_information.data_nodes
- timescaledb_information.continuous_aggregates
- timescaledb_information.jobs
- timescaledb_information.job_stats
- timescaledb_information.hypertables
- _timescaledb_internal.compressed_chunk_stats
- _timescaledb_internal.hypertable_chunk_local_size
  _timescaledb_catalog.chunk_copy_operation
  _timescaledb_catalog.chunk_copy_operation_id_seq
  _timescaledb_catalog.compression_algorithm
- _timescaledb_internal.bgw_policy_chunk_stats
- _timescaledb_internal.bgw_job_stat
  _timescaledb_catalog.tablespace_id_seq
-(17 rows)
+ _timescaledb_internal.bgw_job_stat
+ _timescaledb_internal.bgw_policy_chunk_stats
+ _timescaledb_internal.compressed_chunk_stats
+ _timescaledb_internal.hypertable_chunk_local_size
+ timescaledb_experimental.chunk_replication_status
+ timescaledb_experimental.policies
+ timescaledb_information.chunks
+ timescaledb_information.compression_settings
+ timescaledb_information.continuous_aggregates
+ timescaledb_information.data_nodes
+ timescaledb_information.dimensions
+ timescaledb_information.hypertables
+ timescaledb_information.job_errors
+ timescaledb_information.job_stats
+ timescaledb_information.jobs
+(19 rows)
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -652,4 +646,6 @@ SELECT * FROM test_tz ORDER BY time;
 (4 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :TEST_DBNAME_EXTRA;
+-- DROP DATABASE WITH(FORCE) is only available in PG13+
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 13 THEN 'WITH(FORCE)' ELSE '' END AS "DROPDBOPTION" \gset
+DROP DATABASE :TEST_DBNAME_EXTRA :DROPDBOPTION;

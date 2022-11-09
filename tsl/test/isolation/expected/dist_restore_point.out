@@ -385,7 +385,7 @@ debug_waitpoint_enable
 (1 row)
 
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
-step s2_add_dn: SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'cdrp_4'); <waiting ...>
+step s2_add_dn: SELECT node_name FROM add_data_node('data_node_4', host => 'localhost', database => 'cdrp_4'); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
@@ -417,9 +417,9 @@ t
 (4 rows)
 
 step s2_add_dn: <... completed>
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_4|localhost|55432|cdrp_4  |t           |t               |t                
+node_name  
+-----------
+data_node_4
 (1 row)
 
 step s3_lock_count_fs: SELECT foreign_server_locks() as foreign_server_locks;

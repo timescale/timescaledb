@@ -114,7 +114,7 @@ typedef struct AsyncAppendState
 {
 	CustomScanState css;
 	PlanState *subplan_state; /* AppendState or MergeAppendState */
-	List *data_node_scans;	/* DataNodeScan states */
+	List *data_node_scans;	  /* DataNodeScan states */
 	bool first_run;
 } AsyncAppendState;
 

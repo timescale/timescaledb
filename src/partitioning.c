@@ -202,8 +202,7 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	{
 		TypeCacheEntry *tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-		if (tce->hash_proc == InvalidOid &&
-			ts_partitioning_func_is_closed_default(schema, partfunc))
+		if (!OidIsValid(tce->hash_proc) && ts_partitioning_func_is_closed_default(schema, partfunc))
 			elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
 	}
 
@@ -408,7 +407,7 @@ ts_get_partition_for_key(PG_FUNCTION_ARGS)
 	data = DatumGetTextPP(arg);
 	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data), VARSIZE_ANY_EXHDR(data)));
 
-	res = (int32)(hash_u & 0x7fffffff); /* Only positive numbers */
+	res = (int32) (hash_u & 0x7fffffff); /* Only positive numbers */
 
 	PG_FREE_IF_COPY(data, 0);
 	PG_RETURN_INT32(res);
@@ -448,7 +447,7 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 		fcinfo->flinfo->fn_extra = pfc;
 	}
 
-	if (pfc->tce->hash_proc == InvalidOid)
+	if (!OidIsValid(pfc->tce->hash_proc))
 		elog(ERROR, "could not find hash function for type %u", pfc->argtype);
 
 	/* use the supplied collation, if it exists, otherwise use the default for
@@ -461,7 +460,7 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	hash = FunctionCall1Coll(&pfc->tce->hash_proc_finfo, collation, arg);
 
 	/* Only positive numbers */
-	res = (int32)(DatumGetUInt32(hash) & 0x7fffffff);
+	res = (int32) (DatumGetUInt32(hash) & 0x7fffffff);
 
 	PG_RETURN_INT32(res);
 }

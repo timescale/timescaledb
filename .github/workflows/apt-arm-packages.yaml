@@ -57,7 +57,7 @@ jobs:
           dpkg -L timescaledb-2-postgresql-${{ matrix.pg }}
         EOF
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Read versions
       id: versions
@@ -70,7 +70,7 @@ jobs:
         else
           version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
         fi
-        echo "::set-output name=version::${version}"
+        echo "version=${version}" >>$GITHUB_OUTPUT
 
     - name: Test Installation
       run: |

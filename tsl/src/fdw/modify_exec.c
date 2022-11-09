@@ -57,7 +57,7 @@ typedef struct TsFdwDataNodeState
 {
 	TSConnectionId id;
 	/* for remote query execution */
-	TSConnection *conn;   /* connection for the scan */
+	TSConnection *conn;	  /* connection for the scan */
 	PreparedStmt *p_stmt; /* prepared statement handle, if created */
 } TsFdwDataNodeState;
 

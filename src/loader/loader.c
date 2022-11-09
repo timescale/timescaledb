@@ -122,7 +122,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
 
-static void inline extension_check(void);
+inline static void extension_check(void);
 #if PG14_LT
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query);
 #else
@@ -205,7 +205,7 @@ extension_owner(void)
 	systable_endscan(scandesc);
 	table_close(rel, AccessShareLock);
 
-	if (extension_owner == InvalidOid)
+	if (!OidIsValid(extension_owner))
 		elog(ERROR, "extension not found while getting owner");
 
 	return extension_owner;
@@ -346,7 +346,7 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 	 */
 	Oid dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
 
-	if (dropped_db_oid != InvalidOid)
+	if (OidIsValid(dropped_db_oid))
 	{
 		ereport(LOG,
 				(errmsg("TimescaleDB background worker scheduler for database %u will be stopped",
@@ -496,7 +496,8 @@ static void
 check_uuid(const char *label)
 {
 	const MemoryContext oldcontext = CurrentMemoryContext;
-	const char *uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
+	/* Volatile is to work around the incorrect GCC -Wclobbered diagnostics. */
+	const char *volatile uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
 	if (!uuid || strncmp(label, SECLABEL_DIST_TAG, uuid - label) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
@@ -708,7 +709,8 @@ _PG_init(void)
 	ProcessUtility_hook = loader_process_utility_hook;
 }
 
-static void inline do_load()
+inline static void
+do_load()
 {
 	char *version = extension_version();
 	char soname[MAX_SO_NAME_LEN];
@@ -782,7 +784,8 @@ static void inline do_load()
 	post_parse_analyze_hook = old_hook;
 }
 
-static void inline extension_check()
+inline static void
+extension_check()
 {
 	enum ExtensionState state = extension_current_state();
 

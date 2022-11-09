@@ -56,7 +56,7 @@ typedef struct Cache
 	bool handle_txn_callbacks; /* Auto-release caches on (sub)txn
 								* aborts and commits. Should be off
 								* if cache used in txn callbacks */
-	bool release_on_commit;	/* This should be false if doing
+	bool release_on_commit;	   /* This should be false if doing
 								* cross-commit operations like CLUSTER or
 								* VACUUM */
 } Cache;

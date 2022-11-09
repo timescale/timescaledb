@@ -17,6 +17,29 @@
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
+/*switch to ts user for _timescaledb_internal access */
+#define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
+	do                                                                                             \
+	{                                                                                              \
+		if ((schemaname) &&                                                                        \
+			strncmp(schemaname, INTERNAL_SCHEMA_NAME, strlen(INTERNAL_SCHEMA_NAME)) == 0)          \
+			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
+		else                                                                                       \
+			(newuid) = InvalidOid;                                                                 \
+		if (OidIsValid((newuid)))                                                                  \
+		{                                                                                          \
+			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
+			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
+		}                                                                                          \
+	} while (0)
+
+#define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
+	do                                                                                             \
+	{                                                                                              \
+		if (OidIsValid((newuid)))                                                                  \
+			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
+	} while (0);
+
 typedef enum ContinuousAggViewOption
 {
 	ContinuousEnabled = 0,
@@ -125,7 +148,17 @@ typedef struct CaggsInfoData
 	List *bucket_functions;
 } CaggsInfo;
 
-extern TSDLLEXPORT const CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
+typedef struct CaggPolicyOffset
+{
+	Datum value;
+	Oid type;
+	bool isnull;
+	const char *name;
+} CaggPolicyOffset;
+
+extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
+
+extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
 														   ArrayType *bucket_widths,
 														   ArrayType *bucket_functions,
@@ -138,7 +171,7 @@ TSDLLEXPORT void ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs,
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
 
-extern TSDLLEXPORT void ts_materialization_invalidation_log_delete_inner(int32 materialization_id);
+extern TSDLLEXPORT void ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id);
 
 extern TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id);
@@ -155,16 +188,19 @@ extern void ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id);
 extern TSDLLEXPORT ContinuousAggViewType ts_continuous_agg_view_type(FormData_continuous_agg *data,
 																	 const char *schema,
 																	 const char *name);
-extern void ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema);
-extern void ts_continuous_agg_rename_view(const char *old_schema, const char *name,
-										  const char *new_schema, const char *new_name,
-										  ObjectType *object_type);
+extern TSDLLEXPORT void ts_continuous_agg_rename_schema_name(const char *old_schema,
+															 const char *new_schema);
+extern TSDLLEXPORT void ts_continuous_agg_rename_view(const char *old_schema, const char *old_name,
+													  const char *new_schema, const char *new_name,
+													  ObjectType *object_type);
 
 extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
 
 extern TSDLLEXPORT const Dimension *
 ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid);
 extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, const char *name);
+
+extern TSDLLEXPORT void ts_continuous_agg_invalidate_chunk(Hypertable *ht, Chunk *chunk);
 
 extern TSDLLEXPORT bool ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg);
 extern TSDLLEXPORT int64 ts_continuous_agg_bucket_width(const ContinuousAgg *agg);

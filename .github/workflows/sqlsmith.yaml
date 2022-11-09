@@ -8,13 +8,25 @@ on:
     branches:
       - sqlsmith
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg14_latest: ${{ steps.setter.outputs.PG14_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   regress:
     name: SQLsmith PG${{ matrix.pg }}
     runs-on: ${{ matrix.os }}
+    needs: config
     strategy:
       matrix:
         os: ["ubuntu-20.04"]
-        pg: ["14.4"]
+        pg: [ "${{ fromJson(needs.config.outputs.pg14_latest) }}" ]
         cc: ["gcc"]
         build_type: ["Debug"]
       fail-fast: false
@@ -32,7 +44,7 @@ jobs:
     # workflow since that workflow runs daily there should always be a cache hit
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
@@ -49,7 +61,7 @@ jobs:
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Build TimescaleDB
       run: |
@@ -58,7 +70,7 @@ jobs:
         make -C build install
 
     - name: Checkout sqlsmith
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'timescale/sqlsmith'
         path: 'sqlsmith'
@@ -94,20 +106,23 @@ jobs:
         # wait for in progress coredumps
         sleep 10
         if coredumpctl list; then
-          echo "::set-output name=coredumps::true"
+          echo "coredumps=true" >>$GITHUB_OUTPUT
           false
         fi
 
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        echo "bt full" | sudo coredumpctl gdb
+        sudo coredumpctl gdb <<EOT
+          printf "%s\n\n", debug_query_string
+          bt full
+        EOT
         ./scripts/bundle_coredumps.sh
         false
 
     - name: Upload Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps

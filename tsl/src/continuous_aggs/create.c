@@ -23,6 +23,7 @@
 #include <catalog/indexing.h>
 #include <catalog/pg_aggregate.h>
 #include <catalog/pg_collation.h>
+#include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
@@ -47,10 +48,10 @@
 #include <parser/parse_type.h>
 #include <rewrite/rewriteHandler.h>
 #include <rewrite/rewriteManip.h>
+#include <utils/acl.h>
 #include <utils/rel.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
-#include <utils/int8.h>
 #include <utils/regproc.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
@@ -90,29 +91,6 @@
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
 #define INTERNAL_TO_TS_FUNCTION "to_timestamp_without_timezone"
 
-/*switch to ts user for _timescaledb_internal access */
-#define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
-	do                                                                                             \
-	{                                                                                              \
-		if ((schemaname) &&                                                                        \
-			strncmp(schemaname, INTERNAL_SCHEMA_NAME, strlen(INTERNAL_SCHEMA_NAME)) == 0)          \
-			(newuid) = ts_catalog_database_info_get()->owner_uid;                                  \
-		else                                                                                       \
-			(newuid) = InvalidOid;                                                                 \
-		if ((newuid) != InvalidOid)                                                                \
-		{                                                                                          \
-			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
-			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
-		}                                                                                          \
-	} while (0)
-
-#define RESTORE_USER(newuid, saved_uid, saved_secctx)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		if ((newuid) != InvalidOid)                                                                \
-			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
-	} while (0);
-
 #define PRINT_MATCOLNAME(colbuf, type, original_query_resno, colno)                                \
 	do                                                                                             \
 	{                                                                                              \
@@ -131,7 +109,7 @@
 		{                                                                                          \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
-					 errmsg(" bad materialization internal name")));                               \
+					 errmsg("bad materialization internal name")));                                \
 		}                                                                                          \
 	} while (0);
 
@@ -153,7 +131,7 @@
 typedef struct MatTableColumnInfo
 {
 	List *matcollist;		 /* column defns for materialization tbl*/
-	List *partial_seltlist;  /* tlist entries for populating the materialization table columns */
+	List *partial_seltlist;	 /* tlist entries for populating the materialization table columns */
 	List *partial_grouplist; /* group clauses used for populating the materialization table */
 	List *mat_groupcolname_list; /* names of columns that are populated by the group-by clause
 									correspond to the partial_grouplist.
@@ -165,7 +143,7 @@ typedef struct MatTableColumnInfo
 
 typedef struct FinalizeQueryInfo
 {
-	List *final_seltlist;   /* select target list for finalize query */
+	List *final_seltlist;	/* select target list for finalize query */
 	Node *final_havingqual; /* having qual for finalize query */
 	Query *final_userquery; /* user query used to compute the finalize_query */
 	bool finalized;			/* finalized form? */
@@ -184,6 +162,7 @@ typedef struct CAggTimebucketInfo
 	Interval *interval;			  /* stores the interval, NULL if not specified */
 	const char *timezone;		  /* the name of the timezone, NULL if not specified */
 
+	FuncExpr *bucket_func; /* function call expr of the bucketing function */
 	/*
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
@@ -221,7 +200,7 @@ static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
 	char *table_access_method, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
+static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
 														  Query *userview_query, bool finalized);
 
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
@@ -511,11 +490,11 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
 							   InvalidOid, /* indexRelationId */
 							   InvalidOid, /* parentIndexId */
 							   InvalidOid, /* parentConstraintId */
-							   false,	  /* is_alter_table */
-							   false,	  /* check_rights */
-							   false,	  /* check_not_in_use */
-							   false,	  /* skip_build */
-							   false);	 /* quiet */
+							   false,	   /* is_alter_table */
+							   false,	   /* check_rights */
+							   false,	   /* check_not_in_use */
+							   false,	   /* skip_build */
+							   false);	   /* quiet */
 		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
 
 		if (!HeapTupleIsValid(indxtuple))
@@ -712,6 +691,24 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	TIMESTAMP_NOBEGIN(src->origin); /* origin is not specified by default */
 }
 
+static Const *
+check_time_bucket_argument(Node *arg, char *position)
+{
+	if (IsA(arg, NamedArgExpr))
+		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
+
+	Node *expr = eval_const_expressions(NULL, arg);
+
+	if (!IsA(expr, Const))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only immutable expressions allowed in time bucket function"),
+				 errhint("Use an immutable expression as %s argument to the time bucket function.",
+						 position)));
+
+	return castNode(Const, expr);
+}
+
 /*
  * Check if the group-by clauses has exactly 1 time_bucket(.., <col>) where
  * <col> is the hypertable's partitioning column and other invariants. Then fill
@@ -722,6 +719,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 {
 	ListCell *l;
 	bool found = false;
+	bool custom_origin = false;
 
 	/* Make sure tbinfo was initialized. This assumption is used below. */
 	Assert(tbinfo->bucket_width == 0);
@@ -737,9 +735,16 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			FuncExpr *fe = ((FuncExpr *) tle->expr);
 			Node *width_arg;
 			Node *col_arg;
-			Node *tz_arg;
 
 			if (!function_allowed_in_cagg_definition(fe->funcid))
+				continue;
+
+			/*
+			 * offset variants of time_bucket functions are not
+			 * supported at the moment.
+			 */
+			if (list_length(fe->args) >= 5 ||
+				(list_length(fe->args) == 4 && exprType(lfourth(fe->args)) == INTERVALOID))
 				continue;
 
 			if (found)
@@ -750,6 +755,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			else
 				found = true;
 
+			tbinfo->bucket_func = fe;
+
 			/*only column allowed : time_bucket('1day', <column> ) */
 			col_arg = lsecond(fe->args);
 
@@ -759,54 +766,12 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						 errmsg(
 							 "time bucket function must reference a hypertable dimension column")));
 
-			if (list_length(fe->args) == 4)
-			{
-				/*
-				 * Timezone and custom origin are specified. In this clause we
-				 * save only the timezone. Origin is processed in the following
-				 * clause.
-				 */
-				tz_arg = eval_const_expressions(NULL, lfourth(fe->args));
-
-				if (!IsA(tz_arg, Const))
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("only immutable expressions allowed in time bucket function"),
-							 errhint("Use an immutable expression as fourth argument"
-									 " to the time bucket function.")));
-
-				Const *tz = castNode(Const, tz_arg);
-
-				/* This is assured by function_allowed_in_cagg_definition() above. */
-				Assert(tz->consttype == TEXTOID);
-				const char *tz_name = TextDatumGetCString(tz->constvalue);
-				if (!ts_is_valid_timezone_name(tz_name))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg("invalid timezone name \"%s\"", tz_name)));
-				}
-
-				tbinfo->timezone = tz_name;
-				tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
-			}
-
 			if (list_length(fe->args) >= 3)
 			{
-				tz_arg = eval_const_expressions(NULL, lthird(fe->args));
-				if (!IsA(tz_arg, Const))
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("only immutable expressions allowed in time bucket function"),
-							 errhint("Use an immutable expression as third argument"
-									 " to the time bucket function.")));
-
-				Const *tz = castNode(Const, tz_arg);
-				if ((tz->consttype == TEXTOID) && (list_length(fe->args) == 3))
+				Const *arg = check_time_bucket_argument(lthird(fe->args), "third");
+				if (exprType((Node *) arg) == TEXTOID)
 				{
-					/* Timezone specified */
-					const char *tz_name = TextDatumGetCString(tz->constvalue);
-
+					const char *tz_name = TextDatumGetCString(arg->constvalue);
 					if (!ts_is_valid_timezone_name(tz_name))
 					{
 						ereport(ERROR,
@@ -817,51 +782,69 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					tbinfo->timezone = tz_name;
 					tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
 				}
-				else
+			}
+
+			if (list_length(fe->args) >= 4)
+			{
+				Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth");
+				if (exprType((Node *) arg) == TEXTOID)
 				{
-					/*
-					 * Custom origin specified. This is always treated as
-					 * a variable-sized bucket case.
-					 */
+					const char *tz_name = TextDatumGetCString(arg->constvalue);
+					if (!ts_is_valid_timezone_name(tz_name))
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+								 errmsg("invalid timezone name \"%s\"", tz_name)));
+					}
+
+					tbinfo->timezone = tz_name;
 					tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
-
-					if (tz->constisnull)
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid origin value: null")));
-					}
-
-					switch (tz->consttype)
-					{
-						case DATEOID:
-							tbinfo->origin = DatumGetTimestamp(
-								DirectFunctionCall1(date_timestamp, tz->constvalue));
-							break;
-						case TIMESTAMPOID:
-							tbinfo->origin = DatumGetTimestamp(tz->constvalue);
-							break;
-						case TIMESTAMPTZOID:
-							tbinfo->origin = DatumGetTimestampTz(tz->constvalue);
-							break;
-						default:
-							/*
-							 * This shouldn't happen. But if somehow it does
-							 * make sure the execution will stop here even in
-							 * the Release build.
-							 */
-							ereport(ERROR,
-									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									 errmsg("unsupported time bucket function")));
-					}
-
-					if (TIMESTAMP_NOT_FINITE(tbinfo->origin))
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid origin value: infinity")));
-					}
 				}
+			}
+
+			/* check for custom origin */
+			switch (exprType(col_arg))
+			{
+				case DATEOID:
+					/* origin is always 3rd arg for date variants */
+					if (list_length(fe->args) == 3)
+					{
+						custom_origin = true;
+						tbinfo->origin = DatumGetTimestamp(
+							DirectFunctionCall1(date_timestamp,
+												castNode(Const, lthird(fe->args))->constvalue));
+					}
+					break;
+				case TIMESTAMPOID:
+					/* origin is always 3rd arg for timestamp variants */
+					if (list_length(fe->args) == 3)
+					{
+						custom_origin = true;
+						tbinfo->origin =
+							DatumGetTimestamp(castNode(Const, lthird(fe->args))->constvalue);
+					}
+					break;
+				case TIMESTAMPTZOID:
+					/* origin can be 3rd or 4th arg for timestamptz variants */
+					if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
+					{
+						custom_origin = true;
+						tbinfo->origin =
+							DatumGetTimestampTz(castNode(Const, lthird(fe->args))->constvalue);
+					}
+					else if (list_length(fe->args) >= 4 &&
+							 exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
+					{
+						custom_origin = true;
+						tbinfo->origin =
+							DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
+					}
+			}
+			if (custom_origin && TIMESTAMP_NOT_FINITE(tbinfo->origin))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid origin value: infinity")));
 			}
 
 			/*
@@ -895,35 +878,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						 errhint("Use an immutable expression as first argument"
 								 " to the time bucket function.")));
 
-			if ((tbinfo->bucket_width == BUCKET_WIDTH_VARIABLE) && (tbinfo->interval->month != 0))
+			if (tbinfo->interval && tbinfo->interval->month)
 			{
-				/* Monthly buckets case */
-				if (!TIMESTAMP_NOT_FINITE(tbinfo->origin))
-				{
-					/*
-					 * Origin was specified - make sure it's the first day of the month.
-					 * If a timezone was specified the check should be done in this timezone.
-					 */
-					Timestamp origin = tbinfo->origin;
-					if (tbinfo->timezone != NULL)
-					{
-						/* The code is equal to 'timestamptz AT TIME ZONE tzname'. */
-						origin = DatumGetTimestamp(
-							DirectFunctionCall2(timestamptz_zone,
-												CStringGetTextDatum(tbinfo->timezone),
-												TimestampTzGetDatum((TimestampTz) origin)));
-					}
-
-					const char *day =
-						TextDatumGetCString(DirectFunctionCall2(timestamp_to_char,
-																TimestampGetDatum(origin),
-																CStringGetTextDatum("DD")));
-					if (strcmp(day, "01") != 0)
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("for monthly buckets origin must be the first day of the "
-										"month")));
-				}
+				tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
 			}
 		}
 	}
@@ -977,8 +934,8 @@ cagg_agg_validate(Node *node, void *context)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("ordered set/hypothetical aggregates are not supported")));
 		}
-		if (aggform->aggcombinefn == InvalidOid ||
-			(aggform->aggtranstype == INTERNALOID && aggform->aggdeserialfn == InvalidOid))
+		if (!OidIsValid(aggform->aggcombinefn) ||
+			(aggform->aggtranstype == INTERNALOID && !OidIsValid(aggform->aggdeserialfn)))
 		{
 			ReleaseSysCache(aggtuple);
 			ereport(ERROR,
@@ -1238,7 +1195,7 @@ static Oid
 get_finalizefnoid()
 {
 	Oid finalfnoid;
-	Oid finalfnargtypes[] = { TEXTOID,  NAMEOID,	  NAMEOID, get_array_type(NAMEOID),
+	Oid finalfnargtypes[] = { TEXTOID,	NAMEOID,	  NAMEOID, get_array_type(NAMEOID),
 							  BYTEAOID, ANYELEMENTOID };
 	List *funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(FINALFN));
 	int nargs = sizeof(finalfnargtypes) / sizeof(finalfnargtypes[0]);
@@ -2257,7 +2214,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										   panquery,
 										   materialize_hypertable_id);
 
-	create_view_for_query(final_selquery, stmt->view);
+	/* copy view acl to materialization hypertable */
+	ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
+	ts_copy_relation_acl(view_address.objectId, mataddress.objectId, GetUserId());
 
 	/* Step 3: create the internal view with select partialize(..)
 	 */
@@ -2310,18 +2269,17 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		}
 
 		/*
-		 * `experimental` = true and `name` = "time_bucket_ng" are hardcoded
-		 * rather than extracted from the query. We happen to know that
-		 * monthly buckets can currently be created only with time_bucket_ng(),
-		 * thus these values are correct. Besides, they are not used for
+		 * These values are not used for
 		 * anything except Assert's yet for the same reasons. Once the design
 		 * of variable-sized buckets is finalized we will have a better idea
 		 * of what schema is needed exactly. Until then the choice was made
 		 * in favor of the most generic schema that can be optimized later.
 		 */
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 true,
-											 "time_bucket_ng",
+											 get_func_namespace(
+												 origquery_ht->bucket_func->funcid) !=
+												 PG_PUBLIC_NAMESPACE,
+											 get_func_name(origquery_ht->bucket_func->funcid),
 											 bucket_width,
 											 origin,
 											 origquery_ht->timezone);
@@ -2463,13 +2421,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	}
 
 	if (finalized)
-	{ /* This continuous aggregate does not have partials, do not check for defects. */
+	{
+		/* This continuous aggregate does not have partials, do not check for defects. */
 		relation_close(user_view_rel, NoLock);
-		elog(INFO,
-			 "Skipping check for defects of aggregate without partials "
-			 "\"%s.%s\"",
-			 schema,
-			 relname);
 		return;
 	}
 

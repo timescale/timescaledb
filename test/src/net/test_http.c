@@ -60,7 +60,7 @@ static const char *const BAD_RESPONSES[] = { "HTTP/1.1 200 OK\r\n"
 											 "{\"status\":404}",
 											 NULL };
 
-static int TEST_LENGTHS[] = { 14, 14, 14, 14 };
+static size_t TEST_LENGTHS[] = { 14, 14, 14, 14 };
 static const char *MESSAGE_BODY[] = {
 	"{\"status\":200}", "{\"status\":200}", "{\"status\":200}", "{\"status\":201}"
 };
@@ -72,7 +72,7 @@ TS_FUNCTION_INFO_V1(ts_test_http_request_build);
 static int
 num_test_strings()
 {
-	return sizeof(TEST_LENGTHS) / sizeof(int);
+	return sizeof(TEST_LENGTHS) / sizeof(TEST_LENGTHS[0]);
 }
 
 /*  Check we can succesfully parse partial by well-formed HTTP responses */
@@ -80,7 +80,8 @@ Datum
 ts_test_http_parsing(PG_FUNCTION_ARGS)
 {
 	int num_iterations = PG_GETARG_INT32(0);
-	int bytes, i, j;
+	int i, j;
+	size_t bytes;
 
 	srand(time(0));
 
@@ -97,7 +98,7 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 
 			buf = ts_http_response_state_next_buffer(state, &bufsize);
 
-			TestAssertTrue(bufsize >= bytes);
+			TestAssertTrue(bufsize >= (ssize_t) bytes);
 
 			/* Copy part of the message into the parsing state */
 			memcpy(buf, TEST_RESPONSES[i], bytes);
@@ -125,7 +126,8 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 Datum
 ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 {
-	int bytes, i;
+	int i;
+	size_t bytes;
 
 	srand(time(0));
 
@@ -140,7 +142,7 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 
 		bytes = strlen(TEST_RESPONSES[i]);
 
-		TestAssertTrue(bufsize >= bytes);
+		TestAssertTrue(bufsize >= (ssize_t) bytes);
 
 		/* Copy all of the message into the parsing state */
 		memcpy(buf, TEST_RESPONSES[i], bytes);
@@ -172,7 +174,7 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 
 		bytes = strlen(BAD_RESPONSES[i]);
 
-		TestAssertTrue(bufsize >= bytes);
+		TestAssertTrue(bufsize >= (ssize_t) bytes);
 
 		memcpy(buf, BAD_RESPONSES[i], bytes);
 

@@ -170,7 +170,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
-        ORDER BY objid::text DESC;
+        ORDER BY objid::regclass::text COLLATE "C";
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -217,4 +217,8 @@ INSERT INTO test_tz VALUES('Mon Mar 20 09:37:00.936242 2017', 30, 'dev3');
 SELECT * FROM test_tz ORDER BY time;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :TEST_DBNAME_EXTRA;
+
+-- DROP DATABASE WITH(FORCE) is only available in PG13+
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 13 THEN 'WITH(FORCE)' ELSE '' END AS "DROPDBOPTION" \gset
+DROP DATABASE :TEST_DBNAME_EXTRA :DROPDBOPTION;
+

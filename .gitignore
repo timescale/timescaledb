@@ -32,3 +32,4 @@ typedef.list
 /debug/
 /cmake-build-debug/
 /.idea/
+coccinelle.diff

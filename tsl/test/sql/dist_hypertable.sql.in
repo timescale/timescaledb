@@ -24,8 +24,11 @@ SELECT
     test.make_tablespace_path(:'TEST_TABLESPACE2_PREFIX', :'TEST_DBNAME') AS spc2path
 \gset
 
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
@@ -56,12 +59,13 @@ SET client_min_messages TO ERROR;
 SET client_min_messages TO NOTICE;
 \set ECHO all
 
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 --Ensure INSERTs use DataNodeDispatch. DataNodeCopy is tested later
 SET timescaledb.enable_distributed_insert_with_copy=false;
 
 -- Verify lack of tables
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Test that one cannot directly create TimescaleDB foreign tables
@@ -103,8 +107,10 @@ SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor =>
 \set ON_ERROR_STOP 1
 -- can create under-replicated hypertable byf force detaching a data node
 RESET ROLE;
-SELECT * FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_4 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
@@ -265,7 +271,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT * FROM disttable;
 $$);
 
-SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 
 -- Show what some queries would look like on the frontend
@@ -1138,11 +1144,6 @@ INSERT INTO hyper_estimate VALUES
        ('2018-01-13 05:50', 2, 4),
        ('2018-01-13 16:01', 3, 2);
 
--- Since there are no stats we use shared buffers size to estimate number of rows
-EXPLAIN (COSTS ON)
-SELECT *
-FROM hyper_estimate;
-
 -- This will calculate the stats
 ANALYZE hyper_estimate;
 
@@ -1523,10 +1524,10 @@ SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 --
 -- Expect batch size to be lower than defined max_insert_batch_size
 --
-EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 
-EXPLAIN INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
 INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
 SELECT count(*) from test_1702;
 
@@ -1546,7 +1547,7 @@ CREATE TABLE test_1702 (
 
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 
-EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+EXPLAIN (COSTS OFF) INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 
 DROP TABLE test_1702;
 
@@ -1731,7 +1732,7 @@ SELECT count(*) FROM disttable;
 -- ignore this oid mismatch for non-builtin types.
 SET timescaledb.enable_connection_binary_data=true;
 \set ON_ERROR_STOP 0
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM disttable ORDER BY 1;
 
 SET timescaledb.remote_data_fetcher = 'cursor';

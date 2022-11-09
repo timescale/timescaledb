@@ -35,6 +35,8 @@
 
 #include "cross_module_fn.h"
 
+#include <executor/spi.h>
+
 #define TS_TELEMETRY_VERSION 2
 #define TS_VERSION_JSON_FIELD "current_timescaledb_version"
 #define TS_IS_UPTODATE_JSON_FIELD "is_up_to_date"
@@ -59,6 +61,11 @@
 #define REQ_BUILD_ARCHITECTURE "build_architecture"
 #define REQ_DATA_VOLUME "data_volume"
 
+#define REQ_NUM_POLICY_CAGG_FIXED "num_continuous_aggs_policies_fixed"
+#define REQ_NUM_POLICY_COMPRESSION_FIXED "num_compression_policies_fixed"
+#define REQ_NUM_POLICY_REORDER_FIXED "num_reorder_policies_fixed"
+#define REQ_NUM_POLICY_RETENTION_FIXED "num_retention_policies_fixed"
+#define REQ_NUM_USER_DEFINED_ACTIONS_FIXED "num_user_defined_actions_fixed"
 #define REQ_NUM_POLICY_CAGG "num_continuous_aggs_policies"
 #define REQ_NUM_POLICY_COMPRESSION "num_compression_policies"
 #define REQ_NUM_POLICY_REORDER "num_reorder_policies"
@@ -82,6 +89,9 @@
 #define TIMESCALE_ANALYTICS "timescale_analytics"
 #define TIMESCALEDB_TOOLKIT "timescaledb_toolkit"
 
+#define REQ_JOB_STATS_BY_JOB_TYPE "stats_by_job_type"
+#define REQ_NUM_ERR_BY_SQLERRCODE "errors_by_sqlerrcode"
+
 static const char *related_extensions[] = {
 	PG_PROMETHEUS, PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS, TIMESCALEDB_TOOLKIT,
 };
@@ -101,19 +111,42 @@ bgw_job_type_counts()
 		if (namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0)
 		{
 			if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
-				counts.policy_cagg++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_cagg_fixed++;
+				else
+					counts.policy_cagg++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_compression") == 0)
-				counts.policy_compression++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_compression_fixed++;
+				else
+					counts.policy_compression++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_reorder") == 0)
-				counts.policy_reorder++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_reorder_fixed++;
+				else
+					counts.policy_reorder++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_retention") == 0)
-				counts.policy_retention++;
+			{
+				if (job->fd.fixed_schedule)
+					counts.policy_retention_fixed++;
+				else
+					counts.policy_retention++;
+			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0)
 				counts.policy_telemetry++;
 		}
 		else
 		{
-			counts.user_defined_action++;
+			if (job->fd.fixed_schedule)
+				counts.user_defined_action_fixed++;
+			else
+				counts.user_defined_action++;
 		}
 	}
 
@@ -143,7 +176,6 @@ char_in_valid_version_digits(const char c)
 bool
 ts_validate_server_version(const char *json, VersionResult *result)
 {
-	int i;
 	Datum version = DirectFunctionCall2(json_object_field_text,
 										CStringGetTextDatum(json),
 										PointerGetDatum(cstring_to_text(TS_VERSION_JSON_FIELD)));
@@ -164,7 +196,7 @@ ts_validate_server_version(const char *json, VersionResult *result)
 		return false;
 	}
 
-	for (i = 0; i < strlen(result->versionstr); i++)
+	for (size_t i = 0; i < strlen(result->versionstr); i++)
 	{
 		if (!isalpha(result->versionstr[i]) && !isdigit(result->versionstr[i]) &&
 			!char_in_valid_version_digits(result->versionstr[i]))
@@ -226,10 +258,275 @@ add_job_counts(JsonbParseState *state)
 	BgwJobTypeCount counts = bgw_job_type_counts();
 
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_CAGG, counts.policy_cagg);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_CAGG_FIXED, counts.policy_cagg_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_COMPRESSION, counts.policy_compression);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_COMPRESSION_FIXED, counts.policy_compression_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_REORDER, counts.policy_reorder);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_REORDER_FIXED, counts.policy_reorder_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_POLICY_RETENTION, counts.policy_retention);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_RETENTION_FIXED, counts.policy_retention_fixed);
 	ts_jsonb_add_int32(state, REQ_NUM_USER_DEFINED_ACTIONS, counts.user_defined_action);
+	ts_jsonb_add_int32(state, REQ_NUM_USER_DEFINED_ACTIONS_FIXED, counts.user_defined_action_fixed);
+}
+
+static JsonbValue *
+add_errors_by_sqlerrcode_internal(JsonbParseState *parse_state, const char *job_type,
+								  Jsonb *sqlerrs_jsonb)
+{
+	JsonbIterator *it;
+	JsonbIteratorToken type;
+	JsonbValue val;
+	JsonbValue *ret;
+	JsonbValue key = {
+		.type = jbvString,
+		.val.string.val = pstrdup(job_type),
+		.val.string.len = strlen(job_type),
+	};
+
+	ret = pushJsonbValue(&parse_state, WJB_KEY, &key);
+	ret = pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+
+	/* we don't expect nested values here */
+	it = JsonbIteratorInit(&sqlerrs_jsonb->root);
+	type = JsonbIteratorNext(&it, &val, true /*skip_nested*/);
+	if (type != WJB_BEGIN_OBJECT)
+		elog(ERROR, "invalid JSON format");
+	while ((type = JsonbIteratorNext(&it, &val, true)))
+	{
+		const char *errcode;
+		int64 errcnt;
+
+		if (type == WJB_END_OBJECT)
+			break;
+		else if (type == WJB_KEY)
+		{
+			errcode = pnstrdup(val.val.string.val, val.val.string.len);
+			/* get the corresponding value for this key */
+			type = JsonbIteratorNext(&it, &val, true);
+			if (type != WJB_VALUE)
+				elog(ERROR, "unexpected jsonb type");
+			errcnt =
+				DatumGetInt64(DirectFunctionCall1(numeric_int8, NumericGetDatum(val.val.numeric)));
+			ts_jsonb_add_int64(parse_state, errcode, errcnt);
+		}
+		else
+			elog(ERROR, "unexpected jsonb type");
+	}
+
+	ret = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	return ret;
+}
+/* this function queries the database through SPI and gets back a set of records
+ that look like (job_type TEXT, jsonb_object_agg JSONB).
+ For example, (user_defined_action, {"P0001": 2, "42883": 5})
+ (we are expecting about 6 rows depending
+ on how we write the query and if we exclude any jobs)
+ Then for each returned row adds a new kv pair to the jsonb,
+ which looks like "job_type": {"errtype1": errcnt1, ...} */
+static void
+add_errors_by_sqlerrcode(JsonbParseState *parse_state)
+{
+	int res;
+	StringInfo command;
+	MemoryContext old_context = CurrentMemoryContext, spi_context;
+
+	const char *command_string =
+		"SELECT "
+		"job_type, jsonb_object_agg(sqlerrcode, count) "
+		"FROM"
+		"("
+		"	SELECT ("
+		"		CASE "
+		"			WHEN error_data ->> \'proc_schema\' = \'_timescaledb_internal\'"
+		" 			AND error_data ->> \'proc_name\' ~ "
+		"\'^policy_(retention|compression|reorder|refresh_continuous_"
+		"aggregate|telemetry|job_error_retention)$\' "
+		"			THEN error_data ->> \'proc_name\' "
+		"			ELSE \'user_defined_action\'"
+		"		END"
+		"	) as job_type, "
+		"	error_data ->> \'sqlerrcode\' as sqlerrcode, "
+		"	pg_catalog.COUNT(*) "
+		"	FROM "
+		"	_timescaledb_internal.job_errors "
+		"	WHERE error_data ->> \'sqlerrcode\' IS NOT NULL "
+		"	GROUP BY job_type, error_data->> \'sqlerrcode\' "
+		"	ORDER BY job_type"
+		") q "
+		"GROUP BY q.job_type";
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* SPI calls must be qualified otherwise they are unsafe */
+	res = SPI_exec("SET search_path TO pg_catalog, pg_temp", 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
+	command = makeStringInfo();
+
+	appendStringInfoString(command, command_string);
+	res = SPI_execute(command->data, true /*read only*/, 0 /* count */);
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not get errors by sqlerrcode and job type"))));
+
+	/* we expect about 6 rows returned, each row is a record (TEXT, JSONB) */
+	for (uint64 i = 0; i < SPI_processed; i++)
+	{
+		Datum record_jobtype, record_jsonb;
+		bool isnull_jobtype, isnull_jsonb;
+
+		record_jobtype =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull_jobtype);
+		if (isnull_jobtype)
+			elog(ERROR, "null job type returned");
+		record_jsonb =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull_jsonb);
+		/* this jsonb looks like {"P0001": 32, "42883": 6} */
+		Jsonb *sqlerrs_jsonb = isnull_jsonb ? NULL : DatumGetJsonbP(record_jsonb);
+
+		if (sqlerrs_jsonb == NULL)
+			continue;
+		/* the jsonb object cannot be created in the SPI context or it will be lost */
+		spi_context = MemoryContextSwitchTo(old_context);
+		add_errors_by_sqlerrcode_internal(parse_state,
+										  TextDatumGetCString(record_jobtype),
+										  sqlerrs_jsonb);
+		old_context = MemoryContextSwitchTo(spi_context);
+	}
+
+	res = SPI_exec("RESET search_path", 0);
+	res = SPI_finish();
+
+	Assert(res == SPI_OK_FINISH);
+}
+
+static JsonbValue *
+add_job_stats_internal(JsonbParseState *state, const char *job_type, TelemetryJobStats *stats)
+{
+	JsonbValue key = {
+		.type = jbvString,
+		.val.string.val = pstrdup(job_type),
+		.val.string.len = strlen(job_type),
+	};
+	pushJsonbValue(&state, WJB_KEY, &key);
+	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+
+	ts_jsonb_add_int64(state, "total_runs", stats->total_runs);
+	ts_jsonb_add_int64(state, "total_successes", stats->total_successes);
+	ts_jsonb_add_int64(state, "total_failures", stats->total_failures);
+	ts_jsonb_add_int64(state, "total_crashes", stats->total_crashes);
+	ts_jsonb_add_int32(state, "max_consecutive_failures", stats->max_consecutive_failures);
+	ts_jsonb_add_int32(state, "max_consecutive_crashes", stats->max_consecutive_crashes);
+	ts_jsonb_add_interval(state, "total_duration", stats->total_duration);
+	ts_jsonb_add_interval(state, "total_duration_failures", stats->total_duration_failures);
+
+	return pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+}
+
+static void
+add_job_stats_by_job_type(JsonbParseState *parse_state)
+{
+	StringInfo command;
+	int res;
+	MemoryContext old_context = CurrentMemoryContext, spi_context;
+	SPITupleTable *tuptable = NULL;
+
+	const char *command_string =
+		"SELECT ("
+		"	CASE "
+		"		WHEN j.proc_schema = \'_timescaledb_internal\' AND j.proc_name ~ "
+		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_error_"
+		"retention)$\' "
+		"		THEN j.proc_name::TEXT "
+		"		ELSE \'user_defined_action\' "
+		"	END"
+		")  AS job_type, "
+		"	SUM(total_runs)::BIGINT AS total_runs, "
+		"	SUM(total_successes)::BIGINT AS total_successes, "
+		"	SUM(total_failures)::BIGINT AS total_failures, "
+		"	SUM(total_crashes)::BIGINT AS total_crashes, "
+		"	SUM(total_duration) AS total_duration, "
+		"	SUM(total_duration_failures) AS total_duration_failures, "
+		"	MAX(consecutive_failures) AS max_consecutive_failures, "
+		"	MAX(consecutive_crashes) AS max_consecutive_crashes "
+		"FROM "
+		"	_timescaledb_internal.bgw_job_stat s "
+		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
+		"GROUP BY "
+		"job_type";
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* SPI calls must be qualified otherwise they are unsafe */
+	res = SPI_exec("SET search_path TO pg_catalog, pg_temp", 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
+	command = makeStringInfo();
+
+	appendStringInfoString(command, command_string);
+	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not get job statistics by job type"))));
+	/*
+	 * a row returned looks like this:
+	 * (job_type, total_runs, total_successes, total_failures, total_crashes, total_duration,
+	 * total_duration_failures, max_consec_fails, max_consec_crashes)
+	 * ("policy_telemetry", 12, 10, 1, 1, 00:00:11, 00:00:01, 1, 1)
+	 */
+	for (uint64 i = 0; i < SPI_processed; i++)
+	{
+		tuptable = SPI_tuptable;
+		TupleDesc tupdesc = tuptable->tupdesc;
+		Datum jobtype_datum;
+		Datum total_runs, total_successes, total_failures, total_crashes;
+		Datum total_duration, total_duration_failures, max_consec_crashes, max_consec_fails;
+
+		bool isnull_jobtype, isnull_runs, isnull_successes, isnull_failures, isnull_crashes;
+		bool isnull_duration, isnull_duration_failures, isnull_consec_crashes, isnull_consec_fails;
+
+		jobtype_datum =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull_jobtype);
+		if (isnull_jobtype)
+			elog(ERROR, "null job type returned");
+		total_runs = SPI_getbinval(tuptable->vals[i], tupdesc, 2, &isnull_runs);
+		total_successes = SPI_getbinval(tuptable->vals[i], tupdesc, 3, &isnull_successes);
+		total_failures = SPI_getbinval(tuptable->vals[i], tupdesc, 4, &isnull_failures);
+		total_crashes = SPI_getbinval(tuptable->vals[i], tupdesc, 5, &isnull_crashes);
+		total_duration = SPI_getbinval(tuptable->vals[i], tupdesc, 6, &isnull_duration);
+		total_duration_failures =
+			SPI_getbinval(tuptable->vals[i], tupdesc, 7, &isnull_duration_failures);
+		max_consec_fails = SPI_getbinval(tuptable->vals[i], tupdesc, 8, &isnull_consec_fails);
+		max_consec_crashes = SPI_getbinval(tuptable->vals[i], tupdesc, 9, &isnull_consec_crashes);
+
+		if (isnull_jobtype || isnull_runs || isnull_successes || isnull_failures ||
+			isnull_crashes || isnull_duration || isnull_consec_crashes || isnull_consec_fails)
+		{
+			elog(ERROR, "null record field returned");
+		}
+
+		spi_context = MemoryContextSwitchTo(old_context);
+		TelemetryJobStats stats = { .total_runs = DatumGetInt64(total_runs),
+									.total_successes = DatumGetInt64(total_successes),
+									.total_failures = DatumGetInt64(total_failures),
+									.total_crashes = DatumGetInt64(total_crashes),
+									.max_consecutive_failures = DatumGetInt32(max_consec_fails),
+									.max_consecutive_crashes = DatumGetInt32(max_consec_crashes),
+									.total_duration = DatumGetIntervalP(total_duration),
+									.total_duration_failures =
+										DatumGetIntervalP(total_duration_failures) };
+		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
+		old_context = MemoryContextSwitchTo(spi_context);
+	}
+	res = SPI_exec("RESET search_path", 0);
+	res = SPI_finish();
+	Assert(res == SPI_OK_FINISH);
 }
 
 static int64
@@ -241,11 +538,9 @@ get_database_size()
 static void
 add_related_extensions(JsonbParseState *state)
 {
-	int i;
-
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 
-	for (i = 0; i < sizeof(related_extensions) / sizeof(char *); i++)
+	for (size_t i = 0; i < sizeof(related_extensions) / sizeof(char *); i++)
 	{
 		const char *ext = related_extensions[i];
 
@@ -273,7 +568,7 @@ get_pgversion_string()
 	major = server_version_num / 10000;
 	patch = server_version_num % 100;
 
-	Assert(major > 10);
+	Assert(major >= PG_MAJOR_MIN);
 	appendStringInfo(buf, "%d.%d", major, patch);
 
 	return buf->data;
@@ -429,7 +724,7 @@ add_function_call_telemetry(JsonbParseState *state)
 	}
 
 	visible_extensions[0] = "timescaledb";
-	for (int i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
+	for (size_t i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
 		visible_extensions[i] = related_extensions[i - 1];
 
 	functions =
@@ -442,7 +737,8 @@ add_function_call_telemetry(JsonbParseState *state)
 		for (uint32 i = 0; i < functions->num_elements; i++)
 		{
 			FnTelemetryEntry *entry = fn_telemetry_entry_vec_at(functions, i);
-			ts_jsonb_add_int64(state, format_procedure(entry->fn), entry->count);
+			char *proc_sig = format_procedure_qualified(entry->fn);
+			ts_jsonb_add_int64(state, proc_sig, entry->count);
 		}
 	}
 
@@ -514,6 +810,26 @@ build_telemetry_report()
 	ts_jsonb_add_str(parse_state, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
 	ts_jsonb_add_int32(parse_state, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
 	ts_jsonb_add_int64(parse_state, REQ_DATA_VOLUME, get_database_size());
+	/* add job execution stats */
+	key.type = jbvString;
+	key.val.string.val = REQ_NUM_ERR_BY_SQLERRCODE;
+	key.val.string.len = strlen(REQ_NUM_ERR_BY_SQLERRCODE);
+	pushJsonbValue(&parse_state, WJB_KEY, &key);
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+
+	add_errors_by_sqlerrcode(parse_state);
+
+	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+
+	key.type = jbvString;
+	key.val.string.val = REQ_JOB_STATS_BY_JOB_TYPE;
+	key.val.string.len = strlen(REQ_JOB_STATS_BY_JOB_TYPE);
+	pushJsonbValue(&parse_state, WJB_KEY, &key);
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+
+	add_job_stats_by_job_type(parse_state);
+
+	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* Add relation stats */
 	ts_telemetry_stats_gather(&relstats);
@@ -728,7 +1044,8 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	Connection *conn;
 	HttpRequest *req;
 	HttpResponseState *rsp;
-	bool started = false;
+	/* Declared volatile to suppress the incorrect -Wclobbered warning. */
+	volatile bool started = false;
 	bool snapshot_set = false;
 	const char *volatile json = NULL;
 

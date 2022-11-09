@@ -17,7 +17,7 @@
  */
 typedef struct Hypercube
 {
-	int16 capacity;   /* capacity of slices[] */
+	int16 capacity;	  /* capacity of slices[] */
 	int16 num_slices; /* actual number of slices (should equal
 					   * capacity after create) */
 	/* Slices are stored in dimension order */

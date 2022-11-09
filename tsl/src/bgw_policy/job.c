@@ -250,13 +250,13 @@ policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy
 {
 	int32 htid = policy_reorder_get_hypertable_id(config);
 	Hypertable *ht = ts_hypertable_get_by_id(htid);
-	const char *index_name = policy_reorder_get_index_name(config);
 
 	if (!ht)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("configuration hypertable id %d not found", htid)));
 
+	const char *index_name = policy_reorder_get_index_name(config);
 	check_valid_index(ht, index_name);
 
 	if (policy)
@@ -396,7 +396,6 @@ policy_invoke_recompress_chunk(Chunk *chunk)
 	Oid restype;
 	Oid func_oid;
 	List *args = NIL;
-	int i;
 	bool isnull;
 	Const *argarr[RECOMPRESS_CHUNK_NARGS] = {
 		makeConst(REGCLASSOID,
@@ -421,7 +420,7 @@ policy_invoke_recompress_chunk(Chunk *chunk)
 	/* Prepare the function expr with argument list */
 	get_func_result_type(func_oid, &restype, NULL);
 
-	for (i = 0; i < lengthof(argarr); i++)
+	for (size_t i = 0; i < lengthof(argarr); i++)
 		args = lappend(args, argarr[i]);
 
 	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
@@ -669,27 +668,4 @@ job_execute(BgwJob *job)
 	}
 
 	return true;
-}
-
-/*
- * Check configuration for a job type.
- */
-void
-job_config_check(Name proc_schema, Name proc_name, Jsonb *config)
-{
-	if (namestrcmp(proc_schema, INTERNAL_SCHEMA_NAME) == 0)
-	{
-		if (namestrcmp(proc_name, "policy_retention") == 0)
-			policy_retention_read_and_validate_config(config, NULL);
-		else if (namestrcmp(proc_name, "policy_reorder") == 0)
-			policy_reorder_read_and_validate_config(config, NULL);
-		else if (namestrcmp(proc_name, "policy_compression") == 0)
-		{
-			PolicyCompressionData policy_data;
-			policy_compression_read_and_validate_config(config, &policy_data);
-			ts_cache_release(policy_data.hcache);
-		}
-		else if (namestrcmp(proc_name, "policy_refresh_continuous_aggregate") == 0)
-			policy_refresh_cagg_read_and_validate_config(config, NULL);
-	}
 }

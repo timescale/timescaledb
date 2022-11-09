@@ -57,7 +57,7 @@ static HTAB *ShippableCacheHash = NULL;
 typedef struct
 {
 	/* XXX we assume this struct contains no padding bytes */
-	Oid objid;	/* function/operator/type OID */
+	Oid objid;	  /* function/operator/type OID */
 	Oid classid;  /* OID of its catalog (pg_proc, etc) */
 	Oid serverid; /* FDW server we are concerned with */
 } ShippableCacheKey;

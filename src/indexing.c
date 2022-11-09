@@ -277,7 +277,7 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 	ListCell *lc;
 	bool result = false;
 
-	if (htrel->rd_pkindex != InvalidOid)
+	if (OidIsValid(htrel->rd_pkindex))
 		return true;
 
 	foreach (lc, indexoidlist)

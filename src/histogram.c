@@ -144,8 +144,6 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		Size i;
-
 		/* Since number of buckets is part of the aggregation call the initialization
 		 * might be different in the partials so we error out if they are not identical. */
 		if (state1->nbuckets != state2->nbuckets)
@@ -154,7 +152,7 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 		result = copy_state(aggcontext, state1);
 
 		/* Combine values from state1 and state2 when both states are non-null */
-		for (i = 0; i < state1->nbuckets; i++)
+		for (int32 i = 0; i < state1->nbuckets; i++)
 		{
 			/* Perform addition using int64 to check for overflow */
 			int64 val = (int64) DatumGetInt32(result->buckets[i]);
@@ -162,7 +160,7 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 			if (val + other >= PG_INT32_MAX)
 				elog(ERROR, "overflow in histogram combine");
 
-			result->buckets[i] = Int32GetDatum((int32)(val + other));
+			result->buckets[i] = Int32GetDatum((int32) (val + other));
 		}
 	}
 
@@ -174,7 +172,6 @@ Datum
 ts_hist_serializefunc(PG_FUNCTION_ARGS)
 {
 	Histogram *state;
-	Size i;
 	StringInfoData buf;
 
 	Assert(!PG_ARGISNULL(0));
@@ -183,7 +180,7 @@ ts_hist_serializefunc(PG_FUNCTION_ARGS)
 	pq_begintypsend(&buf);
 	pq_sendint32(&buf, state->nbuckets);
 
-	for (i = 0; i < state->nbuckets; i++)
+	for (int32 i = 0; i < state->nbuckets; i++)
 		pq_sendint32(&buf, DatumGetInt32(state->buckets[i]));
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));

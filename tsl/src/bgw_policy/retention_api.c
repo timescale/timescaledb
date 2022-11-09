@@ -25,14 +25,9 @@
 #include "utils.h"
 #include "jsonb_utils.h"
 #include "bgw_policy/job.h"
-
-#define POLICY_RETENTION_PROC_NAME "policy_retention"
-#define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_DROP_AFTER "drop_after"
-#define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	{                                                                                              \
-		.day = 1                                                                                   \
-	}
+#include "bgw_policy/policies_v2.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -47,11 +42,27 @@ policy_retention_proc(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+Datum
+policy_retention_check(PG_FUNCTION_ARGS)
+{
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+	}
+
+	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
+
+	PG_RETURN_VOID();
+}
+
 int32
 policy_retention_get_hypertable_id(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
+	int32 hypertable_id =
+		ts_jsonb_get_int32_field(config, POL_RETENTION_CONF_KEY_HYPERTABLE_ID, &found);
 
 	if (!found)
 		ereport(ERROR,
@@ -65,12 +76,12 @@ int64
 policy_retention_get_drop_after_int(const Jsonb *config)
 {
 	bool found;
-	int64 drop_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_DROP_AFTER, &found);
+	int64 drop_after = ts_jsonb_get_int64_field(config, POL_RETENTION_CONF_KEY_DROP_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_DROP_AFTER)));
+				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 
 	return drop_after;
 }
@@ -78,12 +89,12 @@ policy_retention_get_drop_after_int(const Jsonb *config)
 Interval *
 policy_retention_get_drop_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_DROP_AFTER);
+	Interval *interval = ts_jsonb_get_interval_field(config, POL_RETENTION_CONF_KEY_DROP_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_DROP_AFTER)));
+				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 
 	return interval;
 }
@@ -137,20 +148,12 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 }
 
 Datum
-policy_retention_add(PG_FUNCTION_ARGS)
+policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
+							  Interval default_schedule_interval, bool if_not_exists,
+							  bool fixed_schedule, TimestampTz initial_start, const char *timezone)
 {
-	/* behave like a strict function */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
-		PG_RETURN_NULL();
-
 	NameData application_name;
 	int32 job_id;
-	Oid ht_oid = PG_GETARG_OID(0);
-	Datum window_datum = PG_GETARG_DATUM(1);
-	bool if_not_exists = PG_GETARG_BOOL(2);
-	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
-	Interval default_schedule_interval =
-		PG_ARGISNULL(3) ? (Interval) DEFAULT_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
 	Hypertable *hypertable;
 	Cache *hcache;
 
@@ -164,8 +167,6 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Interval default_retry_period = { .time = 5 * USECS_PER_MINUTE };
 	/* Right now, there is an infinite number of retries for drop_chunks jobs */
 	int default_max_retries = -1;
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/* Verify that the hypertable owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -193,7 +194,7 @@ policy_retention_add(PG_FUNCTION_ARGS)
 		BgwJob *existing = linitial(jobs);
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_DROP_AFTER,
+														POL_RETENTION_CONF_KEY_DROP_AFTER,
 														partitioning_type,
 														window_type,
 														window_datum))
@@ -220,43 +221,49 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	if (IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(window_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", CONFIG_KEY_DROP_AFTER),
+				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
 				 errhint("Integer time duration is required for hypertables"
 						 " with integer time dimension.")));
 
 	if (IS_TIMESTAMP_TYPE(partitioning_type) && window_type != INTERVALOID)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", CONFIG_KEY_DROP_AFTER),
+				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
 				 errhint("Interval time duration is required for hypertable"
 						 " with timestamp-based time dimension.")));
 
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
 
 	switch (window_type)
 	{
 		case INTERVALOID:
 			ts_jsonb_add_interval(parse_state,
-								  CONFIG_KEY_DROP_AFTER,
+								  POL_RETENTION_CONF_KEY_DROP_AFTER,
 								  DatumGetIntervalP(window_datum));
 			break;
 		case INT2OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_DROP_AFTER, DatumGetInt16(window_datum));
+			ts_jsonb_add_int64(parse_state,
+							   POL_RETENTION_CONF_KEY_DROP_AFTER,
+							   DatumGetInt16(window_datum));
 			break;
 		case INT4OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_DROP_AFTER, DatumGetInt32(window_datum));
+			ts_jsonb_add_int64(parse_state,
+							   POL_RETENTION_CONF_KEY_DROP_AFTER,
+							   DatumGetInt32(window_datum));
 			break;
 		case INT8OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_DROP_AFTER, DatumGetInt64(window_datum));
+			ts_jsonb_add_int64(parse_state,
+							   POL_RETENTION_CONF_KEY_DROP_AFTER,
+							   DatumGetInt64(window_datum));
 			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("unsupported datatype for %s: %s",
-							CONFIG_KEY_DROP_AFTER,
+							POL_RETENTION_CONF_KEY_DROP_AFTER,
 							format_type_be(window_type))));
 	}
 
@@ -265,9 +272,11 @@ policy_retention_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Retention Policy");
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name, proc_schema, check_schema, check_name, owner;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_name, POLICY_RETENTION_CHECK_NAME);
+	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
@@ -277,10 +286,15 @@ policy_retention_add(PG_FUNCTION_ARGS)
 										&default_retry_period,
 										&proc_schema,
 										&proc_name,
+										&check_schema,
+										&check_name,
 										&owner,
 										true,
+										fixed_schedule,
 										hypertable->fd.id,
-										config);
+										config,
+										initial_start,
+										timezone);
 
 	ts_cache_release(hcache);
 
@@ -288,14 +302,58 @@ policy_retention_add(PG_FUNCTION_ARGS)
 }
 
 Datum
-policy_retention_remove(PG_FUNCTION_ARGS)
+policy_retention_add(PG_FUNCTION_ARGS)
 {
-	Oid table_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
-	Cache *hcache;
-	Hypertable *hypertable;
+	/* behave like a strict function */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
+	Oid ht_oid = PG_GETARG_OID(0);
+	Datum window_datum = PG_GETARG_DATUM(1);
+	bool if_not_exists = PG_GETARG_BOOL(2);
+	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Interval default_schedule_interval =
+		PG_ARGISNULL(3) ? (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
+	TimestampTz initial_start = PG_ARGISNULL(4) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(4);
+	bool fixed_schedule = !PG_ARGISNULL(4);
+	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
+	char *valid_timezone = NULL;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	Datum retval;
+	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
+	if (fixed_schedule)
+	{
+		ts_bgw_job_validate_schedule_interval(&default_schedule_interval);
+		if (TIMESTAMP_NOT_FINITE(initial_start))
+			initial_start = ts_timer_get_current_timestamp();
+	}
+
+	if (timezone != NULL)
+		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(5));
+
+	retval = policy_retention_add_internal(ht_oid,
+										   window_type,
+										   window_datum,
+										   default_schedule_interval,
+										   if_not_exists,
+										   fixed_schedule,
+										   initial_start,
+										   valid_timezone);
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		int32 job_id = DatumGetInt32(retval);
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
+	return retval;
+}
+
+Datum
+policy_retention_remove_internal(Oid table_oid, bool if_exists)
+{
+	Cache *hcache;
+	Hypertable *hypertable;
 
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (!hypertable)
@@ -339,7 +397,7 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errmsg("retention policy not found for hypertable \"%s\", skipping",
 							get_rel_name(table_oid))));
-			PG_RETURN_NULL();
+			PG_RETURN_BOOL(false);
 		}
 	}
 	Assert(list_length(jobs) == 1);
@@ -347,5 +405,16 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_delete_by_id(job->fd.id);
 
-	PG_RETURN_NULL();
+	PG_RETURN_BOOL(true);
+}
+
+Datum
+policy_retention_remove(PG_FUNCTION_ARGS)
+{
+	Oid table_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_retention_remove_internal(table_oid, if_exists);
 }

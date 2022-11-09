@@ -39,6 +39,7 @@
 #include <partitioning/partbounds.h>
 #include <utils/date.h>
 #include <utils/errcodes.h>
+#include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/syscache.h>
 
@@ -78,13 +79,13 @@ static Oid ts_chunks_arg_types[] = { RECORDOID, INT4ARRAYOID };
 static void
 init_chunk_exclusion_func()
 {
-	if (chunk_exclusion_func == InvalidOid)
+	if (!OidIsValid(chunk_exclusion_func))
 	{
 		List *l = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNK_EXCL_FUNC_NAME));
 		chunk_exclusion_func =
 			LookupFuncName(l, lengthof(ts_chunks_arg_types), ts_chunks_arg_types, false);
 	}
-	Assert(chunk_exclusion_func != InvalidOid);
+	Assert(OidIsValid(chunk_exclusion_func));
 }
 
 static bool
@@ -161,9 +162,9 @@ const_datum_get_int(Const *cnst)
 	switch (cnst->consttype)
 	{
 		case INT2OID:
-			return (int64)(DatumGetInt16(cnst->constvalue));
+			return (int64) (DatumGetInt16(cnst->constvalue));
 		case INT4OID:
-			return (int64)(DatumGetInt32(cnst->constvalue));
+			return (int64) (DatumGetInt32(cnst->constvalue));
 		case INT8OID:
 			return DatumGetInt64(cnst->constvalue);
 	}
@@ -267,6 +268,47 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		return constraint;
 
 	constified = DirectFunctionCall2(opfunc, c_ts->constvalue, c_int->constvalue);
+
+	/*
+	 * Since constifying intervals with day component does depend on the timezone
+	 * this can lead to different results around daylight saving time switches.
+	 * So we add a safety buffer when the interval has day components to counteract.
+	 */
+	if (interval->day != 0)
+	{
+		bool add;
+		TimestampTz constified_tstz = DatumGetTimestampTz(constified);
+
+		switch (constraint->opfuncid)
+		{
+			case F_TIMESTAMPTZ_LE:
+			case F_TIMESTAMPTZ_LT:
+				add = true;
+				break;
+			case F_TIMESTAMPTZ_GE:
+			case F_TIMESTAMPTZ_GT:
+				add = false;
+				break;
+			default:
+				return constraint;
+		}
+		/*
+		 * If Var is on wrong side reverse the direction.
+		 */
+		if (!var_on_left)
+			add = !add;
+
+		/*
+		 * The safety buffer is chosen to be 4 hours because daylight saving time
+		 * changes seem to be in the range between -1 and 2 hours.
+		 */
+		if (add)
+			constified_tstz += 4 * USECS_PER_HOUR;
+		else
+			constified_tstz -= 4 * USECS_PER_HOUR;
+
+		constified = TimestampTzGetDatum(constified_tstz);
+	}
 
 	c_ts = copyObject(c_ts);
 	c_ts->constvalue = constified;
@@ -434,6 +476,9 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			{
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
+				/*
+				 * Optimization can't be applied when interval has month component.
+				 */
 				if (interval->month != 0)
 					return op;
 
@@ -466,7 +511,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				Assert(width->consttype == INTERVALOID);
 
 				/*
-				 * intervals with month component are not supported by time_bucket
+				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
 					return op;
@@ -513,7 +558,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				Assert(width->consttype == INTERVALOID);
 
 				/*
-				 * intervals with month component are not supported by time_bucket
+				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
 					return op;
@@ -811,7 +856,8 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 			if (IsA(left, Var) && IsA(right, Var))
 			{
 				Var *ht_var =
-					castNode(Var, castNode(Var, left)->varno == ctx->rel->relid ? left : right);
+					castNode(Var,
+							 (Index) castNode(Var, left)->varno == ctx->rel->relid ? left : right);
 				TypeCacheEntry *tce = lookup_type_cache(ht_var->vartype, TYPECACHE_EQ_OPR);
 
 				if (op->opno == tce->eq_opr)
@@ -863,14 +909,13 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 }
 
 static int
-chunk_cmp_chunk_id(const void *c1, const void *c2)
+chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 {
-	return (*(Chunk **) c1)->fd.id - (*(Chunk **) c2)->fd.id;
+	return (*(Chunk **) c1)->table_id - (*(Chunk **) c2)->table_id;
 }
 
 static Chunk **
-find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode,
-					 unsigned int *num_chunks)
+find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *num_chunks)
 {
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
@@ -878,7 +923,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockm
 		 * Chunk lookup doesn't work for internal compression tables, have to
 		 * fall back to the regular postgres method.
 		 */
-		List *chunk_oids = find_inheritance_children(ht->main_table_relid, lockmode);
+		List *chunk_oids = find_inheritance_children(ht->main_table_relid, AccessShareLock);
 		if (chunk_oids == NIL)
 		{
 			*num_chunks = 0;
@@ -888,7 +933,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockm
 		*num_chunks = list_length(chunk_oids);
 		Chunk **chunks = (Chunk **) palloc(sizeof(Chunk *) * *num_chunks);
 
-		for (int i = 0; i < *num_chunks; i++)
+		for (unsigned int i = 0; i < *num_chunks; i++)
 		{
 			chunks[i] = ts_chunk_get_by_relid(list_nth_oid(chunk_oids, i),
 											  /* fail_if_not_found = */ true);
@@ -903,17 +948,14 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockm
 	 * have a trigger blocking inserts on the parent table it cannot contain
 	 * any rows.
 	 */
-	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
+	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, num_chunks);
 
-	if (!ts_hypertable_restrict_info_has_restrictions(hri))
-	{
-		/*
-		 * If we're using all the chunks, sort them by id ascending to roughly
-		 * match the order provided by find_inheritance_children. This is mostly
-		 * needed to avoid test reference changes.
-		 */
-		qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_id);
-	}
+	/*
+	 * Sort the chunks by oid ascending to roughly match the order provided
+	 * by find_inheritance_children. This is mostly needed to avoid test
+	 * reference changes.
+	 */
+	qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_reloid);
 
 	return chunks;
 }
@@ -945,7 +987,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
  */
 static Chunk **
 get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-					LOCKMODE chunk_lockmode, unsigned int *num_chunks)
+					unsigned int *num_chunks)
 {
 	Const *chunks_arg;
 	ArrayIterator chunk_id_iterator;
@@ -958,7 +1000,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 	int order_attno;
 	Chunk **unlocked_chunks = NULL;
 	Chunk **chunks = NULL;
-	unsigned int unlocked_chunk_count = 0;
+	int unlocked_chunk_count = 0;
 	Oid prev_chunk_oid = InvalidOid;
 	bool chunk_sort_needed = false;
 	int i;
@@ -1033,7 +1075,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 
 	for (i = 0; i < unlocked_chunk_count; i++)
 	{
-		if (ts_chunk_lock_if_exists(unlocked_chunks[i]->table_id, chunk_lockmode))
+		if (ts_chunk_lock_if_exists(unlocked_chunks[i]->table_id, AccessShareLock))
 			chunks[(*num_chunks)++] = unlocked_chunks[i];
 	}
 
@@ -1075,7 +1117,6 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 		return ts_hypertable_restrict_info_get_chunks_ordered(NULL,
 															  ht,
 															  chunks,
-															  chunk_lockmode,
 															  reverse,
 															  nested_oids,
 															  num_chunks);
@@ -1100,11 +1141,10 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 {
 	bool reverse;
 	int order_attno;
-	LOCKMODE lockmode = AccessShareLock;
 
 	if (ctx->chunk_exclusion_func != NULL)
 	{
-		return get_explicit_chunks(ctx, root, rel, ht, lockmode, num_chunks);
+		return get_explicit_chunks(ctx, root, rel, ht, num_chunks);
 	}
 
 	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
@@ -1141,13 +1181,12 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
 															  NULL,
-															  lockmode,
 															  reverse,
 															  nested_oids,
 															  num_chunks);
 	}
 
-	return find_children_chunks(hri, ht, lockmode, num_chunks);
+	return find_children_chunks(hri, ht, num_chunks);
 }
 
 /*
@@ -1322,10 +1361,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.join_level = 0,
 	};
 	Index first_chunk_index = 0;
-	Index i;
 
 	/* double check our permissions are valid */
-	Assert(rti != parse->resultRelation);
+	Assert(rti != (Index) parse->resultRelation);
 
 	oldrc = get_plan_rowmark(root->rowMarks, rti);
 
@@ -1356,13 +1394,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		/*
 		 * Add the information about chunks to the baserel info cache for
-		 * classify_relation(). The relation type is TS_REL_CHUNK_CHILD -- chunk
-		 * added as a result of expanding a hypertable.
+		 * classify_relation().
 		 */
-		add_baserel_cache_entry_for_chunk(chunks[i]->table_id,
-										  chunks[i]->fd.status,
-										  ht,
-										  TS_REL_CHUNK_CHILD);
+		add_baserel_cache_entry_for_chunk(chunks[i]->table_id, chunks[i]->fd.status, ht);
 	}
 
 	/* nothing to do here if we have no chunks and no data nodes */
@@ -1491,8 +1525,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	i = 0;
-	for (i = 0; i < list_length(inh_oids); i++)
+	for (int i = 0; i < list_length(inh_oids); i++)
 	{
 		Index child_rtindex = first_chunk_index + i;
 		/* build_simple_rel will add the child to the relarray */
@@ -1500,7 +1533,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		/* if we're performing partitionwise aggregation, we must populate part_rels */
 		if (rel->part_rels != NULL)
+		{
 			rel->part_rels[i] = child_rel;
+#if PG15_GE
+			rel->live_parts = bms_add_member(rel->live_parts, i);
+#endif
+		}
 
 		ts_get_private_reloptinfo(child_rel)->chunk = chunks[i];
 		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);
@@ -1533,12 +1571,12 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 		 * check this join condition refers to current hypertable
 		 * our Var might be on either side of the expression
 		 */
-		if (linitial_node(Var, op->args)->varno == rel->relid)
+		if ((Index) linitial_node(Var, op->args)->varno == rel->relid)
 		{
 			rel_var = linitial_node(Var, op->args);
 			other_var = lsecond_node(Var, op->args);
 		}
-		else if (lsecond_node(Var, op->args)->varno == rel->relid)
+		else if ((Index) lsecond_node(Var, op->args)->varno == rel->relid)
 		{
 			rel_var = lsecond_node(Var, op->args);
 			other_var = linitial_node(Var, op->args);

@@ -50,3 +50,7 @@ BEGIN
     RAISE 'subscription sync wait timedout';
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.health() RETURNS
+TABLE (node_name NAME, healthy BOOL, in_recovery BOOL, error TEXT)
+AS '@MODULE_PATHNAME@', 'ts_health_check' LANGUAGE C VOLATILE;

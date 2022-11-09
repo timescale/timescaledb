@@ -128,7 +128,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 		}
 
 		Var *var = (Var *) target->expr;
-		Assert(var->varno == path->info->compressed_rel->relid);
+		Assert((Index) var->varno == path->info->compressed_rel->relid);
 		AttrNumber compressed_attno = var->varattno;
 
 		if (compressed_attno == InvalidAttrNumber)
@@ -274,14 +274,15 @@ replace_compressed_vars(Node *node, CompressionInfo *info)
 		char *colname;
 
 		/* constify tableoid in quals */
-		if (var->varno == info->chunk_rel->relid && var->varattno == TableOidAttributeNumber)
+		if ((Index) var->varno == info->chunk_rel->relid &&
+			var->varattno == TableOidAttributeNumber)
 			return (Node *)
 				makeConst(OIDOID, -1, InvalidOid, 4, (Datum) info->chunk_rte->relid, false, true);
 
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
 		/* If not to be replaced, we can just return the Var unmodified */
-		if (var->varno != info->compressed_rel->relid)
+		if ((Index) var->varno != info->compressed_rel->relid)
 			return node;
 
 		/* Create a decompressed Var to replace the compressed one */
@@ -323,7 +324,7 @@ clause_has_compressed_attrs(Node *node, void *context)
 	{
 		CompressedAttnoContext *cxt = (CompressedAttnoContext *) context;
 		Var *var = (Var *) node;
-		if (var->varno == cxt->compress_relid)
+		if ((Index) var->varno == cxt->compress_relid)
 		{
 			if (bms_is_member(var->varattno, cxt->compressed_attnos))
 				return true;
@@ -392,19 +393,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				indexqual = lappend(indexqual, expr);
 		}
 		indexplan->qual = indexqual;
-	}
-	else if (IsA(compressed_path, BitmapHeapPath))
-	{
-		/* To increase performance, we should remove quals that are redundant with the Bitmap scan
-		 * Code from create_bitmap_scan_plan does something similar, and could be used as a starting
-		 * point.
-		 */
-		foreach (lc, clauses)
-		{
-			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			decompress_plan->scan.plan.qual =
-				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
-		}
 	}
 	else
 	{

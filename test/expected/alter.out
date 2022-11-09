@@ -13,6 +13,7 @@ ALTER TABLE alter_before ALTER COLUMN colorid RESET (n_distinct);
 ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
 ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
@@ -51,6 +52,7 @@ ORDER BY c.relname, a.attnum;
 -- DROP a table's column after making it a hypertable and having data
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
@@ -185,25 +187,25 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+------------------+---------------------+---------+--------
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
 (1 row)
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id |      schema_name      |   table_name   | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+----------------+---------------------+---------+--------
-  2 |             2 | _timescaledb_internal | new_chunk_name |                     | f       |      0
+ id | hypertable_id |      schema_name      |   table_name   | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+----------------+---------------------+---------+--------+-----------
+  2 |             2 | _timescaledb_internal | new_chunk_name |                     | f       |      0 | f
 (1 row)
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id | schema_name |   table_name   | compressed_chunk_id | dropped | status 
-----+---------------+-------------+----------------+---------------------+---------+--------
-  2 |             2 | public      | new_chunk_name |                     | f       |      0
+ id | hypertable_id | schema_name |   table_name   | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+----------------+---------------------+---------+--------+-----------
+  2 |             2 | public      | new_chunk_name |                     | f       |      0 | f
 (1 row)
 
 -- Test that we cannot rename chunk columns
@@ -679,10 +681,10 @@ SELECT * from _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * from _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+--------------------+---------------------+---------+--------
- 24 |            12 | new_associated_schema | _hyper_12_24_chunk |                     | f       |      0
- 25 |            12 | new_associated_schema | _hyper_12_25_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
+ 24 |            12 | new_associated_schema | _hyper_12_24_chunk |                     | f       |      0 | f
+ 25 |            12 | new_associated_schema | _hyper_12_25_chunk |                     | f       |      0 | f
 (2 rows)
 
 DROP TABLE my_table;

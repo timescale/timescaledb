@@ -41,14 +41,14 @@ typedef struct DataFetcher
 	TSConnection *conn;
 	TupleFactory *tf;
 
-	MemoryContext req_mctx;   /* Stores async request and response */
+	MemoryContext req_mctx;	  /* Stores async request and response */
 	MemoryContext batch_mctx; /* Stores batches of fetched tuples */
 	MemoryContext tuple_mctx;
 
 	const char *stmt;		 /* sql statement */
 	StmtParams *stmt_params; /* sql statement params */
 
-	HeapTuple *tuples;  /* array of currently-retrieved tuples */
+	HeapTuple *tuples;	/* array of currently-retrieved tuples */
 	int num_tuples;		/* # of tuples in array */
 	int next_tuple_idx; /* index of next one to return */
 	int fetch_size;		/* # of tuples to fetch */

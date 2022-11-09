@@ -125,6 +125,7 @@ extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
+extern int ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval);
 extern TSDLLEXPORT int ts_dimension_set_number_of_slices(Dimension *dim, int16 num_slices);
 extern Datum ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);
@@ -140,7 +141,7 @@ extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_reli
 
 extern void ts_dimension_info_validate(DimensionInfo *info);
 extern int32 ts_dimension_add_from_info(DimensionInfo *info);
-extern void ts_dimensions_rename_schema_name(const char *oldname, const char *newname);
+extern void ts_dimensions_rename_schema_name(const char *old_name, const char *new_name);
 extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData *dimname,
 											DimensionType dimtype, Datum *interval,
 											Oid *intervaltype, int16 *num_slices,

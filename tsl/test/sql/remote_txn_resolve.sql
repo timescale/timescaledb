@@ -32,9 +32,9 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
 AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'
 LANGUAGE C;
 
-SELECT true FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
-SELECT true FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
-SELECT true FROM add_loopback_server('loopback3', database => :'TEST_DBNAME', bootstrap => false);
+SELECT database FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
+SELECT database FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
+SELECT database FROM add_loopback_server('loopback3', database => :'TEST_DBNAME', bootstrap => false);
 
 create table table_modified_by_txns (
     describes text

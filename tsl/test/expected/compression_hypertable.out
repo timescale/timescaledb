@@ -87,14 +87,6 @@ psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result"
                27
 (1 row)
 
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
  timescaledb_pre_restore 
 -------------------------
  t
@@ -229,14 +221,6 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
                 5
 (1 row)
 
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
  timescaledb_pre_restore 
 -------------------------
  t
@@ -349,14 +333,6 @@ SELECT 'test4' AS "HYPERTABLE_NAME" \gset
                 1
 (1 row)
 
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
  timescaledb_pre_restore 
 -------------------------
  t
@@ -470,14 +446,6 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
                10
 (1 row)
 
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
  timescaledb_pre_restore 
 -------------------------
  t
@@ -558,14 +526,6 @@ INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
                 5
 (1 row)
 
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
  timescaledb_pre_restore 
 -------------------------
  t
@@ -614,6 +574,7 @@ DROP TABLE test6;
 -- test 7, compress misc types, and NULLs in dictionaries
 CREATE TABLE test7(time INT, c1 DATE, c2 TIMESTAMP, c3 FLOAT, n TEXT);
 SELECT create_hypertable('test7', 'time', chunk_time_interval=> 200);
+WARNING:  column type "timestamp without time zone" used for "c2" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
@@ -642,14 +603,6 @@ INSERT INTO test7
                 1
 (1 row)
 
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
  timescaledb_pre_restore 
 -------------------------
  t

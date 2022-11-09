@@ -128,10 +128,9 @@ bit_array_recv(const StringInfo buffer)
 static inline void
 bit_array_send(StringInfo buffer, const BitArray *data)
 {
-	int i;
 	pq_sendint32(buffer, data->buckets.num_elements);
 	pq_sendbyte(buffer, data->bits_used_in_last_bucket);
-	for (i = 0; i < data->buckets.num_elements; i++)
+	for (uint32 i = 0; i < data->buckets.num_elements; i++)
 		pq_sendint64(buffer, data->buckets.data[i]);
 }
 

@@ -35,6 +35,10 @@ static const WithClauseDefinition compress_hypertable_with_clause_def[] = {
 			 .arg_name = "compress_orderby",
 			 .type_id = TEXTOID,
 		},
+		[CompressChunkTimeInterval] = {
+			 .arg_name = "compress_chunk_time_interval",
+			 .type_id = INTERVALOID,
+		},
 };
 
 WithClauseResult *
@@ -76,8 +80,6 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	List *parsed;
 	ListCell *lc;
 	SelectStmt *select;
-	short index = 0;
-	List *collist = NIL;
 	RawStmt *raw;
 
 	if (strlen(inpstr) == 0)
@@ -119,6 +121,8 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	if (select->sortClause != NIL)
 		throw_segment_by_error(inpstr);
 
+	List *collist = NIL;
+	short index = 0;
 	foreach (lc, select->groupClause)
 	{
 		ColumnRef *cf;
@@ -161,8 +165,6 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 	List *parsed;
 	ListCell *lc;
 	SelectStmt *select;
-	short index = 0;
-	List *collist = NIL;
 	RawStmt *raw;
 
 	if (strlen(inpstr) == 0)
@@ -203,6 +205,8 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 	if (select->groupClause != NIL)
 		throw_order_by_error(inpstr);
 
+	List *collist = NIL;
+	short index = 0;
 	foreach (lc, select->sortClause)
 	{
 		SortBy *sort_by;
@@ -276,4 +280,20 @@ ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertab
 	}
 	else
 		return NIL;
+}
+
+/* returns List of CompressedParsedCol
+ * E.g. timescaledb.compress_orderby = 'col1 asc nulls first,col2 desc,col3'
+ */
+Interval *
+ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_options,
+												 Hypertable *hypertable)
+{
+	if (parsed_options[CompressChunkTimeInterval].is_default == false)
+	{
+		Datum textarg = parsed_options[CompressChunkTimeInterval].parsed;
+		return DatumGetIntervalP(textarg);
+	}
+	else
+		return NULL;
 }

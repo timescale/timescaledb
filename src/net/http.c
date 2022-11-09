@@ -73,7 +73,7 @@ ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *sta
 	{
 		ret = ts_connection_write(conn, built_request + write_off, request_len);
 
-		if (ret < 0 || ret > request_len)
+		if (ret < 0 || (size_t) ret > request_len)
 			return HTTP_ERROR_WRITE;
 
 		if (ret == 0)

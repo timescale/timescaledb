@@ -605,7 +605,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 CALL refresh_continuous_aggregate('mat_drop_test', NULL, NULL);
 
 --force invalidation
@@ -1352,7 +1352,7 @@ WHERE user_view_name = 'cashflows'
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
 \d+ 'cashflows'
 
-SELECT * FROM cashflows;
+SELECT * FROM cashflows ORDER BY bucket, amount, cashflow, cashflow2;
 
 -- Indexes on not finalized caggs are not allowed
 \set ON_ERROR_STOP 0

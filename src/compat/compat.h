@@ -21,6 +21,8 @@
 
 #include "export.h"
 
+#define PG_MAJOR_MIN 12
+
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 #define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
 #define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
@@ -355,6 +357,11 @@ get_reindex_options(ReindexStmt *stmt)
 #define list_make5_int(x1, x2, x3, x4, x5) lappend_int(list_make4_int(x1, x2, x3, x4), x5)
 #endif
 
+/*
+ * define lfifth macro for convenience
+ */
+#define lfifth(l) lfirst(list_nth_cell(l, 4))
+
 /* PG13 removes the natts parameter from map_variable_attnos */
 #if PG13_LT
 #define map_variable_attnos_compat(node, varno, sublevels_up, map, natts, rowtype, found_wholerow) \
@@ -487,8 +494,8 @@ get_reindex_options(ReindexStmt *stmt)
  * https://github.com/postgres/postgres/commit/3ed2005ff59
  */
 #if PG12
-#define TYPALIGN_CHAR 'c'   /* char alignment (i.e. unaligned) */
-#define TYPALIGN_SHORT 's'  /* short alignment (typically 2 bytes) */
+#define TYPALIGN_CHAR 'c'	/* char alignment (i.e. unaligned) */
+#define TYPALIGN_SHORT 's'	/* short alignment (typically 2 bytes) */
 #define TYPALIGN_INT 'i'	/* int alignment (typically 4 bytes) */
 #define TYPALIGN_DOUBLE 'd' /* double alignment (often 8 bytes) */
 #endif
@@ -535,8 +542,6 @@ get_reindex_options(ReindexStmt *stmt)
 	make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock)
 #endif
 
-#endif /* TIMESCALEDB_COMPAT_H */
-
 /*
  * PostgreSQL < 14 does not have F_TIMESTAMPTZ_GT macro but instead has
  * the oid of that function as F_TIMESTAMP_GT even though the signature
@@ -544,6 +549,214 @@ get_reindex_options(ReindexStmt *stmt)
  * timestamp_gt.
  */
 #if PG14_LT
+#define F_TIMESTAMPTZ_LE F_TIMESTAMP_LE
+#define F_TIMESTAMPTZ_LT F_TIMESTAMP_LT
 #define F_TIMESTAMPTZ_GE F_TIMESTAMP_GE
 #define F_TIMESTAMPTZ_GT F_TIMESTAMP_GT
 #endif
+
+/*
+ * List sorting functions differ between the PG versions.
+ */
+#if PG13_LT
+inline static int
+list_int_cmp_compat(const void *p1, const void *p2)
+{
+	int v1 = *((int *) p1);
+	int v2 = *((int *) p2);
+
+	if (v1 < v2)
+		return -1;
+	if (v1 > v2)
+		return 1;
+	return 0;
+}
+#elif PG13
+inline static int
+list_int_cmp_compat(const ListCell *p1, const ListCell *p2)
+{
+	int v1 = lfirst_int(p1);
+	int v2 = lfirst_int(p2);
+
+	if (v1 < v2)
+		return -1;
+	if (v1 > v2)
+		return 1;
+	return 0;
+}
+#elif PG14_GE
+#define list_int_cmp_compat list_int_cmp
+#endif
+
+#if PG13_LT
+#define list_sort_compat(list, comparator) list_qsort((list), (comparator))
+#else
+#define list_sort_compat(list, comparator) (list_sort((list), (comparator)), (list))
+#endif
+
+/*
+ * PostgreSQL 15 removed "utils/int8.h" header and change the "scanint8"
+ * function to "pg_strtoint64" in "utils/builtins.h".
+ *
+ * https://github.com/postgres/postgres/commit/cfc7191dfea330dd7a71e940d59de78129bb6175
+ */
+#if PG15_LT
+#include <utils/int8.h>
+static inline int64
+pg_strtoint64(const char *str)
+{
+	int64 result;
+	scanint8(str, false, &result);
+
+	return result;
+}
+#else
+#include <utils/builtins.h>
+#endif
+
+/*
+ * PG 15 removes "recheck" argument from check_index_is_clusterable
+ *
+ * https://github.com/postgres/postgres/commit/b940918d
+ */
+#if PG15_GE
+#define check_index_is_clusterable_compat(rel, indexOid, lock)                                     \
+	check_index_is_clusterable(rel, indexOid, lock)
+#else
+#define check_index_is_clusterable_compat(rel, indexOid, lock)                                     \
+	check_index_is_clusterable(rel, indexOid, true, lock)
+#endif
+
+/*
+ * PG15 consolidate VACUUM xid cutoff logic.
+ *
+ * https://github.com/postgres/postgres/commit/efa4a946
+ */
+#if PG15_LT
+#define vacuum_set_xid_limits_compat(rel,                                                          \
+									 freeze_min_age,                                               \
+									 freeze_table_age,                                             \
+									 multixact_freeze_min_age,                                     \
+									 multixact_freeze_table_age,                                   \
+									 oldestXmin,                                                   \
+									 freezeLimit,                                                  \
+									 multiXactCutoff)                                              \
+	vacuum_set_xid_limits(rel,                                                                     \
+						  freeze_min_age,                                                          \
+						  freeze_table_age,                                                        \
+						  multixact_freeze_min_age,                                                \
+						  multixact_freeze_table_age,                                              \
+						  oldestXmin,                                                              \
+						  freezeLimit,                                                             \
+						  NULL,                                                                    \
+						  multiXactCutoff,                                                         \
+						  NULL)
+#else
+#define vacuum_set_xid_limits_compat(rel,                                                          \
+									 freeze_min_age,                                               \
+									 freeze_table_age,                                             \
+									 multixact_freeze_min_age,                                     \
+									 multixact_freeze_table_age,                                   \
+									 oldestXmin,                                                   \
+									 freezeLimit,                                                  \
+									 multiXactCutoff)                                              \
+	do                                                                                             \
+	{                                                                                              \
+		MultiXactId oldestMxact;                                                                   \
+		vacuum_set_xid_limits(rel,                                                                 \
+							  freeze_min_age,                                                      \
+							  freeze_table_age,                                                    \
+							  multixact_freeze_min_age,                                            \
+							  multixact_freeze_table_age,                                          \
+							  oldestXmin,                                                          \
+							  &oldestMxact,                                                        \
+							  freezeLimit,                                                         \
+							  multiXactCutoff);                                                    \
+	} while (0)
+#endif
+
+#if PG15_LT
+#define ExecARUpdateTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   src_partinfo,                                                   \
+								   dst_partinfo,                                                   \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   inewslot,                                                       \
+								   recheckIndexes,                                                 \
+								   transtition_capture,                                            \
+								   is_crosspart_update)                                            \
+	ExecARUpdateTriggers(estate,                                                                   \
+						 resultRelInfo,                                                            \
+						 tupleid,                                                                  \
+						 oldtuple,                                                                 \
+						 inewslot,                                                                 \
+						 recheckIndexes,                                                           \
+						 transtition_capture)
+#else
+#define ExecARUpdateTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   src_partinfo,                                                   \
+								   dst_partinfo,                                                   \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   inewslot,                                                       \
+								   recheckIndexes,                                                 \
+								   transtition_capture,                                            \
+								   is_crosspart_update)                                            \
+	ExecARUpdateTriggers(estate,                                                                   \
+						 resultRelInfo,                                                            \
+						 src_partinfo,                                                             \
+						 dst_partinfo,                                                             \
+						 tupleid,                                                                  \
+						 oldtuple,                                                                 \
+						 inewslot,                                                                 \
+						 recheckIndexes,                                                           \
+						 transtition_capture,                                                      \
+						 is_crosspart_update)
+#endif
+
+#if PG15_LT
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot)
+#else
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
+#endif
+
+#if PG15_LT
+#define ExecARDeleteTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   ar_delete_trig_tcs,                                             \
+								   is_crosspart_update)                                            \
+	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs)
+#else
+#define ExecARDeleteTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   ar_delete_trig_tcs,                                             \
+								   is_crosspart_update)                                            \
+	ExecARDeleteTriggers(estate,                                                                   \
+						 resultRelInfo,                                                            \
+						 tupleid,                                                                  \
+						 oldtuple,                                                                 \
+						 ar_delete_trig_tcs,                                                       \
+						 is_crosspart_update)
+#endif
+
+#endif /* TIMESCALEDB_COMPAT_H */

@@ -7,12 +7,13 @@ SELECT * from _timescaledb_catalog.hypertable;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
 (0 rows)
 
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
@@ -21,6 +22,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 CREATE TABLE hyper_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('hyper_with_dependencies', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
@@ -43,6 +45,7 @@ NOTICE:  drop cascades to view dependent_view
 
 CREATE TABLE chunk_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('chunk_with_dependencies', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
@@ -79,14 +82,15 @@ SELECT * from _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
 (1 row)
 
 DROP TABLE should_drop;
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
@@ -101,8 +105,8 @@ SELECT * from _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
 (1 row)
 

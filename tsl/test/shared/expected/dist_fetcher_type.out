@@ -11,7 +11,7 @@ limit 1;
  1
 (1 row)
 
--- This query should choose row-by-row fetcher.
+-- This query should choose COPY fetcher.
 select 1 x from distinct_on_distributed t1
 limit 1;
  x 
@@ -27,7 +27,7 @@ QUERY PLAN
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1 (actual rows=1 loops=1)
          Output: 1
          Data node: data_node_1
-         Fetcher Type: Row by row
+         Fetcher Type: COPY
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT NULL FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) LIMIT 1
 (8 rows)
@@ -67,13 +67,13 @@ QUERY PLAN
                      Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
 (20 rows)
 
--- This query can't work with rowbyrow fetcher.
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+-- This query can't work with copy fetcher.
+set timescaledb.remote_data_fetcher = 'copy';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
-ERROR:  row-by-row fetcher not supported
--- Check once again that 'auto' is used after 'rowbyrow'.
+ERROR:  COPY fetcher not supported
+-- Check once again that 'auto' is used after 'copy'.
 set timescaledb.remote_data_fetcher = 'auto';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
@@ -111,12 +111,12 @@ ORDER BY 1,2;
 (0 rows)
 
 RESET jit;
--- Row by row fetcher should fail on a custom type that has no binary
+-- COPY fetcher should fail on a custom type that has no binary
 -- serialization.
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+set timescaledb.remote_data_fetcher = 'copy';
 explain (analyze, verbose, costs off, timing off, summary off)
 select time, txn_id, val, substring(info for 20) from disttable_with_ct;
-ERROR:  cannot use row-by-row fetcher because some of the column types do not have binary serialization
+ERROR:  cannot use COPY fetcher because some of the column types do not have binary serialization
 -- Cursor fetcher should be chosen automatically if we have a data type with no
 -- binary serialization.
 set timescaledb.remote_data_fetcher = 'auto';
@@ -131,15 +131,15 @@ QUERY PLAN
    Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[..])
 (6 rows)
 
--- Row by row fetcher with bytea data
-set timescaledb.remote_data_fetcher = 'rowbyrow';
+-- COPY fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'copy';
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from disttable_with_bytea;
 QUERY PLAN
  Custom Scan (DataNodeScan) on public.disttable_with_bytea (actual rows=2 loops=1)
    Output: disttable_with_bytea."time", disttable_with_bytea.bdata
    Data node: data_node_3
-   Fetcher Type: Row by row
+   Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk
    Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
 (6 rows)
@@ -171,8 +171,8 @@ select * from disttable_with_bytea;
  1001 | 
 (2 rows)
 
--- #4515 test for assertion failure in row_by_row_fetcher_close
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+-- #4515 test for assertion failure in copy_fetcher_close
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT *
 FROM
   conditions ref_0
@@ -193,7 +193,7 @@ WHERE EXISTS (
 
 -- #4518
 -- test error handling for queries with multiple distributed hypertables
-SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM
   conditions_dist1 ref_0
 WHERE EXISTS (
@@ -203,7 +203,7 @@ WHERE EXISTS (
   WHERE
     (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
 );
-ERROR:  row-by-row fetcher not supported
+ERROR:  COPY fetcher not supported
 SET timescaledb.remote_data_fetcher = 'auto';
 SELECT * FROM
   conditions_dist1 ref_0
@@ -221,3 +221,50 @@ ORDER BY 1,2;
  Sun Jan 01 08:01:00 2017 PST |      1 |   7.3
 (2 rows)
 
+-- Check that we don't use COPY fetcher for parameterized plans.
+CREATE TABLE lookup (id SERIAL NOT NULL, key TEXT, val TEXT);
+CREATE TABLE metric (ts TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, lookup_id INT NOT NULL);
+SELECT 1 FROM create_distributed_hypertable('metric', 'ts');
+ ?column? 
+        1
+(1 row)
+
+INSERT INTO lookup (key, val) VALUES ('host', 'localhost');
+INSERT INTO metric (ts, val, lookup_id) SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-08-17 00:00:00'::timestamp, '2021-08-17 00:59:59'::timestamp, '1 s'::interval) s;
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    ARRAY[m.lookup_id] && (SELECT array_agg(l.id)::int[] FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+              ts              | val  
+------------------------------+------
+ Tue Aug 17 00:59:59 2021 PDT | 4.14
+(1 row)
+
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+              ts              | val  
+------------------------------+------
+ Tue Aug 17 00:59:59 2021 PDT | 4.14
+(1 row)
+
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+ERROR:  cannot use COPY fetcher because the plan is parameterized

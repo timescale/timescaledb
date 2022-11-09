@@ -1094,6 +1094,21 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+SELECT
+  time_bucket_gapfill(NULL,time,'Europe/Berlin','2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width cannot be NULL
+SELECT
+  time_bucket_gapfill('1day',NULL,'Europe/Berlin','2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: ts cannot be NULL
+SELECT
+  time_bucket_gapfill('1day',time,NULL,'2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: timezone cannot be NULL
 -- test 0 bucket_width
 SELECT
   time_bucket_gapfill(0,time,1,11)
@@ -3074,7 +3089,7 @@ ORDER BY 1 DESC, 2;
 -- issue #3048
 -- test gapfill/hashagg planner interaction
 -- this used to produce a plan without gapfill node
-EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, '2000-01-01', '2000-01-10') AS time,
+EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, start:='2000-01-01', finish:='2000-01-10') AS time,
        sum(v1) AS v1_sum
 FROM metrics
 GROUP BY 1;
@@ -3140,7 +3155,7 @@ DROP TABLE i3834;
 -- issue #1528
 -- test float rounding for certain float values when start and end are identical
 SELECT
-  time_bucket_gapfill('1min'::interval, ts::timestamptz, '2019-11-05 2:20', '2019-11-05 2:30'),
+  time_bucket_gapfill('1min'::interval, ts::timestamptz, start:='2019-11-05 2:20', finish:='2019-11-05 2:30'),
   interpolate(avg(20266.959547::float4)) AS float4,
   interpolate(avg(20266.959547::float8)) AS float8
 FROM (VALUES ('2019-11-05 2:20'), ('2019-11-05 2:30')) v (ts)
@@ -3190,3 +3205,75 @@ GROUP BY 1,2;
 (2 rows)
 
 DROP TABLE gapfill_group_toast;
+-- test bucketing by month
+SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01'::timestamptz,'2001-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Tue Feb 29 16:00:00 2000 PST
+ Sun Apr 30 17:00:00 2000 PDT
+ Fri Jun 30 17:00:00 2000 PDT
+ Thu Aug 31 17:00:00 2000 PDT
+ Tue Oct 31 16:00:00 2000 PST
+ Sun Dec 31 16:00:00 2000 PST
+(7 rows)
+
+SELECT time_bucket_gapfill('1 year'::interval, ts, '2000-01-01'::timestamptz,'2003-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Sun Dec 31 16:00:00 2000 PST
+ Mon Dec 31 16:00:00 2001 PST
+ Tue Dec 31 16:00:00 2002 PST
+(4 rows)
+
+SELECT time_bucket_gapfill('1 century'::interval, ts, '1900-01-01'::timestamptz,'2103-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Sun Dec 31 16:00:00 1899 PST
+ Fri Dec 31 16:00:00 1999 PST
+ Thu Dec 31 16:00:00 2099 PST
+(3 rows)
+
+-- test bucketing with timezone
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 15:00:00 1999 PST
+ Tue Feb 29 15:00:00 2000 PST
+ Sat Apr 29 15:00:00 2000 PDT
+ Thu Jun 29 15:00:00 2000 PDT
+ Tue Aug 29 15:00:00 2000 PDT
+ Sun Oct 29 15:00:00 2000 PST
+ Fri Dec 29 15:00:00 2000 PST
+(7 rows)
+
+SELECT time_bucket_gapfill('2 month'::interval, ts, current_setting('timezone'), '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Sat Jan 01 00:00:00 2000 PST
+ Wed Mar 01 00:00:00 2000 PST
+ Mon May 01 00:00:00 2000 PDT
+ Sat Jul 01 00:00:00 2000 PDT
+ Fri Sep 01 00:00:00 2000 PDT
+ Wed Nov 01 00:00:00 2000 PST
+(6 rows)
+
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Tue Feb 29 16:00:00 2000 PST
+ Sat Apr 29 16:00:00 2000 PDT
+ Thu Jun 29 16:00:00 2000 PDT
+ Tue Aug 29 16:00:00 2000 PDT
+ Sun Oct 29 16:00:00 2000 PST
+ Fri Dec 29 16:00:00 2000 PST
+(7 rows)
+
+SET timezone TO 'Europe/Berlin';
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+      time_bucket_gapfill      
+ Sat Jan 01 00:00:00 2000 CET
+ Wed Mar 01 00:00:00 2000 CET
+ Mon May 01 00:00:00 2000 CEST
+ Sat Jul 01 00:00:00 2000 CEST
+ Fri Sep 01 00:00:00 2000 CEST
+ Wed Nov 01 00:00:00 2000 CET
+(6 rows)
+
+RESET timezone;

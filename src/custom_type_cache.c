@@ -41,7 +41,7 @@ ts_custom_type_cache_get(CustomType type)
 
 	tinfo = &typeinfo[type];
 
-	if (tinfo->type_oid == InvalidOid)
+	if (!OidIsValid(tinfo->type_oid))
 	{
 		Oid schema_oid = LookupExplicitNamespace(tinfo->schema_name, false);
 		Oid type_oid = GetSysCacheOid2(TYPENAMENSP,

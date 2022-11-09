@@ -626,11 +626,6 @@ WHERE device_id IN (
 
 RESET seq_page_cost;
 
--- force a BitmapHeapScan
-SET enable_indexscan TO FALSE;
-
-SET enable_seqscan TO FALSE;
-
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
@@ -643,10 +638,6 @@ FROM :TEST_TABLE
 WHERE device_id IN (
         VALUES (1),
             (2));
-
-SET enable_indexscan TO TRUE;
-
-SET enable_seqscan TO TRUE;
 
 -- test view
 CREATE OR REPLACE VIEW compressed_view AS

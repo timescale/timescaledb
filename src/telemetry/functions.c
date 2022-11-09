@@ -57,9 +57,12 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 	HASHCTL hash_info = {
 		.keysize = sizeof(Oid),
 		.entrysize = sizeof(AllowedFnHashEntry),
+		.hcxt = CurrentMemoryContext,
 	};
-	HTAB *allowed_fns =
-		hash_create("fn telemetry allowed_functions", 1000, &hash_info, HASH_ELEM | HASH_BLOBS);
+	HTAB *allowed_fns = hash_create("fn telemetry allowed_functions",
+									1000,
+									&hash_info,
+									HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 
 	Relation depRel = table_open(DependRelationId, AccessShareLock);
 
@@ -78,7 +81,7 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 		SysScanDesc scan;
 		Oid extension_id = visible_extension_ids[i];
 
-		if (extension_id == InvalidOid)
+		if (!OidIsValid(extension_id))
 			continue;
 
 		// Look in the (referenced object class, referenced object) index for
@@ -184,8 +187,17 @@ ts_function_telemetry_read(const char **visible_extensions, int num_visible_exte
 	fn_telemetry_entry_vec *all_entries;
 	HTAB *allowed_ext_fns;
 
-	if (!function_counts)
-		return NULL;
+	if (function_counts == NULL)
+	{
+		FnTelemetryRendezvous **rendezvous =
+			(FnTelemetryRendezvous **) find_rendezvous_variable(RENDEZVOUS_FUNCTION_TELEMENTRY);
+
+		if (*rendezvous == NULL)
+			return NULL;
+
+		function_counts = (*rendezvous)->function_counts;
+		function_counts_lock = (*rendezvous)->lock;
+	}
 
 	all_entries = read_shared_map();
 	entries_to_send =

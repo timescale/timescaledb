@@ -5,6 +5,140 @@ SET timescaledb.enable_chunk_append TO false;
 SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
 \set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+-- test SELECT FOR UPDATE
+:PREFIX SELECT FROM metrics_space WHERE device_id = 1 FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = 1)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = 1)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = 1)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = 1)
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (1) FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = 1)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = 1)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = 1)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = 1)
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (1,3) FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
+               Filter: (device_id = ANY ('{1,3}'::integer[]))
+(16 rows)
+
+-- check mismatching datatypes
+:PREFIX SELECT FROM metrics_space WHERE device_id = smallint '2' FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = '2'::smallint)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = '2'::smallint)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = '2'::smallint)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = '2'::smallint)
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id = int '2' FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = 2)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = 2)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = 2)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = 2)
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id = bigint '3' FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = '3'::bigint)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = '3'::bigint)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = '3'::bigint)
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = '3'::bigint)
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (smallint '1', smallint '1') FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (int '1', int '1') FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = ANY ('{1,1}'::integer[]))
+(10 rows)
+
+:PREFIX SELECT FROM metrics_space WHERE device_id IN (bigint '1', bigint '1') FOR UPDATE;
+QUERY PLAN
+ LockRows
+   ->  Append
+         ->  Seq Scan on metrics_space metrics_space_1
+               Filter: (device_id = ANY ('{1,1}'::bigint[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+               Filter: (device_id = ANY ('{1,1}'::bigint[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+               Filter: (device_id = ANY ('{1,1}'::bigint[]))
+         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+               Filter: (device_id = ANY ('{1,1}'::bigint[]))
+(10 rows)
+
 -- test valid variants we are optimizing
 :PREFIX DELETE FROM metrics_space WHERE device_id = 1;
 QUERY PLAN

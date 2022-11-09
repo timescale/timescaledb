@@ -27,11 +27,16 @@
 typedef struct BgwJobTypeCount
 {
 	int32 policy_cagg;
+	int32 policy_cagg_fixed;
 	int32 policy_compression;
+	int32 policy_compression_fixed;
 	int32 policy_reorder;
+	int32 policy_reorder_fixed;
 	int32 policy_retention;
+	int32 policy_retention_fixed;
 	int32 policy_telemetry;
 	int32 user_defined_action;
+	int32 user_defined_action_fixed;
 } BgwJobTypeCount;
 
 typedef struct VersionResult

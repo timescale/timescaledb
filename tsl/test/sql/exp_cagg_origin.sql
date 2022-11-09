@@ -30,33 +30,11 @@ INSERT INTO conditions (day, city, temperature) VALUES
 
 \set ON_ERROR_STOP 0
 
--- Make sure NULL can't be specified as an origin
-CREATE MATERIALIZED VIEW conditions_summary_weekly
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT city,
-       timescaledb_experimental.time_bucket_ng('7 days', day, null) AS bucket,
-       MIN(temperature),
-       MAX(temperature)
-FROM conditions
-GROUP BY city, bucket
-WITH NO DATA;
-
 -- Make sure 'infinity' can't be specified as an origin
 CREATE MATERIALIZED VIEW conditions_summary_weekly
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT city,
        timescaledb_experimental.time_bucket_ng('7 days', day, 'infinity' :: date) AS bucket,
-       MIN(temperature),
-       MAX(temperature)
-FROM conditions
-GROUP BY city, bucket
-WITH NO DATA;
-
--- For monthly buckets origin should be the first day of the month
-CREATE MATERIALIZED VIEW conditions_summary_weekly
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT city,
-       timescaledb_experimental.time_bucket_ng('1 month', day, '2021-06-03') AS bucket,
        MIN(temperature),
        MAX(temperature)
 FROM conditions
@@ -94,16 +72,6 @@ SELECT mat_hypertable_id AS cagg_id, raw_hypertable_id AS ht_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'conditions_summary_weekly'
 \gset
-
--- Make sure this is treated as a variable-sized bucket case
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id;
-
--- Make sure the origin is saved in the catalog table
-SELECT experimental, name, bucket_width, origin, timezone
-FROM _timescaledb_catalog.continuous_aggs_bucket_function
-WHERE mat_hypertable_id = :cagg_id;
 
 -- Make sure truncating of the refresh window works
 \set ON_ERROR_STOP 0
@@ -292,11 +260,15 @@ DROP TABLE conditions CASCADE;
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
 
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
-
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE TABLE conditions_dist(
@@ -686,3 +658,9 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamptz',
 
 -- Clean up
 DROP TABLE conditions_timestamptz CASCADE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+

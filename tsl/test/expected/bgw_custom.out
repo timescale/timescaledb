@@ -43,44 +43,47 @@ ERROR:  schedule interval cannot be NULL
 SELECT add_job('custom_func', 'invalid interval');
 ERROR:  invalid input syntax for type interval: "invalid interval" at character 31
 \set ON_ERROR_STOP 1
-SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb);
+select '2000-01-01 00:00:00+00' as time_zero \gset
+SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1000
 (1 row)
 
-SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb);
+SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1001
 (1 row)
 
-SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
+SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1002
 (1 row)
 
-SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
+SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1003
 (1 row)
 
-SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1004
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
- job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled |        config         | next_start | hypertable_schema | hypertable_name 
---------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+-----------------------+------------+-------------------+-----------------
-   1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   | 
-   1001 | User-Defined Action [1001] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc         | default_perm_user | t         | {"type": "procedure"} |            |                   | 
-   1002 | User-Defined Action [1002] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | {"type": "procedure"} |            |                   | 
-   1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   | 
-   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | {"type": "function"}  |            |                   | 
+-- exclude the telemetry[1] and job error retention[2] jobs
+-- job 2 may have already run which will set its next_start field thus making the test flaky
+SELECT * FROM timescaledb_information.jobs WHERE job_id NOT IN (1,2) ORDER BY 1;
+ job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled | fixed_schedule |        config         |          next_start          |        initial_start         | hypertable_schema | hypertable_name | check_schema | check_name 
+--------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+----------------+-----------------------+------------------------------+------------------------------+-------------------+-----------------+--------------+------------
+   1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1001 | User-Defined Action [1001] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc         | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1002 | User-Defined Action [1002] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
 (5 rows)
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
@@ -414,6 +417,7 @@ CREATE TABLE conditions (
   humidity DOUBLE PRECISION NULL
 ) WITH (autovacuum_enabled = FALSE);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval := '15 days'::interval);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
@@ -574,3 +578,359 @@ SELECT _timescaledb_internal.stop_background_workers();
  t
 (1 row)
 
+SELECT _timescaledb_internal.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- add test for custom jobs with custom check functions
+-- create the functions/procedures to be used as checking functions
+CREATE OR REPLACE PROCEDURE test_config_check_proc(config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config must be not NULL and have drop_after';
+    END IF ;
+END
+$$;
+CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
+AS $$
+DECLARE
+  drop_after interval;
+BEGIN 
+    IF config IS NULL THEN
+        RETURN;
+    END IF;
+    SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
+    IF drop_after IS NULL THEN 
+        RAISE EXCEPTION 'Config can be NULL but must have drop_after if not';
+    END IF ;
+END
+$$ LANGUAGE PLPGSQL;
+-- step 2, create a procedure to run as a custom job
+CREATE OR REPLACE PROCEDURE test_proc_with_check(job_id int, config jsonb)
+LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  RAISE NOTICE 'Will only print this if config passes checks, my config is %', config; 
+END
+$$;
+-- step 3, add the job with the config check function passed as argument
+-- test procedures, should get an unsupported error
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_proc'::regproc);
+ERROR:  unsupported function type
+-- test functions
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
+ERROR:  Config can be NULL but must have drop_after if not
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
+ add_job 
+---------
+    1005
+(1 row)
+
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
+ERROR:  invalid input syntax for type interval: "chicken"
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_func'::regproc) 
+as job_with_func_check_id \gset
+--- test alter_job
+select alter_job(:job_with_func_check_id, config => '{"drop_after":"chicken"}');
+ERROR:  invalid input syntax for type interval: "chicken"
+select config from alter_job(:job_with_func_check_id, config => '{"drop_after":"5 years"}');
+          config           
+---------------------------
+ {"drop_after": "5 years"}
+(1 row)
+
+-- test that jobs with an incorrect check function signature will not be registered
+-- these are all incorrect function signatures 
+CREATE OR REPLACE FUNCTION test_config_check_func_0args() RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'I take no arguments and will validate anything you give me!';
+END
+$$ LANGUAGE PLPGSQL;
+CREATE OR REPLACE FUNCTION test_config_check_func_2args(config jsonb, intarg int) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'I take two arguments (jsonb, int) and I should fail to run!';
+END
+$$ LANGUAGE PLPGSQL;
+CREATE OR REPLACE FUNCTION test_config_check_func_intarg(config int) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'I take one argument which is an integer and I should fail to run!';
+END
+$$ LANGUAGE PLPGSQL;
+-- -- this should fail, it has an incorrect check function 
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_0args'::regproc);
+ERROR:  function or procedure public.test_config_check_func_0args(config jsonb) not found
+-- -- so should this
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_2args'::regproc);
+ERROR:  function or procedure public.test_config_check_func_2args(config jsonb) not found
+-- and this
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_intarg'::regproc);
+ERROR:  function or procedure public.test_config_check_func_intarg(config jsonb) not found
+-- and this fails as it calls a nonexistent function
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_nonexistent_check_func'::regproc);
+ERROR:  function "test_nonexistent_check_func" does not exist at character 82
+-- when called with a valid check function and a NULL config no check should occur
+CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'This message will get printed for both NULL and not NULL config';
+END
+$$ LANGUAGE PLPGSQL;
+SET client_min_messages = NOTICE;
+-- check done for both NULL and non-NULL config
+select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
+NOTICE:  This message will get printed for both NULL and not NULL config
+ add_job 
+---------
+    1007
+(1 row)
+
+-- check done
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc) as job_id \gset
+NOTICE:  This message will get printed for both NULL and not NULL config
+-- check function not returning void
+CREATE OR REPLACE FUNCTION test_config_check_func_returns_int(config jsonb) RETURNS INT
+AS $$
+BEGIN 
+    raise notice 'I print a message, and then I return least(1,2)';
+    RETURN LEAST(1, 2);
+END
+$$ LANGUAGE PLPGSQL;
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc,
+initial_start => :'time_zero'::timestamptz) as job_id_int \gset
+NOTICE:  I print a message, and then I return least(1,2)
+-- drop the registered check function, verify that alter_job will work and print a warning that 
+-- the check is being skipped due to the check function missing
+ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, schedule_interval => '1 hour');
+WARNING:  function public.test_config_check_func(config jsonb) not found, skipping config validation for job 1008
+ job_id | schedule_interval | config |         check_config          
+--------+-------------------+--------+-------------------------------
+   1008 | @ 1 hour          | {}     | public.test_config_check_func
+(1 row)
+
+DROP FUNCTION test_config_check_func_returns_int;
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_int, config => '{"field":"value"}');
+WARNING:  function public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1009
+ job_id | schedule_interval |       config       |               check_config                
+--------+-------------------+--------------------+-------------------------------------------
+   1009 | @ 5 secs          | {"field": "value"} | public.test_config_check_func_returns_int
+(1 row)
+
+-- rename the check function and then call alter_job to register the new name
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc);
+NOTICE:  This message will get printed for both NULL and not NULL config
+ job_id | schedule_interval | config |    check_config     
+--------+-------------------+--------+---------------------
+   1008 | @ 1 hour          | {}     | public.renamed_func
+(1 row)
+
+-- run alter again, should get a config check
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
+NOTICE:  This message will get printed for both NULL and not NULL config
+ job_id | schedule_interval | config |    check_config     
+--------+-------------------+--------+---------------------
+   1008 | @ 1 hour          | {}     | public.renamed_func
+(1 row)
+
+-- do not drop the current check function but register a new one
+CREATE OR REPLACE FUNCTION substitute_check_func(config jsonb) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'This message is a substitute of the previously printed one';
+END
+$$ LANGUAGE PLPGSQL;
+-- register the new check
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'substitute_check_func');
+NOTICE:  This message is a substitute of the previously printed one
+ job_id | schedule_interval | config |         check_config         
+--------+-------------------+--------+------------------------------
+   1008 | @ 1 hour          | {}     | public.substitute_check_func
+(1 row)
+
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
+NOTICE:  This message is a substitute of the previously printed one
+ job_id | schedule_interval | config |         check_config         
+--------+-------------------+--------+------------------------------
+   1008 | @ 1 hour          | {}     | public.substitute_check_func
+(1 row)
+
+RESET client_min_messages;
+-- test an oid that doesn't exist
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 17424217::regproc);
+ERROR:  function with OID 17424217 does not exist
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test a function with insufficient privileges
+create schema test_schema;
+create role user_noexec with login;
+grant usage on schema test_schema to user_noexec;
+CREATE OR REPLACE FUNCTION test_schema.test_config_check_func_privileges(config jsonb) RETURNS VOID
+AS $$
+BEGIN 
+    RAISE NOTICE 'This message will only get printed if privileges suffice';
+END
+$$ LANGUAGE PLPGSQL;
+revoke execute on function test_schema.test_config_check_func_privileges from public;
+-- verify the user doesn't have execute permissions on the function
+select has_function_privilege('user_noexec', 'test_schema.test_config_check_func_privileges(jsonb)', 'execute');
+ has_function_privilege 
+------------------------
+ f
+(1 row)
+
+\c :TEST_DBNAME user_noexec
+-- user_noexec should not have exec permissions on this function
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_schema.test_config_check_func_privileges'::regproc);
+ERROR:  permission denied for function "test_config_check_func_privileges"
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- check that alter_job rejects a check function with invalid signature
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'renamed_func',
+initial_start => :'time_zero'::timestamptz) as job_id_alter \gset
+NOTICE:  This message will get printed for both NULL and not NULL config
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 'test_config_check_func_0args');
+ERROR:  function or procedure public.test_config_check_func_0args(config jsonb) not found
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter);
+NOTICE:  This message will get printed for both NULL and not NULL config
+ job_id | schedule_interval | config |    check_config     
+--------+-------------------+--------+---------------------
+   1010 | @ 5 secs          | {}     | public.renamed_func
+(1 row)
+
+-- test that we can unregister the check function
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 0);
+ job_id | schedule_interval | config | check_config 
+--------+-------------------+--------+--------------
+   1010 | @ 5 secs          | {}     | 
+(1 row)
+
+-- no message printed now
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, config => '{}'); 
+ job_id | schedule_interval | config | check_config 
+--------+-------------------+--------+--------------
+   1010 | @ 5 secs          | {}     | 
+(1 row)
+
+-- test the case where we have a background job that registers jobs with a check fn
+CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
+$$
+BEGIN
+    perform add_job('test_proc_with_check', schedule_interval => '10 secs', config => '{}', check_config => 'renamed_func');
+END
+$$;
+select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
+-- wait for enough time
+SELECT wait_for_job_to_run(:last_job_id, 1);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
+ total_runs | total_successes | last_run_status 
+------------+-----------------+-----------------
+          1 |               1 | Success
+(1 row)
+
+-- test coverage for alter_job
+-- registering an invalid oid
+select alter_job(:job_id_alter, check_config => 123456789::regproc);
+ERROR:  function with OID 123456789 does not exist
+-- registering a function with insufficient privileges
+\c :TEST_DBNAME user_noexec
+select * from add_job('test_proc_with_check', '5 secs', config => '{}') as job_id_owner \gset
+select * from alter_job(:job_id_owner, check_config => 'test_schema.test_config_check_func_privileges'::regproc);
+ERROR:  permission denied for function "test_config_check_func_privileges"
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP SCHEMA test_schema CASCADE;
+NOTICE:  drop cascades to function test_schema.test_config_check_func_privileges(jsonb)
+DROP ROLE user_noexec;
+-- test with aggregate check proc
+create function jsonb_add (j1 jsonb, j2 jsonb) returns jsonb
+AS $$
+BEGIN 
+    RETURN j1 || j2;
+END
+$$ LANGUAGE PLPGSQL;
+create table jsonb_values (j jsonb, i int);
+insert into jsonb_values values ('{"refresh_after":"2 weeks"}', 1), ('{"compress_after":"2 weeks"}', 2), ('{"drop_after":"2 weeks"}', 3);
+CREATE AGGREGATE sum_jsb (jsonb)
+(
+    sfunc = jsonb_add,
+    stype = jsonb,
+    initcond = '{}'
+);
+-- for test coverage, check unsupported aggregate type
+select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
+ERROR:  unsupported function type
+-- github issue 4610
+CREATE TABLE sensor_data
+(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
+SELECT FROM create_hypertable('sensor_data','time');
+--
+(1 row)
+
+SELECT '2022-10-06 00:00:00+00' as start_date_sd \gset
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '1 months', :'start_date_sd'::timestamptz - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(1, 50, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+-- enable compression
+ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+                                                                                         alter_job                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1014,"@ 3 days 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_internal.policy_compression_check)
+(1 row)
+
+-- create new chunks
+INSERT INTO sensor_data
+	SELECT
+		time + (INTERVAL '1 minute' * random()) AS time,
+		sensor_id,
+		random() AS cpu,
+		random()* 100 AS temperature
+	FROM
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '2 months', :'start_date_sd'::timestamptz - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
+		generate_series(1, 30, 1 ) AS g2(sensor_id)
+	ORDER BY
+		time;
+-- change compression status so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=3 where table_name = '_hyper_4_17_chunk';
+CALL run_job(:compressjob_id);
+NOTICE:  chunk "_hyper_4_17_chunk" is not compressed
+WARNING:  compressing chunk "_timescaledb_internal._hyper_4_17_chunk" failed when compression policy is executed
+-- check compression status is not changed
+SELECT status FROM _timescaledb_catalog.chunk where table_name = '_hyper_4_17_chunk';
+ status 
+--------
+      3
+(1 row)
+
+-- cleanup
+DROP TABLE sensor_data CASCADE;
+NOTICE:  drop cascades to 8 other objects

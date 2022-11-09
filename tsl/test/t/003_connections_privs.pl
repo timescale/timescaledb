@@ -6,7 +6,6 @@ use strict;
 use warnings;
 use AccessNode;
 use DataNode;
-use TestLib;
 use Test::More tests => 28;
 
 #Initialize all the multi-node instances
@@ -20,11 +19,12 @@ $an->add_data_node($dn2);
 $dn1->append_conf('postgresql.conf', 'log_connections=true');
 $dn2->append_conf('postgresql.conf', 'log_connections=true');
 
-my $output = $an->safe_psql(
+$an->safe_psql(
 	'postgres',
 	qq[
 	CREATE ROLE alice;
 	CALL distributed_exec('CREATE ROLE alice LOGIN');
+	GRANT CREATE ON SCHEMA public TO alice;
 	GRANT USAGE ON FOREIGN SERVER dn1,dn2 TO alice;
 	SET ROLE alice;
 	CREATE TABLE conditions (time timestamptz, location int, temp float);
@@ -44,11 +44,12 @@ my ($cmdret, $stdout, $stderr) = $an->psql(
 	RESET ROLE;
 	DROP TABLE conditions;
 	REVOKE USAGE ON FOREIGN SERVER dn1,dn2 FROM alice;
+	REVOKE CREATE ON SCHEMA public FROM alice;
 	DROP ROLE ALICE;
 	SELECT node_name, user_name, invalidated
    	FROM _timescaledb_internal.show_connection_cache()
 	WHERE user_name='alice';
-	
+
 ]);
 
 # Expected output:
@@ -81,6 +82,9 @@ call distributed_exec(\$\$ CREATE USER regress_dep_user2;\$\$);
 GRANT USAGE ON FOREIGN SERVER dn1,dn2 TO regress_dep_user0;
 GRANT USAGE ON FOREIGN SERVER dn1,dn2 TO regress_dep_user1;
 GRANT USAGE ON FOREIGN SERVER dn1,dn2 TO regress_dep_user2;
+GRANT CREATE ON SCHEMA public TO regress_dep_user0;
+GRANT CREATE ON SCHEMA public TO regress_dep_user1;
+GRANT CREATE ON SCHEMA public TO regress_dep_user2;
 SET SESSION AUTHORIZATION regress_dep_user0;
 CREATE TABLE conditions1 (time bigint NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('conditions1', 'time', chunk_time_interval => 10);

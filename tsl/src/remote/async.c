@@ -230,7 +230,7 @@ async_request_send_prepare(TSConnection *conn, const char *sql, int n_params)
 	written =
 		snprintf(stmt_name, stmt_name_len, "ts_prep_%u", remote_connection_get_prep_stmt_number());
 
-	if (written < 0 || written >= stmt_name_len)
+	if (written < 0 || (size_t) written >= stmt_name_len)
 		elog(ERROR, "cannot create prepared statement name");
 
 	req = async_request_create(conn, sql, stmt_name, n_params, NULL, FORMAT_TEXT);
@@ -418,6 +418,7 @@ async_response_report_error(AsyncResponse *res, int elevel)
 					remote_result_elog(aresult->result, elevel);
 					break;
 				default:
+				{
 					PG_TRY();
 					{
 						elog(elevel, "unexpected response status %u", status);
@@ -428,6 +429,7 @@ async_response_report_error(AsyncResponse *res, int elevel)
 						PG_RE_THROW();
 					}
 					PG_END_TRY();
+				}
 			}
 			break;
 		}
@@ -919,7 +921,7 @@ async_request_discard_response(AsyncRequest *req)
 	AsyncResponseResult *result = NULL;
 	do
 	{
-		/* for row-by-row fetching we need to loop until we consume the whole response */
+		/* for COPY fetching we need to loop until we consume the whole response */
 		result = async_request_set_wait_any_result(&set);
 		if (result != NULL)
 			async_response_result_close(result);
@@ -934,7 +936,7 @@ prepared_stmt_close(PreparedStmt *stmt)
 
 	ret = snprintf(sql, sizeof(sql), "DEALLOCATE %s", stmt->stmt_name);
 
-	if (ret < 0 || ret >= sizeof(sql))
+	if (ret < 0 || (size_t) ret >= sizeof(sql))
 		elog(ERROR, "could not create deallocate statement");
 
 	async_request_wait_ok_command(async_request_send(stmt->conn, sql));

@@ -16,7 +16,7 @@
  */
 typedef struct DimensionVec
 {
-	int32 capacity;   /* The capacity of the slices array */
+	int32 capacity;	  /* The capacity of the slices array */
 	int32 num_slices; /* The current number of slices in slices
 					   * array */
 	DimensionSlice *slices[FLEXIBLE_ARRAY_MEMBER];

@@ -10,47 +10,13 @@ RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_siz
 AS '@MODULE_PATHNAME@', 'ts_relation_size' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE VIEW _timescaledb_internal.hypertable_chunk_local_size AS
-WITH chunks AS (
-    SELECT
-        h.schema_name AS hypertable_schema,
-        h.table_name AS hypertable_name,
-        h.id AS hypertable_id,
-        c.id AS chunk_id,
-        c.schema_name AS chunk_schema,
-        c.table_name AS chunk_name,
-        format('%I.%I', c.schema_name, c.table_name)::regclass AS relid,
-        CASE WHEN comp.schema_name IS NOT NULL AND comp.table_name IS NOT NULL THEN
-            format('%I.%I', comp.schema_name, comp.table_name)::regclass
-        ELSE
-            NULL::regclass
-        END AS relidcomp,
-        c.compressed_chunk_id
-    FROM
-        _timescaledb_catalog.hypertable h
-        JOIN _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-            AND c.dropped IS FALSE
-        LEFT JOIN _timescaledb_catalog.chunk comp ON comp.id = c.compressed_chunk_id
-),
-sizes AS (
-    SELECT
-        ch.hypertable_schema,
-        ch.hypertable_name,
-        ch.hypertable_id,
-        ch.chunk_id,
-        ch.chunk_schema,
-        ch.chunk_name,
-        _timescaledb_internal.relation_size(ch.relid) AS relsize,
-        _timescaledb_internal.relation_size(ch.relidcomp) AS relcompsize
-    FROM
-        chunks ch
-)
 SELECT
-    hypertable_schema,
-    hypertable_name,
-    hypertable_id,
-    chunk_id,
-    chunk_schema,
-    chunk_name,
+    h.schema_name AS hypertable_schema,
+    h.table_name AS hypertable_name,
+    h.id AS hypertable_id,
+    c.id AS chunk_id,
+    c.schema_name AS chunk_schema,
+    c.table_name AS chunk_name,
     COALESCE((relsize).total_size, 0) AS total_bytes,
     COALESCE((relsize).heap_size, 0) AS heap_bytes,
     COALESCE((relsize).index_size, 0) AS index_bytes,
@@ -60,7 +26,19 @@ SELECT
     COALESCE((relcompsize).index_size, 0) AS compressed_index_size,
     COALESCE((relcompsize).toast_size, 0) AS compressed_toast_size
 FROM
-    sizes;
+    _timescaledb_catalog.hypertable h
+    JOIN _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+        AND c.dropped IS FALSE
+    JOIN LATERAL _timescaledb_internal.relation_size(
+        format('%I.%I'::text, c.schema_name, c.table_name)::regclass) AS relsize ON TRUE
+    LEFT JOIN _timescaledb_catalog.chunk comp ON comp.id = c.compressed_chunk_id
+    LEFT JOIN LATERAL _timescaledb_internal.relation_size(
+        CASE WHEN comp.schema_name IS NOT NULL AND comp.table_name IS NOT NULL THEN
+            format('%I.%I', comp.schema_name, comp.table_name)::regclass
+        ELSE
+            NULL::regclass
+        END
+        ) AS relcompsize ON TRUE;
 
 GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
 
@@ -102,18 +80,7 @@ RETURNS TABLE (
 LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
     /* get the main hypertable id and sizes */
-    WITH _hypertable AS (
-        SELECT
-            id,
-            _timescaledb_internal.relation_size(format('%I.%I', schema_name, table_name)::regclass) AS relsize
-        FROM
-            _timescaledb_catalog.hypertable
-        WHERE
-            schema_name = schema_name_in
-            AND table_name = table_name_in
-    ),
-    /* project the size of the parent hypertable */
-    _hypertable_sizes AS (
+    WITH _hypertable_sizes AS (
         SELECT
             id,
             COALESCE((relsize).total_size, 0) AS total_bytes,
@@ -125,7 +92,12 @@ $BODY$
             0::BIGINT AS compressed_toast_size,
             0::BIGINT AS compressed_heap_size
         FROM
-            _hypertable
+            _timescaledb_catalog.hypertable
+            JOIN LATERAL _timescaledb_internal.relation_size(
+                format('%I.%I', schema_name, table_name)::regclass) AS relsize ON TRUE
+        WHERE
+            schema_name = schema_name_in
+            AND table_name = table_name_in
     ),
     /* calculate the size of the hypertable chunks */
     _chunk_sizes AS (
@@ -142,6 +114,8 @@ $BODY$
         FROM
             _timescaledb_internal.hypertable_chunk_local_size ch
             JOIN _hypertable_sizes ht ON ht.id = ch.hypertable_id
+        WHERE hypertable_schema = schema_name_in
+          AND hypertable_name = table_name_in
     )
     /* calculate the SUM of the hypertable and chunk sizes */
 	SELECT

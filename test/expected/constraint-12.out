@@ -786,6 +786,7 @@ ALTER TABLE hyper_unique DROP CONSTRAINT hyper_unique_time_key;
 -- test for constraint validation crash, see #1183
 CREATE TABLE test_validate(time timestamp NOT NULL, a TEXT, b TEXT);
 SELECT * FROM create_hypertable('test_validate', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
             14 | public      | test_validate | t
@@ -813,6 +814,7 @@ id int,
 time timestamp,
 CONSTRAINT pk PRIMARY KEY (time, id) USING INDEX TABLESPACE tablespace1);
 SELECT create_hypertable('tbl', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_hypertable 
 -------------------
  (15,public,tbl,t)

@@ -27,7 +27,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/data_node_dispatch.h"
 #include "nodes/data_node_copy.h"
-#include "nodes/gapfill/planner.h"
+#include "nodes/gapfill/gapfill.h"
 #include "planner.h"
 
 #include <math.h>

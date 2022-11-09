@@ -56,6 +56,7 @@ typedef enum CatalogTable
 	REMOTE_TXN,
 	CHUNK_COPY_OPERATION,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
+	JOB_ERRORS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -240,6 +241,7 @@ enum Anum_dimension
 	Anum_dimension_partitioning_func_schema,
 	Anum_dimension_partitioning_func,
 	Anum_dimension_interval_length,
+	Anum_dimension_compress_interval_length,
 	Anum_dimension_integer_now_func_schema,
 	Anum_dimension_integer_now_func,
 	_Anum_dimension_max,
@@ -260,6 +262,7 @@ typedef struct FormData_dimension
 	NameData partitioning_func;
 	/* open (time) columns */
 	int64 interval_length;
+	int64 compress_interval_length;
 	NameData integer_now_func_schema;
 	NameData integer_now_func;
 } FormData_dimension;
@@ -407,6 +410,7 @@ enum Anum_chunk
 	Anum_chunk_compressed_chunk_id,
 	Anum_chunk_dropped,
 	Anum_chunk_status,
+	Anum_chunk_osm_chunk,
 	_Anum_chunk_max,
 };
 
@@ -421,6 +425,7 @@ typedef struct FormData_chunk
 	int32 compressed_chunk_id;
 	bool dropped;
 	int32 status;
+	bool osm_chunk;
 } FormData_chunk;
 
 typedef FormData_chunk *Form_chunk;
@@ -431,6 +436,7 @@ enum
 	CHUNK_HYPERTABLE_ID_INDEX,
 	CHUNK_SCHEMA_NAME_INDEX,
 	CHUNK_COMPRESSED_CHUNK_ID_INDEX,
+	CHUNK_OSM_CHUNK_INDEX,
 	_MAX_CHUNK_INDEX,
 };
 
@@ -453,6 +459,12 @@ enum Anum_chunk_schema_name_idx
 {
 	Anum_chunk_schema_name_idx_schema_name = 1,
 	Anum_chunk_schema_name_idx_table_name,
+};
+
+enum Anum_chunk_osm_chunk_idx
+{
+	Anum_chunk_osm_chunk_idx_osm_chunk = 1,
+	Anum_chunk_osm_chunk_idx_hypertable_id,
 };
 
 /************************************
@@ -693,13 +705,20 @@ enum Anum_bgw_job
 	Anum_bgw_job_proc_name,
 	Anum_bgw_job_owner,
 	Anum_bgw_job_scheduled,
+	Anum_bgw_job_fixed_schedule,
+	Anum_bgw_job_initial_start,
 	Anum_bgw_job_hypertable_id,
 	Anum_bgw_job_config,
+	Anum_bgw_job_check_schema,
+	Anum_bgw_job_check_name,
+	Anum_bgw_job_timezone,
 	_Anum_bgw_job_max,
 };
 
 #define Natts_bgw_job (_Anum_bgw_job_max - 1)
 
+/* fixed_schedule needs to come before the varlen fields
+ for GETSTRUCT to work */
 typedef struct FormData_bgw_job
 {
 	int32 id;
@@ -712,8 +731,13 @@ typedef struct FormData_bgw_job
 	NameData proc_name;
 	NameData owner;
 	bool scheduled;
+	bool fixed_schedule;
+	TimestampTz initial_start;
 	int32 hypertable_id;
 	Jsonb *config;
+	NameData check_schema;
+	NameData check_name;
+	text *timezone;
 } FormData_bgw_job;
 
 typedef FormData_bgw_job *Form_bgw_job;
@@ -761,11 +785,13 @@ enum Anum_bgw_job_stat
 	Anum_bgw_job_stat_last_run_success,
 	Anum_bgw_job_stat_total_runs,
 	Anum_bgw_job_stat_total_duration,
+	Anum_bgw_job_stat_total_duration_failures,
 	Anum_bgw_job_stat_total_success,
 	Anum_bgw_job_stat_total_failures,
 	Anum_bgw_job_stat_total_crashes,
 	Anum_bgw_job_stat_consecutive_failures,
 	Anum_bgw_job_stat_consecutive_crashes,
+	Anum_bgw_job_stat_flags,
 	_Anum_bgw_job_stat_max,
 };
 
@@ -781,11 +807,13 @@ typedef struct FormData_bgw_job_stat
 	bool last_run_success;
 	int64 total_runs;
 	Interval total_duration;
+	Interval total_duration_failures;
 	int64 total_success;
 	int64 total_failures;
 	int64 total_crashes;
 	int32 consecutive_failures;
 	int32 consecutive_crashes;
+	int32 flags;
 } FormData_bgw_job_stat;
 
 typedef FormData_bgw_job_stat *Form_bgw_job_stat;
@@ -1214,7 +1242,6 @@ enum
 typedef enum Anum_compression_chunk_size_pkey
 {
 	Anum_compression_chunk_size_pkey_chunk_id = 1,
-	Anum_compression_chunk_size_pkey_compressed_chunk_id,
 	_Anum_compression_chunk_size_pkey_max,
 } Anum_compression_chunk_size_pkey;
 
@@ -1366,6 +1393,31 @@ typedef struct CatalogSecurityContext
 	Oid saved_uid;
 	int saved_security_context;
 } CatalogSecurityContext;
+
+#define JOB_ERRORS_TABLE_NAME "job_errors"
+
+enum Anum_job_error
+{
+	Anum_job_error_job_id = 1,
+	Anum_job_error_pid,
+	Anum_job_error_start_time,
+	Anum_job_error_finish_time,
+	Anum_job_error_error_data,
+	_Anum_job_error_max,
+};
+
+#define Natts_job_error (_Anum_job_error_max - 1)
+
+typedef struct FormData_job_error
+{
+	int32 job_id;
+	int32 pid;
+	TimestampTz start_time;
+	TimestampTz finish_time;
+	Jsonb *error_data;
+} FormData_job_error;
+
+typedef FormData_job_error *Form_job_error;
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,

@@ -1,13 +1,8 @@
 include(GenerateTestSchedule)
 
-# These are the configurations. There has to be a file whatever.conf.in for each
-# configuration name in this list and the corresponding variables use the
-# configuration name as a suffix.
-set(TEST_CONFIGURATIONS postgresql max_bgw_8)
-
 # These are the files for the 'postgresql' configuration. This is the default,
 # so unless you have a good reason, add new test files here.
-set(TEST_FILES_postgresql
+set(TEST_FILES
     bgw_custom.sql
     bgw_policy.sql
     cagg_errors.sql
@@ -34,15 +29,21 @@ set(TEST_FILES_postgresql
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
-    TEST_FILES_postgresql
+    TEST_FILES
+    bgw_db_scheduler.sql
+    troubleshooting_job_errors.sql
+    bgw_db_scheduler_fixed.sql
     bgw_reorder_drop_chunks.sql
+    scheduler_fixed.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
+    chunk_merge.sql
     chunk_utils_compression.sql
     compression_algos.sql
     compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql
+    compression_merge.sql
     compression_segment_meta.sql
     compression.sql
     compress_table.sql
@@ -53,9 +54,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl_dist_ht.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
-    cagg_invalidation_dist_ht.sql
+    cagg_migrate_integer.sql
+    cagg_migrate_integer_dist_ht.sql
+    cagg_migrate_timestamp.sql
+    cagg_migrate_timestamp_dist_ht.sql
     cagg_multi.sql
-    continuous_aggs.sql
     continuous_aggs_deprecated.sql
     cagg_tableam.sql
     cagg_usage.sql
@@ -69,8 +72,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_api_calls.sql
     dist_commands.sql
     dist_compression.sql
+    dist_copy_format_long.sql
     dist_copy_long.sql
     dist_ddl.sql
+    dist_move_chunk.sql
     dist_partial_agg.sql
     dist_policy.sql
     dist_query.sql
@@ -88,20 +93,26 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     tsl_tables.sql
     license.sql)
   if(USE_TELEMETRY)
-    list(APPEND TEST_FILES_postgresql telemetry_stats.sql)
+    list(APPEND TEST_FILES telemetry_stats.sql)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES_postgresql modify_exclusion.sql
-       chunk_utils_internal.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES chunk_utils_internal.sql)
+  endif()
 endif()
 
-set(SOLO_TESTS_postgresql
+set(SOLO_TESTS
+    bgw_db_scheduler
+    troubleshooting_job_errors
+    bgw_db_scheduler_fixed
     bgw_reorder_drop_chunks
+    scheduler_fixed
     compress_bgw_reorder_drop_chunks
     compression_ddl
     cagg_bgw
+    cagg_bgw_dist_ht
     cagg_ddl
     cagg_ddl_dist_ht
     cagg_dump
@@ -115,22 +126,26 @@ set(SOLO_TESTS_postgresql
     reorder
     telemetry_stats)
 
-# Test files for the max_bgw_8 configuration that configures TimescaleDB with a
-# max of 8 TimescaleDB background workers.
-set(TEST_FILES_max_bgw_8)
-set(SOLO_TESTS_max_bgw_8 bgw_db_scheduler)
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES_max_bgw_8 bgw_db_scheduler.sql dist_move_chunk.sql)
-endif()
-
 set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
+# This test runs only with PG version >= 14
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
+  set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES cagg_query.sql.in dist_hypertable.sql.in
-       remote_copy.sql.in dist_grant.sql.in)
+  list(
+    APPEND
+    TEST_TEMPLATES
+    cagg_query.sql.in
+    dist_hypertable.sql.in
+    remote_copy.sql.in
+    dist_grant.sql.in
+    cagg_invalidation_dist_ht.sql.in
+    continuous_aggs.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
@@ -155,8 +170,18 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
   configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE}
                  COPYONLY)
-  list(APPEND TEST_FILES_postgresql ${TEST_FILE})
+  list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
+
+foreach(TEST_FILES_GE_14 ${TEST_FILES_ON_VERSION_GE_14})
+  string(LENGTH ${TEST_FILES_GE_14} TEST_FILES_GE_14_NAME_LEN)
+  math(EXPR TEST_FILES_GE_14_NAME_LEN ${TEST_FILES_GE_14_NAME_LEN}-7)
+  string(SUBSTRING ${TEST_FILES_GE_14} 0 ${TEST_FILES_GE_14_NAME_LEN} TEMPLATE)
+  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
+  configure_file(${TEST_FILES_GE_14} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE}
+                 COPYONLY)
+  list(APPEND TEST_FILES ${TEST_FILE})
+endforeach(TEST_FILES_GE_14)
 
 if(NOT TEST_GROUP_SIZE)
   set(PARALLEL_GROUP_SIZE 10)
@@ -164,14 +189,12 @@ else()
   set(PARALLEL_GROUP_SIZE ${TEST_GROUP_SIZE})
 endif()
 
-# Generate a test schedule for each configuration.
-foreach(_conf ${TEST_CONFIGURATIONS})
-  generate_test_schedule(
-    ${TEST_SCHEDULE}_${_conf}
-    TEST_FILES
-    ${TEST_FILES_${_conf}}
-    SOLO
-    ${SOLO_TESTS_${_conf}}
-    GROUP_SIZE
-    ${PARALLEL_GROUP_SIZE})
-endforeach()
+# Generate a test schedule
+generate_test_schedule(
+  ${TEST_SCHEDULE}
+  TEST_FILES
+  ${TEST_FILES}
+  SOLO
+  ${SOLO_TESTS}
+  GROUP_SIZE
+  ${PARALLEL_GROUP_SIZE})

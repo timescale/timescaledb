@@ -54,13 +54,15 @@ ts_chunk_constraints_alloc(int size_hint, MemoryContext mctx)
 }
 
 ChunkConstraints *
-ts_chunk_constraints_copy(ChunkConstraints *ccs)
+ts_chunk_constraints_copy(ChunkConstraints *chunk_constraints)
 {
 	ChunkConstraints *copy = palloc(sizeof(ChunkConstraints));
 
-	memcpy(copy, ccs, sizeof(ChunkConstraints));
-	copy->constraints = palloc0(CHUNK_CONSTRAINTS_SIZE(ccs->capacity));
-	memcpy(copy->constraints, ccs->constraints, CHUNK_CONSTRAINTS_SIZE(ccs->num_constraints));
+	memcpy(copy, chunk_constraints, sizeof(ChunkConstraints));
+	copy->constraints = palloc0(CHUNK_CONSTRAINTS_SIZE(chunk_constraints->capacity));
+	memcpy(copy->constraints,
+		   chunk_constraints->constraints,
+		   CHUNK_CONSTRAINTS_SIZE(chunk_constraints->num_constraints));
 
 	return copy;
 }
@@ -577,12 +579,34 @@ chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conf
 		 */
 		return false;
 	}
+	/*
+	   Check if the foreign key constraint references a partition in a partitioned
+	   table. In that case, we shouldn't include this constraint as we will end up
+	   checking the foreign key constraint once for every partition, which obviously
+	   leads to foreign key constraint violation. Instead, we only include constraints
+	   referencing the parent table of the partitioned table.
+	*/
+	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
+		return false;
 
 	/* Foreign tables do not support non-check constraints, so skip them */
 	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
 		return false;
 
 	return true;
+}
+
+static bool
+chunk_constraint_is_check(const char chunk_relkind, Form_pg_constraint conform)
+{
+	if (conform->contype == CONSTRAINT_CHECK)
+	{
+		/*
+		 * check constraints supported on foreign tables (like OSM chunks)
+		 */
+		return true;
+	}
+	return false;
 }
 
 int
@@ -631,6 +655,39 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	};
 
 	return ts_constraint_process(hypertable_oid, chunk_constraint_add, &cc);
+}
+
+/* check constraints have the same name as the one on the hypertable */
+static ConstraintProcessStatus
+chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
+{
+	ConstraintContext *cc = arg;
+	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+
+	if (chunk_constraint_is_check(cc->chunk_relkind, constraint))
+	{
+		ts_chunk_constraints_add(cc->ccs,
+								 cc->chunk_id,
+								 0,
+								 NameStr(constraint->conname),
+								 NameStr(constraint->conname));
+		return CONSTR_PROCESSED;
+	}
+
+	return CONSTR_IGNORED;
+}
+
+/* Adds only inheritable check constraints */
+int
+ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, int32 chunk_id,
+													   const char chunk_relkind, Oid hypertable_oid)
+{
+	ConstraintContext cc = {
+		.chunk_relkind = chunk_relkind,
+		.ccs = ccs,
+		.chunk_id = chunk_id,
+	};
+	return ts_constraint_process(hypertable_oid, chunk_constraint_add_check, &cc);
 }
 
 void
@@ -844,11 +901,11 @@ chunk_constraint_rename_on_chunk_table(int32 chunk_id, const char *old_name, con
 }
 
 static void
-chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname)
+chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_name)
 {
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
-	bool repl[Natts_chunk_constraint] = { false };
+	bool doReplace[Natts_chunk_constraint] = { false };
 	HeapTuple tuple, new_tuple;
 	TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
 	NameData new_hypertable_constraint_name;
@@ -861,26 +918,26 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 	heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
-	namestrcpy(&new_hypertable_constraint_name, newname);
-	chunk_constraint_choose_name(&new_chunk_constraint_name, newname, chunk_id);
+	namestrcpy(&new_hypertable_constraint_name, new_name);
+	chunk_constraint_choose_name(&new_chunk_constraint_name, new_name, chunk_id);
 
 	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 		NameGetDatum(&new_hypertable_constraint_name);
-	repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
 	old_chunk_constraint_name =
 		DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
 	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
 		NameGetDatum(&new_chunk_constraint_name);
-	repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
 
 	chunk_constraint_rename_on_chunk_table(chunk_id,
 										   NameStr(*old_chunk_constraint_name),
 										   NameStr(new_chunk_constraint_name));
 
-	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
+	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
 
 	ts_chunk_index_adjust_meta(chunk_id,
-							   newname,
+							   new_name,
 							   NameStr(*old_chunk_constraint_name),
 							   NameStr(new_chunk_constraint_name));
 
@@ -895,19 +952,19 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
  * Adjust internal metadata after index/constraint rename
  */
 int
-ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, const char *oldname,
-								const char *newname)
+ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
+								const char *old_name, const char *new_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
 	int count = 0;
 
-	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, oldname);
+	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, old_name);
 
 	ts_scanner_foreach(&iterator)
 	{
 		bool nulls[Natts_chunk_constraint];
-		bool repl[Natts_chunk_constraint] = { false };
+		bool doReplace[Natts_chunk_constraint] = { false };
 		Datum values[Natts_chunk_constraint];
 		bool should_free;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -918,12 +975,13 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, 
 
 		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 			CStringGetDatum(ht_constraint_name);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
 		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
-			CStringGetDatum(newname);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
+			CStringGetDatum(new_name);
+		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
 
-		new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, repl);
+		new_tuple =
+			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, doReplace);
 
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);
@@ -937,9 +995,55 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, 
 	return count;
 }
 
+bool
+ts_chunk_constraint_update_slice_id(int32 chunk_id, int32 old_slice_id, int32 new_slice_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+
+	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, old_slice_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool replIsnull[Natts_chunk_constraint];
+		bool repl[Natts_chunk_constraint] = { false };
+		Datum values[Natts_chunk_constraint];
+		bool should_free, isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		int32 current_chunk_id =
+			DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
+
+		if (isnull || current_chunk_id != chunk_id)
+			continue;
+
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+		HeapTuple new_tuple;
+
+		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull);
+
+		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] =
+			Int32GetDatum(new_slice_id);
+		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
+
+		new_tuple =
+			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull, repl);
+
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
+		ts_scan_iterator_close(&iterator);
+		return true;
+	}
+
+	return false;
+}
+
 int
-ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname,
-												 const char *newname)
+ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
+												 const char *new_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
@@ -949,12 +1053,12 @@ ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old
 
 	ts_scanner_foreach(&iterator)
 	{
-		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), oldname))
+		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), old_name))
 			continue;
 
 		count++;
 		chunk_constraint_rename_hypertable_from_tuple(ts_scan_iterator_tuple_info(&iterator),
-													  newname);
+													  new_name);
 	}
 	return count;
 }

@@ -49,8 +49,8 @@ ts_test_data_node_show(PG_FUNCTION_ARGS)
 
 	if (list_length((List *) funcctx->user_fctx) > 0)
 	{
-		Datum values[4];
-		bool nulls[4] = { true };
+		Datum values[3];
+		bool nulls[3] = { true };
 		HeapTuple tuple;
 		List *node_names = funcctx->user_fctx;
 		const char *node_name = linitial(node_names);
@@ -73,17 +73,10 @@ ts_test_data_node_show(PG_FUNCTION_ARGS)
 				values[1] = CStringGetTextDatum(defGetString(elem));
 				nulls[1] = false;
 			}
-			else if (strcmp("port", elem->defname) == 0)
-			{
-				int32 port = strtoul(defGetString(elem), NULL, 10) & 0xFFFFFFFF;
-
-				values[2] = Int32GetDatum(port);
-				nulls[2] = false;
-			}
 			else if (strcmp("dbname", elem->defname) == 0)
 			{
-				values[3] = CStringGetDatum(defGetString(elem));
-				nulls[3] = false;
+				values[2] = CStringGetDatum(defGetString(elem));
+				nulls[2] = false;
 			}
 		}
 

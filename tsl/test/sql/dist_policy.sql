@@ -11,16 +11,18 @@
 \o
 \set ECHO all
 
--- Add data nodes
-\x on
-SELECT * FROM add_data_node('dist_policy_data_node_1', host => 'localhost',
-                            database => 'dist_policy_data_node_1');
-SELECT * FROM add_data_node('dist_policy_data_node_2', host => 'localhost',
-                            database => 'dist_policy_data_node_2');
-SELECT * FROM add_data_node('dist_policy_data_node_3', host => 'localhost',
-                            database => 'dist_policy_data_node_3');
-\x off
-GRANT USAGE ON FOREIGN SERVER dist_policy_data_node_1, dist_policy_data_node_2, dist_policy_data_node_3 TO PUBLIC;
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
 -- Create a fake clock that we can use below and make sure that it is
 -- defined on the data nodes as well.
@@ -82,4 +84,12 @@ FROM generate_series(1,10) AS time,
      generate_series(1,3) AS device;
 
 -- Make sure reorder policy is blocked for distributed hypertable
+\set ON_ERROR_STOP 0
 SELECT add_reorder_policy('conditions', 'conditions_time_idx');
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+

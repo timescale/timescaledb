@@ -117,6 +117,21 @@ dist_ddl_error_if_not_allowed_data_node_session(void)
 }
 
 static void
+dist_ddl_error_if_multi_command(const ProcessUtilityArgs *args)
+{
+	List *parsetree_list;
+
+	/* Parse the SQL string into a list of raw parse trees */
+	parsetree_list = pg_parse_query(args->query_string);
+
+	/* Prevent 'command;command' execution */
+	if (list_length(parsetree_list) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("nested commands are not supported on distributed hypertable")));
+}
+
+static void
 dist_ddl_state_add_remote_command(const char *cmd)
 {
 	MemoryContext mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
@@ -314,6 +329,9 @@ dist_ddl_state_set_hypertable(const ProcessUtilityArgs *args)
 	if (num_hypertables > 1)
 		dist_ddl_error_raise_unsupported();
 
+	/* Prevent execution of several commands in one query string */
+	dist_ddl_error_if_multi_command(args);
+
 	/* Get the distributed hypertable */
 	ht =
 		ts_hypertable_cache_get_entry(hcache, linitial_oid(args->hypertable_list), CACHE_FLAG_NONE);
@@ -327,21 +345,6 @@ dist_ddl_state_set_hypertable(const ProcessUtilityArgs *args)
 	dist_ddl_state_add_data_node_list_from_ht(ht);
 	ts_cache_release(hcache);
 	return true;
-}
-
-static HypertableType
-dist_ddl_state_get_hypertable_type(void)
-{
-	Cache *hcache;
-	Hypertable *ht;
-	HypertableType type;
-
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, dist_ddl_state.relid, CACHE_FLAG_NONE);
-	Assert(ht != NULL);
-	type = ts_hypertable_get_type(ht);
-	ts_cache_release(hcache);
-	return type;
 }
 
 static void
@@ -1220,14 +1223,17 @@ dist_ddl_end(EventTriggerData *command)
 		return;
 	}
 
-	/* Do delayed block of SET SCHEMA and RENAME commands.
-	 *
-	 * In the future those commands might be unblocked and data_node_list could
-	 * be updated here as well.
-	 */
+	/* Do delayed block of SET SCHEMA and RENAME commands */
 	if (OidIsValid(dist_ddl_state.relid))
 	{
-		HypertableType type = dist_ddl_state_get_hypertable_type();
+		/* Get hypertable type and update data node list */
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *ht =
+			ts_hypertable_cache_get_entry(hcache, dist_ddl_state.relid, CACHE_FLAG_NONE);
+		Assert(ht != NULL);
+		HypertableType type = ts_hypertable_get_type(ht);
+		dist_ddl_state_add_data_node_list_from_ht(ht);
+		ts_cache_release(hcache);
 
 		/* Ensure this operation is executed by the access node session. */
 		if (type == HYPERTABLE_DISTRIBUTED_MEMBER)

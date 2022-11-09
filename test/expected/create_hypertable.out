@@ -92,13 +92,13 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                         | 
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                         | 
-  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  5 |             2 | location    | text        | f       |          4 | _timescaledb_internal    | get_partition_hash |                 |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          4 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
 (5 rows)
 
 --test that we can change the number of partitions and that 1 is allowed
@@ -109,9 +109,9 @@ SELECT set_number_partitions('test_schema.test_table', 1, 'location');
 (1 row)
 
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
-  5 |             2 | location    | text        | f       |          1 | _timescaledb_internal    | get_partition_hash |                 |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  5 |             2 | location    | text        | f       |          1 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
 (1 row)
 
 SELECT set_number_partitions('test_schema.test_table', 2, 'location');
@@ -121,9 +121,9 @@ SELECT set_number_partitions('test_schema.test_table', 2, 'location');
 (1 row)
 
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
-  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -155,14 +155,14 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                         | 
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                         | 
-  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
-  6 |             2 | id          | integer     | t       |            |                          |                    |            1000 |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  6 |             2 | id          | integer     | t       |            |                          |                    |            1000 |                          |                         | 
 (6 rows)
 
 -- Test add_dimension: can use interval types for TIMESTAMPTZ columns
@@ -409,6 +409,7 @@ NOTICE:  column "location" is already a dimension, skipping
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
@@ -526,9 +527,11 @@ select * from only test_schema.test_migrate;
 \set ON_ERROR_STOP 0
 --should fail without migrate_data => true
 select create_hypertable('test_schema.test_migrate', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 ERROR:  table "test_migrate" is not empty
 \set ON_ERROR_STOP 1
 select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
         create_hypertable        
@@ -544,12 +547,12 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
 (1 row)
 
 select * from _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+--------------------+---------------------+---------+--------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk   |                     | f       |      0
-  8 |             7 | _timescaledb_internal | _hyper_7_8_chunk   |                     | f       |      0
-  9 |            10 | _timescaledb_internal | _hyper_10_9_chunk  |                     | f       |      0
- 10 |            10 | _timescaledb_internal | _hyper_10_10_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk   |                     | f       |      0 | f
+  8 |             7 | _timescaledb_internal | _hyper_7_8_chunk   |                     | f       |      0 | f
+  9 |            10 | _timescaledb_internal | _hyper_10_9_chunk  |                     | f       |      0 | f
+ 10 |            10 | _timescaledb_internal | _hyper_10_10_chunk |                     | f       |      0 | f
 (4 rows)
 
 select * from test_schema.test_migrate;
@@ -579,6 +582,7 @@ select * from only _timescaledb_internal._hyper_10_10_chunk;
 
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
@@ -588,6 +592,7 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE TYPE test_type AS (time timestamp, temp float);
 CREATE TABLE test_table_of_type OF test_type;
 SELECT create_hypertable('test_table_of_type', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
@@ -603,6 +608,7 @@ DROP TYPE test_type CASCADE;
 NOTICE:  drop cascades to 3 other objects
 CREATE TABLE test_table_of_type (time timestamp, temp float);
 SELECT create_hypertable('test_table_of_type', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
@@ -751,9 +757,9 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 (1 row)
 
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
- 29 |            17 | time        | bigint      | t       |            |                          |                   |               1 | public                  | dummy_now
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+ 29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | public                  | dummy_now
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -773,8 +779,198 @@ select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', repla
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
- 29 |            17 | time        | bigint      | t       |            |                          |                   |               1 | my_new_schema           | dummy_now4
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+ 29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now4
 (1 row)
 
+-- github issue #4650
+CREATE TABLE sample_table (
+       cpu double precision null,
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       name varchar(100) default 'this is a default string value',
+       UNIQUE(sensor_id, time)
+);
+ALTER TABLE sample_table DROP COLUMN name;
+-- below creation should not report any warnings.
+SELECT * FROM create_hypertable('sample_table', 'time');
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+            18 | public      | sample_table | t
+(1 row)
+
+-- cleanup
+DROP TABLE sample_table CASCADE;
+-- github issue 4684
+-- test PARTITION BY HASH
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY HASH (id);
+DO $$
+BEGIN
+   FOR i IN 1..2
+   LOOP
+      EXECUTE format('
+         CREATE TABLE %I
+         PARTITION OF regular
+         FOR VALUES WITH (MODULUS 2, REMAINDER %s)',
+         'regular_' || i, i - 1
+      );
+   END LOOP;
+END;
+$$;
+INSERT INTO regular SELECT generate_series(1,1000), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (19,public,timescale,t)
+(1 row)
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(1,200), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(1,200), 43;
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_19_15_chunk
+ _timescaledb_internal._hyper_19_16_chunk
+ _timescaledb_internal._hyper_19_17_chunk
+(3 rows)
+
+\set ON_ERROR_STOP 0
+-- record goes into chunk1 violating FK constraint as value 1001 is not present in regular table
+INSERT INTO timescale SELECT now(), 1001, 43;
+ERROR:  insert or update on table "_hyper_19_15_chunk" violates foreign key constraint "15_1_timescale_id_fkey"
+-- record goes into chunk2 violating FK constraint as value 1002 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 1002, 43;
+ERROR:  insert or update on table "_hyper_19_16_chunk" violates foreign key constraint "16_2_timescale_id_fkey"
+-- record goes into chunk3 violating FK constraint as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+ERROR:  insert or update on table "_hyper_19_17_chunk" violates foreign key constraint "17_3_timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to 4 other objects
+DROP TABLE timescale cascade;
+-- test PARTITION BY RANGE
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY RANGE (id);
+CREATE TABLE regular_1_500 PARTITION OF regular
+    FOR VALUES FROM (1) TO (500);
+CREATE TABLE regular_500_1000 PARTITION OF regular
+    FOR VALUES FROM (500) TO (801);
+INSERT INTO regular SELECT generate_series(1,800), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (20,public,timescale,t)
+(1 row)
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(200,400), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(400,600), 43;
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_20_18_chunk
+ _timescaledb_internal._hyper_20_19_chunk
+ _timescaledb_internal._hyper_20_20_chunk
+(3 rows)
+
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 801 is not present in regular table
+INSERT INTO timescale SELECT now(), 801, 43;
+ERROR:  insert or update on table "_hyper_20_18_chunk" violates foreign key constraint "18_4_timescale_id_fkey"
+-- FK constraint violation as value 902 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 902, 43;
+ERROR:  insert or update on table "_hyper_20_19_chunk" violates foreign key constraint "19_5_timescale_id_fkey"
+-- FK constraint violation as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+ERROR:  insert or update on table "_hyper_20_20_chunk" violates foreign key constraint "20_6_timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to 4 other objects
+DROP TABLE timescale cascade;
+-- test PARTITION BY LIST
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY LIST (id);
+CREATE TABLE regular_1_2_3_4 PARTITION OF regular FOR VALUES IN (1,2,3,4);
+CREATE TABLE regular_5_6_7_8 PARTITION OF regular FOR VALUES IN (5,6,7,8);
+INSERT INTO regular SELECT generate_series(1,8), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (21,public,timescale,t)
+(1 row)
+
+insert into timescale values (now(), 1,2);
+insert into timescale values (now(), 2,2);
+insert into timescale values (now(), 3,2);
+insert into timescale values (now(), 4,2);
+insert into timescale values (now(), 5,2);
+insert into timescale values (now(), 6,2);
+insert into timescale values (now(), 7,2);
+insert into timescale values (now(), 8,2);
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 9 is not present in regular table
+insert into timescale values (now(), 9,2);
+ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "21_7_timescale_id_fkey"
+-- FK constraint violation as value 10 is not present in regular table
+insert into timescale values (now(), 10,2);
+ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "21_7_timescale_id_fkey"
+-- FK constraint violation as value 111 is not present in regular table
+insert into timescale values (now(), 111,2);
+ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key constraint "21_7_timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to 2 other objects
+DROP TABLE timescale cascade;

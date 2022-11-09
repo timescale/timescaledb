@@ -132,7 +132,8 @@ SELECT r -> 'num_data_nodes' AS num_data_nodes,
 FROM telemetry_report;
 
 -- Become an access node by adding a data node
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
 
 -- Telemetry should show one data node and "acces node" status
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -148,7 +149,8 @@ SELECT test.remote_exec(NULL, $$
 	   FROM get_telemetry_report() t;
 $$);
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
 CREATE TABLE disthyper (LIKE normal);
 SELECT create_distributed_hypertable('disthyper', 'time', 'device');
 
@@ -240,5 +242,80 @@ SELECT
 	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates
 FROM relations;
 
+-- check telemetry for fixed schedule jobs works
+create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
+begin
+raise log 'this is job_test_fixed';
+end
+$$;
+
+create or replace procedure job_test_drifting(jobid int, config jsonb) language plpgsql as $$
+begin
+raise log 'this is job_test_drifting';
+end
+$$;
+-- before adding the jobs
+select get_telemetry_report()->'num_user_defined_actions_fixed';
+select get_telemetry_report()->'num_user_defined_actions';
+
+select add_job('job_test_fixed', '1 week');
+select add_job('job_test_drifting', '1 week', fixed_schedule => false);
+-- add continuous aggregate refresh policy for contagg
+select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, interval '3 weeks'); -- drifting
+select add_continuous_aggregate_policy('contagg_old', interval '3 weeks', NULL, interval '3 weeks', initial_start => now()); -- fixed
+-- add retention policy, fixed
+select add_retention_policy('hyper', interval '1 year', initial_start => now());
+-- add compression policy
+select add_compression_policy('hyper', interval '3 weeks', initial_start => now());
+select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
+select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
+select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
+DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+TRUNCATE _timescaledb_internal.job_errors;
+-- create some "errors" for testing
+INSERT INTO
+_timescaledb_config.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name)
+VALUES (2000, 'User-Defined Action [2000]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_1'),
+(2001, 'User-Defined Action [2001]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_2'),
+(2002, 'Compression Policy [2002]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_compression'),
+(2003, 'Retention Policy [2003]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_retention'),
+(2004, 'Refresh Continuous Aggregate Policy [2004]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_refresh_continuous_aggregate'),
+-- user decided to define a custom action in the _timescaledb_internal schema, we group it with the User-defined actions
+(2005, 'User-Defined Action [2005]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_refresh_continuous_aggregate');
+-- create some errors for them
+INSERT INTO
+_timescaledb_internal.job_errors(job_id, pid, start_time, finish_time, error_data)
+values (2000, 12345, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"public", "proc_name": "custom_action_1"}'),
+(2000, 23456, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"ABCDE", "proc_schema": "public", "proc_name": "custom_action_1"}'),
+(2001, 54321, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"public", "proc_name": "custom_action_2"}'),
+(2002, 23443, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"JF009", "proc_schema":"_timescaledb_internal", "proc_name": "policy_compression"}'),
+(2003, 14567, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_internal", "proc_name": "policy_retention"}'),
+(2004, 78907, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_internal", "proc_name": "policy_refresh_continuous_aggregate"}'),
+(2005, 45757, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_internal", "proc_name": "policy_refresh_continuous_aggregate"}');
+
+-- we have 3 error records for user-defined actions, and three for policies, so we expect 4 types of jobs
+SELECT jsonb_pretty(get_telemetry_report() -> 'errors_by_sqlerrcode');
+-- for job statistics, insert some records into bgw_job_stats
+INSERT INTO _timescaledb_internal.bgw_job_stat
+values 
+(2000, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2001, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2002, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2003, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2004, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2005, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0);
+SELECT jsonb_pretty(get_telemetry_report() -> 'stats_by_job_type');
+
 DROP VIEW relations;
 DROP MATERIALIZED VIEW telemetry_report;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+

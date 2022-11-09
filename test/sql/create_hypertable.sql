@@ -425,3 +425,178 @@ select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', repla
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+
+-- github issue #4650
+CREATE TABLE sample_table (
+       cpu double precision null,
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       name varchar(100) default 'this is a default string value',
+       UNIQUE(sensor_id, time)
+);
+
+ALTER TABLE sample_table DROP COLUMN name;
+
+-- below creation should not report any warnings.
+SELECT * FROM create_hypertable('sample_table', 'time');
+
+-- cleanup
+DROP TABLE sample_table CASCADE;
+
+-- github issue 4684
+-- test PARTITION BY HASH
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY HASH (id);
+
+DO $$
+BEGIN
+   FOR i IN 1..2
+   LOOP
+      EXECUTE format('
+         CREATE TABLE %I
+         PARTITION OF regular
+         FOR VALUES WITH (MODULUS 2, REMAINDER %s)',
+         'regular_' || i, i - 1
+      );
+   END LOOP;
+END;
+$$;
+
+INSERT INTO regular SELECT generate_series(1,1000), 44,55;
+
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(1,200), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(1,200), 43;
+
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+
+\set ON_ERROR_STOP 0
+-- record goes into chunk1 violating FK constraint as value 1001 is not present in regular table
+INSERT INTO timescale SELECT now(), 1001, 43;
+-- record goes into chunk2 violating FK constraint as value 1002 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 1002, 43;
+-- record goes into chunk3 violating FK constraint as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+\set ON_ERROR_STOP 1
+
+-- cleanup
+DROP TABLE regular cascade;
+DROP TABLE timescale cascade;
+
+-- test PARTITION BY RANGE
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY RANGE (id);
+
+CREATE TABLE regular_1_500 PARTITION OF regular
+    FOR VALUES FROM (1) TO (500);
+
+CREATE TABLE regular_500_1000 PARTITION OF regular
+    FOR VALUES FROM (500) TO (801);
+
+INSERT INTO regular SELECT generate_series(1,800), 44,55;
+
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(200,400), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(400,600), 43;
+
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 801 is not present in regular table
+INSERT INTO timescale SELECT now(), 801, 43;
+-- FK constraint violation as value 902 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 902, 43;
+-- FK constraint violation as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+\set ON_ERROR_STOP 1
+
+-- cleanup
+DROP TABLE regular cascade;
+DROP TABLE timescale cascade;
+
+-- test PARTITION BY LIST
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY LIST (id);
+
+CREATE TABLE regular_1_2_3_4 PARTITION OF regular FOR VALUES IN (1,2,3,4);
+CREATE TABLE regular_5_6_7_8 PARTITION OF regular FOR VALUES IN (5,6,7,8);
+
+INSERT INTO regular SELECT generate_series(1,8), 44,55;
+
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+
+insert into timescale values (now(), 1,2);
+insert into timescale values (now(), 2,2);
+insert into timescale values (now(), 3,2);
+insert into timescale values (now(), 4,2);
+insert into timescale values (now(), 5,2);
+insert into timescale values (now(), 6,2);
+insert into timescale values (now(), 7,2);
+insert into timescale values (now(), 8,2);
+
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 9 is not present in regular table
+insert into timescale values (now(), 9,2);
+-- FK constraint violation as value 10 is not present in regular table
+insert into timescale values (now(), 10,2);
+-- FK constraint violation as value 111 is not present in regular table
+insert into timescale values (now(), 111,2);
+\set ON_ERROR_STOP 1
+
+-- cleanup
+DROP TABLE regular cascade;
+DROP TABLE timescale cascade;

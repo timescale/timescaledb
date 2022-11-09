@@ -34,3 +34,35 @@ ts_test_chunk_stats_insert(PG_FUNCTION_ARGS)
 
 	PG_RETURN_NULL();
 }
+
+static int
+osm_insert_hook_mock(Oid ht_oid, int64 range_start, int64 range_end)
+{
+	/* always return true */
+	return 1;
+}
+
+/*
+ * Dummy function to mock OSM_INSERT hook called at chunk creation for tiered data
+ */
+TS_FUNCTION_INFO_V1(ts_setup_osm_hook);
+Datum
+ts_setup_osm_hook(PG_FUNCTION_ARGS)
+{
+	typedef int (*MOCK_OSM_INSERT_HOOK)(Oid, int64, int64);
+	MOCK_OSM_INSERT_HOOK *var =
+		(MOCK_OSM_INSERT_HOOK *) find_rendezvous_variable("osm_chunk_insert_check_hook");
+	*var = osm_insert_hook_mock;
+	PG_RETURN_NULL();
+}
+
+TS_FUNCTION_INFO_V1(ts_undo_osm_hook);
+Datum
+ts_undo_osm_hook(PG_FUNCTION_ARGS)
+{
+	typedef int (*MOCK_OSM_INSERT_HOOK)(Oid, int64, int64);
+	MOCK_OSM_INSERT_HOOK *var =
+		(MOCK_OSM_INSERT_HOOK *) find_rendezvous_variable("osm_chunk_insert_check_hook");
+	*var = NULL;
+	PG_RETURN_NULL();
+}

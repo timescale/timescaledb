@@ -8,18 +8,22 @@
 #define TIMESCALEDB_TSL_NODES_GAPFILL_H
 
 #include <postgres.h>
-#include <fmgr.h>
+#include <nodes/pathnodes.h>
+#include <nodes/primnodes.h>
 
 #define GAPFILL_FUNCTION "time_bucket_gapfill"
 #define GAPFILL_LOCF_FUNCTION "locf"
 #define GAPFILL_INTERPOLATE_FUNCTION "interpolate"
 
-extern Datum gapfill_marker(PG_FUNCTION_ARGS);
-extern Datum gapfill_int16_time_bucket(PG_FUNCTION_ARGS);
-extern Datum gapfill_int32_time_bucket(PG_FUNCTION_ARGS);
-extern Datum gapfill_int64_time_bucket(PG_FUNCTION_ARGS);
-extern Datum gapfill_timestamp_time_bucket(PG_FUNCTION_ARGS);
-extern Datum gapfill_timestamptz_time_bucket(PG_FUNCTION_ARGS);
-extern Datum gapfill_date_time_bucket(PG_FUNCTION_ARGS);
+bool gapfill_in_expression(Expr *node);
+void plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel);
+void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,
+									  RelOptInfo *output_rel);
+
+typedef struct GapFillPath
+{
+	CustomPath cpath;
+	FuncExpr *func; /* time_bucket_gapfill function call */
+} GapFillPath;
 
 #endif /* TIMESCALEDB_TSL_NODES_GAPFILL_H */

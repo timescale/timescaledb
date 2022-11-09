@@ -44,6 +44,7 @@ DROP MATERIALIZED VIEW max_mat_view_date;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 CREATE TABLE continuous_agg_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_timestamp', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------

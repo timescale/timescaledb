@@ -145,12 +145,13 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithms algo);
 extern CompressionStats compress_chunk(Oid in_table, Oid out_table,
 									   const ColumnCompressionInfo **column_compression_info,
-									   int num_columns);
+									   int num_compression_infos);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
 extern void update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid);
+extern void merge_chunk_relstats(Oid merged_relid, Oid compressed_relid);
 
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;

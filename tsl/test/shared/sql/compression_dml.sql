@@ -21,3 +21,36 @@ DEALLOCATE p1;
 DEALLOCATE p2;
 
 DROP TABLE i3719;
+
+-- github issue 4778
+CREATE TABLE metric_5m (
+    time TIMESTAMPTZ NOT NULL,
+    value DOUBLE PRECISION NOT NULL,
+    series_id BIGINT NOT NULL
+);
+SELECT table_name FROM create_hypertable(
+                            'metric_5m'::regclass,
+                            'time'::name, chunk_time_interval=>interval '5m',
+                            create_default_indexes=> false);
+-- enable compression
+ALTER TABLE metric_5m SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'series_id',
+    timescaledb.compress_orderby = 'time, value'
+);
+SET work_mem TO '64kB';
+SELECT '2022-10-10 14:33:44.1234+05:30' as start_date \gset
+-- populate hypertable
+INSERT INTO metric_5m (time, series_id, value)
+    SELECT t, s,1 from generate_series(:'start_date'::timestamptz, :'start_date'::timestamptz + interval '1 day', '10s') t cross join generate_series(1,10, 1) s;
+-- manually compress all chunks
+SELECT count(compress_chunk(c.schema_name|| '.' || c.table_name))
+    FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where
+    c.hypertable_id = ht.id and ht.table_name = 'metric_5m' and c.compressed_chunk_id IS NULL;
+
+-- populate into compressed hypertable, this should not crash
+INSERT INTO metric_5m (time, series_id, value)
+    SELECT t, s,1 from generate_series(:'start_date'::timestamptz, :'start_date'::timestamptz + interval '1 day', '10s') t cross join generate_series(1,10, 1) s;
+-- clean up
+RESET work_mem;
+DROP TABLE metric_5m;

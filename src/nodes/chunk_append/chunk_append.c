@@ -114,10 +114,25 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		{
 			ListCell *lc_var;
 
-			/*
-			 * check the param references a partitioning column of the hypertable
-			 * otherwise we skip runtime exclusion
+			/* We have two types of exclusion:
+			 *
+			 * Parent exclusion fires if the entire hypertable can be excluded.
+			 * This happens if doing things like joining against a parameter
+			 * value that is an empty array or NULL. It doesn't happen often,
+			 * but when it does, it speeds up the query immensely. It's also cheap
+			 * to check for this condition as you check this once per hypertable
+			 * at runtime.
+			 *
+			 * Child exclusion works by seeing if there is a contradiction between
+			 * the chunks constraints and the expression on parameter values. For example,
+			 * it can evaluate whether a time parameter from a subquery falls outside
+			 * the range of the chunk. It is more widely applicable than the parent
+			 * exclusion but is also more expensive to evaluate since you have to perform
+			 * the check on every chunk. Child exclusion can only apply if one of the quals
+			 * involves a partitioning column.
+			 *
 			 */
+			path->runtime_exclusion_parent = true;
 			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
 			{
 				Var *var = lfirst(lc_var);
@@ -127,15 +142,25 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				 * ts_is_partitioning_column would return the correct
 				 * answer for those as well
 				 */
-				if (var->varno == rel->relid && var->varattno > 0 &&
+				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
 					ts_is_partitioning_column(ht, var->varattno))
 				{
-					path->runtime_exclusion = true;
+					path->runtime_exclusion_children = true;
 					break;
 				}
 			}
 		}
 	}
+	/*
+	 * Our strategy is to use child exclusion if possible (if a partitioning
+	 * column is used) and fall back to parent exclusion if we can't use child
+	 * exclusion. Please note: there is no point to using both child and parent
+	 * exclusion at the same time since child exclusion would always exclude
+	 * the same chunks that parent exclusion would.
+	 */
+
+	if (path->runtime_exclusion_parent && path->runtime_exclusion_children)
+		path->runtime_exclusion_parent = false;
 
 	/*
 	 * Make sure our subpath is either an Append or MergeAppend node
@@ -253,7 +278,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		if (!has_scan_childs)
 		{
 			path->startup_exclusion = false;
-			path->runtime_exclusion = false;
+			path->runtime_exclusion_parent = false;
+			path->runtime_exclusion_children = false;
 		}
 
 		path->cpath.custom_paths = nested_children;
@@ -435,11 +461,17 @@ find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_con
 			Assert(IsA(left, Var) && IsA(right, Var));
 
 			/* Is this a join condition referencing our hypertable */
-			if ((left->varno == sort_relid && right->varno == ht_relid &&
-				 left->varattno == sort_var->varattno) ||
-				(left->varno == ht_relid && right->varno == sort_relid &&
+			if (((Index) left->varno == sort_relid && (Index) right->varno == ht_relid &&
+				 left->varattno == sort_var->varattno))
+			{
+				return right;
+			}
+
+			if (((Index) left->varno == ht_relid && (Index) right->varno == sort_relid &&
 				 right->varattno == sort_var->varattno))
-				return left->varno == sort_relid ? right : left;
+			{
+				return left;
+			}
 		}
 	}
 

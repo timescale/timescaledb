@@ -11,7 +11,6 @@
 #include <nodes/makefuncs.h>
 #include <optimizer/optimizer.h>
 #include <rewrite/rewriteManip.h>
-#include <utils/int8.h>
 #include <utils/builtins.h>
 
 #include "options.h"
@@ -42,7 +41,7 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool nulls[Natts_continuous_agg];
 		Datum values[Natts_continuous_agg];
-		bool repl[Natts_continuous_agg] = { false };
+		bool doReplace[Natts_continuous_agg] = { false };
 		bool should_free;
 		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 		HeapTuple new_tuple;
@@ -50,11 +49,11 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 
 		heap_deform_tuple(tuple, tupdesc, values, nulls);
 
-		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 			BoolGetDatum(materialized_only);
 
-		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
 
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);
@@ -68,22 +67,55 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 }
 
 /*
- * Retrieve the cagg view query and find the groupby clause and
- * time_bucket clause. Map them to the column names(of mat.hypertable)
- * Note that cagg_view_query has 2 forms : with union and without UNION
- * We have to extract the part of the query that has finalize_agg on
- * the materialized  hypertable to find the group by clauses.
- * (see continuous_aggs/create.c for more info on the query structure)
- * Returns: list of column names used in group by clause of the cagg query.
+ * This function is responsible to return a list of column names used in
+ * GROUP BY clause of the cagg query. It behaves a bit different depending
+ * of the type of the Continuous Aggregate.
+ *
+ * 1) Partials form (finalized=false)
+ *
+ *    Retrieve the "user view query" and find the GROUP BY clause and
+ *    "time_bucket" clause. Map them to the column names (of mat.hypertable)
+ *
+ *    Note that the "user view query" has 2 forms:
+ *    - with UNION
+ *    - without UNION
+ *
+ *    We have to extract the part of the query that has "finalize_agg" on
+ *    the materialized hypertable to find the GROUP BY clauses.
+ *    (see continuous_aggs/create.c for more info on the query structure)
+ *
+ * 2) Finals form (finalized=true) (>= 2.7)
+ *
+ *    Retrieve the "direct view query" and find the GROUP BY clause and
+ *    "time_bucket" clause. We use the "direct view query" because in the
+ *    "user view query" we removed the re-aggregation in the part that query
+ *    the materialization hypertable so we don't have a GROUP BY clause
+ *    anymore.
+ *
+ *    Get the column name from the GROUP BY clause because all the column
+ *    names are the same in all underlying objects (user view, direct view,
+ *    partial view and materialization hypertable).
  */
 static List *
 cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 {
 	List *retlist = NIL;
 	ListCell *lc;
-	Oid cagg_view_oid =
-		get_relname_relid(NameStr(agg->data.user_view_name),
-						  get_namespace_oid(NameStr(agg->data.user_view_schema), false));
+	Oid cagg_view_oid;
+
+	/*
+	 * Get the direct_view definition for the finalized version because
+	 * the user view doesn't have the "GROUP BY" clause anymore.
+	 */
+	if (ContinuousAggIsFinalized(agg))
+		cagg_view_oid =
+			get_relname_relid(NameStr(agg->data.direct_view_name),
+							  get_namespace_oid(NameStr(agg->data.direct_view_schema), false));
+	else
+		cagg_view_oid =
+			get_relname_relid(NameStr(agg->data.user_view_name),
+							  get_namespace_oid(NameStr(agg->data.user_view_schema), false));
+
 	Relation cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
 	RuleLock *cagg_view_rules = cagg_view_rel->rd_rules;
 	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);
@@ -118,11 +150,19 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	{
 		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
 		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, finalize_query->targetList);
-		/* groupby clauses are columns from the mat hypertable */
-		Assert(IsA(cagg_tle->expr, Var));
-		Var *mat_var = castNode(Var, cagg_tle->expr);
-		char *mat_colname = get_attname(mat_relid, mat_var->varattno, false);
-		retlist = lappend(retlist, mat_colname);
+
+		if (ContinuousAggIsFinalized(agg))
+		{
+			/* "resname" is the same as "mat column names" in the finalized version */
+			if (!cagg_tle->resjunk && cagg_tle->resname)
+				retlist = lappend(retlist, cagg_tle->resname);
+		}
+		else
+		{
+			/* groupby clauses are columns from the mat hypertable */
+			Var *mat_var = castNode(Var, cagg_tle->expr);
+			retlist = lappend(retlist, get_attname(mat_relid, mat_var->varattno, false));
+		}
 	}
 	return retlist;
 }

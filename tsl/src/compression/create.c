@@ -52,7 +52,7 @@ typedef struct CompressColInfo
 {
 	int numcols;
 	FormData_hypertable_compression
-		*col_meta;	/* metadata about columns from src hypertable that will be compressed*/
+		*col_meta;	  /* metadata about columns from src hypertable that will be compressed*/
 	List *coldeflist; /*list of ColumnDef for the compressed column */
 } CompressColInfo;
 
@@ -303,7 +303,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 				cc->col_meta[colno].orderby_nullsfirst = ordercol->nullsfirst;
 			}
 		}
-		if (attroid == InvalidOid)
+		if (!OidIsValid(attroid))
 		{
 			attroid = compresseddata_oid; /* default type for column */
 			cc->col_meta[colno].algo_id = get_default_algorithm_id(attr->atttypid);
@@ -918,7 +918,7 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 			bool orderby_time_default_matches = false;
 			ListCell *elem1, *elem2;
 			FormData_hypertable_compression *fd_elem1;
-			NameData colname1 = { { 0 } }, colname2 = { { 0 } };
+			NameData colname1 = { .data = { 0 } }, colname2 = { .data = { 0 } };
 			CompressedParsedCol *cpc_elem2;
 			/* If the orderby that's already set is only the time column DESC (which is the
 			 default), and we pass the default again, then no need to give an error */
@@ -1065,6 +1065,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	List *segmentby_cols;
 	List *orderby_cols;
 	List *constraint_list = NIL;
+	Interval *compress_interval;
+	const Dimension *time_dim;
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
@@ -1091,6 +1093,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+	compress_interval = ts_compress_hypertable_parse_chunk_time_interval(with_clause_options, ht);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		check_modify_compression_options(ht, with_clause_options, orderby_cols);
@@ -1129,6 +1132,18 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	/*add the constraints to the new compressed hypertable */
 	ht = ts_hypertable_get_by_id(ht->fd.id); /*reload updated info*/
 	ts_hypertable_clone_constraints_to_compressed(ht, constraint_list);
+
+	if (compress_interval != NULL)
+	{
+		time_dim = hyperspace_get_open_dimension(ht->space, 0);
+		int64 compress_interval_usec =
+			ts_interval_value_to_internal(IntervalPGetDatum(compress_interval), INTERVALOID);
+		if (compress_interval_usec % time_dim->fd.interval_length > 0)
+			elog(WARNING,
+				 "compress chunk interval is not a multiple of chunk interval, you should use a "
+				 "factor of chunk interval to merge as much as possible");
+		ts_hypertable_set_compress_interval(ht, compress_interval_usec);
+	}
 
 	/* do not release any locks, will get released by xact end */
 	return true;

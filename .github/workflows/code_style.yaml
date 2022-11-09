@@ -10,39 +10,70 @@ on:
 jobs:
   cmake_checks:
     name: Check CMake files
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Install prerequisites
         run: pip install cmakelang
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Run format on CMake files
         run: |
           find  -name CMakeLists.txt  -exec cmake-format -i {} +
           find src test tsl -name '*.cmake' -exec cmake-format -i {} +
       - name: Check for diff
         run: git diff --exit-code
+
   perl_checks:
     name: Check Perl code in tree
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Install prerequisites
         run: sudo apt install perltidy
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+      - name: Check trailing whitespace
+        if: always()
+        run: |
+          find . -name '*.p[lm]' -exec perl -pi -e 's/[ \t]+$//' {} +
+          git diff --exit-code
       - name: Format Perl files, if needed
-        run: find . -name '*.p[lm]' -exec perltidy --profile=scripts/perltidyrc {} +
-      - name: Check for diff
-        run: git diff --exit-code
+        if: always()
+        run: |
+          find . -name '*.p[lm]' -exec perltidy -b -bext=/ {} +
+          git diff --exit-code
+
+  cc_checks:
+    name: Check code formatting
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+    - name: Check trailing whitespace
+      if: always()
+      run: |
+        find . -name '*.[ch]' -exec perl -pi -e 's/[ \t]+$//' {} +
+        git diff --exit-code
+
+    - name: Check code formatting
+      if: always()
+      run: |
+        sudo apt install clang-format-14
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-14 100
+        sudo update-alternatives --set clang-format /usr/bin/clang-format-14
+        ./scripts/clang_format_all.sh
+        git diff --exit-code
+
   misc_checks:
-    name: Check formatting, license, update scripts and git hooks
-    runs-on: ubuntu-20.04
+    name: Check license, update scripts, and git hooks
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
     - name: Checkout source
       if: always()
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Check license
       if: always()
       run: ./scripts/check_license_all.sh
@@ -53,14 +84,6 @@ jobs:
     - name: Check for unreferenced test files
       if: always()
       run: ./scripts/check_unreferenced_files.sh
-    - name: Check code formatting
-      if: always()
-      run: |
-        sudo apt install clang-format-8
-        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-8 100
-        sudo update-alternatives --set clang-format /usr/bin/clang-format-8
-        ./scripts/clang_format_all.sh
-        git diff --exit-code
     - name: Check update scripts
       if: always()
       run: ./scripts/check_update_scripts.sh

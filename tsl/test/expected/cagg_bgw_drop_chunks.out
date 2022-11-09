@@ -97,9 +97,9 @@ WHERE hypertable_name = '_materialized_hypertable_2' ORDER BY range_start_intege
 
 SELECT add_retention_policy( 'drop_chunks_view1', drop_after => 10) as drop_chunks_job_id1 \gset
 SELECT alter_job(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
-                                             alter_job                                              
-----------------------------------------------------------------------------------------------------
- (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": 10, ""hypertable_id"": 2}",-infinity)
+                                                                    alter_job                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": 10, ""hypertable_id"": 2}",-infinity,_timescaledb_internal.policy_retention_check)
 (1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(2000000);

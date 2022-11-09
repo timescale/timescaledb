@@ -8,19 +8,31 @@ on:
       - prerelease_test
   pull_request:
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   update_test:
     name: Update test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
+    needs: config
     strategy:
       matrix:
-        pg: ["12.11", "13.7", "14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
       POSTGRES_HOST_AUTH_METHOD: trust
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Update tests ${{ matrix.pg }}
       run: |
@@ -34,7 +46,7 @@ jobs:
 
     - name: Upload Artifacts
       if: failure()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Extension update diff ${{ matrix.pg }}
         path: update_test.*.diff.*
@@ -42,9 +54,10 @@ jobs:
   downgrade_test:
     name: Downgrade test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
+    needs: config
     strategy:
       matrix:
-        pg: ["12.11", "13.7", "14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -52,7 +65,7 @@ jobs:
       GENERATE_DOWNGRADE_SCRIPT: ON
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     # We need the tags to be able to build a downgrade script.
     - name: Fetch all tags
@@ -75,7 +88,7 @@ jobs:
 
     - name: Upload Artifacts
       if: failure()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Extension downgrade diff ${{ matrix.pg }}
         path: downgrade_test.*.diff.*

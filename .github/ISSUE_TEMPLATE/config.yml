@@ -3,8 +3,11 @@ contact_links:
   - name: Support Request
     url: https://www.timescale.com/support
     about: Support request or question relating to TimescaleDB
-  - name: Question?
+  - name: Timescale Community Slack
     url: https://slack.timescale.com/
+    about: Get free help from the TimescaleDB community
+  - name: Timescale Community Forum
+    url: https://forum.timescale.com/
     about: Get free help from the TimescaleDB community
   - name: Documentation request
     url: https://github.com/timescale/docs/issues/new/choose

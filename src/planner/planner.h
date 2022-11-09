@@ -75,7 +75,7 @@ ts_get_private_reloptinfo(RelOptInfo *rel)
 typedef enum TsRelType
 {
 	TS_REL_HYPERTABLE,		 /* A hypertable with no parent */
-	TS_REL_CHUNK,			 /* Chunk with no parent (i.e., it's part of the
+	TS_REL_CHUNK_STANDALONE, /* Chunk with no parent (i.e., it's part of the
 							  * plan as a standalone table. For example,
 							  * querying the chunk directly and not via the
 							  * parent hypertable). */
@@ -107,7 +107,6 @@ extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
 
 extern void add_baserel_cache_entry_for_chunk(Oid chunk_reloid, uint32 chunk_status,
-											  Hypertable *hypertable, TsRelType chunk_reltype);
-extern TsRelType ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p_ht);
+											  Hypertable *hypertable);
 
 #endif /* TIMESCALEDB_PLANNER_H */

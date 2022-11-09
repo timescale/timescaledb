@@ -334,6 +334,29 @@ CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 SELECT * FROM cagg_invals;
 SELECT * FROM hyper_invals;
 
+-- Pick the first chunk of conditions to TRUNCATE
+SELECT show_chunks AS chunk_to_truncate
+FROM show_chunks('conditions')
+ORDER BY 1
+LIMIT 1 \gset
+
+-- Show the data before truncating one of the chunks
+SELECT * FROM :chunk_to_truncate
+ORDER BY 1;
+
+-- Truncate one chunk
+\if :IS_DISTRIBUTED
+-- There is no TRUNCATE implementation for FOREIGN tables yet
+\set ON_ERROR_STOP 0
+\endif
+TRUNCATE TABLE :chunk_to_truncate;
+\if :IS_DISTRIBUTED
+\set ON_ERROR_STOP 1
+\endif
+
+-- Should see new invalidation entries for conditions for the non-distributed case
+SELECT * FROM hyper_invals;
+
 -- TRUNCATE the hypertable to invalidate all its continuous aggregates
 TRUNCATE conditions;
 

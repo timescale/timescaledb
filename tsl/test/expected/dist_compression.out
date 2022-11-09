@@ -28,16 +28,21 @@ LANGUAGE C;
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-       node_name       |   host    | port  |       database        | node_created | database_created | extension_created 
------------------------+-----------+-------+-----------------------+--------------+------------------+-------------------
- db_dist_compression_1 | localhost | 55432 | db_dist_compression_1 | t            | t                | t
- db_dist_compression_2 | localhost | 55432 | db_dist_compression_2 | t            | t                | t
- db_dist_compression_3 | localhost | 55432 | db_dist_compression_3 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+       node_name       |       database        | node_created | database_created | extension_created 
+-----------------------+-----------------------+--------------+------------------+-------------------
+ db_dist_compression_1 | db_dist_compression_1 | t            | t                | t
+ db_dist_compression_2 | db_dist_compression_2 | t            | t                | t
+ db_dist_compression_3 | db_dist_compression_3 | t            | t                | t
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 CREATE TABLE compressed(time timestamptz, device int, temp float);
 -- Replicate twice to see that compress_chunk compresses all replica chunks
@@ -287,36 +292,36 @@ $$);
 NOTICE:  [db_dist_compression_1]: 
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_1]:
-id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status
---+-------------+---------------------+------------------------+-------------------+-------+------
- 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1
- 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  6|f      |     1
- 5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0
- 6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0
+id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
+--+-------------+---------------------+------------------------+-------------------+-------+------+---------
+ 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  6|f      |     1|f        
+ 5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0|f        
+ 6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0|f        
 (4 rows)
 
 
 NOTICE:  [db_dist_compression_2]: 
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_2]:
-id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status
---+-------------+---------------------+------------------------+-------------------+-------+------
- 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1
- 2|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  6|f      |     1
- 5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0
- 6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0
+id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
+--+-------------+---------------------+------------------------+-------------------+-------+------+---------
+ 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  6|f      |     1|f        
+ 5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0|f        
+ 6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0|f        
 (4 rows)
 
 
 NOTICE:  [db_dist_compression_3]: 
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_3]:
-id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status
---+-------------+---------------------+------------------------+-------------------+-------+------
- 1|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  4|f      |     1
- 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  3|f      |     1
- 3|            2|_timescaledb_internal|compress_hyper_2_3_chunk|                   |f      |     0
- 4|            2|_timescaledb_internal|compress_hyper_2_4_chunk|                   |f      |     0
+id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
+--+-------------+---------------------+------------------------+-------------------+-------+------+---------
+ 1|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  4|f      |     1|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  3|f      |     1|f        
+ 3|            2|_timescaledb_internal|compress_hyper_2_3_chunk|                   |f      |     0|f        
+ 4|            2|_timescaledb_internal|compress_hyper_2_4_chunk|                   |f      |     0|f        
 (4 rows)
 
 
@@ -654,29 +659,29 @@ select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 \gset
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
-  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | hypertable_id |                       config                        
-------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+---------------+-----------------------------------------------------
- 1000 | Compression Policy [1000] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"}
+  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |     check_schema      |        check_name        | timezone 
+------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+-----------------------+--------------------------+----------
+ 1000 | Compression Policy [1000] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check | 
 (1 row)
 
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
- job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start 
---------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------
-   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 2, "compress_after": "@ 60 days"} | -infinity
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                  
+--------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+------------------------------------------------
+   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 2, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_internal.policy_compression_check
 (1 row)
 
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | hypertable_id |                       config                        
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+---------------+-----------------------------------------------------
- 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |     check_schema      |        check_name        | timezone 
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+-----------------------+--------------------------+----------
+ 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check | 
 (1 row)
 
 -- we want only 1 chunk to be compressed --
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
 FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                 alter_job                                                                  
---------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 2, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity)
+                                                                                         alter_job                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 2, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check)
 (1 row)
 
 insert into conditions
@@ -694,11 +699,11 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
- id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+-----------------------+---------------------+---------+--------
-  6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      1
-  7 |             2 | _timescaledb_internal | _dist_hyper_2_7_chunk |                     | f       |      0
-  8 |             2 | _timescaledb_internal | _dist_hyper_2_8_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-----------------------+---------------------+---------+--------+-----------
+  6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      1 | f
+  7 |             2 | _timescaledb_internal | _dist_hyper_2_7_chunk |                     | f       |      0 | f
+  8 |             2 | _timescaledb_internal | _dist_hyper_2_8_chunk |                     | f       |      0 | f
 (3 rows)
 
 -- TEST 4 --
@@ -768,9 +773,9 @@ INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_smallint SET (timescaledb.compress);
 SELECT add_compression_policy('test_table_smallint', 2::int) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | hypertable_id |                  config                   
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+---------------+-------------------------------------------
- 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         |             3 | {"hypertable_id": 3, "compress_after": 2}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |     check_schema      |        check_name        | timezone 
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-------------------------------------------+-----------------------+--------------------------+----------
+ 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             3 | {"hypertable_id": 3, "compress_after": 2} | _timescaledb_internal | policy_compression_check | 
 (1 row)
 
 CALL run_job(:compressjob_id);
@@ -810,9 +815,9 @@ INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_integer SET (timescaledb.compress);
 SELECT add_compression_policy('test_table_integer', 2::int) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | hypertable_id |                  config                   
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+---------------+-------------------------------------------
- 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         |             4 | {"hypertable_id": 4, "compress_after": 2}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |     check_schema      |        check_name        | timezone 
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-------------------------------------------+-----------------------+--------------------------+----------
+ 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             4 | {"hypertable_id": 4, "compress_after": 2} | _timescaledb_internal | policy_compression_check | 
 (1 row)
 
 CALL run_job(:compressjob_id);
@@ -852,9 +857,9 @@ INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_bigint SET (timescaledb.compress);
 SELECT add_compression_policy('test_table_bigint', 2::int) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | hypertable_id |                  config                   
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+---------------+-------------------------------------------
- 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         |             5 | {"hypertable_id": 5, "compress_after": 2}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |    owner    | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |     check_schema      |        check_name        | timezone 
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------+-----------+----------------+---------------+---------------+-------------------------------------------+-----------------------+--------------------------+----------
+ 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         | f              |               |             5 | {"hypertable_id": 5, "compress_after": 2} | _timescaledb_internal | policy_compression_check | 
 (1 row)
 
 CALL run_job(:compressjob_id);
@@ -1473,3 +1478,7 @@ SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
  Wed Aug 18 00:00:00 2021 PDT | 4.14 |      1 | medium_value_text | 
 (1 row)
 
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

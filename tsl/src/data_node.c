@@ -400,7 +400,7 @@ static bool
 data_node_validate_database(TSConnection *conn, const DbInfo *database)
 {
 	PGresult *res;
-	uint32 actual_encoding;
+	int32 actual_encoding;
 	const char *actual_chartype;
 	const char *actual_collation;
 
@@ -580,9 +580,8 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 {
 	TSConnection *conn = NULL;
 	char *err = NULL;
-	int i;
 
-	for (i = 0; i < lengthof(bootstrap_databases); i++)
+	for (size_t i = 0; i < lengthof(bootstrap_databases); i++)
 	{
 		List *node_options =
 			create_data_node_options(host, port, bootstrap_databases[i], username, password);
@@ -1315,7 +1314,7 @@ data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, b
 									bool block_chunks)
 {
 	int affected = 0;
-	bool all_hypertables = table_id == InvalidOid ? true : false;
+	bool all_hypertables = !OidIsValid(table_id);
 	List *hypertable_data_nodes = NIL;
 	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 
@@ -1451,7 +1450,6 @@ drop_data_node_database(const ForeignServer *server)
 	char *nodename = pstrdup(server->servername);
 	char *dbname = NULL;
 	char *err = NULL;
-	int i;
 
 	/* Figure out the name of the database that should be dropped */
 	foreach (lc, server->options)
@@ -1483,7 +1481,7 @@ drop_data_node_database(const ForeignServer *server)
 	/* Cannot connect to the database that is being dropped, so try to connect
 	 * to a "standard" bootstrap database that we expect to exist on the data
 	 * node */
-	for (i = 0; i < lengthof(bootstrap_databases); i++)
+	for (size_t i = 0; i < lengthof(bootstrap_databases); i++)
 	{
 		List *conn_options;
 		DefElem dbname_elem = {

@@ -245,9 +245,11 @@ sanitize_serialized_partial(Oid deserialfnoid, bytea *serialized_partial)
  * deserialize from the internal format in which data is stored in bytea
  * parameter. Callers need to check deserialized_isnull . Only if this is set to false,
  * a valid value is returned.
+ * The serialized_partial argument is declared volatile to avoid the mistaken
+ * gcc-11 warning -Wclobbered.
  */
 static Datum
-inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
+inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *volatile serialized_partial,
 					  bool serialized_isnull, bool *deserialized_isnull)
 {
 	Datum deserialized = (Datum) 0;

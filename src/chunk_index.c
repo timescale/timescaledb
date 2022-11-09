@@ -303,7 +303,7 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 									template_indexrel->rd_indoption,
 									reloptions,
 									flags,
-									0,	 /* constr_flags constant and 0
+									0,	   /* constr_flags constant and 0
 											* for now */
 									false, /* allow system table mods */
 									false, /* is internal */
@@ -945,19 +945,19 @@ init_scan_by_chunk_id_index_name(ScanIterator *iterator, int32 chunk_id, const c
  * Adjust internal metadata after index/constraint rename
  */
 int
-ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char *oldname,
-						   const char *newname)
+ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char *old_name,
+						   const char *new_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_INDEX, RowExclusiveLock, CurrentMemoryContext);
 	int count = 0;
 
-	init_scan_by_chunk_id_index_name(&iterator, chunk_id, oldname);
+	init_scan_by_chunk_id_index_name(&iterator, chunk_id, old_name);
 
 	ts_scanner_foreach(&iterator)
 	{
 		bool nulls[Natts_chunk_index];
-		bool repl[Natts_chunk_index] = { false };
+		bool doReplace[Natts_chunk_index] = { false };
 		Datum values[Natts_chunk_index];
 		bool should_free;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -968,11 +968,12 @@ ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char
 
 		values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
 			CStringGetDatum(ht_index_name);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
-		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = CStringGetDatum(newname);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
+		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
+		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = CStringGetDatum(new_name);
+		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
 
-		new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, repl);
+		new_tuple =
+			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, doReplace);
 
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);
@@ -986,13 +987,13 @@ ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char
 }
 
 int
-ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname)
+ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *new_name)
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(chunk_indexrelid);
 	ChunkIndexRenameInfo renameinfo = {
 		.oldname = indexname,
-		.newname = newname,
+		.newname = new_name,
 	};
 
 	ScanKeyInit(&scankey[0],
@@ -1015,13 +1016,13 @@ ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname)
 }
 
 int
-ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *newname)
+ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *new_name)
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(hypertable_indexrelid);
 	ChunkIndexRenameInfo renameinfo = {
 		.oldname = indexname,
-		.newname = newname,
+		.newname = new_name,
 		.isparent = true,
 	};
 

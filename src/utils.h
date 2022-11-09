@@ -67,6 +67,7 @@ extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_
  * Convert a column from the internal time representation into the specified type
  */
 extern TSDLLEXPORT Datum ts_internal_to_time_value(int64 value, Oid type);
+extern TSDLLEXPORT int64 ts_internal_to_time_int64(int64 value, Oid type);
 extern TSDLLEXPORT Datum ts_internal_to_interval_value(int64 value, Oid type);
 extern TSDLLEXPORT char *ts_internal_to_time_string(int64 value, Oid type);
 
@@ -116,7 +117,7 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 	(to_type *) ts_create_struct_from_slot(slot, mctx, sizeof(to_type), sizeof(form_type));
 
 /* note PG10 has_superclass but PG96 does not so use this */
-#define is_inheritance_child(relid) (ts_inheritance_parent_relid(relid) != InvalidOid)
+#define is_inheritance_child(relid) (OidIsValid(ts_inheritance_parent_relid((relid))))
 
 #define is_inheritance_parent(relid)                                                               \
 	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
@@ -198,5 +199,7 @@ extern TSDLLEXPORT const char *ts_get_node_name(Node *node);
 extern TSDLLEXPORT int ts_get_relnatts(Oid relid);
 extern TSDLLEXPORT void ts_alter_table_with_event_trigger(Oid relid, Node *cmd, List *cmds,
 														  bool recurse);
+extern TSDLLEXPORT void ts_copy_relation_acl(const Oid source_relid, const Oid target_relid,
+											 const Oid owner_id);
 
 #endif /* TIMESCALEDB_UTILS_H */

@@ -13,6 +13,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/reorder_api.h"
+#include "bgw_policy/policies_v2.h"
 #include "chunk.h"
 #include "chunk_api.h"
 #include "compression/api.h"
@@ -39,7 +40,7 @@
 #include "license_guc.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/skip_scan/skip_scan.h"
-#include "nodes/gapfill/gapfill.h"
+#include "nodes/gapfill/gapfill_functions.h"
 #include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
@@ -49,6 +50,7 @@
 #include "remote/dist_commands.h"
 #include "remote/dist_copy.h"
 #include "remote/dist_txn.h"
+#include "remote/healthcheck.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "reorder.h"
@@ -96,14 +98,18 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_compression_add = policy_compression_add,
 	.policy_compression_remove = policy_compression_remove,
 	.policy_recompression_proc = policy_recompression_proc,
+	.policy_compression_check = policy_compression_check,
 	.policy_refresh_cagg_add = policy_refresh_cagg_add,
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
+	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
+	.policy_reorder_check = policy_reorder_check,
 	.policy_reorder_remove = policy_reorder_remove,
 	.policy_retention_add = policy_retention_add,
 	.policy_retention_proc = policy_retention_proc,
+	.policy_retention_check = policy_retention_check,
 	.policy_retention_remove = policy_retention_remove,
 
 	.job_add = job_add,
@@ -112,7 +118,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.job_delete = job_delete,
 	.job_run = job_run,
 	.job_execute = job_execute,
-	.job_config_check = job_config_check,
 
 	/* gapfill */
 	.gapfill_marker = gapfill_marker,
@@ -122,6 +127,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_date_time_bucket = gapfill_date_time_bucket,
 	.gapfill_timestamp_time_bucket = gapfill_timestamp_time_bucket,
 	.gapfill_timestamptz_time_bucket = gapfill_timestamptz_time_bucket,
+	.gapfill_timestamptz_timezone_time_bucket = gapfill_timestamptz_timezone_time_bucket,
 
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,
@@ -129,6 +135,12 @@ CrossModuleFunctions tsl_cm_functions = {
 	.copy_chunk_proc = tsl_copy_chunk_proc,
 	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
 	.subscription_exec = tsl_subscription_exec,
+
+	.policies_add = policies_add,
+	.policies_remove = policies_remove,
+	.policies_remove_all = policies_remove_all,
+	.policies_alter = policies_alter,
+	.policies_show = policies_show,
 
 	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,
@@ -219,6 +231,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats,
+	.health_check = ts_dist_health_check,
 };
 
 static void

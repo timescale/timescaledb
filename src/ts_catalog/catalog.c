@@ -116,6 +116,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME,
 	},
+	[JOB_ERRORS] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.table_name = JOB_ERRORS_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -164,6 +168,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
 			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
 			[CHUNK_COMPRESSED_CHUNK_ID_INDEX] = "chunk_compressed_chunk_id_idx",
+			[CHUNK_OSM_CHUNK_INDEX] = "chunk_osm_chunk_idx",
 		},
 	},
 	[CHUNK_CONSTRAINT] = {
@@ -307,7 +312,7 @@ typedef struct InternalFunctionDef
 	int args;
 } InternalFunctionDef;
 
-const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
+static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,
@@ -379,7 +384,7 @@ catalog_database_info_init(CatalogDatabaseInfo *info)
 	info->schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
 	info->owner_uid = catalog_owner();
 
-	if (info->schema_id == InvalidOid)
+	if (!OidIsValid(info->schema_id))
 		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
 }
 
@@ -421,7 +426,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		schema_oid = get_namespace_oid(table_ary[i].schema_name, false);
 		id = get_relname_relid(table_ary[i].table_name, schema_oid);
 
-		if (id == InvalidOid)
+		if (!OidIsValid(id))
 			elog(ERROR,
 				 "OID lookup failed for table \"%s.%s\"",
 				 table_ary[i].schema_name,
@@ -436,7 +441,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		{
 			id = get_relname_relid(index_ary[i].names[j], schema_oid);
 
-			if (id == InvalidOid)
+			if (!OidIsValid(id))
 				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);
 
 			tables_info[i].index_ids[j] = id;

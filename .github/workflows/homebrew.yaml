@@ -37,7 +37,7 @@ jobs:
         brew services start postgresql
 
     # checkout code to get version information
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Test Installation
       run: |
@@ -51,7 +51,7 @@ jobs:
         fi
         installed_version=$(psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" postgres | sed -e 's! !!g')
         if [ "$version" != "$installed_version" ];then
-          echo "Installed version \"${installed_version}\" does not match expected version \"#{version}\"."
+          echo "Installed version \"${installed_version}\" does not match expected version \"${version}\"."
           false
         fi
 

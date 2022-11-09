@@ -95,8 +95,8 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 
 /*
  * The default origin is Monday 2000-01-03. We don't use PG epoch since it starts on a saturday.
- * This makes time-buckets by a week more intuitive and aligns it with
- * date_trunc.
+ * This makes time-buckets by a week more intuitive and aligns it with date_trunc. Since month
+ * bucketing ignores the day component this makes origin for month buckets 2000-01-01.
  */
 #define DEFAULT_ORIGIN (JAN_3_2000)
 #define TIME_BUCKET_TS(period, timestamp, result, shift)                                           \
@@ -134,6 +134,49 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 		(result) += (shift);                                                                       \
 	} while (0)
 
+static void
+validate_month_bucket(Interval *interval)
+{
+	/*
+	 * Bucketing by a month and non-month cannot be mixed.
+	 */
+	Assert(interval->month);
+
+	if (interval->day || interval->time)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("month intervals cannot have day or time component")));
+	}
+}
+
+/*
+ * To bucket by month we get the year and month of a date and convert
+ * that to the nth month since origin. This allows us to treat month
+ * bucketing similar to int bucketing. During this process we ignore
+ * the day component and therefore only support bucketing by full months.
+ */
+static DateADT
+bucket_month(int32 period, DateADT date, DateADT origin)
+{
+	int32 year, month, day;
+	int32 result;
+
+	j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
+	int32 timestamp = year * 12 + month - 1;
+
+	j2date(origin + POSTGRES_EPOCH_JDATE, &year, &month, &day);
+	int32 offset = year * 12 + month - 1;
+
+	TIME_BUCKET(period, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
+
+	year = result / 12;
+	month = result % 12;
+	day = 1;
+
+	return date2j(year, month + 1, day) - POSTGRES_EPOCH_JDATE;
+}
+
 /* Returns the period in the same representation as Postgres Timestamps.
  * Note that this is not our internal representation (microseconds).
  * Always returns an exact value.*/
@@ -163,14 +206,32 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 	 */
 	Timestamp origin = (PG_NARGS() > 2 ? PG_GETARG_TIMESTAMP(2) : DEFAULT_ORIGIN);
 	Timestamp result;
-	int64 period = get_interval_period_timestamp_units(interval);
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMP(timestamp);
 
-	TIME_BUCKET_TS(period, timestamp, result, origin);
+	if (interval->month)
+	{
+		DateADT origin_date = 0;
+		validate_month_bucket(interval);
 
-	PG_RETURN_TIMESTAMP(result);
+		DateADT date = DatumGetDateADT(DirectFunctionCall1(timestamp_date, PG_GETARG_DATUM(1)));
+		if (origin != DEFAULT_ORIGIN)
+			origin_date =
+				DatumGetDateADT(DirectFunctionCall1(timestamp_date, TimestampGetDatum(origin)));
+
+		date = bucket_month(interval->month, date, origin_date);
+
+		PG_RETURN_DATUM(DirectFunctionCall1(date_timestamp, DateADTGetDatum(date)));
+	}
+	else
+	{
+		int64 period = get_interval_period_timestamp_units(interval);
+
+		TIME_BUCKET_TS(period, timestamp, result, origin);
+
+		PG_RETURN_TIMESTAMP(result);
+	}
 }
 
 TS_FUNCTION_INFO_V1(ts_timestamptz_bucket);
@@ -187,14 +248,95 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	 */
 	TimestampTz origin = (PG_NARGS() > 2 ? PG_GETARG_TIMESTAMPTZ(2) : DEFAULT_ORIGIN);
 	TimestampTz result;
-	int64 period = get_interval_period_timestamp_units(interval);
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMPTZ(timestamp);
 
-	TIME_BUCKET_TS(period, timestamp, result, origin);
+	if (PG_NARGS() > 2)
+	{
+		origin = PG_GETARG_TIMESTAMPTZ(2);
+	}
 
-	PG_RETURN_TIMESTAMPTZ(result);
+	if (interval->month)
+	{
+		DateADT origin_date = 0;
+		validate_month_bucket(interval);
+
+		DateADT date = DatumGetDateADT(DirectFunctionCall1(timestamp_date, PG_GETARG_DATUM(1)));
+		if (origin != DEFAULT_ORIGIN)
+			origin_date =
+				DatumGetDateADT(DirectFunctionCall1(timestamp_date, TimestampTzGetDatum(origin)));
+
+		date = bucket_month(interval->month, date, origin_date);
+
+		PG_RETURN_DATUM(DirectFunctionCall1(date_timestamp, DateADTGetDatum(date)));
+	}
+	else
+	{
+		int64 period = get_interval_period_timestamp_units(interval);
+
+		TIME_BUCKET_TS(period, timestamp, result, origin);
+
+		PG_RETURN_TIMESTAMPTZ(result);
+	}
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_timezone_bucket);
+
+/*
+ * time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ DEFAULT
+ * NULL, "offset" INTERVAL DEFAULT NULL) RETURNS TIMESTAMPTZ
+ */
+TSDLLEXPORT Datum
+ts_timestamptz_timezone_bucket(PG_FUNCTION_ARGS)
+{
+	Datum period = PG_GETARG_DATUM(0);
+	Datum timestamp = PG_GETARG_DATUM(1);
+	Datum tzname = PG_GETARG_DATUM(2);
+
+	/*
+	 * When called from SQL we will always have 5 args because default values
+	 * will be filled in for missing arguments. When called from C with
+	 * DirectFunctionCall number of arguments might be less than 5.
+	 */
+	bool have_origin = PG_NARGS() > 3 && !PG_ARGISNULL(3);
+	bool have_offset = PG_NARGS() > 4 && !PG_ARGISNULL(4);
+
+	/*
+	 * We need to check for NULL arguments here because the function cannot be
+	 * defined STRICT due to the optional arguments.
+	 */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
+	/* Convert to local timestamp according to timezone */
+	timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
+	if (have_offset)
+	{
+		/* Apply offset. */
+		timestamp = DirectFunctionCall2(timestamp_mi_interval, timestamp, PG_GETARG_DATUM(4));
+	}
+
+	if (have_origin)
+	{
+		Datum origin = DirectFunctionCall2(timestamptz_zone, tzname, PG_GETARG_DATUM(3));
+		timestamp = DirectFunctionCall3(ts_timestamp_bucket, period, timestamp, origin);
+	}
+	else
+	{
+		timestamp = DirectFunctionCall2(ts_timestamp_bucket, period, timestamp);
+	}
+
+	if (have_offset)
+	{
+		/* Remove offset. */
+		timestamp = DirectFunctionCall2(timestamp_pl_interval, timestamp, PG_GETARG_DATUM(4));
+	}
+
+	/* Convert back to timezone */
+	timestamp = DirectFunctionCall2(timestamp_zone, tzname, timestamp);
+
+	PG_RETURN_DATUM(timestamp);
 }
 
 static inline void
@@ -223,27 +365,41 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 {
 	Interval *interval = PG_GETARG_INTERVAL_P(0);
 	DateADT date = PG_GETARG_DATEADT(1);
-	Timestamp origin = DEFAULT_ORIGIN;
+	DateADT origin = 0;
+	Timestamp origin_ts = DEFAULT_ORIGIN;
 	Timestamp timestamp, result;
-	int64 period = -1;
 
 	if (DATE_NOT_FINITE(date))
 		PG_RETURN_DATEADT(date);
 
-	period = get_interval_period_timestamp_units(interval);
-	/* check the period aligns on a date */
-	check_period_is_daily(period);
-
 	/* convert to timestamp (NOT tz), bucket, convert back to date */
 	timestamp = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(1)));
-	if (PG_NARGS() > 2)
-		origin = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(2)));
-
 	Assert(!TIMESTAMP_NOT_FINITE(timestamp));
 
-	TIME_BUCKET_TS(period, timestamp, result, origin);
+	if (PG_NARGS() > 2)
+	{
+		origin = PG_GETARG_DATEADT(2);
+		if (!interval->month)
+			origin_ts =
+				DatumGetTimestamp(DirectFunctionCall1(date_timestamp, DateADTGetDatum(origin)));
+	}
 
-	PG_RETURN_DATUM(DirectFunctionCall1(timestamp_date, TimestampGetDatum(result)));
+	if (interval->month)
+	{
+		validate_month_bucket(interval);
+
+		date = bucket_month(interval->month, date, origin);
+		PG_RETURN_DATEADT(date);
+	}
+	else
+	{
+		int64 period = get_interval_period_timestamp_units(interval);
+		/* check the period aligns on a date */
+		check_period_is_daily(period);
+
+		TIME_BUCKET_TS(period, timestamp, result, origin_ts);
+		PG_RETURN_DATUM(DirectFunctionCall1(timestamp_date, TimestampGetDatum(result)));
+	}
 }
 
 /* when working with time_buckets stored in our catalog, we may not know ahead of time which
@@ -428,20 +584,13 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 		/* Handle months and years */
 
 		j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
+		int32 result;
+		int32 offset = origin_year * 12 + origin_month - 1;
+		int32 timestamp = year * 12 + month - 1;
+		TIME_BUCKET(interval->month, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
 
-		if ((year < origin_year) || ((year == origin_year) && (month < origin_month)))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("origin must be before the given date")));
-		}
-
-		delta = (year * 12 + month) - (origin_year * 12 + origin_month);
-		bucket_number = delta / interval->month;
-		year = origin_year + (origin_month - 1 + bucket_number * interval->month) / 12;
-		month =
-			(((origin_year * 12 + (origin_month - 1)) + (bucket_number * interval->month)) % 12) +
-			1;
+		year = result / 12;
+		month = (result % 12) + 1;
 		day = 1;
 
 		date = date2j(year, month, day) - POSTGRES_EPOCH_JDATE;

@@ -27,9 +27,9 @@ WHERE classoid = 'pg_class'::regclass
 ORDER BY schema, name, initpriv;
 
 \di _timescaledb_catalog.*
-\ds+ _timescaledb_catalog.*;
-\df _timescaledb_internal.*;
-\df+ _timescaledb_internal.*;
+\ds+ _timescaledb_catalog.*
+\df _timescaledb_internal.*
+\df+ _timescaledb_internal.*
 \df public.*;
 \df+ public.*;
 
@@ -43,9 +43,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
 -- The list of tables configured to be dumped.
-SELECT obj::regclass::text
-FROM (SELECT unnest(extconfig) AS obj FROM pg_extension WHERE extname='timescaledb') AS objects
-ORDER BY obj::regclass::text;
+SELECT unnest(extconfig)::regclass::text AS obj FROM pg_extension WHERE extname='timescaledb' ORDER BY 1;
 
 -- Show dropped chunks
 SELECT *
@@ -75,3 +73,8 @@ FROM pg_depend dep
 WHERE classid='pg_class'::regclass
 ORDER BY attrelid::regclass::text,att.attnum;
 
+-- Show constraints
+SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid::regclass::text ~ '^_timescaledb_'
+ORDER BY 1, 2, 3;

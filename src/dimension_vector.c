@@ -23,7 +23,7 @@ cmp_slices_reverse(const void *left, const void *right)
 	const DimensionSlice *left_slice = *((DimensionSlice **) left);
 	const DimensionSlice *right_slice = *((DimensionSlice **) right);
 
-	return ts_dimension_slice_cmp(right_slice, left_slice);
+	return -ts_dimension_slice_cmp(left_slice, right_slice);
 }
 
 static int

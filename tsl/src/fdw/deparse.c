@@ -78,7 +78,7 @@
 #include "scan_plan.h"
 #include "extension_constants.h"
 #include "partialize_finalize.h"
-#include "nodes/gapfill/planner.h"
+#include "nodes/gapfill/gapfill.h"
 #include "planner/planner.h"
 
 /*
@@ -200,7 +200,7 @@ static void deparseReturningList(StringInfo buf, RangeTblEntry *rte, Index rtind
 static void deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte,
 							 bool qualify_col);
 static void deparseRelation(StringInfo buf, Relation rel);
-static void deparseExpr(Expr *expr, deparse_expr_cxt *context);
+static void deparseExpr(Expr *node, deparse_expr_cxt *context);
 static void deparseVar(Var *node, deparse_expr_cxt *context);
 static void deparseConst(Const *node, deparse_expr_cxt *context, int showtype);
 static void deparseParam(Param *node, deparse_expr_cxt *context);
@@ -907,7 +907,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 				varno_assigned = true;
 			}
 
-			if (varno != var->varno)
+			if (varno != (Index) var->varno)
 				return;
 		}
 		/* We only allow constants apart from vars, but we ignore them */
@@ -1002,7 +1002,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 		char *sep = "";
 		RelOptInfo *scanrel = context->scanrel;
 
-		Assert(varno > 0 && varno < root->simple_rel_array_size);
+		Assert(varno > 0 && varno < (Index) root->simple_rel_array_size);
 		context->scanrel = root->simple_rel_array[varno];
 
 		appendStringInfoString(buf, "DISTINCT ON (");
@@ -1560,11 +1560,10 @@ static int
 append_values_params(DeparsedInsertStmt *stmt, StringInfo buf, int pindex)
 {
 	bool first = true;
-	int i;
 
 	appendStringInfoChar(buf, '(');
 
-	for (i = 0; i < stmt->num_target_attrs; i++)
+	for (unsigned int i = 0; i < stmt->num_target_attrs; i++)
 	{
 		if (!first)
 			appendStringInfoString(buf, ", ");

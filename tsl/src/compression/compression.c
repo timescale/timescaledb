@@ -20,6 +20,7 @@
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
+#include <nodes/pg_list.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
@@ -38,6 +39,7 @@
 
 #include "array.h"
 #include "chunk.h"
+#include "debug_point.h"
 #include "deltadelta.h"
 #include "dictionary.h"
 #include "gorilla.h"
@@ -92,6 +94,7 @@ typedef struct SegmentInfo
 	int16 typlen;
 	bool is_null;
 	bool typ_by_val;
+	Oid collation;
 } SegmentInfo;
 
 typedef struct PerColumn
@@ -108,6 +111,7 @@ typedef struct PerColumn
 
 	/* segment info; only used if compressor is NULL */
 	SegmentInfo *segment_info;
+	int16 segmentby_column_index;
 } PerColumn;
 
 typedef struct RowCompressor
@@ -118,6 +122,8 @@ typedef struct RowCompressor
 	/* the table we're writing the compressed data to */
 	Relation compressed_table;
 	BulkInsertState bistate;
+	/* segment by index Oid if any */
+	Oid index_oid;
 
 	/* in theory we could have more input columns than outputted ones, so we
 	   store the number of inputs/compressors seperately*/
@@ -154,7 +160,7 @@ static Tuplesortstate *compress_chunk_sort_relation(Relation in_rel, int n_keys,
 static void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
-								int16 *column_offsets, int16 num_compressed_columns,
+								int16 *column_offsets, int16 num_columns_in_compressed_table,
 								bool need_bistate);
 static void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
@@ -216,6 +222,27 @@ restore_pgclass_stats(Oid table_oid, int pages, int visible, float tuples)
 
 	heap_freetuple(tuple);
 	table_close(pg_class, RowExclusiveLock);
+}
+
+/* Merge the relstats when merging chunks while compressing them.
+ * We need to do this in order to update the relstats of the chunk
+ * that is merged into since the compressed one will be dropped by
+ * the merge.
+ */
+extern void
+merge_chunk_relstats(Oid merged_relid, Oid compressed_relid)
+{
+	int comp_pages, merged_pages, comp_visible, merged_visible;
+	float comp_tuples, merged_tuples;
+
+	capture_pgclass_stats(compressed_relid, &comp_pages, &comp_visible, &comp_tuples);
+	capture_pgclass_stats(merged_relid, &merged_pages, &merged_visible, &merged_tuples);
+
+	merged_pages += comp_pages;
+	merged_visible += comp_visible;
+	merged_tuples += comp_tuples;
+
+	restore_pgclass_stats(merged_relid, merged_pages, merged_visible, merged_tuples);
 }
 
 /* Truncate the relation WITHOUT applying triggers. This is the
@@ -389,6 +416,7 @@ static void compress_chunk_populate_sort_info_for_column(Oid table,
 														 const ColumnCompressionInfo *column,
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
+static void run_analyze_on_chunk(Oid chunk_relid);
 
 static Tuplesortstate *
 compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressionInfo **keys)
@@ -418,7 +446,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 										  sort_operators,
 										  sort_collations,
 										  nulls_first,
-										  work_mem,
+										  maintenance_work_mem,
 										  NULL,
 										  false /*=randomAccess*/);
 
@@ -439,6 +467,12 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 	}
 
 	heap_endscan(heapScan);
+
+	/* Perform an analyze on the chunk to get up-to-date stats before compressing.
+	 * We do it at this point because we've just read out the entire chunk into
+	 * tuplesort, so its pages are likely to be cached and we can save on I/O.
+	 */
+	run_analyze_on_chunk(in_rel->rd_id);
 
 	ExecDropSingleTupleTableSlot(heap_tuple_slot);
 
@@ -487,6 +521,25 @@ compress_chunk_populate_sort_info_for_column(Oid table, const ColumnCompressionI
 	ReleaseSysCache(tp);
 }
 
+static void
+run_analyze_on_chunk(Oid chunk_relid)
+{
+	VacuumRelation vr = {
+		.type = T_VacuumRelation,
+		.relation = NULL,
+		.oid = chunk_relid,
+		.va_cols = NIL,
+	};
+	VacuumStmt vs = {
+		.type = T_VacuumStmt,
+		.rels = list_make1(&vr),
+		.is_vacuumcmd = false,
+		.options = NIL,
+	};
+
+	ExecVacuum(NULL, &vs, true);
+}
+
 /********************
  ** row_compressor **
  ********************/
@@ -501,6 +554,227 @@ static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 static SegmentInfo *segment_info_new(Form_pg_attribute column_attr);
 static void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 static bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null);
+
+/* Find segment by index for setting the correct sequence number if
+ * we are trying to roll up chunks while compressing
+ */
+static Oid
+get_compressed_chunk_index(Relation compressed_chunk, int16 *uncompressed_col_to_compressed_col,
+						   PerColumn *per_column, int n_input_columns)
+{
+	ListCell *lc;
+	int i;
+
+	List *index_oids = RelationGetIndexList(compressed_chunk);
+
+	foreach (lc, index_oids)
+	{
+		Oid index_oid = lfirst_oid(lc);
+		bool matches = true;
+		int num_segmentby_columns = 0;
+		Relation index_rel = index_open(index_oid, AccessShareLock);
+		IndexInfo *index_info = BuildIndexInfo(index_rel);
+
+		for (i = 0; i < n_input_columns; i++)
+		{
+			if (per_column[i].segmentby_column_index < 1)
+				continue;
+
+			/* Last member of the index must be the sequence number column. */
+			if (per_column[i].segmentby_column_index >= index_rel->rd_att->natts)
+			{
+				matches = false;
+				break;
+			}
+
+			int index_att_offset = AttrNumberGetAttrOffset(per_column[i].segmentby_column_index);
+
+			if (index_info->ii_IndexAttrNumbers[index_att_offset] !=
+				AttrOffsetGetAttrNumber(uncompressed_col_to_compressed_col[i]))
+			{
+				matches = false;
+				break;
+			}
+
+			num_segmentby_columns++;
+		}
+
+		/* Check that we have the correct number of index attributes
+		 * and that the last one is the sequence number
+		 */
+		if (num_segmentby_columns != index_rel->rd_att->natts - 1 ||
+			namestrcmp((Name) &index_rel->rd_att->attrs[num_segmentby_columns].attname,
+					   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != 0)
+			matches = false;
+
+		index_close(index_rel, AccessShareLock);
+
+		if (matches)
+			return index_oid;
+	}
+
+	return InvalidOid;
+}
+
+static int32
+index_scan_sequence_number(Relation table_rel, Oid index_oid, ScanKeyData *scankey,
+						   int num_scankeys)
+{
+	int32 result = 0;
+	bool is_null;
+	Relation index_rel = index_open(index_oid, AccessShareLock);
+	RelationInitIndexAccessInfo(index_rel);
+
+	IndexScanDesc index_scan =
+		index_beginscan(table_rel, index_rel, GetTransactionSnapshot(), num_scankeys, 0);
+	index_scan->xs_want_itup = true;
+	index_rescan(index_scan, scankey, num_scankeys, NULL, 0);
+
+	if (index_getnext_tid(index_scan, BackwardScanDirection))
+	{
+		result = index_getattr(index_scan->xs_itup,
+							   index_scan->xs_itupdesc->natts -
+								   1, /* Last attribute of the index is sequence number. */
+							   index_scan->xs_itupdesc,
+							   &is_null);
+		if (is_null)
+			result = 0;
+	}
+
+	index_endscan(index_scan);
+	index_close(index_rel, AccessShareLock);
+
+	return result;
+}
+
+static int32
+table_scan_sequence_number(Relation table_rel, int16 seq_num_column_num, ScanKeyData *scankey,
+						   int num_scankeys)
+{
+	int32 curr_seq_num = 0, max_seq_num = 0;
+	bool is_null;
+	HeapTuple compressed_tuple;
+	Datum seq_num;
+	TupleDesc in_desc = RelationGetDescr(table_rel);
+
+	TableScanDesc heap_scan =
+		table_beginscan(table_rel, GetLatestSnapshot(), num_scankeys, scankey);
+
+	for (compressed_tuple = heap_getnext(heap_scan, ForwardScanDirection); compressed_tuple != NULL;
+		 compressed_tuple = heap_getnext(heap_scan, ForwardScanDirection))
+	{
+		Assert(HeapTupleIsValid(compressed_tuple));
+
+		seq_num = heap_getattr(compressed_tuple, seq_num_column_num, in_desc, &is_null);
+		if (!is_null)
+		{
+			curr_seq_num = DatumGetInt32(seq_num);
+			if (max_seq_num < curr_seq_num)
+			{
+				max_seq_num = curr_seq_num;
+			}
+		}
+	}
+
+	heap_endscan(heap_scan);
+
+	return max_seq_num;
+}
+
+/* Scan compressed chunk to get the sequence number for current group.
+ * This is necessary to do when merging chunks. If the chunk is empty,
+ * scan will always return 0 and the sequence number will start from
+ * SEQUENCE_NUM_GAP.
+ */
+static int32
+get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
+									  int16 *uncompressed_col_to_compressed_col,
+									  PerColumn *per_column, int n_input_columns,
+									  int16 seq_num_column_num)
+{
+	/* No point scanning an empty relation. */
+	if (table_rel->rd_rel->relpages == 0)
+		return SEQUENCE_NUM_GAP;
+
+	/* If there is a suitable index, use index scan otherwise fallback to heap scan. */
+	bool is_index_scan = OidIsValid(index_oid);
+
+	int i, num_scankeys = 0;
+	int32 result = 0;
+
+	for (i = 0; i < n_input_columns; i++)
+	{
+		if (per_column[i].segmentby_column_index < 1)
+			continue;
+
+		num_scankeys++;
+	}
+
+	MemoryContext scan_ctx = AllocSetContextCreate(CurrentMemoryContext,
+												   "get max sequence number scan",
+												   ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old_ctx;
+	old_ctx = MemoryContextSwitchTo(scan_ctx);
+
+	ScanKeyData *scankey = NULL;
+
+	if (num_scankeys > 0)
+	{
+		scankey = palloc0(sizeof(ScanKeyData) * num_scankeys);
+
+		for (i = 0; i < n_input_columns; i++)
+		{
+			if (per_column[i].segmentby_column_index < 1)
+				continue;
+
+			PerColumn col = per_column[i];
+			int16 attno = is_index_scan ?
+							  col.segmentby_column_index :
+							  AttrOffsetGetAttrNumber(uncompressed_col_to_compressed_col[i]);
+
+			if (col.segment_info->is_null)
+			{
+				ScanKeyEntryInitialize(&scankey[col.segmentby_column_index - 1],
+									   SK_ISNULL | SK_SEARCHNULL,
+									   attno,
+									   InvalidStrategy, /* no strategy */
+									   InvalidOid,		/* no strategy subtype */
+									   InvalidOid,		/* no collation */
+									   InvalidOid,		/* no reg proc for this */
+									   (Datum) 0);		/* constant */
+			}
+			else
+			{
+				ScanKeyEntryInitializeWithInfo(&scankey[col.segmentby_column_index - 1],
+											   0, /* flags */
+											   attno,
+											   BTEqualStrategyNumber,
+											   InvalidOid, /* No strategy subtype. */
+											   col.segment_info->collation,
+											   &col.segment_info->eq_fn,
+											   col.segment_info->val);
+			}
+		}
+	}
+
+	if (is_index_scan)
+	{
+		/* Index scan should always use at least one scan key to get the sequence number. */
+		Assert(num_scankeys > 0);
+
+		result = index_scan_sequence_number(table_rel, index_oid, scankey, num_scankeys);
+	}
+	else
+	{
+		/* Table scan can work without scan keys. */
+		result = table_scan_sequence_number(table_rel, seq_num_column_num, scankey, num_scankeys);
+	}
+
+	MemoryContextSwitchTo(old_ctx);
+	MemoryContextDelete(scan_ctx);
+
+	return result + SEQUENCE_NUM_GAP;
+}
 
 /* num_compression_infos is the number of columns we will write to in the compressed table */
 static void
@@ -603,6 +877,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 				.min_metadata_attr_offset = segment_min_attr_offset,
 				.max_metadata_attr_offset = segment_max_attr_offset,
 				.min_max_metadata_builder = segment_min_max_builder,
+				.segmentby_column_index = -1,
 			};
 		}
 		else
@@ -613,11 +888,18 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 					 compression_info->attname.data);
 			*column = (PerColumn){
 				.segment_info = segment_info_new(column_attr),
+				.segmentby_column_index = compression_info->segmentby_column_index,
 				.min_metadata_attr_offset = -1,
 				.max_metadata_attr_offset = -1,
 			};
 		}
 	}
+
+	row_compressor->index_oid =
+		get_compressed_chunk_index(compressed_table,
+								   row_compressor->uncompressed_col_to_compressed_col,
+								   row_compressor->per_column,
+								   row_compressor->n_input_columns);
 }
 
 static void
@@ -679,10 +961,13 @@ static void
 row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 {
 	int col;
+	/* save original memory context */
+	const MemoryContext oldcontext = CurrentMemoryContext;
 
 	Assert(row_compressor->rows_compressed_into_current_value == 0);
 	Assert(row_compressor->n_input_columns <= row->tts_nvalid);
 
+	MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
 	for (col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
@@ -694,13 +979,29 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 
 		Assert(column->compressor == NULL);
 
-		MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
 		/* Performance Improvment: We should just use array access here; everything is guaranteed to
 		   be fetched */
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		segment_info_update(column->segment_info, val, is_null);
-		MemoryContextSwitchTo(row_compressor->per_row_ctx);
 	}
+	/* switch to original memory context */
+	MemoryContextSwitchTo(oldcontext);
+
+	/*
+	 * The sequence number of the compressed tuple is per segment by grouping
+	 * and should be reset when the grouping changes to prevent overflows with
+	 * many segmentby columns.
+	 *
+	 */
+	row_compressor->sequence_num =
+		get_sequence_number_for_current_group(row_compressor->compressed_table,
+											  row_compressor->index_oid,
+											  row_compressor->uncompressed_col_to_compressed_col,
+											  row_compressor->per_column,
+											  row_compressor->n_input_columns,
+											  AttrOffsetGetAttrNumber(
+												  row_compressor
+													  ->sequence_num_metadata_column_offset));
 }
 
 static bool
@@ -897,6 +1198,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
+
 	MemoryContextReset(row_compressor->per_row_ctx);
 }
 
@@ -928,6 +1230,7 @@ segment_info_new(Form_pg_attribute column_attr)
 	fmgr_info_cxt(eq_fn_oid, &segment_info->eq_fn, CurrentMemoryContext);
 
 	segment_info->eq_fcinfo = HEAP_FCINFO(2);
+	segment_info->collation = column_attr->attcollation;
 	InitFunctionCallInfoData(*segment_info->eq_fcinfo,
 							 &segment_info->eq_fn /*=Flinfo*/,
 							 2 /*=Nargs*/,
@@ -1125,7 +1428,15 @@ decompress_chunk(Oid in_table, Oid out_table)
 	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
 #endif
+
+	/* The reindex_relation() function creates an AccessExclusiveLock on the
+	 * chunk index (if present). After calling this function, concurrent
+	 * SELECTs have to wait until the index lock is released. When no
+	 * index is present concurrent SELECTs can be still performed in
+	 * parallel. */
+	DEBUG_WAITPOINT("decompress_chunk_impl_before_reindex");
 	reindex_relation(out_table, 0, options);
+	DEBUG_WAITPOINT("decompress_chunk_impl_after_reindex");
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1419,7 +1730,7 @@ Datum
 tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
-	CompressedDataHeader header = { { 0 } };
+	CompressedDataHeader header = { .vl_len_ = { 0 } };
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 

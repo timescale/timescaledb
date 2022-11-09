@@ -55,6 +55,18 @@ as
 select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location WITH NO DATA;
+-- Manually create index on CAgg
+CREATE INDEX cagg_idx on mat_refresh_test(location);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE USER not_priv;
+\c :TEST_DBNAME not_priv
+-- A user with no ownership on the Cagg cannot create index on it. -- This should fail
+\set ON_ERROR_STOP 0
+CREATE INDEX cagg_idx on mat_refresh_test(humidity);
+ERROR:  must be owner of hypertable "_materialized_hypertable_2"
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP USER not_priv;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT add_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -65,8 +77,8 @@ insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 CALL refresh_continuous_aggregate(' mat_refresh_test', NULL, NULL);
 SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
-SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name ) as materialization_hypertable 
-FROM timescaledb_information.continuous_aggregates 
+SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name ) as materialization_hypertable
+FROM timescaledb_information.continuous_aggregates
 WHERE view_name = 'mat_refresh_test' \gset
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
 SELECT schema_name as mat_chunk_schema, table_name as mat_chunk_table
@@ -268,3 +280,36 @@ partial_view      | _timescaledb_internal._partial_view_10
 partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
 
 \x off
+-- Check for default privilege permissions get propagated to the materialization hypertable
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA test_default_privileges;
+GRANT USAGE ON SCHEMA "test_default_privileges" TO :ROLE_DEFAULT_PERM_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "test_default_privileges" GRANT SELECT ON TABLES TO :ROLE_DEFAULT_PERM_USER;
+CREATE TABLE test_default_privileges.devices (
+   time TIMESTAMPTZ NOT NULL,
+   device INT,
+   temp DOUBLE PRECISION NULL,
+   PRIMARY KEY(time, device)
+);
+SELECT create_hypertable('test_default_privileges.devices', 'time');
+           create_hypertable            
+----------------------------------------
+ (11,test_default_privileges,devices,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
+FROM test_default_privileges.devices
+GROUP BY bucket, device
+WITH NO DATA;
+-- check if user view perms have been propagated to the mat-ht
+SELECT user_view_perm IS NOT DISTINCT FROM mat_table_perm
+FROM cagg_info
+WHERE user_view = 'test_default_privileges.devices_summary'::regclass;
+ ?column? 
+----------
+ t
+(1 row)
+

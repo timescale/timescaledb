@@ -349,11 +349,11 @@ SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
   42
 (1 row)
 
-SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
- _ts_meta_sequence_num 
------------------------
-                    10
-                    20
+SELECT location, _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
+ location | _ts_meta_sequence_num 
+----------+-----------------------
+ NYC      |                    10
+ POR      |                    10
 (2 rows)
 
 \x
@@ -875,6 +875,7 @@ CREATE TABLE datatype_test(
   char_column char
 );
 SELECT create_hypertable('datatype_test','time');
+WARNING:  column type "timestamp without time zone" used for "timestamp_column" does not follow best practices
       create_hypertable      
 -----------------------------
  (11,public,datatype_test,t)
@@ -1586,4 +1587,53 @@ SELECT count(*) FROM metrics;
 -------
  12961
 (1 row)
+
+-- test sequence number is local to segment by
+CREATE TABLE local_seq(time timestamptz, device int);
+SELECT table_name FROM create_hypertable('local_seq','time');
+NOTICE:  adding not-null constraint to column "time"
+ table_name 
+------------
+ local_seq
+(1 row)
+
+ALTER TABLE local_seq SET(timescaledb.compress,timescaledb.compress_segmentby='device');
+INSERT INTO local_seq SELECT '2000-01-01',1 FROM generate_series(1,3000);
+INSERT INTO local_seq SELECT '2000-01-01',2 FROM generate_series(1,3500);
+INSERT INTO local_seq SELECT '2000-01-01',3 FROM generate_series(1,3000);
+INSERT INTO local_seq SELECT '2000-01-01',4 FROM generate_series(1,3000);
+INSERT INTO local_seq SELECT '2000-01-01', generate_series(5,8);
+SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_33_66_chunk
+(1 row)
+
+SELECT
+	format('%s.%s',chunk.schema_name,chunk.table_name) AS "COMP_CHUNK"
+FROM _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable ht_comp ON ht_comp.id = ht.compressed_hypertable_id
+  INNER JOIN _timescaledb_catalog.chunk ON chunk.hypertable_id = ht_comp.id
+WHERE ht.table_name = 'local_seq' \gset
+SELECT device, _ts_meta_sequence_num, _ts_meta_count FROM :COMP_CHUNK ORDER BY 1,2;
+ device | _ts_meta_sequence_num | _ts_meta_count 
+--------+-----------------------+----------------
+      1 |                    10 |           1000
+      1 |                    20 |           1000
+      1 |                    30 |           1000
+      2 |                    10 |           1000
+      2 |                    20 |           1000
+      2 |                    30 |           1000
+      2 |                    40 |            500
+      3 |                    10 |           1000
+      3 |                    20 |           1000
+      3 |                    30 |           1000
+      4 |                    10 |           1000
+      4 |                    20 |           1000
+      4 |                    30 |           1000
+      5 |                    10 |              1
+      6 |                    10 |              1
+      7 |                    10 |              1
+      8 |                    10 |              1
+(17 rows)
 

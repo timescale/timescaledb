@@ -23,16 +23,21 @@ CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], 
 RETURNS TABLE("table_record" CSTRING[])
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
 LANGUAGE C;
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-       node_name       |   host    | port  |       database        | node_created | database_created | extension_created 
------------------------+-----------+-------+-----------------------+--------------+------------------+-------------------
- db_cagg_ddl_dist_ht_1 | localhost | 55432 | db_cagg_ddl_dist_ht_1 | t            | t                | t
- db_cagg_ddl_dist_ht_2 | localhost | 55432 | db_cagg_ddl_dist_ht_2 | t            | t                | t
- db_cagg_ddl_dist_ht_3 | localhost | 55432 | db_cagg_ddl_dist_ht_3 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+       node_name       |       database        | node_created | database_created | extension_created 
+-----------------------+-----------------------+--------------+------------------+-------------------
+ db_cagg_ddl_dist_ht_1 | db_cagg_ddl_dist_ht_1 | t            | t                | t
+ db_cagg_ddl_dist_ht_2 | db_cagg_ddl_dist_ht_2 | t            | t                | t
+ db_cagg_ddl_dist_ht_3 | db_cagg_ddl_dist_ht_3 | t            | t                | t
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \set IS_DISTRIBUTED TRUE
 \ir include/cagg_ddl_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -217,7 +222,7 @@ SELECT current_user;
 
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name | partial_view_schema | partial_view_name 
@@ -474,7 +479,7 @@ psql:include/cagg_ddl_common.sql:303: ERROR:  operation not supported on materia
 ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 SELECT * FROM new_name;
  time_bucket | count 
 -------------+-------
@@ -665,11 +670,11 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 --we see the chunks row with the dropped flags set;
 SELECT * FROM _timescaledb_catalog.chunk where dropped;
- id | hypertable_id |      schema_name      |       table_name        | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+-------------------------+---------------------+---------+--------
- 13 |            10 | _timescaledb_internal | _dist_hyper_10_13_chunk |                     | t       |      0
- 14 |            10 | _timescaledb_internal | _dist_hyper_10_14_chunk |                     | t       |      0
- 15 |            10 | _timescaledb_internal | _dist_hyper_10_15_chunk |                     | t       |      0
+ id | hypertable_id |      schema_name      |       table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-------------------------+---------------------+---------+--------+-----------
+ 13 |            10 | _timescaledb_internal | _dist_hyper_10_13_chunk |                     | t       |      0 | f
+ 14 |            10 | _timescaledb_internal | _dist_hyper_10_14_chunk |                     | t       |      0 | f
+ 15 |            10 | _timescaledb_internal | _dist_hyper_10_15_chunk |                     | t       |      0 | f
 (3 rows)
 
 --still see data in the view

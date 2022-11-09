@@ -200,6 +200,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     -Wempty-body
     -Wvla
     -Wall
+    -Wextra
+    # The SQL function arguments macro PG_FUNCTION_ARGS often inroduces unused
+    # arguments.
+    -Wno-unused-parameter
     -Wundef
     -Wmissing-prototypes
     -Wpointer-arith
@@ -237,9 +241,25 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     message(STATUS "Compiler does not support -Wimplicit-fallthrough")
   endif()
 
+  check_c_compiler_flag(-Wnewline-eof CC_SUPPORTS_NEWLINE_EOF)
+  if(CC_SUPPORTS_NEWLINE_EOF)
+    add_compile_options(-Wnewline-eof)
+  endif()
+
   # strict overflow check produces false positives on gcc < 8
   if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_C_COMPILER_VERSION VERSION_LESS 8)
     add_compile_options(-Wno-strict-overflow)
+  endif()
+
+  # -Wclobbered produces false positives on gcc < 9
+  if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_C_COMPILER_VERSION VERSION_LESS 9)
+    add_compile_options(-Wno-clobbered)
+  endif()
+
+  if(CMAKE_COMPILER_IS_GNUCC)
+    add_compile_options(
+      # Seems to be broken in GCC 11 with designated initializers.
+      -Wno-missing-field-initializers)
   endif()
 
   # On UNIX, the compiler needs to support -fvisibility=hidden to hide symbols
@@ -371,18 +391,9 @@ configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
         DESTINATION "${PG_SHAREDIR}/extension")
 
-# We look for specific versions installed by distributions before the default
-# name since distros that have installed clang-format-9 will not work and the
-# user need to install an earlier version, which will then be named
-# "clang-format-N".
-#
-# This breaks the CMake convention of using the "default" name first to handle
-# local installs. If this turns out to be something that we want to support, we
-# need to look specifically for "clang-format" in the local installation paths
-# before looking for the versioned names in standard installation paths.
 find_program(
   CLANG_FORMAT
-  NAMES clang-format-8 clang-format-7 clang-format
+  NAMES clang-format-14 clang-format
   PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin /opt/bin
   DOC "The path to clang-format")
 
@@ -399,26 +410,13 @@ if(CLANG_FORMAT)
         "Could not parse clang-format version ${CLANG_FORMAT_VERSION_OUTPUT}")
   endif()
 
-  if((${CMAKE_MATCH_1} LESS "7") OR (${CMAKE_MATCH_1} GREATER "8"))
-    message(WARNING "clang-format version 7 or 8 required")
+  if((${CMAKE_MATCH_1} LESS "14"))
+    message(WARNING "clang-format version 14 or greater required")
     set(CLANG_FORMAT False)
   endif()
 endif()
 
-if(NOT CLANG_FORMAT)
-  find_program(DOCKER docker DOC "The path to docker")
-
-  if(DOCKER)
-    message(STATUS "Using docker based clang-format")
-    add_custom_target(
-      clang-format
-      COMMAND
-        docker run --rm -it --user=`id -u`:`id -g`
-        --volume=${PROJECT_SOURCE_DIR}:/timescaledb
-        timescaledev/postgres-dev-clang:clang7-pg11.1
-        /timescaledb/scripts/clang_format_all.sh)
-  endif()
-else()
+if(CLANG_FORMAT)
   message(STATUS "Using local clang-format")
   add_custom_target(
     clang-format COMMAND ${CMAKE_COMMAND} -E env CLANG_FORMAT=${CLANG_FORMAT}
@@ -494,7 +492,7 @@ if(LINTER)
     message(STATUS "Linter support (clang-tidy) enabled")
     if(LINTER_STRICT)
       set(CMAKE_C_CLANG_TIDY
-          "${CLANG_TIDY};--checks=clang-diagnostic-*,clang-analyzer-*,-*,clang-analyzer-core.*,clang-diagnostic-*,readability-redundant-control-flow,bugprone-argument-comment,bugprone-macro-parentheses;--warnings-as-errors=*"
+          "${CLANG_TIDY};--checks=clang-diagnostic-*,clang-analyzer-*,-*,clang-analyzer-core.*,clang-diagnostic-*,readability-redundant-control-flow,bugprone-argument-comment,bugprone-macro-parentheses,readability-suspicious-call-argument,readability-misleading-indentation,readability-inconsistent-declaration-parameter-name;--warnings-as-errors=*"
       )
     else()
       set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY};--quiet")

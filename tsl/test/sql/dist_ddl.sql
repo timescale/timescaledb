@@ -13,31 +13,34 @@
 \o
 \set ECHO all
 
-\set MY_DB1 :TEST_DBNAME _1
-\set MY_DB2 :TEST_DBNAME _2
-\set MY_DB3 :TEST_DBNAME _3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
 
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'MY_DB1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'MY_DB2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'MY_DB3');
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 
 -- Presence of non-distributed hypertables on data nodes should not cause issues
-CALL distributed_exec('CREATE TABLE local(time timestamptz, measure int)', '{ "data_node_1", "data_node_3" }');
-CALL distributed_exec($$ SELECT create_hypertable('local', 'time') $$, '{ "data_node_1", "data_node_3" }');
+CALL distributed_exec('CREATE TABLE local(time timestamptz, measure int)', ARRAY[:'DATA_NODE_1',:'DATA_NODE_3']);
+CALL distributed_exec($$ SELECT create_hypertable('local', 'time') $$, ARRAY[:'DATA_NODE_1',:'DATA_NODE_3']);
 
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null
-\c :MY_DB1
+\c :DATA_NODE_1
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c :MY_DB2
+\c :DATA_NODE_2
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c :MY_DB3
+\c :DATA_NODE_3
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 --\c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -102,13 +105,29 @@ TRUNCATE disttable;
 
 -- RENAME TO
 ALTER TABLE disttable RENAME TO disttable2;
+
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable2';
+\c :DATA_NODE_1
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable2';
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
 ALTER TABLE disttable2 RENAME TO disttable;
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable';
+\c :DATA_NODE_1
+SELECT 1 FROM pg_tables WHERE tablename = 'disttable';
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
+
+SET timescaledb.hide_data_node_name_in_errors = 'on';
 
 -- SET SCHEMA
-ALTER TABLE disttable SET SCHEMA some_schema;
-ALTER TABLE some_schema.disttable SET SCHEMA public;
 \set ON_ERROR_STOP 0
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
+\set ON_ERROR_STOP 1
+
+-- some_schema was not created on data nodes
+\set ON_ERROR_STOP 0
+ALTER TABLE disttable SET SCHEMA some_schema;
 \set ON_ERROR_STOP 1
 
 -- OWNER TO
@@ -180,7 +199,7 @@ ALTER TABLE disttable RENAME COLUMN description TO descr;
 SELECT * FROM test.show_columns('disttable')
 WHERE "Column"='descr';
 
-SELECT * FROM test.remote_exec('{ data_node_1 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT chunk.relid AS chunk_relid,
 	   		  (SELECT "Column" AS col FROM test.show_columns(chunk.relid) WHERE "Column"='descr')
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
@@ -192,7 +211,7 @@ ALTER TABLE disttable RENAME CONSTRAINT device_check TO device_chk;
 SELECT * FROM test.show_constraints('disttable')
 WHERE "Constraint"='device_chk';
 
-SELECT * FROM test.remote_exec('{ data_node_1 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
        SELECT chunk.relid AS chunk_relid,
 	   		  (SELECT "Constraint" AS constr FROM test.show_constraints(chunk.relid) WHERE "Constraint"='device_chk')
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
@@ -203,13 +222,13 @@ ALTER INDEX disttable_description_idx RENAME to disttable_descr_idx;
 SELECT * FROM test.show_indexes('disttable')
 WHERE "Index"='disttable_descr_idx'::regclass;
 
-SELECT * FROM test.remote_exec('{ data_node_1 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT chunk.relid AS chunk_relid, (test.show_indexes(chunk.relid)).*
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
 $$);
 
 -- Test REINDEX command with distributed hypertable
-\c :MY_DB1
+\c :DATA_NODE_1
 SELECT * FROM test.show_indexes('_timescaledb_internal._dist_hyper_1_1_chunk');
 SELECT pg_relation_filepath('_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk'::regclass::oid) AS oid_before_reindex \gset
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -218,7 +237,7 @@ SET ROLE :ROLE_1;
 REINDEX TABLE disttable;
 REINDEX (VERBOSE) TABLE disttable;
 
-\c :MY_DB1
+\c :DATA_NODE_1
 SELECT pg_relation_filepath('_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk'::regclass::oid) AS oid_after_reindex \gset
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_1;
@@ -616,6 +635,7 @@ CREATE EVENT TRIGGER test_event_trigger_sqldrop ON sql_drop
     WHEN TAG IN ('drop table')
     EXECUTE FUNCTION test_event_trigger_sql_drop_function();
 
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Test DROP inside event trigger on local table (should not crash)
@@ -650,7 +670,7 @@ SELECT * FROM set_replication_factor('disttable',  NULL);
 \set ON_ERROR_STOP 1
 SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
 
-\c :MY_DB1
+\c :DATA_NODE_1
 SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable';
 SELECT * FROM test.show_indexes('disttable');
 
@@ -693,7 +713,7 @@ DROP TABLE disttable;
 -- without enabling timescaledb.enable_client_ddl_on_data_nodes guc
 CREATE TABLE disttable(time timestamptz NOT NULL, device int);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 3);
-\c :MY_DB1
+\c :DATA_NODE_1
 ANALYZE disttable;
 ANALYZE;
 VACUUM disttable;
@@ -706,14 +726,178 @@ DROP TABLE disttable;
 -- Issue: #4508
 --
 CREATE TABLE hyper(time TIMESTAMPTZ, device INT, temp FLOAT);
-SELECT create_distributed_hypertable('hyper', 'time', 'device', 4, chunk_time_interval => interval '18 hours', replication_factor => 1, data_nodes => '{ data_node_1, data_node_2 }');
+SELECT create_distributed_hypertable('hyper', 'time', 'device', 4, chunk_time_interval => interval '18 hours', replication_factor => 1, data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
 
 INSERT INTO hyper SELECT t, ceil((random() * 5))::int, random() * 80
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-05'::timestamptz, '1 minute') as t;
 ANALYZE hyper;
 
+--
+-- Ensure single query multi-statement command is blocked
+--
+-- Issue #4818
+--
+CREATE TABLE disttable(time timestamptz NOT NULL, device int);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+
+CREATE OR REPLACE PROCEDURE test_dist_multi_stmt_command()
+LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE 'ANALYZE disttable; ANALYZE disttable';
+END
+$$;
+
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CALL test_dist_multi_stmt_command();
+\set ON_ERROR_STOP 1
+
+DROP TABLE disttable;
+--
+-- Test hypertable distributed defaults
+--
+SHOW timescaledb.hypertable_distributed_default;
+SHOW timescaledb.hypertable_replication_factor_default;
+
+/* CASE1: create_hypertable(distributed, replication_factor) */
+
+-- defaults are not applied
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('drf_test', 'time', distributed=>false, replication_factor=>1);
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('drf_test', 'time', distributed=>true, replication_factor=>1);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+/* CASE2: create_hypertable(distributed) */
+
+-- auto
+SET timescaledb.hypertable_distributed_default TO 'auto';
+
+-- create regular hypertable by default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>false);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- create distributed hypertable using replication factor default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>true);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- distributed (same as auto)
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- create regular hypertable by default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>false);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- create distributed hypertable using replication factor default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>true);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- local
+SET timescaledb.hypertable_distributed_default TO 'local';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>false);
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+-- create distributed hypertable using replication factor default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', distributed=>true);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+/* CASE3: create_hypertable(replication_factor) */
+
+-- auto
+SET timescaledb.hypertable_distributed_default TO 'auto';
+
+-- create distributed hypertable when replication_factor > 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- distributed
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- create distributed hypertable
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- local
+SET timescaledb.hypertable_distributed_default TO 'local';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=>2);
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+-- distributed hypertable member: replication_factor=>-1
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time', replication_factor=> -1);
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+/* CASE4: create_hypertable() */
+
+-- auto
+SET timescaledb.hypertable_distributed_default TO 'auto';
+
+-- regular by default
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time');
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- distributed
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- distributed hypertable with using default replication factor
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time');
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
+-- local
+SET timescaledb.hypertable_distributed_default TO 'distributed';
+
+-- unsupported
+\set ON_ERROR_STOP 0
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('drf_test', 'time');
+DROP TABLE drf_test;
+\set ON_ERROR_STOP 1
+
+/* CASE5: create_distributed_hypertable() default replication factor */
+SET timescaledb.hypertable_distributed_default TO 'auto';
+SET timescaledb.hypertable_replication_factor_default TO 3;
+
+CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
+SELECT create_distributed_hypertable('drf_test', 'time');
+SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
+DROP TABLE drf_test;
+
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE :MY_DB1;
-DROP DATABASE :MY_DB2;
-DROP DATABASE :MY_DB3;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

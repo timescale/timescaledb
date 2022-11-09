@@ -335,6 +335,7 @@ SELECT COUNT(*) FROM hyper_copy_large;
 -- Migrate data to chunks by using copy
 SELECT create_hypertable('hyper_copy_large', 'time',
    chunk_time_interval => INTERVAL '1 hour', migrate_data => 'true');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  migrating data to chunks
        create_hypertable       
 -------------------------------

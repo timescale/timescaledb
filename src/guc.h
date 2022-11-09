@@ -32,10 +32,19 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
+
 #ifdef USE_TELEMETRY
-extern int ts_guc_telemetry_level;
+typedef enum TelemetryLevel
+{
+	TELEMETRY_OFF,
+	TELEMETRY_NO_FUNCTIONS,
+	TELEMETRY_BASIC,
+} TelemetryLevel;
+
+extern TelemetryLevel ts_guc_telemetry_level;
 extern char *ts_telemetry_cloud;
 #endif
+
 extern TSDLLEXPORT char *ts_guc_license;
 extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;
@@ -50,11 +59,34 @@ extern TSDLLEXPORT bool ts_guc_enable_remote_explain;
 typedef enum DataFetcherType
 {
 	CursorFetcherType,
-	RowByRowFetcherType,
+	CopyFetcherType,
 	AutoFetcherType,
 } DataFetcherType;
 
 extern TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher;
+
+typedef enum HypertableDistType
+{
+	HYPERTABLE_DIST_AUTO,
+	HYPERTABLE_DIST_LOCAL,
+	HYPERTABLE_DIST_DISTRIBUTED
+} HypertableDistType;
+
+extern TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default;
+extern TSDLLEXPORT int ts_guc_hypertable_replication_factor_default;
+
+typedef enum DistCopyTransferFormat
+{
+	DCTF_Auto,
+	DCTF_Binary,
+	DCTF_Text
+} DistCopyTransferFormat;
+
+extern TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
+
+/* Hook for plugins to allow additional SSL options */
+typedef void (*set_ssl_options_hook_type)(const char *user_name);
+extern TSDLLEXPORT set_ssl_options_hook_type ts_set_ssl_options_hook;
 
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
@@ -65,5 +97,6 @@ extern char *ts_current_timestamp_mock;
 
 void _guc_init(void);
 void _guc_fini(void);
+extern TSDLLEXPORT void ts_assign_ssl_options_hook(void *fn);
 
 #endif /* TIMESCALEDB_GUC_H */

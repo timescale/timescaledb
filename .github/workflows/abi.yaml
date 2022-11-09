@@ -15,30 +15,66 @@ on:
     branches:
       - prerelease_test
 jobs:
-  abi_test:
-    name: ABI Test ${{ matrix.type}} PG${{ matrix.pg }}
+  config:
     runs-on: ubuntu-latest
+    outputs:
+      pg12_abi_min: ${{ steps.config.outputs.pg12_abi_min }}
+      pg13_abi_min: ${{ steps.config.outputs.pg13_abi_min }}
+      pg14_abi_min: ${{ steps.config.outputs.pg14_abi_min }}
+      pg12_latest: ${{ steps.config.outputs.pg12_latest }}
+      pg13_latest: ${{ steps.config.outputs.pg13_latest }}
+      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+    - name: Read configuration
+      id: config
+      run: python .github/gh_config_reader.py
+
+  abi_test:
+    name: ABI Test ${{ matrix.type}} PG${{ matrix.test }}
+    runs-on: ubuntu-latest
+    needs: config
     strategy:
       fail-fast: false
       matrix:
-        pg: ["12.8","13.4","14.0"]
-        type: ["min","max"]
+        test: [ "12backward", "12forward", "13backward", "13forward", "14backward", "14forward" ]
+        os: [ windows-2019 ]
+        include:
+          - test: 12backward
+            pg: 12
+            builder: ${{ fromJson(needs.config.outputs.pg12_latest) }}
+            tester: ${{ fromJson(needs.config.outputs.pg12_abi_min ) }}
+          - test: 12forward
+            pg: 12
+            builder: ${{ fromJson(needs.config.outputs.pg12_abi_min ) }}
+            tester: ${{ fromJson(needs.config.outputs.pg12_latest) }}
+          - test: 13backward
+            pg: 13
+            builder: ${{ fromJson(needs.config.outputs.pg13_latest) }}
+            tester: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}
+          - test: 13forward
+            pg: 13
+            builder: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}
+            tester: ${{ fromJson(needs.config.outputs.pg13_latest) }}
+          - test: 14backward
+            pg: 14
+            builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
+          - test: 14forward
+            pg: 14
+            builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}
 
     steps:
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Build extension
       run: |
-
-        if [[ "${{ matrix.type }}" == "min" ]]; then
-          PG_MAJOR=$(echo "${{matrix.pg}}" | cut -c 1-2 )
-          # this will be latest released version
-          BUILDER_IMAGE="postgres:${PG_MAJOR}-alpine"
-        else
-          BUILDER_IMAGE="postgres:${{matrix.pg}}-alpine"
-        fi
+        BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
 
         docker run -i --rm -v $(pwd):/mnt ${BUILDER_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base krb5-dev openssl-dev git > /dev/null
@@ -53,14 +89,7 @@ jobs:
 
     - name: Run tests
       run: |
-
-        if [[ "${{ matrix.type }}" == "min" ]]; then
-          TEST_IMAGE="postgres:${{matrix.pg}}-alpine"
-        else
-          PG_MAJOR=$(echo "${{matrix.pg}}" | cut -c 1-2 )
-          # this will be latest released version
-          TEST_IMAGE="postgres:${PG_MAJOR}-alpine"
-        fi
+        TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
 
         docker run -i --rm -v $(pwd):/mnt ${TEST_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base krb5-dev openssl-dev sudo > /dev/null
@@ -79,20 +108,20 @@ jobs:
         sudo chmod a+rw .
         sudo find . -name regression.diffs -exec cat {} + > regression.log
         sudo find . -name postmaster.log -exec cat {} + > postgres.log
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Regression diff ABI Breakage ${{ matrix.type }} PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: PostgreSQL log ABI Breakage ${{ matrix.type }} PG${{ matrix.pg }}
         path: postgres.log

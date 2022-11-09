@@ -101,6 +101,7 @@ SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_n
 
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
@@ -118,6 +119,7 @@ SELECT * FROM chunks_detailed_size('timestamp_partitioned') order by chunk_name;
 
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
 SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |       table_name        | created 
 ---------------+-------------+-------------------------+---------
@@ -138,6 +140,7 @@ CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
 -- easily compressable string and instead store it with TOAST
 ALTER TABLE toast_test ALTER COLUMN value SET STORAGE EXTERNAL;
 SELECT * FROM create_hypertable('toast_test', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -416,6 +419,7 @@ SELECT
 --
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------

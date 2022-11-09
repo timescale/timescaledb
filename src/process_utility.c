@@ -237,9 +237,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetTableSpace:
 				/* this is passed down in `process_altertable_set_tablespace_end` */
 			case AT_SetStatistics: /* should this be pushed down in some way? */
-			case AT_AddColumn:	 /* this is passed down */
+			case AT_AddColumn:	   /* this is passed down */
 			case AT_ColumnDefault: /* this is passed down */
-			case AT_DropColumn:	/* this is passed down */
+			case AT_DropColumn:	   /* this is passed down */
 #if PG14_GE
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
@@ -1001,7 +1001,7 @@ process_truncate(ProcessUtilityArgs *args)
 	List *hypertables = NIL;
 	List *relations = NIL;
 	bool list_changed = false;
-	MemoryContext parsetreectx = GetMemoryChunkContext(args->parsetree);
+	MemoryContext oldctx, parsetreectx = GetMemoryChunkContext(args->parsetree);
 
 	/* For all hypertables, we drop the now empty chunks. We also propagate the
 	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
@@ -1037,7 +1037,6 @@ process_truncate(ProcessUtilityArgs *args)
 					if (cagg)
 					{
 						Hypertable *mat_ht, *raw_ht;
-						MemoryContext oldctx;
 
 						if (!relation_should_recurse(rv))
 							ereport(ERROR,
@@ -1071,13 +1070,14 @@ process_truncate(ProcessUtilityArgs *args)
 					break;
 				}
 				case RELKIND_RELATION:
+				/* TRUNCATE for foreign tables not implemented yet. This will raise an error. */
+				case RELKIND_FOREIGN_TABLE:
 				{
 					Hypertable *ht =
 						ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+					Chunk *chunk;
 
-					if (!ht)
-						list_append = true;
-					else
+					if (ht)
 					{
 						ContinuousAggHypertableStatus agg_status;
 
@@ -1114,6 +1114,38 @@ process_truncate(ProcessUtilityArgs *args)
 							 */
 							list_changed = true;
 					}
+					else if ((chunk = ts_chunk_get_by_relid(relid, false)) != NULL)
+					{ /* this is a chunk */
+						ht = ts_hypertable_cache_get_entry(hcache,
+														   chunk->hypertable_relid,
+														   CACHE_FLAG_NONE);
+
+						Assert(ht != NULL);
+
+						/* If the hypertable has continuous aggregates, then invalidate
+						 * the truncated region. */
+						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+							ts_continuous_agg_invalidate_chunk(ht, chunk);
+						/* Truncate the compressed chunk too. */
+						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+						{
+							Chunk *compressed_chunk =
+								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+							if (compressed_chunk != NULL)
+							{
+								/* Create list item into the same context of the list. */
+								oldctx = MemoryContextSwitchTo(parsetreectx);
+								rv = makeRangeVar(NameStr(compressed_chunk->fd.schema_name),
+												  NameStr(compressed_chunk->fd.table_name),
+												  -1);
+								MemoryContextSwitchTo(oldctx);
+								list_changed = true;
+							}
+						}
+						list_append = true;
+					}
+					else
+						list_append = true;
 					break;
 				}
 			}
@@ -1234,14 +1266,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			/* If the hypertable has continuous aggregates, then invalidate
 			 * the dropped region. */
 			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
-			{
-				int64 start = ts_chunk_primary_dimension_start(chunk);
-				int64 end = ts_chunk_primary_dimension_end(chunk);
-
-				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
-					   chunk->cube->slices[0]->fd.dimension_id);
-				ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
-			}
+				ts_continuous_agg_invalidate_chunk(ht, chunk);
 		}
 	}
 
@@ -2569,6 +2594,9 @@ process_index_start(ProcessUtilityArgs *args)
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
 	LockRelId main_table_index_lock_relid;
+	int sec_ctx;
+	Oid uid = InvalidOid, saved_uid = InvalidOid;
+	ContinuousAgg *cagg = NULL;
 
 	Assert(IsA(stmt, IndexStmt));
 
@@ -2587,13 +2615,15 @@ process_index_start(ProcessUtilityArgs *args)
 	if (NULL == ht)
 	{
 		/* Check if the relation is a Continuous Aggregate */
-		ContinuousAgg *cagg = ts_continuous_agg_find_by_rv(stmt->relation);
+		cagg = ts_continuous_agg_find_by_rv(stmt->relation);
 
 		if (cagg)
 		{
 			/* If the relation is a CAgg and it is finalized */
 			if (ContinuousAggIsFinalized(cagg))
+			{
 				ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+			}
 			else
 			{
 				ts_cache_release(hcache);
@@ -2678,12 +2708,25 @@ process_index_start(ProcessUtilityArgs *args)
 		PreventInTransactionBlock(true,
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
 
+	if (cagg)
+	{
+		/*
+		 * If this is an index creation for cagg, then we need to switch user as the current
+		 * user might not have permissions on the internal schema where cagg index will be
+		 * created.
+		 * Need to restore user soon after this step.
+		 */
+		ts_cagg_permissions_check(ht->main_table_relid, GetUserId());
+		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
+	}
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
 														   info.extended_options.multitransaction,
 														   hypertable_is_distributed(ht));
 
+	if (cagg)
+		RESTORE_USER(uid, saved_uid, sec_ctx);
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
 	 * to do here. */
@@ -3296,7 +3339,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				relation = partstmt->name;
 				Assert(NULL != relation);
 
-				if (InvalidOid != ts_hypertable_relid(relation))
+				if (OidIsValid(ts_hypertable_relid(relation)))
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -3429,7 +3472,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 			case AT_SetRelOptions:
 				if (!IsA(cmd->def, List))
 					ereport(ERROR,
-							(errcode(ERRCODE_INTERNAL_ERROR),
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("expected set options to contain a list")));
 				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				break;
@@ -3709,7 +3752,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AddColumnToView:		   /* only used with views */
 		case AT_AlterColumnGenericOptions: /* only used with foreign tables */
 		case AT_GenericOptions:			   /* only used with foreign tables */
-		case AT_ReAddDomainConstraint:	 /* We should handle this in future,
+		case AT_ReAddDomainConstraint:	   /* We should handle this in future,
 											* new subset of constraints in PG11
 											* currently not hit in test code */
 		case AT_AttachPartition:		   /* handled in
@@ -3848,7 +3891,7 @@ process_create_rule_start(ProcessUtilityArgs *args)
 {
 	RuleStmt *stmt = (RuleStmt *) args->parsetree;
 
-	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
+	if (!OidIsValid(ts_hypertable_relid(stmt->relation)))
 		return DDL_CONTINUE;
 
 	ereport(ERROR,

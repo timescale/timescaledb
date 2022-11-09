@@ -36,15 +36,27 @@ env:
   LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt print_suppressions=0 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   sanitizer:
     name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: config
     strategy:
       fail-fast: false
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
         os: ["ubuntu-20.04"]
-        pg: ["12.11","13.7","14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Install Linux Dependencies
       run: |
@@ -56,13 +68,13 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -94,7 +106,7 @@ jobs:
         # test seems to fail due to a PostgreSQL bug where AbortStartTime in
         # postmaster.c is not atomic but read/written across signal handlers
         # and ServerLoop.
-        make -k -C build installcheck SKIPS='remote_txn' IGNORES='bgw_db_scheduler debug_notice' | tee installcheck.log
+        make -k -C build installcheck SKIPS='remote_txn' IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed debug_notice' | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
@@ -105,22 +117,24 @@ jobs:
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
-          if coredumpctl -q list >/dev/null; then echo "::set-output name=coredumps::true"; fi
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          # print OOM killer information
+          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
         fi
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Regression diff ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: postgres.log
@@ -128,20 +142,23 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        echo "bt full" | sudo coredumpctl gdb
+        sudo coredumpctl gdb <<EOT
+          printf "%s\n\n", debug_query_string
+          bt full
+        EOT
         ./scripts/bundle_coredumps.sh
         false
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Coredumps ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: sanitizer logs
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: ${{ github.workspace }}/sanitizer.log.*

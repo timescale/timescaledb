@@ -95,10 +95,14 @@ SELECT j.id AS job_id,
   j.proc_name,
   j.owner,
   j.scheduled,
+  j.fixed_schedule,
   j.config,
   js.next_start,
+  j.initial_start,
   ht.schema_name AS hypertable_schema,
-  ht.table_name AS hypertable_name
+  ht.table_name AS hypertable_name,
+  j.check_schema,
+  j.check_name
 FROM _timescaledb_config.bgw_job j
   LEFT JOIN _timescaledb_catalog.hypertable ht ON ht.id = j.hypertable_id
   LEFT JOIN _timescaledb_internal.bgw_job_stat js ON js.job_id = j.id;
@@ -236,7 +240,7 @@ FROM (
       array_agg(node_name ORDER BY node_name) AS node_list
     FROM _timescaledb_catalog.chunk_data_node
     GROUP BY chunk_id) chdn ON srcch.id = chdn.chunk_id
-  WHERE srcch.dropped IS FALSE
+  WHERE srcch.dropped IS FALSE AND srcch.osm_chunk IS FALSE
     AND ht.compression_state != 2 ) finalq
 WHERE chunk_dimension_num = 1;
 
@@ -296,5 +300,32 @@ WHERE segq.hypertable_id = ht.id
 ORDER BY table_name,
   segmentby_column_index,
   orderby_column_index;
+
+-- troubleshooting job errors view
+CREATE OR REPLACE VIEW timescaledb_information.job_errors AS 
+SELECT
+    job_id,
+    error_data ->> 'proc_schema' as proc_schema,
+    error_data ->> 'proc_name' as proc_name,
+    pid,
+    start_time,
+    finish_time,
+    error_data ->> 'sqlerrcode' AS sqlerrcode,
+    CASE WHEN error_data ->>'message' IS NOT NULL THEN 
+      CASE WHEN error_data ->>'detail' IS NOT NULL THEN 
+        CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data ->>'detail', '. ', error_data->>'hint')
+        ELSE concat(error_data ->>'message', ' ', error_data ->>'detail')
+        END
+      ELSE
+        CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data->>'hint')
+        ELSE error_data ->>'message'
+        END
+      END
+    ELSE
+      'job crash detected, see server logs'
+    END
+    AS err_message
+FROM
+    _timescaledb_internal.job_errors;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

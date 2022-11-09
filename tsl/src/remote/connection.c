@@ -186,7 +186,7 @@ fill_simple_error(TSConnectionError *err, int errcode, const char *errmsg, const
 	err->errcode = errcode;
 	err->msg = errmsg;
 	err->host = pstrdup(PQhost(conn->pg_conn));
-	err->nodename = pstrdup(NameStr(conn->node_name));
+	err->nodename = pstrdup(remote_connection_node_name(conn));
 
 	return false;
 }
@@ -847,6 +847,9 @@ remote_connection_set_status(TSConnection *conn, TSConnectionStatus status)
 {
 	Assert(conn != NULL);
 	conn->status = status;
+
+	/* Should be blocking except when doing COPY. */
+	Assert(PQisnonblocking(conn->pg_conn) == (conn->status == CONN_COPY_IN));
 }
 
 TSConnectionStatus
@@ -858,6 +861,14 @@ remote_connection_get_status(const TSConnection *conn)
 const char *
 remote_connection_node_name(const TSConnection *conn)
 {
+#ifndef NDEBUG
+	const char *hide_node_name =
+		GetConfigOption("timescaledb.hide_data_node_name_in_errors", true, false);
+	if (hide_node_name && strcmp(hide_node_name, "on") == 0)
+	{
+		return "<hidden node name>";
+	}
+#endif
 	return NameStr(conn->node_name);
 }
 
@@ -909,7 +920,10 @@ remote_connection_exec(TSConnection *conn, const char *cmd)
 		ResultEntry *entry = PQresultInstanceData(res, eventproc);
 
 		if (status == PGRES_FATAL_ERROR && entry == NULL)
+		{
+			res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
 			PQfireResultCreateEvents(conn->pg_conn, res);
+		}
 	}
 	return res;
 }
@@ -1255,6 +1269,10 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 	keywords[option_pos] = "sslkey";
 	values[option_pos] = make_user_path(user_name, PATH_KIND_KEY)->data;
 	option_pos++;
+
+	/* if ts_set_ssl_options_hook is enabled then invoke that hook */
+	if (ts_set_ssl_options_hook)
+		ts_set_ssl_options_hook(user_name);
 
 	*option_start = option_pos;
 }
@@ -2118,8 +2136,8 @@ send_binary_copy_header(const TSConnection *conn, TSConnectionError *err)
 	/* File header for binary format */
 	static const char file_header[] = {
 		'P', 'G', 'C', 'O', 'P', 'Y', '\n', '\377', '\r', '\n', '\0', /* Signature */
-		0,   0,   0,   0,											  /* 4 bytes flags */
-		0,   0,   0,   0 /* 4 bytes header extension length (unused) */
+		0,	 0,	  0,   0,											  /* 4 bytes flags */
+		0,	 0,	  0,   0 /* 4 bytes header extension length (unused) */
 	};
 
 	int res = PQputCopyData(conn->pg_conn, file_header, sizeof(file_header));
@@ -2151,6 +2169,26 @@ remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binar
 								 "connection not IDLE when beginning COPY",
 								 conn);
 
+#ifndef NDEBUG
+	/* Set some variables for testing. */
+	const char *throw_after_option =
+		GetConfigOption("timescaledb.debug_broken_sendrecv_throw_after", true, false);
+	if (throw_after_option)
+	{
+		res = PQexec(pg_conn,
+					 psprintf("set timescaledb.debug_broken_sendrecv_throw_after = '%s';",
+							  throw_after_option));
+		if (PQresultStatus(res) != PGRES_COMMAND_OK)
+		{
+			remote_connection_get_result_error(res, err);
+			PQclear(res);
+			return false;
+		}
+		PQclear(res);
+	}
+#endif
+
+	/* Run the COPY query. */
 	res = PQexec(pg_conn, copycmd);
 
 	if (PQresultStatus(res) != PGRES_COPY_IN)
@@ -2226,8 +2264,7 @@ send_end_binary_copy_data(const TSConnection *conn, TSConnectionError *err)
 bool
 remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 {
-	PGresult *res;
-	bool success;
+	PGresult *res = NULL;
 
 	/*
 	 * In any case, try to switch the connection into the blocking mode, because
@@ -2248,13 +2285,30 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 			if (flush_result == 1)
 			{
 				/*
+				 * In some rare cases, flush might report that it's busy, but
+				 * actually there was an error and the socket became invalid.
+				 * Check for it. This is something we have observed in COPY
+				 * queries used for performance testing with tsbench, but not
+				 * sure how it happens exactly, must be in the depths of
+				 * pqReadData called by pqFlush.
+				 */
+				int socket = PQsocket(conn->pg_conn);
+				if (socket == PGINVALID_SOCKET)
+				{
+					return fill_connection_error(err,
+												 ERRCODE_CONNECTION_EXCEPTION,
+												 "failed to flush the COPY connection",
+												 conn);
+				}
+
+				/*
 				 * The socket is busy, wait. We don't care about the wait result
 				 * here, because whether it is a timeout or the socket became
 				 * writeable, we just retry.
 				 */
 				(void) WaitLatchOrSocket(MyLatch,
-										 PQsocket(conn->pg_conn),
-										 WL_TIMEOUT | WL_SOCKET_WRITEABLE,
+										 WL_TIMEOUT | WL_SOCKET_WRITEABLE | WL_EXIT_ON_PM_DEATH,
+										 socket,
 										 /* timeout = */ 1000,
 										 /* wait_event_info = */ 0);
 			}
@@ -2266,20 +2320,20 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 			else
 			{
 				/* Error. */
-				return fill_simple_error(err,
-										 ERRCODE_CONNECTION_EXCEPTION,
-										 "failed to flush the COPY connection",
-										 conn);
+				return fill_connection_error(err,
+											 ERRCODE_CONNECTION_EXCEPTION,
+											 "failed to flush the COPY connection",
+											 conn);
 			}
 		}
 
 		/* Switch the connection into blocking mode. */
 		if (PQsetnonblocking(conn->pg_conn, 0) != 0)
 		{
-			return fill_simple_error(err,
-									 ERRCODE_CONNECTION_EXCEPTION,
-									 "failed to set the connection into blocking mode",
-									 conn);
+			return fill_connection_error(err,
+										 ERRCODE_CONNECTION_EXCEPTION,
+										 "failed to set the connection into blocking mode",
+										 conn);
 		}
 	}
 
@@ -2303,32 +2357,33 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 	if (res == NULL || PQresultStatus(res) != PGRES_COPY_IN)
 	{
 		remote_connection_set_status(conn, res == NULL ? CONN_IDLE : CONN_PROCESSING);
-		elog(ERROR, "connection marked as CONN_COPY_IN, but no COPY is in progress");
 	}
 
-	if (conn->binary_copy && !send_end_binary_copy_data(conn, err))
-		return false;
+	/*
+	 * Finish the COPY if needed.
+	 */
+	if (remote_connection_get_status(conn) == CONN_COPY_IN)
+	{
+		if (conn->binary_copy && !send_end_binary_copy_data(conn, err))
+			return false;
 
-	if (PQputCopyEnd(conn->pg_conn, NULL) != 1)
-		return fill_simple_error(err,
-								 ERRCODE_CONNECTION_EXCEPTION,
-								 "could not end remote COPY",
-								 conn);
+		if (PQputCopyEnd(conn->pg_conn, NULL) != 1)
+			return fill_connection_error(err,
+										 ERRCODE_CONNECTION_EXCEPTION,
+										 "could not end remote COPY",
+										 conn);
 
-	success = true;
-	remote_connection_set_status(conn, CONN_PROCESSING);
+		remote_connection_set_status(conn, CONN_PROCESSING);
+	}
 
+	bool success = true;
 	while ((res = PQgetResult(conn->pg_conn)))
 	{
 		ExecStatusType status = PQresultStatus(res);
 		if (status != PGRES_COMMAND_OK)
 		{
-			success =
-				fill_result_error(err,
-								  ERRCODE_CONNECTION_EXCEPTION,
-								  psprintf("invalid result status '%s' when ending remote COPY",
-										   PQresStatus(status)),
-								  res);
+			success = false;
+			remote_connection_get_result_error(res, err);
 		}
 	}
 

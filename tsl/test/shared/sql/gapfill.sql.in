@@ -371,6 +371,21 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 
+SELECT
+  time_bucket_gapfill(NULL,time,'Europe/Berlin','2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('1day',NULL,'Europe/Berlin','2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('1day',time,NULL,'2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+
 -- test 0 bucket_width
 SELECT
   time_bucket_gapfill(0,time,1,11)
@@ -1416,7 +1431,7 @@ ORDER BY 1 DESC, 2;
 -- issue #3048
 -- test gapfill/hashagg planner interaction
 -- this used to produce a plan without gapfill node
-EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, '2000-01-01', '2000-01-10') AS time,
+EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, start:='2000-01-01', finish:='2000-01-10') AS time,
        sum(v1) AS v1_sum
 FROM metrics
 GROUP BY 1;
@@ -1446,7 +1461,7 @@ DROP TABLE i3834;
 -- issue #1528
 -- test float rounding for certain float values when start and end are identical
 SELECT
-  time_bucket_gapfill('1min'::interval, ts::timestamptz, '2019-11-05 2:20', '2019-11-05 2:30'),
+  time_bucket_gapfill('1min'::interval, ts::timestamptz, start:='2019-11-05 2:20', finish:='2019-11-05 2:30'),
   interpolate(avg(20266.959547::float4)) AS float4,
   interpolate(avg(20266.959547::float8)) AS float8
 FROM (VALUES ('2019-11-05 2:20'), ('2019-11-05 2:30')) v (ts)
@@ -1472,3 +1487,18 @@ WHERE time >= '2022-06-01' AND time <= '2022-06-02'
 GROUP BY 1,2;
 
 DROP TABLE gapfill_group_toast;
+
+-- test bucketing by month
+SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01'::timestamptz,'2001-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+SELECT time_bucket_gapfill('1 year'::interval, ts, '2000-01-01'::timestamptz,'2003-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+SELECT time_bucket_gapfill('1 century'::interval, ts, '1900-01-01'::timestamptz,'2103-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+
+-- test bucketing with timezone
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+SELECT time_bucket_gapfill('2 month'::interval, ts, current_setting('timezone'), '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+
+SET timezone TO 'Europe/Berlin';
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+RESET timezone;
+

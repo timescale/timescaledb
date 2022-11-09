@@ -19,6 +19,7 @@
 #include "export.h"
 
 #define INVALID_CHUNK_ID 0
+#define IS_OSM_CHUNK(chunk) ((chunk)->fd.osm_chunk == true)
 
 /* Should match definitions in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
@@ -146,6 +147,7 @@ extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
 extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p);
 extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
 										const char *prefix);
+List *ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs);
 
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
@@ -163,9 +165,10 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_foun
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_relid(Oid relid);
+extern TSDLLEXPORT int32 ts_chunk_get_compressed_chunk_id(int32 chunk_id);
 extern bool ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id,
 														   int32 *chunk_status);
-extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
+extern TSDLLEXPORT Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
 							bool missing_ok);
@@ -184,6 +187,7 @@ extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, in
 											 MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
+extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
@@ -199,8 +203,8 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 									 const char *table_name, Oid chunk_table_relid, bool *created);
 extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_partial(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
-extern TSDLLEXPORT bool ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
 																	 int32 chunk_status,
 																	 ChunkOperation cmd,
@@ -227,6 +231,9 @@ extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);
 extern int ts_chunk_oid_cmp(const void *p1, const void *p2);
+int ts_chunk_get_osm_chunk_id(int hypertable_id);
+extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk,
+													int32 dimension_id);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

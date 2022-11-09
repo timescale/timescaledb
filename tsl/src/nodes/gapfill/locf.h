@@ -9,8 +9,7 @@
 
 #include <postgres.h>
 
-#include "nodes/gapfill/gapfill.h"
-#include "nodes/gapfill/exec.h"
+#include "gapfill_internal.h"
 
 typedef struct GapFillLocfColumnState
 {

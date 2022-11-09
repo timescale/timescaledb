@@ -108,8 +108,10 @@ SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'D
 \set ON_ERROR_STOP 1
 
 SET default_transaction_read_only TO off;
-SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
-SELECT * FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
 
 -- create_distributed_hypertable()
 --
@@ -245,8 +247,8 @@ FROM
 GROUP BY bucket, device_id WITH NO DATA;
 
 -- policy API
--- compression policy will throw an error only if it attempts to compress
--- atleast 1 chunk
+-- compression policy will not throw an error, as it is expected to continue
+-- with next chunks
 SET default_transaction_read_only TO off;
 CREATE TABLE test_table_int(time bigint NOT NULL, device int);
 SELECt create_hypertable('test_table_int', 'time', chunk_time_interval=>'1'::bigint);
@@ -284,4 +286,8 @@ SELECT remove_retention_policy('test_table');
 SELECT add_job('now','12h');
 SELECT alter_job(1,scheduled:=false);
 SELECT delete_job(1);
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
 

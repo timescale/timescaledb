@@ -3943,6 +3943,7 @@ SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
 -- #3720 skipscan not being used on varchar column
 CREATE TABLE i3720(time timestamptz not null,data varchar);
 SELECT table_name FROM create_hypertable('i3720','time');
+WARNING:  column type "character varying" used for "data" does not follow best practices
  table_name 
 ------------
  i3720

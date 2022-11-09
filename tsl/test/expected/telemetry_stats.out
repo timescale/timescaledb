@@ -433,21 +433,21 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                       +
      },                                             +
      "continuous_aggregates": {                     +
-         "heap_size": 147456,                       +
+         "heap_size": 180224,                       +
          "toast_size": 24576,                       +
          "compression": {                           +
-             "compressed_heap_size": 8192,          +
-             "compressed_row_count": 1,             +
+             "compressed_heap_size": 40960,         +
+             "compressed_row_count": 10,            +
              "num_compressed_caggs": 1,             +
              "compressed_toast_size": 8192,         +
              "num_compressed_chunks": 1,            +
              "uncompressed_heap_size": 49152,       +
              "uncompressed_row_count": 452,         +
-             "compressed_indexes_size": 0,          +
+             "compressed_indexes_size": 16384,      +
              "uncompressed_toast_size": 0,          +
              "uncompressed_indexes_size": 81920     +
          },                                         +
-         "indexes_size": 163840,                    +
+         "indexes_size": 180224,                    +
          "num_children": 4,                         +
          "num_relations": 2,                        +
          "num_reltuples": 452,                      +
@@ -513,10 +513,11 @@ FROM telemetry_report;
 (1 row)
 
 -- Become an access node by adding a data node
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
--------------+-----------+-------+----------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_telemetry_stats_1 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |       database       | node_created | database_created | extension_created 
+-------------+----------------------+--------------+------------------+-------------------
+ data_node_1 | db_telemetry_stats_1 | t            | t                | t
 (1 row)
 
 -- Telemetry should show one data node and "acces node" status
@@ -566,10 +567,11 @@ num_data_nodes|distributed_member
  
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
--------------+-----------+-------+----------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_telemetry_stats_2 | t            | t                | t
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |       database       | node_created | database_created | extension_created 
+-------------+----------------------+--------------+------------------+-------------------
+ data_node_2 | db_telemetry_stats_2 | t            | t                | t
 (1 row)
 
 CREATE TABLE disthyper (LIKE normal);
@@ -930,21 +932,21 @@ FROM relations;
              continuous_aggregates              
 ------------------------------------------------
  {                                             +
-     "heap_size": 335872,                      +
+     "heap_size": 368640,                      +
      "toast_size": 40960,                      +
      "compression": {                          +
-         "compressed_heap_size": 8192,         +
-         "compressed_row_count": 1,            +
+         "compressed_heap_size": 40960,        +
+         "compressed_row_count": 10,           +
          "num_compressed_caggs": 1,            +
          "compressed_toast_size": 8192,        +
          "num_compressed_chunks": 1,           +
          "uncompressed_heap_size": 49152,      +
          "uncompressed_row_count": 452,        +
-         "compressed_indexes_size": 0,         +
+         "compressed_indexes_size": 16384,     +
          "uncompressed_toast_size": 0,         +
          "uncompressed_indexes_size": 81920    +
      },                                        +
-     "indexes_size": 393216,                   +
+     "indexes_size": 409600,                   +
      "num_children": 8,                        +
      "num_relations": 4,                       +
      "num_reltuples": 452,                     +
@@ -954,5 +956,194 @@ FROM relations;
  }
 (1 row)
 
+-- check telemetry for fixed schedule jobs works
+create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
+begin
+raise log 'this is job_test_fixed';
+end
+$$;
+create or replace procedure job_test_drifting(jobid int, config jsonb) language plpgsql as $$
+begin
+raise log 'this is job_test_drifting';
+end
+$$;
+-- before adding the jobs
+select get_telemetry_report()->'num_user_defined_actions_fixed';
+ ?column? 
+----------
+ 0
+(1 row)
+
+select get_telemetry_report()->'num_user_defined_actions';
+ ?column? 
+----------
+ 0
+(1 row)
+
+select add_job('job_test_fixed', '1 week');
+ add_job 
+---------
+    1000
+(1 row)
+
+select add_job('job_test_drifting', '1 week', fixed_schedule => false);
+ add_job 
+---------
+    1001
+(1 row)
+
+-- add continuous aggregate refresh policy for contagg
+select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, interval '3 weeks'); -- drifting
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1002
+(1 row)
+
+select add_continuous_aggregate_policy('contagg_old', interval '3 weeks', NULL, interval '3 weeks', initial_start => now()); -- fixed
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1003
+(1 row)
+
+-- add retention policy, fixed
+select add_retention_policy('hyper', interval '1 year', initial_start => now());
+ add_retention_policy 
+----------------------
+                 1004
+(1 row)
+
+-- add compression policy
+select add_compression_policy('hyper', interval '3 weeks', initial_start => now());
+ add_compression_policy 
+------------------------
+                   1005
+(1 row)
+
+select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
+ uda_fixed | uda_drifting 
+-----------+--------------
+ 1         | 1
+(1 row)
+
+select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
+ contagg_fixed | contagg_drifting 
+---------------+------------------
+ 1             | 1
+(1 row)
+
+select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
+ compress_fixed | retention_fixed 
+----------------+-----------------
+ 1              | 1
+(1 row)
+
+DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+TRUNCATE _timescaledb_internal.job_errors;
+-- create some "errors" for testing
+INSERT INTO
+_timescaledb_config.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name)
+VALUES (2000, 'User-Defined Action [2000]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_1'),
+(2001, 'User-Defined Action [2001]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_2'),
+(2002, 'Compression Policy [2002]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_compression'),
+(2003, 'Retention Policy [2003]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_retention'),
+(2004, 'Refresh Continuous Aggregate Policy [2004]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_refresh_continuous_aggregate'),
+-- user decided to define a custom action in the _timescaledb_internal schema, we group it with the User-defined actions
+(2005, 'User-Defined Action [2005]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_internal', 'policy_refresh_continuous_aggregate');
+-- create some errors for them
+INSERT INTO
+_timescaledb_internal.job_errors(job_id, pid, start_time, finish_time, error_data)
+values (2000, 12345, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"public", "proc_name": "custom_action_1"}'),
+(2000, 23456, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"ABCDE", "proc_schema": "public", "proc_name": "custom_action_1"}'),
+(2001, 54321, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"public", "proc_name": "custom_action_2"}'),
+(2002, 23443, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"JF009", "proc_schema":"_timescaledb_internal", "proc_name": "policy_compression"}'),
+(2003, 14567, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_internal", "proc_name": "policy_retention"}'),
+(2004, 78907, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_internal", "proc_name": "policy_refresh_continuous_aggregate"}'),
+(2005, 45757, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_internal", "proc_name": "policy_refresh_continuous_aggregate"}');
+-- we have 3 error records for user-defined actions, and three for policies, so we expect 4 types of jobs
+SELECT jsonb_pretty(get_telemetry_report() -> 'errors_by_sqlerrcode');
+                 jsonb_pretty                 
+----------------------------------------------
+ {                                           +
+     "policy_retention": {                   +
+         "P0001": 1                          +
+     },                                      +
+     "policy_compression": {                 +
+         "JF009": 1                          +
+     },                                      +
+     "user_defined_action": {                +
+         "ABCDE": 1,                         +
+         "P0001": 2                          +
+     },                                      +
+     "policy_refresh_continuous_aggregate": {+
+         "P0001": 2                          +
+     }                                       +
+ }
+(1 row)
+
+-- for job statistics, insert some records into bgw_job_stats
+INSERT INTO _timescaledb_internal.bgw_job_stat
+values 
+(2000, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2001, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2002, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2003, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2004, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
+(2005, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '-infinity'::timestamptz, '-infinity'::timestamptz, 
+false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0);
+SELECT jsonb_pretty(get_telemetry_report() -> 'stats_by_job_type');
+                  jsonb_pretty                  
+------------------------------------------------
+ {                                             +
+     "policy_retention": {                     +
+         "total_runs": 1,                      +
+         "total_crashes": 0,                   +
+         "total_duration": "@ 0",              +
+         "total_failures": 1,                  +
+         "total_successes": 0,                 +
+         "max_consecutive_crashes": 0,         +
+         "total_duration_failures": "@ 2 secs",+
+         "max_consecutive_failures": 1         +
+     },                                        +
+     "policy_compression": {                   +
+         "total_runs": 1,                      +
+         "total_crashes": 0,                   +
+         "total_duration": "@ 0",              +
+         "total_failures": 1,                  +
+         "total_successes": 0,                 +
+         "max_consecutive_crashes": 0,         +
+         "total_duration_failures": "@ 2 secs",+
+         "max_consecutive_failures": 1         +
+     },                                        +
+     "user_defined_action": {                  +
+         "total_runs": 2,                      +
+         "total_crashes": 0,                   +
+         "total_duration": "@ 0",              +
+         "total_failures": 2,                  +
+         "total_successes": 0,                 +
+         "max_consecutive_crashes": 0,         +
+         "total_duration_failures": "@ 4 secs",+
+         "max_consecutive_failures": 1         +
+     },                                        +
+     "policy_refresh_continuous_aggregate": {  +
+         "total_runs": 2,                      +
+         "total_crashes": 0,                   +
+         "total_duration": "@ 0",              +
+         "total_failures": 2,                  +
+         "total_successes": 0,                 +
+         "max_consecutive_crashes": 0,         +
+         "total_duration_failures": "@ 4 secs",+
+         "max_consecutive_failures": 1         +
+     }                                         +
+ }
+(1 row)
+
 DROP VIEW relations;
 DROP MATERIALIZED VIEW telemetry_report;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;

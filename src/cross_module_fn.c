@@ -28,14 +28,18 @@
 CROSSMODULE_WRAPPER(policy_compression_add);
 CROSSMODULE_WRAPPER(policy_compression_remove);
 CROSSMODULE_WRAPPER(policy_recompression_proc);
+CROSSMODULE_WRAPPER(policy_compression_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_add);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_proc);
+CROSSMODULE_WRAPPER(policy_refresh_cagg_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_remove);
 CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
+CROSSMODULE_WRAPPER(policy_reorder_check);
 CROSSMODULE_WRAPPER(policy_reorder_remove);
 CROSSMODULE_WRAPPER(policy_retention_add);
 CROSSMODULE_WRAPPER(policy_retention_proc);
+CROSSMODULE_WRAPPER(policy_retention_check);
 CROSSMODULE_WRAPPER(policy_retention_remove);
 
 CROSSMODULE_WRAPPER(job_add);
@@ -50,6 +54,12 @@ CROSSMODULE_WRAPPER(move_chunk_proc);
 CROSSMODULE_WRAPPER(copy_chunk_proc);
 CROSSMODULE_WRAPPER(copy_chunk_cleanup_proc);
 CROSSMODULE_WRAPPER(subscription_exec);
+
+CROSSMODULE_WRAPPER(policies_add);
+CROSSMODULE_WRAPPER(policies_remove);
+CROSSMODULE_WRAPPER(policies_remove_all);
+CROSSMODULE_WRAPPER(policies_alter);
+CROSSMODULE_WRAPPER(policies_show);
 
 /* partialize/finalize aggregate */
 CROSSMODULE_WRAPPER(partialize_agg);
@@ -113,6 +123,7 @@ CROSSMODULE_WRAPPER(dist_remote_hypertable_index_info);
 CROSSMODULE_WRAPPER(distributed_exec);
 CROSSMODULE_WRAPPER(create_distributed_restore_point);
 CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
+CROSSMODULE_WRAPPER(health_check);
 
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 Datum
@@ -173,13 +184,6 @@ job_execute_default_fn(BgwJob *job)
 	pg_unreachable();
 }
 
-static void
-job_config_check_default_fn(Name proc_schema, Name proc_name, Jsonb *config)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 static bool
 process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
 							   WithClauseResult *with_clause_options)
@@ -201,22 +205,62 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+/*
+ * TSL library is not loaded by the replication worker for some reason,
+ * so a call to `compressed_data_in` and `compressed_data_out` functions would
+ * produce a misleading error saying that your license is "timescale" and you
+ * should upgrade to "timescale" license, even if you have already upgraded.
+ *
+ * As a workaround, we try to load the TSL module it in this function.
+ * It will still error out in the "apache" version
+ */
+
 static Datum
 process_compressed_data_in(PG_FUNCTION_ARGS)
 {
-	/*
-	 * TSL library is not loaded by the replication worker for some reason,
-	 * so a call to `compressed_data_in` function would produce a misleading
-	 * error saying that your license is "timescale" and you should upgrade to
-	 * "timescale" license, even if you have already upgraded.
-	 *
-	 * As a workaround, we try to load the TSL module it in this function. It will still
-	 * error out in the "apache" version
-	 */
 	ts_license_enable_module_loading();
 
 	if (ts_cm_functions->compressed_data_in != process_compressed_data_in)
 		return ts_cm_functions->compressed_data_in(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
+static Datum
+process_compressed_data_out(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->compressed_data_out != process_compressed_data_out)
+		return ts_cm_functions->compressed_data_out(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
+/*
+ * This function ensures that the TSL library is loaded and the call to
+ * post_update_cagg_try_repair is dispatched to the correct
+ * function.
+ *
+ * The TSL library might not be loaded when post_update_cagg_try_repair is
+ * called during a database upgrade, resulting in an error message about
+ * improper licensing:
+ *
+ * "[..] is not supported under the current "timescale" license
+ *  INT:  Upgrade your license to 'timescale'""
+ *
+ * See also the comment about this problem in the function
+ * process_compressed_data_in.
+ */
+static Datum
+process_cagg_try_repair(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
+		return ts_cm_functions->cagg_try_repair(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
@@ -374,19 +418,24 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.gapfill_date_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_timestamptz_timezone_time_bucket = error_no_default_fn_pg_community,
 
 	/* bgw policies */
 	.policy_compression_add = error_no_default_fn_pg_community,
 	.policy_compression_remove = error_no_default_fn_pg_community,
 	.policy_recompression_proc = error_no_default_fn_pg_community,
+	.policy_compression_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_add = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_proc = error_no_default_fn_pg_community,
+	.policy_refresh_cagg_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_remove = error_no_default_fn_pg_community,
 	.policy_reorder_add = error_no_default_fn_pg_community,
 	.policy_reorder_proc = error_no_default_fn_pg_community,
+	.policy_reorder_check = error_no_default_fn_pg_community,
 	.policy_reorder_remove = error_no_default_fn_pg_community,
 	.policy_retention_add = error_no_default_fn_pg_community,
 	.policy_retention_proc = error_no_default_fn_pg_community,
+	.policy_retention_check = error_no_default_fn_pg_community,
 	.policy_retention_remove = error_no_default_fn_pg_community,
 
 	.job_add = error_no_default_fn_pg_community,
@@ -395,7 +444,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.job_delete = error_no_default_fn_pg_community,
 	.job_run = error_no_default_fn_pg_community,
 	.job_execute = job_execute_default_fn,
-	.job_config_check = job_config_check_default_fn,
 
 	.move_chunk = error_no_default_fn_pg_community,
 	.move_chunk_proc = error_no_default_fn_pg_community,
@@ -403,6 +451,12 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.copy_chunk_cleanup_proc = error_no_default_fn_pg_community,
 	.subscription_exec = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
+
+	.policies_add = error_no_default_fn_pg_community,
+	.policies_remove = error_no_default_fn_pg_community,
+	.policies_remove_all = error_no_default_fn_pg_community,
+	.policies_alter = error_no_default_fn_pg_community,
+	.policies_show = error_no_default_fn_pg_community,
 
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
@@ -421,13 +475,13 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_drop_dist_ht_invalidation_trigger = NULL,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
-	.cagg_try_repair = error_no_default_fn_pg_community,
+	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
 	.compressed_data_recv = error_no_default_fn_pg_community,
 	.compressed_data_in = process_compressed_data_in,
-	.compressed_data_out = error_no_default_fn_pg_community,
+	.compressed_data_out = process_compressed_data_out,
 	.process_compress_table = process_compress_table_default,
 	.create_compressed_chunk = error_no_default_fn_pg_community,
 	.compress_chunk = error_no_default_fn_pg_community,
@@ -487,6 +541,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_replica_table = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
+	.health_check = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

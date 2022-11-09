@@ -21,6 +21,7 @@ AlwaysBreakTemplateDeclarations: MultiLine
 BinPackArguments: false
 BinPackParameters: true
 BraceWrapping:
+  AfterCaseLabel: true
   AfterClass:      true
   AfterControlStatement: true
   AfterEnum:       true

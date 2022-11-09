@@ -41,12 +41,12 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+------------------+---------------------+---------+--------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                     | f       |      0
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                     | f       |      0
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                     | f       |      0 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                     | f       |      0 | f
+  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                     | f       |      0 | f
 (4 rows)
 
 SELECT * FROM test.show_subtables('"two_Partitions"');
@@ -84,8 +84,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status 
-----+---------------+-------------+------------+---------------------+---------+--------
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+---------+--------+-----------
 (0 rows)
 
 -- should be empty
@@ -105,11 +105,11 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+------------------+---------------------+---------+--------
-  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |                     | f       |      0
-  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |                     | f       |      0
-  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |                     | f       |      0 | f
+  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |                     | f       |      0 | f
+  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk |                     | f       |      0 | f
 (3 rows)
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_5_chunk;
@@ -244,6 +244,7 @@ RESET client_min_messages;
 \c test_trunc_ht owner
 CREATE TABLE test_hypertable (time TIMESTAMP WITHOUT TIME ZONE NOT NULL, value DOUBLE PRECISION);
 SELECT create_hypertable('test_hypertable', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
       create_hypertable       
 ------------------------------
  (1,public,test_hypertable,t)

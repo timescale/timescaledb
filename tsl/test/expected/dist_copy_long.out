@@ -28,10 +28,12 @@ SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
-select create_distributed_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '90 day');
+select create_distributed_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '270 day');
 NOTICE:  adding not-null constraint to column "date"
  create_distributed_hypertable 
 -------------------------------
@@ -39,7 +41,7 @@ NOTICE:  adding not-null constraint to column "date"
 (1 row)
 
 create table uk_price_paid_space2(like uk_price_paid);
-select create_distributed_hypertable('uk_price_paid_space2', 'date', 'postcode2', 2, chunk_time_interval => interval '90 day');
+select create_distributed_hypertable('uk_price_paid_space2', 'date', 'postcode2', 2, chunk_time_interval => interval '270 day');
 WARNING:  insufficient number of partitions for dimension "postcode2"
    create_distributed_hypertable   
 -----------------------------------
@@ -47,7 +49,7 @@ WARNING:  insufficient number of partitions for dimension "postcode2"
 (1 row)
 
 create table uk_price_paid_space10(like uk_price_paid);
-select create_distributed_hypertable('uk_price_paid_space10', 'date', 'postcode2', 10, chunk_time_interval => interval '90 day');
+select create_distributed_hypertable('uk_price_paid_space10', 'date', 'postcode2', 10, chunk_time_interval => interval '270 day');
    create_distributed_hypertable    
 ------------------------------------
  (3,public,uk_price_paid_space10,t)
@@ -128,5 +130,72 @@ select count(*) from uk_price_paid;
  200000
 (1 row)
 
-truncate uk_price_paid;
-reset timescaledb.max_open_chunks_per_insert;
+-- Different replication factors
+create table uk_price_paid_r2(like uk_price_paid);
+select create_distributed_hypertable('uk_price_paid_r2', 'date', 'postcode2',
+    chunk_time_interval => interval '90 day', replication_factor => 2);
+ create_distributed_hypertable 
+-------------------------------
+ (4,public,uk_price_paid_r2,t)
+(1 row)
+
+create table uk_price_paid_r3(like uk_price_paid);
+select create_distributed_hypertable('uk_price_paid_r3', 'date', 'postcode2',
+    chunk_time_interval => interval '90 day', replication_factor => 3);
+ create_distributed_hypertable 
+-------------------------------
+ (5,public,uk_price_paid_r3,t)
+(1 row)
+
+select hypertable_name, replication_factor from timescaledb_information.hypertables
+where hypertable_name like 'uk_price_paid%' order by hypertable_name;
+    hypertable_name    | replication_factor 
+-----------------------+--------------------
+ uk_price_paid         |                  1
+ uk_price_paid_r2      |                  2
+ uk_price_paid_r3      |                  3
+ uk_price_paid_space10 |                  1
+ uk_price_paid_space2  |                  1
+(5 rows)
+
+\copy uk_price_paid_r2 from program 'zcat < data/prices-10k-random-1.tsv.gz';
+select count(*) from uk_price_paid_r2;
+ count 
+-------
+ 10000
+(1 row)
+
+\copy uk_price_paid_r3 from program 'zcat < data/prices-10k-random-1.tsv.gz';
+select count(*) from uk_price_paid_r3;
+ count 
+-------
+ 10000
+(1 row)
+
+-- 0, 1, 2 rows
+\copy uk_price_paid from stdin
+select count(*) from uk_price_paid;
+ count  
+--------
+ 200000
+(1 row)
+
+\copy uk_price_paid from program 'zcat < data/prices-10k-random-1.tsv.gz | head -1';
+select count(*) from uk_price_paid;
+ count  
+--------
+ 200001
+(1 row)
+
+\copy uk_price_paid from program 'zcat < data/prices-10k-random-1.tsv.gz | head -2';
+select count(*) from uk_price_paid;
+ count  
+--------
+ 200003
+(1 row)
+
+-- Teardown
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;

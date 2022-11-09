@@ -16,13 +16,6 @@
 #endif
 
 #ifdef USE_TELEMETRY
-typedef enum TelemetryLevel
-{
-	TELEMETRY_OFF,
-	TELEMETRY_NO_FUNCTIONS,
-	TELEMETRY_BASIC,
-} TelemetryLevel;
-
 /* Define which level means on. We use this object to have at least one object
  * of type TelemetryLevel in the code, otherwise pgindent won't work for the
  * type */
@@ -49,9 +42,23 @@ static const struct config_enum_entry telemetry_level_options[] = {
 #endif
 
 static const struct config_enum_entry remote_data_fetchers[] = {
-	{ "rowbyrow", RowByRowFetcherType, false },
+	{ "copy", CopyFetcherType, false },
 	{ "cursor", CursorFetcherType, false },
 	{ "auto", AutoFetcherType, false },
+	{ NULL, 0, false }
+};
+
+static const struct config_enum_entry hypertable_distributed_types[] = {
+	{ "auto", HYPERTABLE_DIST_AUTO, false },
+	{ "local", HYPERTABLE_DIST_LOCAL, false },
+	{ "distributed", HYPERTABLE_DIST_DISTRIBUTED, false },
+	{ NULL, 0, false }
+};
+
+static const struct config_enum_entry dist_copy_transfer_formats[] = {
+	{ "auto", DCTF_Auto, false },
+	{ "binary", DCTF_Binary, false },
+	{ "text", DCTF_Text, false },
 	{ NULL, 0, false }
 };
 
@@ -73,7 +80,7 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
 #ifdef USE_TELEMETRY
-int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
+TelemetryLevel ts_guc_telemetry_level = TELEMETRY_DEFAULT;
 char *ts_telemetry_cloud = NULL;
 #endif
 
@@ -83,16 +90,29 @@ char *ts_last_tune_version = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
+TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
 TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
 TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
+TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
+TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = "";
 #endif
+
+/* Hook for plugins to allow additional SSL options */
+set_ssl_options_hook_type ts_set_ssl_options_hook = NULL;
+
+/* Assign the hook to the passed in function argument */
+void
+ts_assign_ssl_options_hook(void *fn)
+{
+	ts_set_ssl_options_hook = (set_ssl_options_hook_type) fn;
+}
 
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
@@ -300,6 +320,25 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	/*
+	 * The default is 'auto', so that the dist COPY could use text transfer
+	 * format for text input. It has a passthrough optimization for this case,
+	 * which greatly reduces the CPU usage. Ideally we would implement the same
+	 * optimization for binary, but the Postgres COPY code doesn't provide
+	 * enough APIs for that.
+	 */
+	DefineCustomEnumVariable("timescaledb.dist_copy_transfer_format",
+							 "Data format used by distributed COPY to send data to data nodes",
+							 "auto, binary or text",
+							 (int *) &ts_guc_dist_copy_transfer_format,
+							 DCTF_Auto,
+							 dist_copy_transfer_formats,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable("timescaledb.enable_client_ddl_on_data_nodes",
 							 "Enable DDL operations on data nodes by a client",
 							 "Do not restrict execution of DDL operations only by access node",
@@ -337,7 +376,7 @@ _guc_init(void)
 	DefineCustomEnumVariable("timescaledb.remote_data_fetcher",
 							 "Set remote data fetcher type",
 							 "Pick data fetcher type based on type of queries you plan to run "
-							 "(rowbyrow or cursor)",
+							 "(copy or cursor)",
 							 (int *) &ts_guc_remote_data_fetcher,
 							 AutoFetcherType,
 							 remote_data_fetchers,
@@ -407,7 +446,7 @@ _guc_init(void)
 	DefineCustomEnumVariable("timescaledb.telemetry_level",
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
-							 &ts_guc_telemetry_level,
+							 (int *) &ts_guc_telemetry_level,
 							 TELEMETRY_DEFAULT,
 							 telemetry_level_options,
 							 PGC_USERSET,
@@ -486,6 +525,33 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 #endif
+
+	DefineCustomEnumVariable("timescaledb.hypertable_distributed_default",
+							 "Set distributed hypertables default creation policy",
+							 "Set default policy to create local or distributed hypertables "
+							 "(auto, local or distributed)",
+							 (int *) &ts_guc_hypertable_distributed_default,
+							 HYPERTABLE_DIST_AUTO,
+							 hypertable_distributed_types,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomIntVariable("timescaledb.hypertable_replication_factor_default",
+							"Default replication factor value to use with a hypertables",
+							"Global default value for replication factor to use with hypertables "
+							"when the `replication_factor` argument is not provided",
+							&ts_guc_hypertable_replication_factor_default,
+							1,
+							1,
+							65536,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 }
 
 void

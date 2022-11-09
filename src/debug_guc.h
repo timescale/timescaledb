@@ -22,7 +22,7 @@
 	(1UL << UPPERREL_PARTIAL_GROUP_AGG)				/* Enabled using "partial_group_agg" */
 #define STAGE_GROUP_AGG (1UL << UPPERREL_GROUP_AGG) /* Enabled using "group_agg" */
 #define STAGE_WINDOW (1UL << UPPERREL_WINDOW)		/* Enabled using "window" */
-#define STAGE_DISTINCT (1UL << UPPERREL_DISTINCT)   /* Enabled using "distinct" */
+#define STAGE_DISTINCT (1UL << UPPERREL_DISTINCT)	/* Enabled using "distinct" */
 #define STAGE_ORDERED (1UL << UPPERREL_ORDERED)		/* Enabled using "ordered" */
 #define STAGE_FINAL (1UL << UPPERREL_FINAL)			/* Enabled using "final" */
 

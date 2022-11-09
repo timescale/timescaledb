@@ -14,6 +14,9 @@
 #include "scanner.h"
 #include "timer.h"
 #include "utils.h"
+#include "jsonb_utils.h"
+#include <utils/builtins.h>
+#include "time_bucket.h"
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -49,6 +52,7 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found
 		.index = catalog_get_index(catalog, BGW_JOB_STAT, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
+		.flags = SCANNER_F_KEEPLOCK,
 		.tuple_found = tuple_found,
 		.filter = tuple_filter,
 		.data = data,
@@ -104,7 +108,11 @@ bgw_job_stat_tuple_delete(TupleInfo *ti, void *const data)
 void
 ts_bgw_job_stat_delete(int32 bgw_job_id)
 {
-	bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_delete, NULL, NULL, RowExclusiveLock);
+	bgw_job_stat_scan_job_id(bgw_job_id,
+							 bgw_job_stat_tuple_delete,
+							 NULL,
+							 NULL,
+							 ShareRowExclusiveLock);
 }
 
 /* Mark the start of a job. This should be done in a separate transaction by the scheduler
@@ -148,7 +156,7 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	fd->last_run_success = false;
 	fd->total_crashes++;
 	fd->consecutive_crashes++;
-
+	fd->flags = ts_clear_flags_32(fd->flags, LAST_CRASH_REPORTED);
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
@@ -161,18 +169,102 @@ typedef struct
 	BgwJob *job;
 } JobResultCtx;
 
+/*
+ * time_bucket(schedule_interval, finish_time, origin => initial_start)
+ */
+static TimestampTz
+get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
+{
+	Assert(job->fd.fixed_schedule == true);
+	Datum timebucket_fini, result, offset;
+	Datum schedint_datum = IntervalPGetDatum(&job->fd.schedule_interval);
+
+	if (job->fd.timezone == NULL)
+	{
+		offset = DirectFunctionCall2(ts_timestamptz_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(job->fd.initial_start));
+
+		timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  TimestampTzGetDatum(job->fd.initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+	}
+	else
+	{
+		char *tz = text_to_cstring(job->fd.timezone);
+		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  CStringGetTextDatum(tz),
+											  TimestampTzGetDatum(job->fd.initial_start));
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(job->fd.initial_start),
+									 CStringGetTextDatum(tz));
+	}
+
+	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
+	/* if we have a month component, the origin doesn't work so we must manually
+	 include the offset */
+	if (job->fd.schedule_interval.month)
+	{
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
+	}
+	/*
+	 * adding the schedule interval above to get the next bucket might still not hit
+	 * the next bucket if we are crossing DST. So we can end up with a next_start value
+	 * that is actually less than the finish time of the job. Hence, we have to make sure
+	 * the next scheduled slot we compute is in the future and not in the past
+	 */
+	while (DatumGetTimestampTz(result) <= finish_time)
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+
+	return DatumGetTimestampTz(result);
+}
+
+static TimestampTz
+calculate_next_start_on_success_fixed(TimestampTz finish_time, BgwJob *job)
+{
+	TimestampTz next_slot;
+
+	next_slot = get_next_scheduled_execution_slot(job, finish_time);
+
+	return next_slot;
+}
+
+static TimestampTz
+calculate_next_start_on_success_drifting(TimestampTz last_finish, BgwJob *job)
+{
+	TimestampTz ts;
+	ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
+												 TimestampTzGetDatum(last_finish),
+												 IntervalPGetDatum(&job->fd.schedule_interval)));
+	return ts;
+}
+
 static TimestampTz
 calculate_next_start_on_success(TimestampTz finish_time, BgwJob *job)
 {
+	/* next_start is the previously calculated next_start for this job */
 	TimestampTz ts;
 	TimestampTz last_finish = finish_time;
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
 		last_finish = ts_timer_get_current_timestamp();
 	}
-	ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
-												 TimestampTzGetDatum(last_finish),
-												 IntervalPGetDatum(&job->fd.schedule_interval)));
+
+	/* calculate next_start differently depending on drift/no drift */
+	if (job->fd.fixed_schedule)
+		ts = calculate_next_start_on_success_fixed(last_finish, job);
+	else
+		ts = calculate_next_start_on_success_drifting(last_finish, job);
+
 	return ts;
 }
 
@@ -184,23 +276,36 @@ calculate_jitter_percent()
 	return ldexp((double) (16 - (int) (percent % 32)), -7);
 }
 
-/* For failures we have additive backoff based on consecutive failures
- * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF
- * We also limit the additive backoff in case of consecutive failures as we don't
+/* For failures we have backoff based on consecutive failures
+ * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF / 1 minute
+ * for jobs failing at runtime / for jobs failing to launch.
+ * We also limit the backoff in case of consecutive failures as we don't
  * want to pass in input that leads to out of range timestamps and don't want to
  * put off the next start time for the job indefinitely
  */
 static TimestampTz
-calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job)
+calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job,
+								bool launch_failure)
 {
 	float8 jitter = calculate_jitter_percent();
-	/* consecutive failures includes this failure */
-	TimestampTz res = 0;
+
+	/*
+	 * Have to be declared volatile because they are modified between
+	 * setjmp/longjmp calls.
+	 */
+	volatile TimestampTz res = 0;
 	volatile bool res_set = false;
-	TimestampTz last_finish = finish_time;
+	volatile TimestampTz last_finish = finish_time;
+
+	/* consecutive failures includes this failure */
 	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
 																		  consecutive_failures);
+	Assert(consecutive_failures > 0 && multiplier < 63);
+
 	MemoryContext oldctx;
+	/* 2^(consecutive_failures) - 1, at most 2^20 */
+	int64 max_slots = (INT64CONST(1) << (int64) multiplier) - INT64CONST(1);
+	int64 rand_backoff = random() % (max_slots * USECS_PER_SEC);
 
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
@@ -211,15 +316,31 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	BeginInternalSubTransaction("next start on failure");
 	PG_TRY();
 	{
-		/* ival = retry_period * (consecutive_failures)  */
-		Datum ival = DirectFunctionCall2(interval_mul,
-										 IntervalPGetDatum(&job->fd.retry_period),
-										 Float8GetDatum(multiplier));
-
+		Datum ival;
 		/* ival_max is the ceiling = MAX_INTERVALS_BACKOFF * schedule_interval */
-		Datum ival_max = DirectFunctionCall2(interval_mul,
-											 IntervalPGetDatum(&job->fd.schedule_interval),
-											 Float8GetDatum(MAX_INTERVALS_BACKOFF));
+		Datum ival_max;
+		// max wait time to launch job is 1 minute
+		Interval interval_max = { .time = 60000000 };
+		Interval retry_ival = { .time = 2000000 };
+		retry_ival.time += rand_backoff;
+
+		if (launch_failure)
+		{
+			// random backoff seconds in [2, 2 + 2^f]
+			ival = IntervalPGetDatum(&retry_ival);
+			ival_max = IntervalPGetDatum(&interval_max);
+		}
+		else
+		{
+			/* ival = retry_period * (consecutive_failures)  */
+			ival = DirectFunctionCall2(interval_mul,
+									   IntervalPGetDatum(&job->fd.retry_period),
+									   Float8GetDatum(multiplier));
+			/* ival_max is the ceiling = MAX_INTERVALS_BACKOFF * schedule_interval */
+			ival_max = DirectFunctionCall2(interval_mul,
+										   IntervalPGetDatum(&job->fd.schedule_interval),
+										   Float8GetDatum(MAX_INTERVALS_BACKOFF));
+		}
 
 		if (DatumGetInt32(DirectFunctionCall2(interval_cmp, ival, ival_max)) > 0)
 			ival = ival_max;
@@ -255,7 +376,26 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 													  TimestampTzGetDatum(nowt),
 													  IntervalPGetDatum(&job->fd.retry_period)));
 	}
+	/* for fixed_schedules, we make sure that if the calculated next_start time
+	 * surpasses the next scheduled slot, then next_start will be set to the value
+	 * of the next scheduled slot, so we don't get off track */
+	if (job->fd.fixed_schedule)
+	{
+		TimestampTz next_slot = get_next_scheduled_execution_slot(job, finish_time);
+		if (res > next_slot)
+			res = next_slot;
+	}
 	return res;
+}
+
+static TimestampTz
+calculate_next_start_on_failed_launch(int consecutive_failed_launches, BgwJob *job)
+{
+	TimestampTz now = ts_timer_get_current_timestamp();
+	TimestampTz failure_calc =
+		calculate_next_start_on_failure(now, consecutive_failed_launches, job, true);
+
+	return failure_calc;
 }
 
 /* For crashes, the logic is the similar as for failures except we also have
@@ -266,7 +406,8 @@ static TimestampTz
 calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
 {
 	TimestampTz now = ts_timer_get_current_timestamp();
-	TimestampTz failure_calc = calculate_next_start_on_failure(now, consecutive_crashes, job);
+	TimestampTz failure_calc =
+		calculate_next_start_on_failure(now, consecutive_crashes, job, false);
 	TimestampTz min_time = TimestampTzPlusMilliseconds(now, MIN_WAIT_AFTER_CRASH_MS);
 
 	if (min_time > failure_calc)
@@ -292,21 +433,22 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	duration = DatumGetIntervalP(DirectFunctionCall2(timestamp_mi,
 													 TimestampTzGetDatum(fd->last_finish),
 													 TimestampTzGetDatum(fd->last_start)));
-	fd->total_duration =
-		*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
-											   IntervalPGetDatum(&fd->total_duration),
-											   IntervalPGetDatum(duration)));
 
 	/* undo marking created by start marks */
 	fd->last_run_success = result_ctx->result == JOB_SUCCESS ? true : false;
 	fd->total_crashes--;
 	fd->consecutive_crashes = 0;
+	fd->flags = ts_clear_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	if (result_ctx->result == JOB_SUCCESS)
 	{
 		fd->total_success++;
 		fd->consecutive_failures = 0;
 		fd->last_successful_finish = fd->last_finish;
+		fd->total_duration =
+			*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&fd->total_duration),
+												   IntervalPGetDatum(duration)));
 		/* Mark the next start at the end if the job itself hasn't */
 		if (!bgw_job_stat_next_start_was_set(fd))
 			fd->next_start = calculate_next_start_on_success(fd->last_finish, result_ctx->job);
@@ -315,6 +457,10 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	{
 		fd->total_failures++;
 		fd->consecutive_failures++;
+		fd->total_duration_failures =
+			*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&fd->total_duration_failures),
+												   IntervalPGetDatum(duration)));
 
 		/*
 		 * Mark the next start at the end if the job itself hasn't (this may
@@ -326,8 +472,28 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		if (!bgw_job_stat_next_start_was_set(fd) && result_ctx->result != JOB_FAILURE_TO_START)
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
 															 fd->consecutive_failures,
-															 result_ctx->job);
+															 result_ctx->job,
+															 false);
 	}
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	return SCAN_DONE;
+}
+
+static ScanTupleResult
+bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
@@ -381,9 +547,13 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 		Int64GetDatum((mark_start ? 1 : 0));
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] =
 		IntervalPGetDatum(&zero_ival);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration_failures)] =
+		IntervalPGetDatum(&zero_ival);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_flags)] =
+		Int32GetDatum(JOB_STAT_FLAGS_DEFAULT);
 
 	if (mark_start)
 	{
@@ -409,25 +579,21 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 void
 ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
-	/* Use double-check locking */
+	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
+	 * job races and adds a job when we insert the relation as well since that
+	 * can trigger a failure when inserting a row for the job. We use the
+	 * RowExclusiveLock in the scan since we cannot use NoLock (relation_open
+	 * requires a lock that it not NoLock). */
+	Relation rel =
+		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_mark_start,
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
-	{
-		Relation rel =
-			table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-		/* Recheck while having a self-exclusive lock */
-		if (!bgw_job_stat_scan_job_id(bgw_job_id,
-									  bgw_job_stat_tuple_mark_start,
-									  NULL,
-									  NULL,
-									  RowExclusiveLock))
-			bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
-		table_close(rel, ShareRowExclusiveLock);
-		pgstat_report_activity(STATE_IDLE, NULL);
-	}
+		bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
+	table_close(rel, NoLock);
+	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
 void
@@ -442,8 +608,20 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  bgw_job_stat_tuple_mark_end,
 								  NULL,
 								  &res,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
+	pgstat_report_activity(STATE_IDLE, NULL);
+}
+
+void
+ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id)
+{
+	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+								  bgw_job_stat_tuple_mark_crash_reported,
+								  NULL,
+								  NULL,
+								  RowExclusiveLock))
+		elog(ERROR, "unable to find job statistics for job %d", bgw_job_id);
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
@@ -464,7 +642,7 @@ ts_bgw_job_stat_set_next_start(int32 job_id, TimestampTz next_start)
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
-								  RowExclusiveLock))
+								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job_id);
 }
 
@@ -481,7 +659,7 @@ ts_bgw_job_stat_update_next_start(int32 job_id, TimestampTz next_start, bool all
 									 bgw_job_stat_tuple_set_next_start,
 									 NULL,
 									 &next_start,
-									 RowExclusiveLock);
+									 ShareRowExclusiveLock);
 	return found;
 }
 
@@ -492,24 +670,20 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 	if (next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
-	/* Use double-check locking */
+	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
+	 * job races and adds a job when we insert the relation as well since that
+	 * can trigger a failure when inserting a row for the job. We use the
+	 * RowExclusiveLock in the scan since we cannot use NoLock (relation_open
+	 * requires a lock that it not NoLock). */
+	Relation rel =
+		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
 								  RowExclusiveLock))
-	{
-		Relation rel =
-			table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-		/* Recheck while having a self-exclusive lock */
-		if (!bgw_job_stat_scan_job_id(bgw_job_id,
-									  bgw_job_stat_tuple_set_next_start,
-									  NULL,
-									  &next_start,
-									  RowExclusiveLock))
-			bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
-		table_close(rel, ShareRowExclusiveLock);
-	}
+		bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
+	table_close(rel, NoLock);
 }
 
 bool
@@ -523,14 +697,44 @@ ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
 }
 
 TimestampTz
-ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
+ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_failed_launches)
 {
+	/* give the system some room to breathe, wait before trying to launch again */
+	if (consecutive_failed_launches > 0)
+		return calculate_next_start_on_failed_launch(consecutive_failed_launches, job);
 	if (jobstat == NULL)
 		/* Never previously run - run right away */
 		return DT_NOBEGIN;
 
 	if (jobstat->fd.consecutive_crashes > 0)
+	{
+		/* Update the errors table regarding the crash */
+		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
+		{
+			/* add the proc_schema, proc_name to the jsonb */
+			NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
+			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
+			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
+			JsonbParseState *parse_state = NULL;
+			pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+			ts_jsonb_add_str(parse_state, "proc_schema", NameStr(proc_schema));
+			ts_jsonb_add_str(parse_state, "proc_name", NameStr(proc_name));
+			JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+
+			const FormData_job_error jerr = {
+				.error_data = JsonbValueToJsonb(result),
+				.start_time = jobstat->fd.last_start,
+				.finish_time = ts_timer_get_current_timestamp(),
+				.pid = -1,
+				.job_id = jobstat->fd.id,
+			};
+
+			ts_job_errors_insert_tuple(&jerr);
+			ts_bgw_job_stat_mark_crash_reported(jobstat->fd.id);
+		}
+
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+	}
 
 	return jobstat->fd.next_start;
 }

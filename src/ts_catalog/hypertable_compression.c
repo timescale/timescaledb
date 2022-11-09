@@ -245,7 +245,7 @@ ts_hypertable_compression_rename_column(int32 htid, char *old_column_name, char 
 		{
 			Datum values[Natts_hypertable_compression];
 			bool isnulls[Natts_hypertable_compression];
-			bool repl[Natts_hypertable_compression] = { false };
+			bool doReplace[Natts_hypertable_compression] = { false };
 			bool should_free;
 			HeapTuple tuple, new_tuple;
 			TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
@@ -256,8 +256,8 @@ ts_hypertable_compression_rename_column(int32 htid, char *old_column_name, char 
 			namestrcpy(&name_new_column_name, new_column_name);
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] =
 				NameGetDatum(&name_new_column_name);
-			repl[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] = true;
-			new_tuple = heap_modify_tuple(tuple, tupdesc, values, isnulls, repl);
+			doReplace[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] = true;
+			new_tuple = heap_modify_tuple(tuple, tupdesc, values, isnulls, doReplace);
 			ts_catalog_update(ti->scanrel, new_tuple);
 
 			if (should_free)

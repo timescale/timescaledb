@@ -43,15 +43,25 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_compression_add;
 	PGFunction policy_compression_remove;
 	PGFunction policy_recompression_proc;
+	PGFunction policy_compression_check;
 	PGFunction policy_refresh_cagg_add;
 	PGFunction policy_refresh_cagg_proc;
+	PGFunction policy_refresh_cagg_check;
 	PGFunction policy_refresh_cagg_remove;
 	PGFunction policy_reorder_add;
 	PGFunction policy_reorder_proc;
+	PGFunction policy_reorder_check;
 	PGFunction policy_reorder_remove;
 	PGFunction policy_retention_add;
 	PGFunction policy_retention_proc;
+	PGFunction policy_retention_check;
 	PGFunction policy_retention_remove;
+
+	PGFunction policies_add;
+	PGFunction policies_remove;
+	PGFunction policies_remove_all;
+	PGFunction policies_alter;
+	PGFunction policies_show;
 
 	PGFunction job_add;
 	PGFunction job_alter;
@@ -60,7 +70,6 @@ typedef struct CrossModuleFunctions
 	PGFunction job_run;
 
 	bool (*job_execute)(BgwJob *job);
-	void (*job_config_check)(Name proc_schema, Name proc_name, Jsonb *config);
 
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 									TsRelType input_reltype, Hypertable *ht, void *extra);
@@ -77,6 +86,7 @@ typedef struct CrossModuleFunctions
 	PGFunction gapfill_date_time_bucket;
 	PGFunction gapfill_timestamp_time_bucket;
 	PGFunction gapfill_timestamptz_time_bucket;
+	PGFunction gapfill_timestamptz_timezone_time_bucket;
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
@@ -192,6 +202,7 @@ typedef struct CrossModuleFunctions
 	TupleTableSlot *(*compress_row_exec)(CompressSingleRowState *cr, TupleTableSlot *slot);
 	void (*compress_row_end)(CompressSingleRowState *cr);
 	void (*compress_row_destroy)(CompressSingleRowState *cr);
+	PGFunction health_check;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

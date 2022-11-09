@@ -106,6 +106,25 @@ SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
 -------------
 (0 rows)
 
+-- truncate one compressed chunk
+SELECT chunk_schema || '.' || chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'table_to_compress' and hypertable_schema = 'public'
+ORDER BY chunk_name LIMIT 1
+\gset
+SELECT count(*) FROM :CHNAME;
+ count 
+-------
+     1
+(1 row)
+
+TRUNCATE TABLE :CHNAME;
+SELECT count(*) FROM :CHNAME;
+ count 
+-------
+     0
+(1 row)
+
 -- drop all hypertables' old chunks
 SELECT drop_chunks(table_name::regclass, older_than=>'1 day'::interval)
   FROM _timescaledb_catalog.hypertable

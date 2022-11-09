@@ -96,7 +96,7 @@ CREATE MATERIALIZED VIEW mat_after
 WITH (timescaledb.continuous)
 AS :QUERY_AFTER WITH NO DATA;
 --materialize mat_before
-SET client_min_messages TO LOG;
+SET client_min_messages TO NOTICE;
 CALL refresh_continuous_aggregate('mat_before', NULL, NULL);
 SELECT count(*) FROM conditions_before;
  count 
@@ -133,14 +133,6 @@ SELECT count(*) FROM conditions_after;
 --dump & restore
 \c postgres :ROLE_SUPERUSER
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   hypertable
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump:   chunk
-pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
 \c :TEST_DBNAME
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;

@@ -8,9 +8,21 @@ on:
       - prerelease_test
   pull_request:
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   regress_linux_32bit:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
     runs-on: ubuntu-latest
+    needs: config
     container:
       image: i386/debian:buster-slim
       options: --privileged --ulimit core=-1
@@ -20,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: ["12.11","13.7","14.4"]
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
 
     steps:
@@ -47,7 +59,7 @@ jobs:
         chown -R postgres:postgres ~/postgresql
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v1
+      uses: actions/checkout@v3
 
     - name: Build TimescaleDB
       run: |
@@ -71,7 +83,7 @@ jobs:
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
-        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true"; fi >>$GITHUB_OUTPUT
         cat regression.log
 
     - name: Coredumps
@@ -84,29 +96,32 @@ jobs:
           apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
+            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<EOT | tee -a stacktraces.log
+              printf "%s\n\n", debug_query_string
+              bt full
+        EOT
           done
-          echo "::set-output name=coredumps::true"
+          echo "coredumps=true" >>$GITHUB_OUTPUT
           exit 1
         fi
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: Regression diff linux-i386 PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktraces.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postgres.log

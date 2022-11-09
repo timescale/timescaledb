@@ -364,8 +364,8 @@ WARNING:  telemetry could not connect to "noservice.timescale.com"
 SET timescaledb.telemetry_level=basic;
 SELECT * FROM jsonb_object_keys(get_telemetry_report()) AS key
 WHERE key != 'os_name_pretty';
-             key              
-------------------------------
+                key                 
+------------------------------------
  db_uuid
  license
  os_name
@@ -383,19 +383,26 @@ WHERE key != 'os_name_pretty';
  build_os_version
  exported_db_uuid
  instance_metadata
+ stats_by_job_type
  telemetry_version
  build_architecture
  last_tuned_version
  postgresql_version
  related_extensions
  timescaledb_version
+ errors_by_sqlerrcode
  num_reorder_policies
  num_retention_policies
  num_compression_policies
  num_user_defined_actions
+ num_reorder_policies_fixed
  build_architecture_bit_size
  num_continuous_aggs_policies
-(29 rows)
+ num_retention_policies_fixed
+ num_compression_policies_fixed
+ num_user_defined_actions_fixed
+ num_continuous_aggs_policies_fixed
+(36 rows)
 
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT t FROM get_telemetry_report() t;
@@ -550,16 +557,16 @@ EXECUTE record_from_prepared;
 
 DEALLOCATE record_from_prepared;
 SELECT get_telemetry_report()->'functions_used';
-                                                                                                        ?column?                                                                                                        
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"abs(integer)": 1, "min(integer)": 1, "sum(integer)": 1, "get_telemetry_report()": 1, "int4eq(integer,integer)": 1, "int4mi(integer,integer)": 11, "int4pl(integer,integer)": 3, "jsonb_object_field(jsonb,text)": 1}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          ?column?                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"pg_catalog.count()": 1, "pg_catalog.sum(bigint)": 4, "pg_catalog.abs(integer)": 1, "pg_catalog.max(integer)": 2, "pg_catalog.min(integer)": 1, "pg_catalog.sum(integer)": 1, "pg_catalog.int8(numeric)": 4, "pg_catalog.sum(interval)": 2, "public.get_telemetry_report()": 1, "pg_catalog.text(pg_catalog.name)": 1, "pg_catalog.int4eq(integer,integer)": 2, "pg_catalog.int4mi(integer,integer)": 11, "pg_catalog.int4pl(integer,integer)": 3, "pg_catalog.nameeq(pg_catalog.name,pg_catalog.name)": 1, "pg_catalog.texteq(pg_catalog.text,pg_catalog.text)": 1, "pg_catalog.nameregexeq(pg_catalog.name,pg_catalog.text)": 1, "pg_catalog.textregexeq(pg_catalog.text,pg_catalog.text)": 1, "pg_catalog.jsonb_object_agg(pg_catalog.\"any\",pg_catalog.\"any\")": 1, "pg_catalog.jsonb_object_field(pg_catalog.jsonb,pg_catalog.text)": 1, "pg_catalog.jsonb_object_field_text(pg_catalog.jsonb,pg_catalog.text)": 5}
 (1 row)
 
 -- check the report again to see if resetting works
 SELECT get_telemetry_report()->'functions_used';
-                              ?column?                              
---------------------------------------------------------------------
- {"get_telemetry_report()": 1, "jsonb_object_field(jsonb,text)": 1}
+                                                                                                                                                                                                                                                                                                                                                                    ?column?                                                                                                                                                                                                                                                                                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"pg_catalog.count()": 1, "pg_catalog.sum(bigint)": 4, "pg_catalog.max(integer)": 2, "pg_catalog.int8(numeric)": 4, "pg_catalog.sum(interval)": 2, "public.get_telemetry_report()": 1, "pg_catalog.text(pg_catalog.name)": 1, "pg_catalog.int4eq(integer,integer)": 1, "pg_catalog.nameeq(pg_catalog.name,pg_catalog.name)": 1, "pg_catalog.texteq(pg_catalog.text,pg_catalog.text)": 1, "pg_catalog.nameregexeq(pg_catalog.name,pg_catalog.text)": 1, "pg_catalog.textregexeq(pg_catalog.text,pg_catalog.text)": 1, "pg_catalog.jsonb_object_agg(pg_catalog.\"any\",pg_catalog.\"any\")": 1, "pg_catalog.jsonb_object_field(pg_catalog.jsonb,pg_catalog.text)": 1, "pg_catalog.jsonb_object_field_text(pg_catalog.jsonb,pg_catalog.text)": 5}
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER

@@ -69,8 +69,6 @@ static emit_log_hook_type prev_emit_log_hook = NULL;
 static void
 emit_log_hook_callback(ErrorData *edata)
 {
-	bool started_txn = false;
-
 	/*
 	 * once proc_exit has started we may no longer be able to start transactions
 	 */
@@ -96,6 +94,8 @@ emit_log_hook_callback(ErrorData *edata)
 		 * reinstall the hook when we're successfully done with this function.
 		 */
 		emit_log_hook = NULL;
+
+		bool started_txn = false;
 
 		if (!IsTransactionState())
 		{

@@ -121,6 +121,7 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series
 --test that we can insert data into a 1-dimensional table (only time partitioning)
 CREATE TABLE "1dim"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim"', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_hypertable 
 -------------------
  (2,public,1dim,t)
@@ -176,6 +177,7 @@ SELECT "1dim" FROM "1dim";
 --test that we can insert pre-1970 dates
 CREATE TABLE "1dim_pre1970"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_pre1970"', 'time', chunk_time_interval=> INTERVAL '1 Month');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
      create_hypertable     
 ---------------------------
  (3,public,1dim_pre1970,t)
@@ -189,6 +191,7 @@ INSERT INTO "1dim_pre1970" VALUES('1969-02-20T09:00:00', 29.9);
 BEGIN;
 CREATE TABLE "1dim_usec_interval"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_usec_interval"', 'time', chunk_time_interval=> 10);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 WARNING:  unexpected interval: smaller than one second
         create_hypertable        
 ---------------------------------
@@ -199,6 +202,7 @@ INSERT INTO "1dim_usec_interval" VALUES('1969-12-01T19:00:00', 21.2);
 ROLLBACK;
 CREATE TABLE "1dim_usec_interval"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_usec_interval"', 'time', chunk_time_interval=> 1000000);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
         create_hypertable        
 ---------------------------------
  (5,public,1dim_usec_interval,t)
@@ -242,22 +246,22 @@ SELECT * FROM "1dim_neg";
 (7 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name     | compressed_chunk_id | dropped | status 
-----+---------------+-----------------------+-------------------+---------------------+---------+--------
-  1 |             1 | one_Partition         | _hyper_1_1_chunk  |                     | f       |      0
-  2 |             1 | one_Partition         | _hyper_1_2_chunk  |                     | f       |      0
-  3 |             1 | one_Partition         | _hyper_1_3_chunk  |                     | f       |      0
-  4 |             2 | _timescaledb_internal | _hyper_2_4_chunk  |                     | f       |      0
-  5 |             3 | _timescaledb_internal | _hyper_3_5_chunk  |                     | f       |      0
-  6 |             3 | _timescaledb_internal | _hyper_3_6_chunk  |                     | f       |      0
-  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk  |                     | f       |      0
-  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk  |                     | f       |      0
- 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk |                     | f       |      0
- 11 |             6 | _timescaledb_internal | _hyper_6_11_chunk |                     | f       |      0
- 12 |             6 | _timescaledb_internal | _hyper_6_12_chunk |                     | f       |      0
- 13 |             6 | _timescaledb_internal | _hyper_6_13_chunk |                     | f       |      0
- 14 |             6 | _timescaledb_internal | _hyper_6_14_chunk |                     | f       |      0
- 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk |                     | f       |      0
+ id | hypertable_id |      schema_name      |    table_name     | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-------------------+---------------------+---------+--------+-----------
+  1 |             1 | one_Partition         | _hyper_1_1_chunk  |                     | f       |      0 | f
+  2 |             1 | one_Partition         | _hyper_1_2_chunk  |                     | f       |      0 | f
+  3 |             1 | one_Partition         | _hyper_1_3_chunk  |                     | f       |      0 | f
+  4 |             2 | _timescaledb_internal | _hyper_2_4_chunk  |                     | f       |      0 | f
+  5 |             3 | _timescaledb_internal | _hyper_3_5_chunk  |                     | f       |      0 | f
+  6 |             3 | _timescaledb_internal | _hyper_3_6_chunk  |                     | f       |      0 | f
+  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk  |                     | f       |      0 | f
+  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk  |                     | f       |      0 | f
+ 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk |                     | f       |      0 | f
+ 11 |             6 | _timescaledb_internal | _hyper_6_11_chunk |                     | f       |      0 | f
+ 12 |             6 | _timescaledb_internal | _hyper_6_12_chunk |                     | f       |      0 | f
+ 13 |             6 | _timescaledb_internal | _hyper_6_13_chunk |                     | f       |      0 | f
+ 14 |             6 | _timescaledb_internal | _hyper_6_14_chunk |                     | f       |      0 | f
+ 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk |                     | f       |      0 | f
 (14 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
@@ -282,6 +286,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
 -- Create a three-dimensional table
 CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
 SELECT create_hypertable('"3dim"', 'time', 'device', 2);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
@@ -426,6 +431,7 @@ RESET timezone;
 SET timezone = 'UTC';
 CREATE TABLE "test_tz"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"test_tz"', 'time', chunk_time_interval=> INTERVAL '1 day');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
    create_hypertable   
 -----------------------
  (11,public,test_tz,t)
@@ -454,6 +460,7 @@ SET timescaledb.max_open_chunks_per_insert = 10;
 SET timescaledb.max_cached_chunks_per_hypertable = 10;
 CREATE TABLE "nondefault_mem_settings"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"nondefault_mem_settings"', 'time', chunk_time_interval=> INTERVAL '1 Month');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
            create_hypertable           
 ---------------------------------------
  (12,public,nondefault_mem_settings,t)

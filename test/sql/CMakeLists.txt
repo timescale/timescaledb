@@ -3,6 +3,7 @@ include(GenerateTestSchedule)
 set(TEST_FILES
     alter.sql
     alternate_users.sql
+    baserel_cache.sql
     broken_tables.sql
     chunks.sql
     chunk_adaptive.sql
@@ -26,9 +27,9 @@ set(TEST_FILES
     information_views.sql
     insert_many.sql
     insert_single.sql
+    insert_returning.sql
     lateral.sql
     misc.sql
-    parallel.sql
     partition.sql
     partitioning.sql
     pg_dump_unprivileged.sql
@@ -36,7 +37,6 @@ set(TEST_FILES
     plain.sql
     plan_hashagg.sql
     plan_ordered_append.sql
-    query.sql
     relocate_extension.sql
     reloptions.sql
     size_utils.sql
@@ -67,7 +67,9 @@ set(TEST_TEMPLATES
     plan_expand_hypertable.sql.in
     plan_hypertable_inline.sql.in
     rowsecurity.sql.in
-    update.sql.in)
+    update.sql.in
+    parallel.sql.in
+    query.sql.in)
 
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
@@ -89,6 +91,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     bgw_launcher.sql
     c_unit_tests.sql
+    copy_memory_usage.sql
     guc_options.sql
     loader.sql
     metadata.sql
@@ -97,7 +100,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     pg_dump.sql
     symbol_conflict.sql
     test_utils.sql)
-  # if(USE_TELEMETRY) list(APPEND TEST_FILES telemetry.sql) endif()
+  if(USE_TELEMETRY)
+    list(APPEND TEST_FILES telemetry.sql)
+  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))

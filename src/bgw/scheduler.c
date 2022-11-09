@@ -106,6 +106,7 @@ typedef struct ScheduledBgwJob
 	 * perform the mark_end
 	 */
 	bool may_need_mark_end;
+	int32 consecutive_failed_launches;
 } ScheduledBgwJob;
 
 static void on_failure_to_start_job(ScheduledBgwJob *sjob);
@@ -133,7 +134,10 @@ ts_bgw_start_worker(const char *name, const BgwParams *bgw_params)
 	/* handle needs to be allocated in long-lived memory context */
 	MemoryContextSwitchTo(scheduler_mctx);
 	if (!RegisterDynamicBackgroundWorker(&worker, &handle))
+	{
+		elog(NOTICE, "unable to register background worker");
 		handle = NULL;
+	}
 	MemoryContextSwitchTo(scratch_mctx);
 
 	return handle;
@@ -156,6 +160,7 @@ static void
 mark_job_as_started(ScheduledBgwJob *sjob)
 {
 	Assert(!sjob->may_need_mark_end);
+	sjob->consecutive_failed_launches = 0;
 	ts_bgw_job_stat_mark_start(sjob->job.fd.id);
 	sjob->may_need_mark_end = true;
 }
@@ -219,6 +224,8 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 * Usually the job process will mark the end, but if the job gets
 			 * a signal (cancel or terminate), it won't be able to so we
 			 * should.
+			 * TODO: Insert a record in the job_errors table informing of this failure
+			 * Currently the SIGTERM case is not handled, there might be other cases as well
 			 */
 			elog(LOG, "job %d failed", sjob->job.fd.id);
 			mark_job_as_ended(sjob, JOB_FAILURE);
@@ -260,7 +267,8 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
 			Assert(!sjob->reserved_worker);
-			sjob->next_start = ts_bgw_job_stat_next_start(job_stat, &sjob->job);
+			sjob->next_start =
+				ts_bgw_job_stat_next_start(job_stat, &sjob->job, sjob->consecutive_failed_launches);
 			break;
 		case JOB_STATE_STARTED:
 			Assert(prev_state == JOB_STATE_SCHEDULED);
@@ -288,6 +296,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 					 "failed to launch job %d \"%s\": out of background workers",
 					 sjob->job.fd.id,
 					 NameStr(sjob->job.fd.application_name));
+				sjob->consecutive_failed_launches++;
 				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
@@ -477,6 +486,10 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 		else if (cur_sjob->job.fd.id > new_sjob->job.fd.id)
 		{
 			scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
+			elog(DEBUG1,
+				 "sjob %d was new, its fixed_schedule is %d",
+				 new_sjob->job.fd.id,
+				 new_sjob->job.fd.fixed_schedule);
 
 			/* Advance the new_job list until we catch up to cur_list */
 			new_ptr = lnext_compat(new_jobs, new_ptr);
@@ -836,7 +849,8 @@ ts_bgw_scheduler_setup_mctx()
 	MemoryContextSwitchTo(scratch_mctx);
 }
 
-static void handle_sighup(SIGNAL_ARGS)
+static void
+handle_sighup(SIGNAL_ARGS)
 {
 	/* based on av_sighup_handler */
 	int save_errno = errno;

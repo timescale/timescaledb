@@ -88,9 +88,6 @@ FROM
 GROUP BY
   tableoid;
 
--- make sure we get bitmapheapscan
-SET enable_indexscan TO FALSE;
-
 SELECT
   *
 FROM

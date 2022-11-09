@@ -283,6 +283,20 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  24 |            3 |                    6 |                   7
 (24 rows)
 
+-- Test that truncating chunks works
+SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
+ count 
+-------
+     1
+(1 row)
+
+TRUNCATE TABLE _timescaledb_internal._hyper_2_7_chunk;
+SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
+ count 
+-------
+     0
+(1 row)
+
 -- Drop one chunk "manually" and verify that dimension slices and
 -- constraints are cleaned up. Each chunk has two constraints and two
 -- dimension slices. Both constraints should be deleted, but only one
@@ -552,7 +566,8 @@ ORDER BY c.id;
  _timescaledb_internal | _hyper_3_18_chunk      | table | default_perm_user
  _timescaledb_internal | bgw_job_stat           | table | super_user
  _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
-(16 rows)
+ _timescaledb_internal | job_errors             | table | super_user
+(17 rows)
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -766,6 +781,7 @@ SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------

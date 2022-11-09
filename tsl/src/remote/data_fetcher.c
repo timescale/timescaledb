@@ -7,7 +7,7 @@
 
 #include "data_fetcher.h"
 #include "cursor_fetcher.h"
-#include "row_by_row_fetcher.h"
+#include "copy_fetcher.h"
 #include "guc.h"
 #include "errors.h"
 

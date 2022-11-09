@@ -24,6 +24,7 @@ CREATE TABLE conditions (
   humidity DOUBLE PRECISION NULL
 );
 SELECT create_hypertable('conditions', 'time', chunk_time_interval := '1 day'::interval);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     create_hypertable    
 -------------------------
  (1,public,conditions,t)

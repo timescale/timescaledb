@@ -117,6 +117,11 @@ FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension
 ORDER BY c.id;
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
+-- Test that truncating chunks works
+SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
+TRUNCATE TABLE _timescaledb_internal._hyper_2_7_chunk;
+SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
+
 -- Drop one chunk "manually" and verify that dimension slices and
 -- constraints are cleaned up. Each chunk has two constraints and two
 -- dimension slices. Both constraints should be deleted, but only one

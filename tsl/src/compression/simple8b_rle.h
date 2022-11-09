@@ -349,7 +349,7 @@ simple8brle_compressor_pop_block(Simple8bRleCompressor *compressor)
 	return compressor->last_block;
 }
 
-static inline int32
+static inline uint32
 simple8brle_compressor_num_selectors(Simple8bRleCompressor *compressor)
 {
 	Assert(bit_array_num_bits(&compressor->selectors) % SIMPLE8B_BITS_PER_SELECTOR == 0);
@@ -628,7 +628,7 @@ simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIter
 			.is_done = true,
 		};
 
-	if (iter->current_in_compressed_pos >= iter->current_block.num_elements_compressed)
+	if (iter->current_in_compressed_pos >= (int32) iter->current_block.num_elements_compressed)
 	{
 		iter->current_block =
 			simple8brle_block_create(bit_array_iter_next(&iter->selectors,
@@ -804,7 +804,7 @@ simple8brle_selector_is_rle(uint8 selector)
 static inline uint32
 simple8brle_rledata_repeatcount(uint64 rledata)
 {
-	return (uint32)((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
+	return (uint32) ((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
 }
 
 static inline uint64
