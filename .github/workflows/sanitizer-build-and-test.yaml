@@ -48,6 +48,8 @@ jobs:
       run: python .github/gh_config_reader.py
 
   sanitizer:
+    # Change the JOB_NAME variable below when changing the name.
+    # Don't use the env variable here because the env context is not accessible.
     name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     needs: config
@@ -130,9 +132,11 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Regression diff ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: regression.log
+        path: |
+          regression.log
+          installcheck.log
 
-    - name: Save postmaster.log
+    - name: Save PostgreSQL log
       if: always()
       uses: actions/upload-artifact@v3
       with:
@@ -142,12 +146,16 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        sudo coredumpctl gdb <<EOT
-          printf "%s\n\n", debug_query_string
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          show debug-file-directory
+          printf "query = '%s'\n\n", debug_query_string
+          frame function ExceptionalCondition
+          printf "condition = '%s'\n", conditionName
           bt full
-        EOT
+        " | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        false
+        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -161,4 +169,29 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: ${{ github.workspace }}/sanitizer.log.*
+        path: ${{ github.workspace }}/sanitizer.log
+
+    - name: Upload test results to the database
+      if: always()
+      env:
+        # GitHub Actions allow you neither to use the env context for the job name,
+        # nor to access the job name from the step context, so we have to
+        # duplicate it to work around this nonsense.
+        JOB_NAME: PG${{ matrix.pg }} ${{ env.name }} ${{ matrix.os }}
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh
