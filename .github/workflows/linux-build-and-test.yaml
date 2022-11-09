@@ -28,6 +28,7 @@ jobs:
         fi
     
   regress:
+    # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
     runs-on: ${{ matrix.os }}
@@ -59,7 +60,7 @@ jobs:
         # This is needed because GitHub image macos-10.15 version
         # 20210927.1 did not install OpenSSL so we install openssl
         # explicitly.
-        brew install openssl
+        brew install openssl gawk
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
@@ -169,9 +170,11 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: regression.log
+        path: |
+          regression.log
+          installcheck.log
 
-    - name: Save postmaster.log
+    - name: Save PostgreSQL log
       if: always()
       uses: actions/upload-artifact@v3
       with:
@@ -181,14 +184,16 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        sudo coredumpctl gdb <<EOT
+        sudo coredumpctl gdb <<<"
           set verbose on
           show debug-file-directory
-          printf "%s\n\n", debug_query_string
+          printf "query = '%s'\n\n", debug_query_string
+          frame function ExceptionalCondition
+          printf "condition = '%s'\n", conditionName
           bt full
-        EOT
+        " | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        false
+        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -206,3 +211,29 @@ jobs:
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
 
+    - name: Upload test results to the database
+      # Don't upload the results of the flaky check, because the db schema only
+      # supports running one test once per job.
+      if: always() && (! contains(matrix.name, 'Flaky'))
+      env:
+        # GitHub Actions allow you neither to use the env context for the job name,
+        # nor to access the job name from the step context, so we have to
+        # duplicate it to work around this nonsense.
+        JOB_NAME: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh
