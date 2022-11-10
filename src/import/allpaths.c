@@ -34,6 +34,7 @@
 
 #include "allpaths.h"
 #include "compat/compat.h"
+#include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
@@ -816,7 +817,7 @@ set_tablesample_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 /* copied from allpaths.c */
 static void
-set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+ts_set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
 	/*
 	 * Test any partial indexes of rel for applicability.  We must do this
@@ -825,7 +826,10 @@ set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	check_index_predicates(root, rel);
 
 	/* Mark rel with estimated output rows, width, etc */
+	MemoryContext old = MemoryContextSwitchTo(ts_temporary_planner_context);
 	set_baserel_size_estimates(root, rel);
+	MemoryContextSwitchTo(old);
+	MemoryContextReset(ts_temporary_planner_context);
 }
 
 /* extracted from the same function in allpaths.c
@@ -882,7 +886,7 @@ ts_set_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rt
 				else
 				{
 					/* Plain relation */
-					set_plain_rel_size(root, rel, rte);
+					ts_set_plain_rel_size(root, rel, rte);
 				}
 				break;
 			case RTE_SUBQUERY:

@@ -150,6 +150,8 @@ DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
  */
 static struct BaserelInfo_hash *ts_baserel_info = NULL;
 
+MemoryContext ts_temporary_planner_context = NULL;
+
 /*
  * Add information about a chunk to the baserel info cache. Used to cache the
  * chunk info at the plan time chunk exclusion.
@@ -446,6 +448,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	 */
 	volatile bool reset_fetcher_type = false;
 	volatile bool reset_baserel_info = false;
+	volatile bool reset_temporary_memory_context = false;
 
 	/*
 	 * If we are in an aborted transaction, reject all queries.
@@ -553,10 +556,16 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				 * or portal memory contexts could also be suitable, but they
 				 * don't exist for SPI calls.
 				 */
-				MemoryContextStats(CurrentMemoryContext);
 				ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
 													 /* nelements = */ 1,
 													 /* private_data = */ NULL);
+			}
+
+			if (ts_temporary_planner_context == NULL)
+			{
+				reset_temporary_memory_context = true;
+				ts_temporary_planner_context = AllocSetContextCreate(CurrentMemoryContext,
+					"ts temporary planner context", ALLOCSET_DEFAULT_SIZES);
 			}
 		}
 
@@ -607,6 +616,12 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		{
 			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
+
+		if (reset_temporary_memory_context)
+		{
+			MemoryContextDelete(ts_temporary_planner_context);
+			ts_temporary_planner_context = NULL;
+		}
 	}
 	PG_CATCH();
 	{
@@ -620,6 +635,12 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		if (reset_fetcher_type)
 		{
 			ts_data_node_fetcher_scan_type = AutoFetcherType;
+		}
+
+		if (reset_temporary_memory_context)
+		{
+			MemoryContextDelete(ts_temporary_planner_context);
+			ts_temporary_planner_context = NULL;
 		}
 
 		/* Pop the cache, but do not release since caches are auto-released on
