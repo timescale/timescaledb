@@ -140,14 +140,47 @@ CROSS JOIN generate_series(1, 5, 1) i;
 ALTER TABLE test6 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='2 hours');
 
 SELECT compress_chunk(i) FROM show_chunks('test6') i;
-SELECT 12 as expected_number_of_chunks, count(*) as number_of_chunks FROM show_chunks('test6');
-SELECT decompress_chunk(i) FROM show_chunks('test6') i;
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 
--- Altering compress chunk time interval will cause us to create 6 chunks instead of 12.
-ALTER TABLE test6 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='4 hours');
+-- This will generate another 24 chunks
+INSERT INTO test6 
+SELECT t, i, gen_rand_minstd() 
+FROM generate_series('2018-03-03 1:00'::TIMESTAMPTZ, '2018-03-04 0:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Altering compress chunk time interval will cause us to create 6 chunks from the additional 24 chunks.
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='4 hours');
 
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-SELECT 6 as expected_number_of_chunks, count(*) as number_of_chunks FROM show_chunks('test6');
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+
+-- This will generate another 3 chunks
+INSERT INTO test6 
+SELECT t, i, gen_rand_minstd() 
+FROM generate_series('2018-03-04 1:00'::TIMESTAMPTZ, '2018-03-04 3:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
+-- Setting compressed chunk to anything less than chunk interval should disable merging chunks.
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='30 minutes');
+
+SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+
+-- This will generate another 3 chunks
+INSERT INTO test6 
+SELECT t, i, gen_rand_minstd() 
+FROM generate_series('2018-03-04 4:00'::TIMESTAMPTZ, '2018-03-04 6:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
+-- Setting compressed chunk to anything less than chunk interval should disable merging chunks.
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=0);
+
+SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+
+-- Setting compress chunk time to NULL will error out.
+\set ON_ERROR_STOP 0
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=NULL);
+\set ON_ERROR_STOP 1
 
 DROP TABLE test6;
 
