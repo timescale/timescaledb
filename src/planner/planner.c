@@ -1424,18 +1424,29 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 		{
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 
+			if (
 #if PG14_GE
-			/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
-			 * the codepath for earlier versions is different. */
-			if (mt->operation == CMD_INSERT || mt->operation == CMD_UPDATE ||
-				mt->operation == CMD_DELETE)
-#else
-			if (mt->operation == CMD_INSERT)
+				/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
+				 * the codepath for earlier versions is different. */
+				mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE ||
 #endif
+#if PG15_GE
+				mt->operation == CMD_MERGE ||
+#endif
+				mt->operation == CMD_INSERT)
 			{
 				RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 				Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
+#if PG15_GE
+				if (ht && mt->operation == CMD_MERGE)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("The MERGE command does not support hypertables in this "
+									"version"),
+							 errhint("Check https://github.com/timescale/timescaledb/issues/4929 "
+									 "for more information and current status")));
+#endif
 				if (ht && (mt->operation == CMD_INSERT || !hypertable_is_distributed(ht)))
 				{
 					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
