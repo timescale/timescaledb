@@ -3934,7 +3934,10 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (compress_options)
 	{
 		parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
-		if (parse_results[CompressEnabled].is_default)
+		/* We allow updating compress chunk time interval independently of other compression
+		 * options. */
+		if (parse_results[CompressEnabled].is_default &&
+			parse_results[CompressChunkTimeInterval].is_default)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("the option timescaledb.compress must be set to true to enable "

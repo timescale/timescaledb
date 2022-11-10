@@ -343,14 +343,33 @@ SELECT compress_chunk(i) FROM show_chunks('test6') i;
  _timescaledb_internal._hyper_11_210_chunk
 (24 rows)
 
-SELECT 12 as expected_number_of_chunks, count(*) as number_of_chunks FROM show_chunks('test6');
- expected_number_of_chunks | number_of_chunks 
----------------------------+------------------
-                        12 |               12
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+ number_of_chunks 
+------------------
+               12
 (1 row)
 
-SELECT decompress_chunk(i) FROM show_chunks('test6') i;
-             decompress_chunk              
+-- This will generate another 24 chunks
+INSERT INTO test6 
+SELECT t, i, gen_rand_minstd() 
+FROM generate_series('2018-03-03 1:00'::TIMESTAMPTZ, '2018-03-04 0:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Altering compress chunk time interval will cause us to create 6 chunks from the additional 24 chunks.
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='4 hours');
+SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
+NOTICE:  chunk "_hyper_11_188_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_190_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_192_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_194_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_196_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_198_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_200_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_202_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_204_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_206_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_208_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_210_chunk" is already compressed
+              compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_11_188_chunk
  _timescaledb_internal._hyper_11_190_chunk
@@ -364,33 +383,166 @@ SELECT decompress_chunk(i) FROM show_chunks('test6') i;
  _timescaledb_internal._hyper_11_206_chunk
  _timescaledb_internal._hyper_11_208_chunk
  _timescaledb_internal._hyper_11_210_chunk
-(12 rows)
+ _timescaledb_internal._hyper_11_210_chunk
+ _timescaledb_internal._hyper_11_210_chunk
+ _timescaledb_internal._hyper_11_226_chunk
+ _timescaledb_internal._hyper_11_226_chunk
+ _timescaledb_internal._hyper_11_226_chunk
+ _timescaledb_internal._hyper_11_226_chunk
+ _timescaledb_internal._hyper_11_230_chunk
+ _timescaledb_internal._hyper_11_230_chunk
+ _timescaledb_internal._hyper_11_230_chunk
+ _timescaledb_internal._hyper_11_230_chunk
+ _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_238_chunk
+ _timescaledb_internal._hyper_11_238_chunk
+ _timescaledb_internal._hyper_11_238_chunk
+ _timescaledb_internal._hyper_11_238_chunk
+ _timescaledb_internal._hyper_11_242_chunk
+ _timescaledb_internal._hyper_11_242_chunk
+ _timescaledb_internal._hyper_11_242_chunk
+ _timescaledb_internal._hyper_11_242_chunk
+ _timescaledb_internal._hyper_11_246_chunk
+ _timescaledb_internal._hyper_11_246_chunk
+(36 rows)
 
--- Altering compress chunk time interval will cause us to create 6 chunks instead of 12.
-ALTER TABLE test6 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='4 hours');
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+ number_of_chunks 
+------------------
+               18
+(1 row)
+
+-- This will generate another 3 chunks
+INSERT INTO test6 
+SELECT t, i, gen_rand_minstd() 
+FROM generate_series('2018-03-04 1:00'::TIMESTAMPTZ, '2018-03-04 3:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
+-- Setting compressed chunk to anything less than chunk interval should disable merging chunks.
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='30 minutes');
+WARNING:  compress chunk interval is not a multiple of chunk interval, you should use a factor of chunk interval to merge as much as possible
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
+NOTICE:  chunk "_hyper_11_188_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_190_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_192_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_194_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_196_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_198_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_200_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_202_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_204_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_206_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_208_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_210_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_238_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_242_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_246_chunk" is already compressed
               compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_11_188_chunk
- _timescaledb_internal._hyper_11_188_chunk
+ _timescaledb_internal._hyper_11_190_chunk
  _timescaledb_internal._hyper_11_192_chunk
- _timescaledb_internal._hyper_11_192_chunk
+ _timescaledb_internal._hyper_11_194_chunk
  _timescaledb_internal._hyper_11_196_chunk
- _timescaledb_internal._hyper_11_196_chunk
+ _timescaledb_internal._hyper_11_198_chunk
  _timescaledb_internal._hyper_11_200_chunk
- _timescaledb_internal._hyper_11_200_chunk
+ _timescaledb_internal._hyper_11_202_chunk
  _timescaledb_internal._hyper_11_204_chunk
- _timescaledb_internal._hyper_11_204_chunk
+ _timescaledb_internal._hyper_11_206_chunk
  _timescaledb_internal._hyper_11_208_chunk
- _timescaledb_internal._hyper_11_208_chunk
-(12 rows)
+ _timescaledb_internal._hyper_11_210_chunk
+ _timescaledb_internal._hyper_11_226_chunk
+ _timescaledb_internal._hyper_11_230_chunk
+ _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_238_chunk
+ _timescaledb_internal._hyper_11_242_chunk
+ _timescaledb_internal._hyper_11_246_chunk
+ _timescaledb_internal._hyper_11_254_chunk
+ _timescaledb_internal._hyper_11_255_chunk
+ _timescaledb_internal._hyper_11_256_chunk
+(21 rows)
 
-SELECT 6 as expected_number_of_chunks, count(*) as number_of_chunks FROM show_chunks('test6');
- expected_number_of_chunks | number_of_chunks 
----------------------------+------------------
-                         6 |                6
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+ number_of_chunks 
+------------------
+               21
 (1 row)
 
+-- This will generate another 3 chunks
+INSERT INTO test6 
+SELECT t, i, gen_rand_minstd() 
+FROM generate_series('2018-03-04 4:00'::TIMESTAMPTZ, '2018-03-04 6:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
+-- Setting compressed chunk to anything less than chunk interval should disable merging chunks.
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=0);
+SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
+NOTICE:  chunk "_hyper_11_188_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_190_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_192_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_194_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_196_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_198_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_200_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_202_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_204_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_206_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_208_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_210_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_238_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_242_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_246_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_254_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_255_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_256_chunk" is already compressed
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_11_188_chunk
+ _timescaledb_internal._hyper_11_190_chunk
+ _timescaledb_internal._hyper_11_192_chunk
+ _timescaledb_internal._hyper_11_194_chunk
+ _timescaledb_internal._hyper_11_196_chunk
+ _timescaledb_internal._hyper_11_198_chunk
+ _timescaledb_internal._hyper_11_200_chunk
+ _timescaledb_internal._hyper_11_202_chunk
+ _timescaledb_internal._hyper_11_204_chunk
+ _timescaledb_internal._hyper_11_206_chunk
+ _timescaledb_internal._hyper_11_208_chunk
+ _timescaledb_internal._hyper_11_210_chunk
+ _timescaledb_internal._hyper_11_226_chunk
+ _timescaledb_internal._hyper_11_230_chunk
+ _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_238_chunk
+ _timescaledb_internal._hyper_11_242_chunk
+ _timescaledb_internal._hyper_11_246_chunk
+ _timescaledb_internal._hyper_11_254_chunk
+ _timescaledb_internal._hyper_11_255_chunk
+ _timescaledb_internal._hyper_11_256_chunk
+ _timescaledb_internal._hyper_11_260_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_262_chunk
+(24 rows)
+
+SELECT count(*) as number_of_chunks FROM show_chunks('test6');
+ number_of_chunks 
+------------------
+               24
+(1 row)
+
+-- Setting compress chunk time to NULL will error out.
+\set ON_ERROR_STOP 0
+ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=NULL);
+ERROR:  invalid value for timescaledb.compress_chunk_time_interval 'null'
+\set ON_ERROR_STOP 1
 DROP TABLE test6;
 CREATE TABLE test7 ("Time" timestamptz, i integer, j integer, k integer, value integer);
 SELECT table_name from create_hypertable('test7', 'Time', chunk_time_interval=> INTERVAL '1 hour');
