@@ -113,6 +113,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES ddl_extra.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+  list(APPEND TEST_FILES merge.sql)
+endif()
+
 # only test custom type if we are in 64-bit architecture
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
   list(APPEND TEST_FILES custom_type.sql)
