@@ -151,6 +151,7 @@ DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
 static struct BaserelInfo_hash *ts_baserel_info = NULL;
 
 MemoryContext ts_temporary_planner_context = NULL;
+static List *ts_temporary_planner_context_list = NIL;
 
 /*
  * Add information about a chunk to the baserel info cache. Used to cache the
@@ -561,12 +562,9 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 													 /* private_data = */ NULL);
 			}
 
-			if (ts_temporary_planner_context == NULL)
-			{
-				reset_temporary_memory_context = true;
-				ts_temporary_planner_context = AllocSetContextCreate(CurrentMemoryContext,
-					"ts temporary planner context", ALLOCSET_DEFAULT_SIZES);
-			}
+			ts_temporary_planner_context = AllocSetContextCreate(CurrentMemoryContext,
+				"ts temporary planner context", ALLOCSET_DEFAULT_SIZES);
+			ts_temporary_planner_context_list = lappend(ts_temporary_planner_context_list, ts_temporary_planner_context);
 		}
 
 		if (prev_planner_hook != NULL)
@@ -617,10 +615,19 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 
-		if (reset_temporary_memory_context)
+		if (ts_temporary_planner_context != NULL)
 		{
+			Assert(llast(ts_temporary_planner_context_list) == ts_temporary_planner_context);
 			MemoryContextDelete(ts_temporary_planner_context);
-			ts_temporary_planner_context = NULL;
+			ts_temporary_planner_context_list = list_delete_last(ts_temporary_planner_context_list);
+			if (ts_temporary_planner_context_list != NIL)
+			{
+				ts_temporary_planner_context = llast(ts_temporary_planner_context_list);
+			}
+			else
+			{
+				ts_temporary_planner_context = NULL;
+			}
 		}
 	}
 	PG_CATCH();
@@ -637,10 +644,19 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 
-		if (reset_temporary_memory_context)
+		if (ts_temporary_planner_context != NULL)
 		{
+			Assert(llast(ts_temporary_planner_context_list) == ts_temporary_planner_context);
 			MemoryContextDelete(ts_temporary_planner_context);
-			ts_temporary_planner_context = NULL;
+			ts_temporary_planner_context_list = list_delete_last(ts_temporary_planner_context_list);
+			if (ts_temporary_planner_context_list != NIL)
+			{
+				ts_temporary_planner_context = llast(ts_temporary_planner_context_list);
+			}
+			else
+			{
+				ts_temporary_planner_context = NULL;
+			}
 		}
 
 		/* Pop the cache, but do not release since caches are auto-released on
