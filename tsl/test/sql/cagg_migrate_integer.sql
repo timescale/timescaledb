@@ -4,5 +4,6 @@
 
 \set IS_DISTRIBUTED FALSE
 \set IS_TIME_DIMENSION FALSE
+\set TIME_DIMENSION_DATATYPE INTEGER
 
 \ir include/cagg_migrate_common.sql

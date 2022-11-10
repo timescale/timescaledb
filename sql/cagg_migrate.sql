@@ -367,6 +367,8 @@ BEGIN
     CASE _plan_step.config->>'window_start_type'
         WHEN 'timestamp with time zone' THEN
             CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::timestamptz, NULL);
+        WHEN 'timestamp without time zone' THEN
+            CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::timestamp, NULL);
         WHEN 'bigint' THEN
             CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::bigint, NULL);
         WHEN 'integer' THEN
