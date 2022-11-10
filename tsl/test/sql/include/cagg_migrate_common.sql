@@ -10,14 +10,8 @@
 \echo 'Running local hypertable tests'
 \endif
 
-\if :IS_TIME_DIMENSION
-    \set TIME_DATATYPE TIMESTAMPTZ
-\else
-    \set TIME_DATATYPE INTEGER
-\endif
-
 CREATE TABLE conditions (
-    "time" :TIME_DATATYPE NOT NULL,
+    "time" :TIME_DIMENSION_DATATYPE NOT NULL,
     temperature NUMERIC
 );
 
@@ -42,18 +36,17 @@ CREATE TABLE conditions (
         0.25;
 \else
     CREATE OR REPLACE FUNCTION integer_now()
-    RETURNS integer LANGUAGE SQL STABLE AS
+    RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
     $$
         SELECT coalesce(max(time), 0)
         FROM public.conditions
     $$;
 
     \if :IS_DISTRIBUTED
-        CALL distributed_exec (
-            $DIST$
-            CREATE OR REPLACE FUNCTION integer_now() RETURNS integer LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;
-            $DIST$
-        );
+        SELECT
+            'CREATE OR REPLACE FUNCTION integer_now() RETURNS '||:'TIME_DIMENSION_DATATYPE'||' LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;' AS "STMT"
+            \gset
+        CALL distributed_exec (:'STMT');
     \endif
 
     SELECT set_integer_now_func('conditions', 'integer_now');

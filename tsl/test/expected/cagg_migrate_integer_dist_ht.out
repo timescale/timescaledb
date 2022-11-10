@@ -38,6 +38,7 @@ FROM (
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 \set IS_DISTRIBUTED TRUE
 \set IS_TIME_DIMENSION FALSE
+\set TIME_DIMENSION_DATATYPE INTEGER
 \ir include/cagg_migrate_common.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -49,13 +50,8 @@ Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
 \endif
-\if :IS_TIME_DIMENSION
-    \set TIME_DATATYPE TIMESTAMPTZ
-\else
-    \set TIME_DATATYPE INTEGER
-\endif
 CREATE TABLE conditions (
-    "time" :TIME_DATATYPE NOT NULL,
+    "time" :TIME_DIMENSION_DATATYPE NOT NULL,
     temperature NUMERIC
 );
 \if :IS_DISTRIBUTED
@@ -83,17 +79,16 @@ CREATE TABLE conditions (
         0.25;
 \else
     CREATE OR REPLACE FUNCTION integer_now()
-    RETURNS integer LANGUAGE SQL STABLE AS
+    RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
     $$
         SELECT coalesce(max(time), 0)
         FROM public.conditions
     $$;
     \if :IS_DISTRIBUTED
-        CALL distributed_exec (
-            $DIST$
-            CREATE OR REPLACE FUNCTION integer_now() RETURNS integer LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;
-            $DIST$
-        );
+        SELECT
+            'CREATE OR REPLACE FUNCTION integer_now() RETURNS '||:'TIME_DIMENSION_DATATYPE'||' LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;' AS "STMT"
+            \gset
+        CALL distributed_exec (:'STMT');
     \endif
     SELECT set_integer_now_func('conditions', 'integer_now');
  set_integer_now_func 
@@ -109,11 +104,11 @@ CREATE TABLE conditions (
 \set ON_ERROR_STOP 0
 -- should fail relation does not exist
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:70: ERROR:  relation "conditions_summary_daily" does not exist at character 19
+psql:include/cagg_migrate_common.sql:63: ERROR:  relation "conditions_summary_daily" does not exist at character 19
 CREATE TABLE conditions_summary_daily();
 -- should fail continuous agg does not exist
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:73: ERROR:  continuous aggregate "public.conditions_summary_daily" does not exist
+psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.conditions_summary_daily" does not exist
 \set ON_ERROR_STOP 1
 DROP TABLE conditions_summary_daily;
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
@@ -136,7 +131,7 @@ WITH NO DATA;
 \set ON_ERROR_STOP 0
 -- should fail because we don't need to migrate finalized caggs
 CALL cagg_migrate('conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:98: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
+psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
 \set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
@@ -155,7 +150,7 @@ FROM
     conditions
 GROUP BY
     bucket;
-psql:include/cagg_migrate_common.sql:117: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:110: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 SELECT
     ca.raw_hypertable_id AS "RAW_HYPERTABLE_ID",
     h.schema_name AS "MAT_SCHEMA_NAME",
@@ -173,7 +168,7 @@ WHERE
 \set ON_ERROR_STOP 0
 -- should fail because the new cagg with suffix '_new' already exists
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:136: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
+psql:include/cagg_migrate_common.sql:129: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
 \set ON_ERROR_STOP 1
 -- remove the new cagg to execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
@@ -217,8 +212,8 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:156: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
-psql:include/cagg_migrate_common.sql:156: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:149: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:149: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
  mat_hypertable_id | step_id |  status  |       type       |                                                                         config                                                                          
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -245,9 +240,9 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
 CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:161: ERROR:  plan already exists for materialized hypertable 3
+psql:include/cagg_migrate_common.sql:154: ERROR:  plan already exists for materialized hypertable 3
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:162: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
+psql:include/cagg_migrate_common.sql:155: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
@@ -289,11 +284,11 @@ AND job_id >= 1000;
 
 -- execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:185: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:178: NOTICE:  drop cascades to 10 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:186: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:179: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:187: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:180: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
     h.schema_name AS "NEW_MAT_SCHEMA_NAME",
@@ -424,9 +419,9 @@ JOIN _timescaledb_catalog.continuous_agg ON mat_hypertable_id = hypertable_id
 ORDER BY bgw_job.id;
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:235: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:228: NOTICE:  drop cascades to 10 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:236: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:229: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                            config                             |     check_schema      |                check_name                 | timezone 
@@ -437,7 +432,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
-psql:include/cagg_migrate_common.sql:239: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:232: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -498,7 +493,7 @@ UNION ALL
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:246: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:239: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
@@ -526,9 +521,9 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 -- test migration overriding the new cagg and removing the old
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:256: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:249: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:257: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:250: NOTICE:  drop cascades to 10 other objects
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
@@ -540,11 +535,11 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
-psql:include/cagg_migrate_common.sql:261: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
-psql:include/cagg_migrate_common.sql:261: NOTICE:  drop cascades to 10 other objects
-psql:include/cagg_migrate_common.sql:261: NOTICE:  job 1002 not found, skipping
-psql:include/cagg_migrate_common.sql:261: NOTICE:  job 1001 not found, skipping
-psql:include/cagg_migrate_common.sql:261: NOTICE:  job 1000 not found, skipping
+psql:include/cagg_migrate_common.sql:254: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:254: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1002 not found, skipping
+psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1001 not found, skipping
+psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1000 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -576,10 +571,10 @@ UNION ALL
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:266: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:259: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 -- should fail because the old cagg was removed
 SELECT * FROM conditions_summary_daily_old;
-psql:include/cagg_migrate_common.sql:268: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
+psql:include/cagg_migrate_common.sql:261: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
@@ -604,9 +599,9 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 -- permissions test
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:278: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:271: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:279: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:272: NOTICE:  drop cascades to 10 other objects
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE MATERIALIZED VIEW conditions_summary_daily
@@ -625,11 +620,11 @@ FROM
     conditions
 GROUP BY
     bucket;
-psql:include/cagg_migrate_common.sql:298: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:291: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:302: ERROR:  permission denied for table continuous_agg_migrate_plan
+psql:include/cagg_migrate_common.sql:295: ERROR:  permission denied for table continuous_agg_migrate_plan
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
@@ -637,7 +632,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:312: ERROR:  permission denied for table continuous_agg_migrate_plan_step
+psql:include/cagg_migrate_common.sql:305: ERROR:  permission denied for table continuous_agg_migrate_plan_step
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
@@ -645,14 +640,14 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:322: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+psql:include/cagg_migrate_common.sql:315: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- all necessary permissions granted
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:331: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:324: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 -- check migrated data. should return 0 (zero) rows
 SELECT * FROM conditions_summary_daily
 EXCEPT
@@ -692,14 +687,14 @@ RESET ROLE;
 --  execute transaction control statements. Transaction control statements are only
 --  allowed if CALL is executed in its own transaction.`
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:348: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:341: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:349: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:342: NOTICE:  drop cascades to 10 other objects
 \set ON_ERROR_STOP 0
 BEGIN;
 -- should fail with `invalid transaction termination`
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:354: ERROR:  invalid transaction termination
+psql:include/cagg_migrate_common.sql:347: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
 CREATE FUNCTION execute_migration() RETURNS void AS
@@ -715,7 +710,7 @@ LANGUAGE plpgsql;
 BEGIN;
 -- should fail with `invalid transaction termination`
 SELECT execute_migration();
-psql:include/cagg_migrate_common.sql:371: ERROR:  invalid transaction termination
+psql:include/cagg_migrate_common.sql:364: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
 -- cleanup

@@ -1,44 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-------------------------------------
--- Set up a distributed environment
-------------------------------------
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\set DATA_NODE_3 :TEST_DBNAME _3
-\ir include/remote_exec.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-CREATE SCHEMA IF NOT EXISTS test;
-psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-GRANT USAGE ON SCHEMA test TO PUBLIC;
-CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
-LANGUAGE C;
-CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], command text)
-RETURNS TABLE("table_record" CSTRING[])
-AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
-LANGUAGE C;
-SELECT node_name, database, node_created, database_created, extension_created
-FROM (
-  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
-  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
-) a;
-              node_name              |              database               | node_created | database_created | extension_created 
--------------------------------------+-------------------------------------+--------------+------------------+-------------------
- db_cagg_migrate_timestamp_dist_ht_1 | db_cagg_migrate_timestamp_dist_ht_1 | t            | t                | t
- db_cagg_migrate_timestamp_dist_ht_2 | db_cagg_migrate_timestamp_dist_ht_2 | t            | t                | t
- db_cagg_migrate_timestamp_dist_ht_3 | db_cagg_migrate_timestamp_dist_ht_3 | t            | t                | t
-(3 rows)
-
-GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
-\set IS_DISTRIBUTED TRUE
+\set IS_DISTRIBUTED FALSE
 \set IS_TIME_DIMENSION TRUE
-\set TIME_DIMENSION_DATATYPE TIMESTAMP
+\set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
 \ir include/cagg_migrate_common.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -46,9 +11,9 @@ GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 CREATE TABLE conditions (
     "time" :TIME_DIMENSION_DATATYPE NOT NULL,
@@ -57,18 +22,17 @@ CREATE TABLE conditions (
 \if :IS_DISTRIBUTED
     \if :IS_TIME_DIMENSION
         SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-psql:include/cagg_migrate_common.sql:20: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
- table_name 
-------------
- conditions
-(1 row)
-
     \else
         SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
     \endif
 \else
     \if :IS_TIME_DIMENSION
         SELECT table_name FROM create_hypertable('conditions', 'time');
+ table_name 
+------------
+ conditions
+(1 row)
+
     \else
         SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
     \endif
@@ -184,18 +148,18 @@ SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg_migrate_plan;
 (1 row)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |   status    |       type       |                                                                                                        config                                                                                                        
--------------------+---------+-------------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ mat_hypertable_id | step_id |   status    |       type       |                                                                                                          config                                                                                                           
+-------------------+---------+-------------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                  3 |       1 | FINISHED    | SAVE WATERMARK   | {"watermark": "Sun Jan 01 00:00:00 2023"}
                  3 |       2 | NOT STARTED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  3 |       3 | NOT STARTED | DISABLE POLICIES | {"policies": null}
-                 3 |       4 | NOT STARTED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                 3 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Mar 11 00:00:00 2022", "start_ts": "Fri Dec 31 00:00:00 2021", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "Fri May 20 00:00:00 2022", "start_ts": "Fri Mar 11 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Jul 29 00:00:00 2022", "start_ts": "Fri May 20 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Oct 07 00:00:00 2022", "start_ts": "Fri Jul 29 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Dec 16 00:00:00 2022", "start_ts": "Fri Oct 07 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Feb 24 00:00:00 2023", "start_ts": "Fri Dec 16 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 3 |       4 | NOT STARTED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
+                 3 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Mar 11 16:00:00 2022 PST", "start_ts": "Fri Dec 31 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "Fri May 20 16:00:00 2022 PDT", "start_ts": "Fri Mar 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Jul 29 16:00:00 2022 PDT", "start_ts": "Fri May 20 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Oct 07 16:00:00 2022 PDT", "start_ts": "Fri Jul 29 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Dec 16 16:00:00 2022 PST", "start_ts": "Fri Oct 07 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "Fri Feb 24 16:00:00 2023 PST", "start_ts": "Fri Dec 16 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                  3 |      11 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      12 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      13 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
@@ -207,18 +171,18 @@ CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:149: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
 psql:include/cagg_migrate_common.sql:149: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                        
--------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ mat_hypertable_id | step_id |  status  |       type       |                                                                                                          config                                                                                                           
+-------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                  3 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Sun Jan 01 00:00:00 2023"}
                  3 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  3 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
-                 3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 00:00:00 2022", "start_ts": "Fri Dec 31 00:00:00 2021", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 00:00:00 2022", "start_ts": "Fri Mar 11 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 00:00:00 2022", "start_ts": "Fri May 20 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 00:00:00 2022", "start_ts": "Fri Jul 29 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 00:00:00 2022", "start_ts": "Fri Oct 07 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 00:00:00 2023", "start_ts": "Fri Dec 16 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
+                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 16:00:00 2022 PST", "start_ts": "Fri Dec 31 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 16:00:00 2022 PDT", "start_ts": "Fri Mar 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 16:00:00 2022 PDT", "start_ts": "Fri May 20 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 16:00:00 2022 PDT", "start_ts": "Fri Jul 29 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 16:00:00 2022 PST", "start_ts": "Fri Oct 07 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 16:00:00 2023 PST", "start_ts": "Fri Dec 16 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                  3 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
@@ -292,14 +256,14 @@ WHERE
     user_view_name = 'conditions_summary_daily_new'
 \gset
 \d+ conditions_summary_daily_new
-                          View "public.conditions_summary_daily_new"
- Column |            Type             | Collation | Nullable | Default | Storage | Description 
---------+-----------------------------+-----------+----------+---------+---------+-------------
- bucket | timestamp without time zone |           |          |         | plain   | 
- min    | numeric                     |           |          |         | main    | 
- max    | numeric                     |           |          |         | main    | 
- avg    | numeric                     |           |          |         | main    | 
- sum    | numeric                     |           |          |         | main    | 
+                         View "public.conditions_summary_daily_new"
+ Column |           Type           | Collation | Nullable | Default | Storage | Description 
+--------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket | timestamp with time zone |           |          |         | plain   | 
+ min    | numeric                  |           |          |         | main    | 
+ max    | numeric                  |           |          |         | main    | 
+ avg    | numeric                  |           |          |         | main    | 
+ sum    | numeric                  |           |          |         | main    | 
 View definition:
  SELECT _materialized_hypertable_6.bucket,
     _materialized_hypertable_6.min,
@@ -307,7 +271,7 @@ View definition:
     _materialized_hypertable_6.avg,
     _materialized_hypertable_6.sum
    FROM _timescaledb_internal._materialized_hypertable_6
-  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -315,7 +279,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 SELECT *
@@ -331,18 +295,18 @@ AND job_id >= 1000;
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                        
--------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ mat_hypertable_id | step_id |  status  |       type       |                                                                                                          config                                                                                                           
+-------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                  3 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Sun Jan 01 00:00:00 2023"}
                  3 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  3 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1002, 1000]}
-                 3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 00:00:00 2022", "start_ts": "Fri Dec 31 00:00:00 2021", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 00:00:00 2022", "start_ts": "Fri Mar 11 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 00:00:00 2022", "start_ts": "Fri May 20 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 00:00:00 2022", "start_ts": "Fri Jul 29 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 00:00:00 2022", "start_ts": "Fri Oct 07 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 3 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 00:00:00 2023", "start_ts": "Fri Dec 16 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
+                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 16:00:00 2022 PST", "start_ts": "Fri Dec 31 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 16:00:00 2022 PDT", "start_ts": "Fri Mar 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 16:00:00 2022 PDT", "start_ts": "Fri May 20 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 16:00:00 2022 PDT", "start_ts": "Fri Jul 29 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 16:00:00 2022 PST", "start_ts": "Fri Oct 07 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                 3 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 16:00:00 2023 PST", "start_ts": "Fri Dec 16 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                  3 |      11 | FINISHED | COPY POLICIES    | {"policies": [1002, 1001, 1000], "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
@@ -411,14 +375,14 @@ CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:232: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
-                            View "public.conditions_summary_daily"
- Column |            Type             | Collation | Nullable | Default | Storage | Description 
---------+-----------------------------+-----------+----------+---------+---------+-------------
- bucket | timestamp without time zone |           |          |         | plain   | 
- min    | numeric                     |           |          |         | main    | 
- max    | numeric                     |           |          |         | main    | 
- avg    | numeric                     |           |          |         | main    | 
- sum    | numeric                     |           |          |         | main    | 
+                           View "public.conditions_summary_daily"
+ Column |           Type           | Collation | Nullable | Default | Storage | Description 
+--------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket | timestamp with time zone |           |          |         | plain   | 
+ min    | numeric                  |           |          |         | main    | 
+ max    | numeric                  |           |          |         | main    | 
+ avg    | numeric                  |           |          |         | main    | 
+ sum    | numeric                  |           |          |         | main    | 
 View definition:
  SELECT _materialized_hypertable_8.bucket,
     _materialized_hypertable_8.min,
@@ -426,7 +390,7 @@ View definition:
     _materialized_hypertable_8.avg,
     _materialized_hypertable_8.sum
    FROM _timescaledb_internal._materialized_hypertable_8
-  WHERE _materialized_hypertable_8.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_8.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -434,19 +398,19 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- cagg with the old format because it was overriden
 \d+ conditions_summary_daily_old
-                          View "public.conditions_summary_daily_old"
- Column |            Type             | Collation | Nullable | Default | Storage | Description 
---------+-----------------------------+-----------+----------+---------+---------+-------------
- bucket | timestamp without time zone |           |          |         | plain   | 
- min    | numeric                     |           |          |         | main    | 
- max    | numeric                     |           |          |         | main    | 
- avg    | numeric                     |           |          |         | main    | 
- sum    | numeric                     |           |          |         | main    | 
+                         View "public.conditions_summary_daily_old"
+ Column |           Type           | Collation | Nullable | Default | Storage | Description 
+--------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket | timestamp with time zone |           |          |         | plain   | 
+ min    | numeric                  |           |          |         | main    | 
+ max    | numeric                  |           |          |         | main    | 
+ avg    | numeric                  |           |          |         | main    | 
+ sum    | numeric                  |           |          |         | main    | 
 View definition:
  SELECT _materialized_hypertable_3.bucket,
     _timescaledb_internal.finalize_agg('pg_catalog.min(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_3.agg_2_2, NULL::numeric) AS min,
@@ -454,7 +418,7 @@ View definition:
     _timescaledb_internal.finalize_agg('pg_catalog.avg(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::numeric) AS avg,
     _timescaledb_internal.finalize_agg('pg_catalog.sum(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::numeric) AS sum
    FROM _timescaledb_internal._materialized_hypertable_3
-  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
   GROUP BY _materialized_hypertable_3.bucket
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
@@ -463,7 +427,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
@@ -518,14 +482,14 @@ psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1001 not found, skipping
 psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1000 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
-                            View "public.conditions_summary_daily"
- Column |            Type             | Collation | Nullable | Default | Storage | Description 
---------+-----------------------------+-----------+----------+---------+---------+-------------
- bucket | timestamp without time zone |           |          |         | plain   | 
- min    | numeric                     |           |          |         | main    | 
- max    | numeric                     |           |          |         | main    | 
- avg    | numeric                     |           |          |         | main    | 
- sum    | numeric                     |           |          |         | main    | 
+                           View "public.conditions_summary_daily"
+ Column |           Type           | Collation | Nullable | Default | Storage | Description 
+--------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket | timestamp with time zone |           |          |         | plain   | 
+ min    | numeric                  |           |          |         | main    | 
+ max    | numeric                  |           |          |         | main    | 
+ avg    | numeric                  |           |          |         | main    | 
+ sum    | numeric                  |           |          |         | main    | 
 View definition:
  SELECT _materialized_hypertable_10.bucket,
     _materialized_hypertable_10.min,
@@ -533,7 +497,7 @@ View definition:
     _materialized_hypertable_10.avg,
     _materialized_hypertable_10.sum
    FROM _timescaledb_internal._materialized_hypertable_10
-  WHERE _materialized_hypertable_10.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(10)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_10.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(10)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -541,7 +505,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(10)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(10)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
@@ -633,18 +597,18 @@ SELECT * FROM conditions_summary_daily_new;
 (0 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                        
--------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ mat_hypertable_id | step_id |  status  |       type       |                                                                                                          config                                                                                                           
+-------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                 12 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Sun Jan 01 00:00:00 2023"}
                 12 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                 12 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
-                12 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                12 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 00:00:00 2022", "start_ts": "Fri Dec 31 00:00:00 2021", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                12 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 00:00:00 2022", "start_ts": "Fri Mar 11 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                12 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 00:00:00 2022", "start_ts": "Fri May 20 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                12 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 00:00:00 2022", "start_ts": "Fri Jul 29 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                12 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 00:00:00 2022", "start_ts": "Fri Oct 07 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                12 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 00:00:00 2023", "start_ts": "Fri Dec 16 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                12 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
+                12 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 16:00:00 2022 PST", "start_ts": "Fri Dec 31 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                12 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 16:00:00 2022 PDT", "start_ts": "Fri Mar 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                12 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 16:00:00 2022 PDT", "start_ts": "Fri May 20 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                12 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 16:00:00 2022 PDT", "start_ts": "Fri Jul 29 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                12 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 16:00:00 2022 PST", "start_ts": "Fri Oct 07 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                12 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 16:00:00 2023 PST", "start_ts": "Fri Dec 16 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 12 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
                 12 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                 12 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
@@ -685,8 +649,3 @@ SELECT execute_migration();
 psql:include/cagg_migrate_common.sql:364: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
--- cleanup
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
-DROP DATABASE :DATA_NODE_3;
