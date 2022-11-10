@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "centos:centos7", "rockylinux:8" ]
+        image: [ "centos:centos7", "rockylinux:8", "rockylinux:9" ]
         pg: [ 12, 13, 14 ]
         license: [ "TSL", "Apache"]
         include:
@@ -45,7 +45,7 @@ jobs:
     - name: Install timescaledb
       run: |
         yum update -y
-        if command -v dnf; then dnf -qy module disable postgresql; fi
+        if [[ "$(rpm -E %{rhel})" -eq "8" ]]; then dnf -qy module disable postgresql; fi
         yum install -y timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} sudo wget
         sudo -u postgres /usr/pgsql-${{ matrix.pg }}/bin/initdb -D /var/lib/pgsql/${{ matrix.pg }}/data
         timescaledb-tune --quiet --yes --pg-config /usr/pgsql-${{ matrix.pg }}/bin/pg_config
