@@ -449,7 +449,6 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	 */
 	volatile bool reset_fetcher_type = false;
 	volatile bool reset_baserel_info = false;
-	volatile bool reset_temporary_memory_context = false;
 
 	/*
 	 * If we are in an aborted transaction, reject all queries.
