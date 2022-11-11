@@ -93,7 +93,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     remote_txn.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
-    license_tsl.sql)
+    license.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
   endif()
