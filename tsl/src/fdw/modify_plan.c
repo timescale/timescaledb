@@ -10,6 +10,7 @@
 
 #include <chunk.h>
 #include "deparse.h"
+#include "errors.h"
 #include "modify_plan.h"
 #include "ts_catalog/chunk_data_node.h"
 
@@ -51,15 +52,29 @@ get_update_attrs(RangeTblEntry *rte)
 	return attrs;
 }
 
-static List *
+/* get a list of "live" DNs associated with this chunk */
+List *
 get_chunk_data_nodes(Oid relid)
 {
 	int32 chunk_id = ts_chunk_get_id_by_relid(relid);
 	Assert(chunk_id != 0);
 
-	List *chunk_data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk_id, CurrentMemoryContext);
+	List *chunk_data_nodes =
+		ts_chunk_data_node_scan_by_chunk_id_filter(chunk_id, CurrentMemoryContext);
 	List *serveroids = NIL;
 	ListCell *lc;
+
+	/* check that alteast one data node is available for this chunk */
+	if (chunk_data_nodes == NIL)
+	{
+		Hypertable *ht = ts_hypertable_get_by_id(ts_chunk_get_hypertable_id_by_relid(relid));
+
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 (errmsg("insufficient number of available data nodes"),
+				  errhint("Increase the number of available data nodes on hypertable \"%s\".",
+						  get_rel_name(ht->main_table_relid)))));
+	}
 
 	foreach (lc, chunk_data_nodes)
 	{

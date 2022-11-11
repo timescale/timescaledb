@@ -14,6 +14,9 @@
 #include <access/xact.h>
 
 #include "ts_catalog/chunk_data_node.h"
+#include "cache.h"
+#include "hypercube.h"
+#include "hypertable_cache.h"
 #include "scanner.h"
 #include "chunk.h"
 
@@ -124,6 +127,37 @@ chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
+/* return a filtered list of "available" ChunkDataNode entries */
+static ScanTupleResult
+chunk_data_node_tuple_found_filter(TupleInfo *ti, void *data)
+{
+	List **nodes = data;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	Form_chunk_data_node form = (Form_chunk_data_node) GETSTRUCT(tuple);
+	ForeignServer *server;
+
+	server = GetForeignServerByName(NameStr(form->node_name), false);
+
+	if (ts_data_node_is_available_by_server(server))
+	{
+		ChunkDataNode *chunk_data_node;
+		MemoryContext old;
+
+		old = MemoryContextSwitchTo(ti->mctx);
+		chunk_data_node = palloc(sizeof(ChunkDataNode));
+		memcpy(&chunk_data_node->fd, form, sizeof(FormData_chunk_data_node));
+		chunk_data_node->foreign_server_oid = server->serverid;
+		*nodes = lappend(*nodes, chunk_data_node);
+		MemoryContextSwitchTo(old);
+	}
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return SCAN_CONTINUE;
+}
+
 static int
 ts_chunk_data_node_scan_by_chunk_id_and_node_internal(int32 chunk_id, const char *node_name,
 													  bool scan_by_remote_chunk_id,
@@ -204,6 +238,22 @@ ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 														  NULL,
 														  false,
 														  chunk_data_node_tuple_found,
+														  &chunk_data_nodes,
+														  AccessShareLock,
+														  mctx);
+	return chunk_data_nodes;
+}
+
+/* Returns a filtered List of available ChunkDataNode structs. */
+List *
+ts_chunk_data_node_scan_by_chunk_id_filter(int32 chunk_id, MemoryContext mctx)
+{
+	List *chunk_data_nodes = NIL;
+
+	ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
+														  NULL,
+														  false,
+														  chunk_data_node_tuple_found_filter,
 														  &chunk_data_nodes,
 														  AccessShareLock,
 														  mctx);

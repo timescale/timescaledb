@@ -20,5 +20,6 @@ extern Datum chunk_drop_stale_chunks(PG_FUNCTION_ARGS);
 extern void ts_chunk_drop_stale_chunks(const char *node_name, ArrayType *chunks_array);
 extern int chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type);
 extern Datum chunk_create_replica_table(PG_FUNCTION_ARGS);
+extern void chunk_update_stale_metadata(Chunk *new_chunk, List *chunk_data_nodes);
 
 #endif /* TIMESCALEDB_TSL_CHUNK_H */

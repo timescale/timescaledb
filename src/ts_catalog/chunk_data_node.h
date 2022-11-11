@@ -7,6 +7,7 @@
 #define TIMESCALEDB_CHUNK_DATA_NODE_H
 
 #include "ts_catalog/catalog.h"
+#include "chunk.h"
 #include "export.h"
 #include "scan_iterator.h"
 
@@ -17,6 +18,8 @@ typedef struct ChunkDataNode
 } ChunkDataNode;
 
 extern TSDLLEXPORT List *ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
+extern TSDLLEXPORT List *ts_chunk_data_node_scan_by_chunk_id_filter(int32 chunk_id,
+																	MemoryContext mctx);
 extern TSDLLEXPORT ChunkDataNode *
 ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
 												  MemoryContext mctx);
@@ -37,5 +40,4 @@ extern TSDLLEXPORT void ts_chunk_data_nodes_scan_iterator_set_chunk_id(ScanItera
 																	   int32 chunk_id);
 extern TSDLLEXPORT void ts_chunk_data_nodes_scan_iterator_set_node_name(ScanIterator *it,
 																		const char *node_name);
-
 #endif /* TIMESCALEDB_CHUNK_DATA_NODE_H */

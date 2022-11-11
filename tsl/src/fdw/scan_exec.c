@@ -281,18 +281,23 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 			  List *fdw_exprs, int eflags)
 {
 	int num_params;
+	Oid server_oid;
+	ForeignServer *server;
 
 	if ((eflags & EXEC_FLAG_EXPLAIN_ONLY) && !ts_guc_enable_remote_explain)
 		return;
+
+	/* Check if the server is "available" for use before setting up a connection to it */
+	server_oid = intVal(list_nth(fdw_private, FdwScanPrivateServerId));
+	server = GetForeignServer(server_oid);
+	if (!ts_data_node_is_available_by_server(server))
+		ereport(ERROR, (errmsg("data node \"%s\" is not available", server->servername)));
 
 	/*
 	 * Get connection to the foreign server.  Connection manager will
 	 * establish new connection if necessary.
 	 */
-	fsstate->conn = get_connection(ss,
-								   intVal(list_nth(fdw_private, FdwScanPrivateServerId)),
-								   scanrelids,
-								   fdw_exprs);
+	fsstate->conn = get_connection(ss, server_oid, scanrelids, fdw_exprs);
 
 	/* Get private info created by planner functions. */
 	fsstate->query = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));

@@ -10,5 +10,6 @@
 
 extern List *fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 									 int subplan_index);
+extern List *get_chunk_data_nodes(Oid relid);
 
 #endif /* TIMESCALEDB_TSL_FDW_MODIFY_PLAN_H */
