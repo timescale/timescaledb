@@ -765,3 +765,72 @@ chunk_drop_stale_chunks(PG_FUNCTION_ARGS)
 	ts_chunk_drop_stale_chunks(node_name, chunks_array);
 	PG_RETURN_VOID();
 }
+/*
+ * Update and refresh the DN list for a given chunk. We remove metadata for this chunk
+ * for unavailable DNs
+ */
+void
+chunk_update_stale_metadata(Chunk *new_chunk, List *chunk_data_nodes)
+{
+	List *serveroids = NIL, *removeoids = NIL;
+	ChunkDataNode *cdn;
+	ListCell *lc;
+
+	/* check that at least one data node is available for this chunk on the AN */
+	if (chunk_data_nodes == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 (errmsg("insufficient number of available data nodes"),
+				  errhint("Increase the number of available data nodes on hypertable "
+						  "\"%s\".",
+						  get_rel_name(new_chunk->hypertable_relid)))));
+
+	foreach (lc, chunk_data_nodes)
+	{
+		cdn = lfirst(lc);
+		serveroids = lappend_oid(serveroids, cdn->foreign_server_oid);
+	}
+
+	foreach (lc, new_chunk->data_nodes)
+	{
+		cdn = lfirst(lc);
+
+		/*
+		 * check if this DN is a part of chunk_data_nodes. If not
+		 * found in chunk_data_nodes, then we need to remove this
+		 * chunk id to node name mapping and also update the primary
+		 * foreign server if necessary. It's possible that this metadata
+		 * might have been already cleared earlier in which case the
+		 * data_nodes list for the chunk will be the same as the
+		 * "serveroids" list and no unnecesary metadata update function
+		 * calls will occur.
+		 */
+		if (!list_member_oid(serveroids, cdn->foreign_server_oid))
+		{
+			chunk_update_foreign_server_if_needed(new_chunk, cdn->foreign_server_oid, false);
+			ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
+																NameStr(cdn->fd.node_name));
+
+			removeoids = lappend_oid(removeoids, cdn->foreign_server_oid);
+		}
+	}
+
+	/* remove entries from new_chunk->data_nodes matching removeoids */
+	foreach (lc, removeoids)
+	{
+		ListCell *l;
+		Oid serveroid = lfirst_oid(lc);
+
+		/* this contrived code to ensure PG12+ compatible in-place list delete */
+		foreach (l, new_chunk->data_nodes)
+		{
+			cdn = lfirst(l);
+
+			if (cdn->foreign_server_oid == serveroid)
+			{
+				new_chunk->data_nodes = list_delete_ptr(new_chunk->data_nodes, cdn);
+				break;
+			}
+		}
+	}
+}

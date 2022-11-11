@@ -865,29 +865,89 @@ SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
 SELECT time, location FROM hyper3 ORDER BY time LIMIT 1;
 SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
 
-
--- inserts should fail if going to chunks that exist on the
--- unavailable data node
-\set ON_ERROR_STOP 0
+-- inserts should continue to work and should go to the "live"
+-- datanodes
 INSERT INTO hyper3 VALUES ('2022-01-03 00:00:00', 1, 1);
+INSERT INTO hyper3 VALUES ('2022-01-03 00:00:05', 1, 1);
 INSERT INTO hyper_1dim VALUES ('2022-01-03 00:00:00', 1, 1);
-\set ON_ERROR_STOP 1
+INSERT INTO hyper_1dim VALUES ('2022-01-03 00:00:05', 1, 1);
 
--- inserts should work if going to a new chunk
+-- Check that the metadata on the AN removes the association with
+-- the "unavailable" DN for existing chunks that are being written into
+-- above
+SELECT * FROM chunk_query_data_node WHERE hypertable_name IN ('hyper3', 'hyper_1dim');
+
+-- Also, inserts should work if going to a new chunk
 INSERT INTO hyper3 VALUES ('2022-01-10 00:00:00', 1, 1);
+INSERT INTO hyper3 VALUES ('2022-01-10 00:00:05', 1, 1);
 INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:00', 1, 1);
+INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:05', 1, 1);
 
+-- Also check that new chunks only use the "available" DNs
+SELECT * FROM chunk_query_data_node WHERE hypertable_name IN ('hyper3', 'hyper_1dim');
+
+-- Updates/Deletes should also work
+UPDATE hyper3 SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+UPDATE hyper3 SET temp = 10 WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:05';
+UPDATE hyper_1dim SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+UPDATE hyper_1dim SET temp = 10 WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
+DELETE FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+DELETE FROM hyper3 WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:05';
+DELETE FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+DELETE FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
+
+-- Inserts directly into chunks using FDW should also work and should go to the
+-- available DNs appropriately
+INSERT INTO _timescaledb_internal._dist_hyper_12_24_chunk VALUES ('2022-01-11 00:00:00', 1, 1);
+INSERT INTO _timescaledb_internal._dist_hyper_13_25_chunk VALUES ('2022-01-11 00:00:00', 1, 1);
+SELECT * FROM test.remote_exec(ARRAY['data_node_2', 'data_node_3'], $$ SELECT * FROM _timescaledb_internal._dist_hyper_12_24_chunk WHERE time = '2022-01-11 00:00:00'; $$);
+SELECT * FROM test.remote_exec(ARRAY['data_node_2', 'data_node_3'], $$ SELECT * FROM _timescaledb_internal._dist_hyper_13_25_chunk WHERE time = '2022-01-11 00:00:00'; $$);
+
+SELECT * FROM chunk_query_data_node WHERE hypertable_name IN ('hyper3', 'hyper_1dim');
 SELECT hypertable_name, chunk_name, data_nodes FROM timescaledb_information.chunks
 WHERE hypertable_name IN ('hyper3', 'hyper_1dim')
 AND range_start::timestamptz <= '2022-01-10 00:00:00'
 AND range_end::timestamptz > '2022-01-10 00:00:00'
 ORDER BY 1, 2;
 
+-- DDL should error out even if one DN is unavailable
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper3 ADD COLUMN temp2 int;
+ALTER TABLE hyper_1dim ADD COLUMN temp2 int;
+\set ON_ERROR_STOP 1
+
+-- Mark all DNs unavailable. Metadata should still retain last DN but all
+-- activity should fail
+SELECT * FROM alter_data_node('data_node_2', available=>false);
+SELECT * FROM alter_data_node('data_node_3', available=>false);
+\set ON_ERROR_STOP 0
+INSERT INTO hyper3 VALUES ('2022-01-10 00:00:00', 1, 1);
+INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:00', 1, 1);
+UPDATE hyper3 SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+UPDATE hyper_1dim SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+DELETE FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+DELETE FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+SELECT count(*) FROM hyper3;
+SELECT count(*) FROM hyper_1dim;
+ALTER TABLE hyper3 ADD COLUMN temp2 int;
+ALTER TABLE hyper_1dim ADD COLUMN temp2 int;
+\set ON_ERROR_STOP 1
+
 -- re-enable the data node and the chunks should "switch back" to
 -- using the data node. However, only the chunks for which the node is
 -- "primary" should switch to using the data node for queries
 ALTER DATABASE data_node_1_unavailable RENAME TO :DN_DBNAME_1;
 SELECT * FROM alter_data_node('data_node_1', available=>true);
+SELECT * FROM alter_data_node('data_node_2', available=>true);
+SELECT * FROM alter_data_node('data_node_3', available=>true);
 SELECT * FROM chunk_query_data_node;
 
 --queries should work again on all tables
@@ -895,6 +955,10 @@ SELECT time, location FROM hyper1 ORDER BY time LIMIT 1;
 SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
 SELECT time, location FROM hyper3 ORDER BY time LIMIT 1;
 SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
+
+-- DDL should also work again
+ALTER TABLE hyper3 ADD COLUMN temp2 int;
+ALTER TABLE hyper_1dim ADD COLUMN temp2 int;
 
 -- save old port so that we can restore connectivity after we test
 -- changing the connection information for the data node
@@ -907,10 +971,10 @@ SELECT split_part(opt, '=', 2) AS old_port
 FROM options WHERE opt LIKE 'port%' \gset
 
 -- also test altering host, port and database
-SELECT node_name, options FROM timescaledb_information.data_nodes;
+SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
 SELECT * FROM alter_data_node('data_node_1', available=>true, host=>'foo.bar', port=>8989, database=>'new_db');
 
-SELECT node_name, options FROM timescaledb_information.data_nodes;
+SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
 -- just show current options:
 SELECT * FROM alter_data_node('data_node_1');
 
@@ -925,7 +989,7 @@ SELECT delete_data_node('data_node_1', drop_database=>true);
 
 -- restore configuration for data_node_1
 SELECT * FROM alter_data_node('data_node_1', host=>'localhost', port=>:old_port, database=>:'DN_DBNAME_1');
-SELECT node_name, options FROM timescaledb_information.data_nodes;
+SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
 
 DROP TABLE hyper1;
 DROP TABLE hyper2;

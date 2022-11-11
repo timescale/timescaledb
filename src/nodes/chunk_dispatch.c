@@ -14,9 +14,11 @@
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
+#include "errors.h"
 #include "subspace_store.h"
 #include "dimension.h"
 #include "guc.h"
+#include "ts_catalog/chunk_data_node.h"
 
 ChunkDispatch *
 ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
@@ -144,10 +146,31 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
+		bool found;
 		Chunk *new_chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
 		if (new_chunk == NULL)
 		{
-			new_chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point);
+			new_chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
+		}
+		else
+			found = true;
+
+		/* get the filtered list of "available" DNs for this chunk but only if it's replicated */
+		if (found && dispatch->hypertable->fd.replication_factor > 1)
+		{
+			List *chunk_data_nodes =
+				ts_chunk_data_node_scan_by_chunk_id_filter(new_chunk->fd.id, CurrentMemoryContext);
+
+			/*
+			 * If the chunk was not created as part of this insert, we need to check whether any
+			 * of the chunk's data nodes are currently unavailable and in that case consider the
+			 * chunk stale on those data nodes. Do that by removing the AN's chunk-datanode
+			 * mapping for the unavailable data nodes.
+			 */
+			if (dispatch->hypertable->fd.replication_factor > list_length(chunk_data_nodes))
+				ts_cm_functions->dist_update_stale_chunk_metadata(new_chunk, chunk_data_nodes);
+
+			list_free(chunk_data_nodes);
 		}
 
 		if (NULL == new_chunk)

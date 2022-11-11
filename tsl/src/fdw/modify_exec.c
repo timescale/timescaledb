@@ -26,6 +26,8 @@
 
 #include "scan_plan.h"
 #include "modify_exec.h"
+#include "modify_plan.h"
+#include "tsl/src/chunk.h"
 
 /*
  * This enum describes what's kept in the fdw_private list for a ModifyTable
@@ -79,7 +81,9 @@ typedef struct TsFdwModifyState
 	AttrNumber ctid_attno; /* attnum of input resjunk ctid column */
 
 	bool prepared;
-	int num_data_nodes;
+	int num_data_nodes;		 /* number of "available" datanodes */
+	int num_all_data_nodes;	 /* number of all datanodes assigned to this "rel" */
+	List *stale_data_nodes;	 /* DNs marked stale for this chunk */
 	StmtParams *stmt_params; /* prepared statement paremeters */
 	TsFdwDataNodeState data_nodes[FLEXIBLE_ARRAY_MEMBER];
 } TsFdwModifyState;
@@ -110,11 +114,22 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	ListCell *lc;
 	Oid user_id = OidIsValid(check_as_user) ? check_as_user : GetUserId();
 	int i = 0;
-	int num_data_nodes = server_id_list == NIL ? 1 : list_length(server_id_list);
+	int num_data_nodes, num_all_data_nodes;
+	int32 hypertable_id = ts_chunk_get_hypertable_id_by_relid(rel->rd_id);
+	List *all_replicas = NIL, *avail_replicas = NIL;
 
-	/* Begin constructing TsFdwModifyState. */
-	fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_data_nodes));
-	fmstate->rel = rel;
+	if (hypertable_id == INVALID_HYPERTABLE_ID)
+	{
+		num_data_nodes = num_all_data_nodes = 1;
+	}
+	else
+	{
+		int32 chunk_id = ts_chunk_get_id_by_relid(rel->rd_id);
+
+		all_replicas = ts_chunk_data_node_scan_by_chunk_id(chunk_id, CurrentMemoryContext);
+		avail_replicas = ts_chunk_data_node_scan_by_chunk_id_filter(chunk_id, CurrentMemoryContext);
+		num_all_data_nodes = list_length(all_replicas);
+	}
 
 	/*
 	 * Identify which user to do the remote access as.  This should match what
@@ -131,6 +146,8 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 		 * in the FDW planning callback.
 		 */
 
+		fmstate =
+			(TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(list_length(server_id_list)));
 		foreach (lc, server_id_list)
 		{
 			Oid server_id = lfirst_oid(lc);
@@ -138,26 +155,53 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 
 			initialize_fdw_data_node_state(&fmstate->data_nodes[i++], id);
 		}
+		num_data_nodes = list_length(server_id_list);
+		Assert(num_data_nodes == list_length(avail_replicas));
 	}
 	else
 	{
 		/*
 		 * If there is no chunk insert state and no data nodes from planning,
 		 * this is an INSERT, UPDATE, or DELETE on a standalone foreign table.
-		 * We must get the data node from the foreign table's metadata.
+		 *
+		 * If it's a regular foreign table then we must get the data node from
+		 * the foreign table's metadata.
+		 *
+		 * Otherwise, we use the list of "available" DNs from earlier
 		 */
-		ForeignTable *table = GetForeignTable(rel->rd_id);
-		TSConnectionId id = remote_connection_id(table->serverid, user_id);
+		if (hypertable_id == INVALID_HYPERTABLE_ID)
+		{
+			ForeignTable *table = GetForeignTable(rel->rd_id);
+			TSConnectionId id = remote_connection_id(table->serverid, user_id);
 
-		initialize_fdw_data_node_state(&fmstate->data_nodes[0], id);
+			Assert(num_data_nodes == 1 && num_all_data_nodes == 1);
+			fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_data_nodes));
+			initialize_fdw_data_node_state(&fmstate->data_nodes[0], id);
+		}
+		else
+		{
+			/* we use only the available replicas */
+			fmstate =
+				(TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(list_length(avail_replicas)));
+			foreach (lc, avail_replicas)
+			{
+				ChunkDataNode *node = lfirst(lc);
+				TSConnectionId id = remote_connection_id(node->foreign_server_oid, user_id);
+
+				initialize_fdw_data_node_state(&fmstate->data_nodes[i++], id);
+			}
+			num_data_nodes = list_length(avail_replicas);
+		}
 	}
 
 	/* Set up remote query information. */
+	fmstate->rel = rel;
 	fmstate->query = query;
 	fmstate->target_attrs = target_attrs;
 	fmstate->has_returning = has_returning;
 	fmstate->prepared = false; /* PREPARE will happen later */
 	fmstate->num_data_nodes = num_data_nodes;
+	fmstate->num_all_data_nodes = num_all_data_nodes;
 
 	/* Prepare for input conversion of RETURNING results. */
 	if (fmstate->has_returning)
@@ -393,6 +437,52 @@ response_type(AttConvInMetadata *att_conv_metadata)
 	return att_conv_metadata == NULL || att_conv_metadata->binary ? FORMAT_BINARY : FORMAT_TEXT;
 }
 
+static void
+fdw_chunk_update_stale_metadata(TsFdwModifyState *fmstate)
+{
+	List *all_data_nodes;
+	Relation rel = fmstate->rel;
+
+	if (fmstate->num_all_data_nodes == fmstate->num_data_nodes)
+		return;
+
+	if (fmstate->num_all_data_nodes > fmstate->num_data_nodes)
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(rel->rd_id, true);
+		/* get filtered list */
+		List *serveroids = get_chunk_data_nodes(rel->rd_id);
+		ListCell *lc;
+		Assert(list_length(serveroids) == fmstate->num_data_nodes);
+
+		all_data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, CurrentMemoryContext);
+		Assert(list_length(all_data_nodes) == fmstate->num_all_data_nodes);
+
+		foreach (lc, all_data_nodes)
+		{
+			ChunkDataNode *cdn = lfirst(lc);
+			/*
+			 * check if this DN is a part of serveroids. If not
+			 * found in serveroids, then we need to remove this
+			 * chunk id to node name mapping and also update the primary
+			 * foreign server if necessary. It's possible that this metadata
+			 * might have been already cleared earlier but we have no way of
+			 * knowing that here.
+			 */
+			if (!list_member_oid(serveroids, cdn->foreign_server_oid) &&
+				!list_member_oid(fmstate->stale_data_nodes, cdn->foreign_server_oid))
+			{
+				chunk_update_foreign_server_if_needed(chunk, cdn->foreign_server_oid, false);
+				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
+																	NameStr(cdn->fd.node_name));
+
+				/* append this DN serveroid to the list of DNs marked stale for this chunk */
+				fmstate->stale_data_nodes =
+					lappend_oid(fmstate->stale_data_nodes, cdn->foreign_server_oid);
+			}
+		}
+	}
+}
+
 TupleTableSlot *
 fdw_exec_foreign_insert(TsFdwModifyState *fmstate, EState *estate, TupleTableSlot *slot,
 						TupleTableSlot *planslot)
@@ -457,6 +547,14 @@ fdw_exec_foreign_insert(TsFdwModifyState *fmstate, EState *estate, TupleTableSlo
 	 * inserts
 	 */
 	pfree(reqset);
+
+	/*
+	 * If rows are affected on DNs and a DN was excluded because of being
+	 * "unavailable" then we need to update metadata on the AN to mark
+	 * this chunk as "stale" for that "unavailable" DN
+	 */
+	if (n_rows > 0 && fmstate->num_all_data_nodes > fmstate->num_data_nodes)
+		fdw_chunk_update_stale_metadata(fmstate);
 
 	/* Return NULL if nothing was inserted on the remote end */
 	return (n_rows > 0) ? slot : NULL;
@@ -543,6 +641,14 @@ fdw_exec_foreign_update_or_delete(TsFdwModifyState *fmstate, EState *estate, Tup
 	 */
 	pfree(reqset);
 	stmt_params_reset(params);
+
+	/*
+	 * If rows are affected on DNs and a DN was excluded because of being
+	 * "unavailable" then we need to update metadata on the AN to mark
+	 * this chunk as "stale" for that "unavailable" DN
+	 */
+	if (n_rows > 0 && fmstate->num_all_data_nodes > fmstate->num_data_nodes)
+		fdw_chunk_update_stale_metadata(fmstate);
 
 	/* Return NULL if nothing was updated on the remote end */
 	return (n_rows > 0) ? slot : NULL;

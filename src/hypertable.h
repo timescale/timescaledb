@@ -135,7 +135,7 @@ extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
 extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_for_point(const Hypertable *h,
 															 const Point *point);
 extern TSDLLEXPORT Chunk *ts_hypertable_create_chunk_for_point(const Hypertable *h,
-															   const Point *point);
+															   const Point *point, bool *found);
 extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(const Hypertable *ht, Oid tspc_oid);

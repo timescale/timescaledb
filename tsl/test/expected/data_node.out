@@ -1769,7 +1769,7 @@ SELECT * FROM chunk_query_data_node;
 -- replication
 \set ON_ERROR_STOP 0
 SELECT time, location FROM hyper1 ORDER BY time LIMIT 1;
-ERROR:  could not connect to "data_node_1"
+ERROR:  data node "data_node_1" is not available
 \set ON_ERROR_STOP 1
 SELECT time, location FROM hyper2 ORDER BY time LIMIT 1;
              time             | location 
@@ -1789,19 +1789,163 @@ SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
  Sat Jan 01 00:00:00 2022 PST |        1
 (1 row)
 
--- inserts should fail if going to chunks that exist on the
--- unavailable data node
-\set ON_ERROR_STOP 0
+-- inserts should continue to work and should go to the "live"
+-- datanodes
 INSERT INTO hyper3 VALUES ('2022-01-03 00:00:00', 1, 1);
-ERROR:  could not connect to "data_node_1"
+INSERT INTO hyper3 VALUES ('2022-01-03 00:00:05', 1, 1);
 INSERT INTO hyper_1dim VALUES ('2022-01-03 00:00:00', 1, 1);
-ERROR:  could not connect to "data_node_1"
-\set ON_ERROR_STOP 1
--- inserts should work if going to a new chunk
+INSERT INTO hyper_1dim VALUES ('2022-01-03 00:00:05', 1, 1);
+-- Check that the metadata on the AN removes the association with
+-- the "unavailable" DN for existing chunks that are being written into
+-- above
+SELECT * FROM chunk_query_data_node WHERE hypertable_name IN ('hyper3', 'hyper_1dim');
+ hypertable_name |                     chunk                     |              data_nodes               | default_data_node 
+-----------------+-----------------------------------------------+---------------------------------------+-------------------
+ hyper3          | _timescaledb_internal._dist_hyper_12_18_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_19_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_20_chunk | {data_node_1,data_node_2,data_node_3} | data_node_3
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_21_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_22_chunk | {data_node_2,data_node_3}             | data_node_3
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_23_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+(6 rows)
+
+-- Also, inserts should work if going to a new chunk
 INSERT INTO hyper3 VALUES ('2022-01-10 00:00:00', 1, 1);
 WARNING:  insufficient number of data nodes
+INSERT INTO hyper3 VALUES ('2022-01-10 00:00:05', 1, 1);
 INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:00', 1, 1);
 WARNING:  insufficient number of data nodes
+INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:05', 1, 1);
+-- Also check that new chunks only use the "available" DNs
+SELECT * FROM chunk_query_data_node WHERE hypertable_name IN ('hyper3', 'hyper_1dim');
+ hypertable_name |                     chunk                     |              data_nodes               | default_data_node 
+-----------------+-----------------------------------------------+---------------------------------------+-------------------
+ hyper3          | _timescaledb_internal._dist_hyper_12_18_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_19_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_20_chunk | {data_node_1,data_node_2,data_node_3} | data_node_3
+ hyper3          | _timescaledb_internal._dist_hyper_12_24_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_21_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_22_chunk | {data_node_2,data_node_3}             | data_node_3
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_23_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_25_chunk | {data_node_2,data_node_3}             | data_node_2
+(8 rows)
+
+-- Updates/Deletes should also work
+UPDATE hyper3 SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+             time             | location | temp 
+------------------------------+----------+------
+ Mon Jan 03 00:00:00 2022 PST |        1 |   10
+ Mon Jan 03 00:00:00 2022 PST |        2 |   10
+(2 rows)
+
+UPDATE hyper3 SET temp = 10 WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:05';
+             time             | location | temp 
+------------------------------+----------+------
+ Mon Jan 03 00:00:05 2022 PST |        1 |   10
+(1 row)
+
+UPDATE hyper_1dim SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+             time             | location | temp 
+------------------------------+----------+------
+ Mon Jan 03 00:00:00 2022 PST |        2 |   10
+ Mon Jan 03 00:00:00 2022 PST |        1 |   10
+(2 rows)
+
+UPDATE hyper_1dim SET temp = 10 WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
+             time             | location | temp 
+------------------------------+----------+------
+ Mon Jan 03 00:00:05 2022 PST |        1 |   10
+(1 row)
+
+DELETE FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+DELETE FROM hyper3 WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+ time | location | temp 
+------+----------+------
+(0 rows)
+
+SELECT * FROM hyper3 WHERE time = '2022-01-03 00:00:05';
+ time | location | temp 
+------+----------+------
+(0 rows)
+
+DELETE FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+DELETE FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+ time | location | temp 
+------+----------+------
+(0 rows)
+
+SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
+ time | location | temp 
+------+----------+------
+(0 rows)
+
+-- Inserts directly into chunks using FDW should also work and should go to the
+-- available DNs appropriately
+INSERT INTO _timescaledb_internal._dist_hyper_12_24_chunk VALUES ('2022-01-11 00:00:00', 1, 1);
+INSERT INTO _timescaledb_internal._dist_hyper_13_25_chunk VALUES ('2022-01-11 00:00:00', 1, 1);
+SELECT * FROM test.remote_exec(ARRAY['data_node_2', 'data_node_3'], $$ SELECT * FROM _timescaledb_internal._dist_hyper_12_24_chunk WHERE time = '2022-01-11 00:00:00'; $$);
+NOTICE:  [data_node_2]:  SELECT * FROM _timescaledb_internal._dist_hyper_12_24_chunk WHERE time = '2022-01-11 00:00:00'
+NOTICE:  [data_node_2]:
+time                        |location|temp
+----------------------------+--------+----
+Tue Jan 11 00:00:00 2022 PST|       1|   1
+(1 row)
+
+
+NOTICE:  [data_node_3]:  SELECT * FROM _timescaledb_internal._dist_hyper_12_24_chunk WHERE time = '2022-01-11 00:00:00'
+NOTICE:  [data_node_3]:
+time                        |location|temp
+----------------------------+--------+----
+Tue Jan 11 00:00:00 2022 PST|       1|   1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM test.remote_exec(ARRAY['data_node_2', 'data_node_3'], $$ SELECT * FROM _timescaledb_internal._dist_hyper_13_25_chunk WHERE time = '2022-01-11 00:00:00'; $$);
+NOTICE:  [data_node_2]:  SELECT * FROM _timescaledb_internal._dist_hyper_13_25_chunk WHERE time = '2022-01-11 00:00:00'
+NOTICE:  [data_node_2]:
+time                        |location|temp
+----------------------------+--------+----
+Tue Jan 11 00:00:00 2022 PST|       1|   1
+(1 row)
+
+
+NOTICE:  [data_node_3]:  SELECT * FROM _timescaledb_internal._dist_hyper_13_25_chunk WHERE time = '2022-01-11 00:00:00'
+NOTICE:  [data_node_3]:
+time                        |location|temp
+----------------------------+--------+----
+Tue Jan 11 00:00:00 2022 PST|       1|   1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM chunk_query_data_node WHERE hypertable_name IN ('hyper3', 'hyper_1dim');
+ hypertable_name |                     chunk                     |              data_nodes               | default_data_node 
+-----------------+-----------------------------------------------+---------------------------------------+-------------------
+ hyper3          | _timescaledb_internal._dist_hyper_12_18_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_19_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_20_chunk | {data_node_1,data_node_2,data_node_3} | data_node_3
+ hyper3          | _timescaledb_internal._dist_hyper_12_24_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_21_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_22_chunk | {data_node_2,data_node_3}             | data_node_3
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_23_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_25_chunk | {data_node_2,data_node_3}             | data_node_2
+(8 rows)
+
 SELECT hypertable_name, chunk_name, data_nodes FROM timescaledb_information.chunks
 WHERE hypertable_name IN ('hyper3', 'hyper_1dim')
 AND range_start::timestamptz <= '2022-01-10 00:00:00'
@@ -1813,15 +1957,78 @@ ORDER BY 1, 2;
  hyper_1dim      | _dist_hyper_13_25_chunk | {data_node_2,data_node_3}
 (2 rows)
 
+-- DDL should error out even if one DN is unavailable
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper3 ADD COLUMN temp2 int;
+ERROR:  some data nodes are not available for DDL commands
+ALTER TABLE hyper_1dim ADD COLUMN temp2 int;
+ERROR:  some data nodes are not available for DDL commands
+\set ON_ERROR_STOP 1
+-- Mark all DNs unavailable. Metadata should still retain last DN but all
+-- activity should fail
+SELECT * FROM alter_data_node('data_node_2', available=>false);
+WARNING:  could not switch data node on 2 chunks
+  node_name  |   host    | port  |    database    | available 
+-------------+-----------+-------+----------------+-----------
+ data_node_2 | localhost | 55432 | db_data_node_2 | f
+(1 row)
+
+SELECT * FROM alter_data_node('data_node_3', available=>false);
+WARNING:  could not switch data node on 11 chunks
+  node_name  |   host    | port  |    database    | available 
+-------------+-----------+-------+----------------+-----------
+ data_node_3 | localhost | 55432 | db_data_node_3 | f
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO hyper3 VALUES ('2022-01-10 00:00:00', 1, 1);
+ERROR:  insufficient number of available data nodes
+INSERT INTO hyper_1dim VALUES ('2022-01-10 00:00:00', 1, 1);
+ERROR:  insufficient number of available data nodes
+UPDATE hyper3 SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+ERROR:  insufficient number of available data nodes
+UPDATE hyper_1dim SET temp = 10 WHERE time = '2022-01-03 00:00:00';
+ERROR:  insufficient number of available data nodes
+DELETE FROM hyper3 WHERE time = '2022-01-03 00:00:00';
+ERROR:  insufficient number of available data nodes
+DELETE FROM hyper_1dim WHERE time = '2022-01-03 00:00:00';
+ERROR:  insufficient number of available data nodes
+SELECT count(*) FROM hyper3;
+ERROR:  data node "data_node_3" is not available
+SELECT count(*) FROM hyper_1dim;
+ERROR:  data node "data_node_3" is not available
+ALTER TABLE hyper3 ADD COLUMN temp2 int;
+ERROR:  some data nodes are not available for DDL commands
+ALTER TABLE hyper_1dim ADD COLUMN temp2 int;
+ERROR:  some data nodes are not available for DDL commands
+\set ON_ERROR_STOP 1
 -- re-enable the data node and the chunks should "switch back" to
 -- using the data node. However, only the chunks for which the node is
 -- "primary" should switch to using the data node for queries
 ALTER DATABASE data_node_1_unavailable RENAME TO :DN_DBNAME_1;
 WARNING:  you need to manually restart any running background workers after this command
 SELECT * FROM alter_data_node('data_node_1', available=>true);
+WARNING:  insufficient number of data nodes
+WARNING:  insufficient number of data nodes
   node_name  |   host    | port  |    database    | available 
 -------------+-----------+-------+----------------+-----------
  data_node_1 | localhost | 55432 | db_data_node_1 | t
+(1 row)
+
+SELECT * FROM alter_data_node('data_node_2', available=>true);
+WARNING:  insufficient number of data nodes
+WARNING:  insufficient number of data nodes
+WARNING:  insufficient number of data nodes
+WARNING:  insufficient number of data nodes
+  node_name  |   host    | port  |    database    | available 
+-------------+-----------+-------+----------------+-----------
+ data_node_2 | localhost | 55432 | db_data_node_2 | t
+(1 row)
+
+SELECT * FROM alter_data_node('data_node_3', available=>true);
+  node_name  |   host    | port  |    database    | available 
+-------------+-----------+-------+----------------+-----------
+ data_node_3 | localhost | 55432 | db_data_node_3 | t
 (1 row)
 
 SELECT * FROM chunk_query_data_node;
@@ -1833,14 +2040,14 @@ SELECT * FROM chunk_query_data_node;
  hyper2          | _timescaledb_internal._dist_hyper_11_15_chunk | {data_node_1,data_node_2}             | data_node_1
  hyper2          | _timescaledb_internal._dist_hyper_11_16_chunk | {data_node_2,data_node_3}             | data_node_2
  hyper2          | _timescaledb_internal._dist_hyper_11_17_chunk | {data_node_1,data_node_3}             | data_node_3
- hyper3          | _timescaledb_internal._dist_hyper_12_18_chunk | {data_node_1,data_node_2,data_node_3} | data_node_1
- hyper3          | _timescaledb_internal._dist_hyper_12_19_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_18_chunk | {data_node_2,data_node_3}             | data_node_3
+ hyper3          | _timescaledb_internal._dist_hyper_12_19_chunk | {data_node_2,data_node_3}             | data_node_2
  hyper3          | _timescaledb_internal._dist_hyper_12_20_chunk | {data_node_1,data_node_2,data_node_3} | data_node_3
- hyper3          | _timescaledb_internal._dist_hyper_12_24_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper3          | _timescaledb_internal._dist_hyper_12_24_chunk | {data_node_2,data_node_3}             | data_node_3
  hyper_1dim      | _timescaledb_internal._dist_hyper_13_21_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
- hyper_1dim      | _timescaledb_internal._dist_hyper_13_22_chunk | {data_node_1,data_node_2,data_node_3} | data_node_3
- hyper_1dim      | _timescaledb_internal._dist_hyper_13_23_chunk | {data_node_1,data_node_2,data_node_3} | data_node_1
- hyper_1dim      | _timescaledb_internal._dist_hyper_13_25_chunk | {data_node_2,data_node_3}             | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_22_chunk | {data_node_2,data_node_3}             | data_node_3
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_23_chunk | {data_node_1,data_node_2,data_node_3} | data_node_2
+ hyper_1dim      | _timescaledb_internal._dist_hyper_13_25_chunk | {data_node_2,data_node_3}             | data_node_3
 (14 rows)
 
 --queries should work again on all tables
@@ -1868,6 +2075,9 @@ SELECT time, location FROM hyper_1dim ORDER BY time LIMIT 1;
  Sat Jan 01 00:00:00 2022 PST |        1
 (1 row)
 
+-- DDL should also work again
+ALTER TABLE hyper3 ADD COLUMN temp2 int;
+ALTER TABLE hyper_1dim ADD COLUMN temp2 int;
 -- save old port so that we can restore connectivity after we test
 -- changing the connection information for the data node
 WITH options AS (
@@ -1878,12 +2088,12 @@ WITH options AS (
 SELECT split_part(opt, '=', 2) AS old_port
 FROM options WHERE opt LIKE 'port%' \gset
 -- also test altering host, port and database
-SELECT node_name, options FROM timescaledb_information.data_nodes;
+SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
   node_name  |                             options                              
 -------------+------------------------------------------------------------------
- data_node_2 | {host=localhost,port=55432,dbname=db_data_node_2}
- data_node_3 | {host=localhost,port=55432,dbname=db_data_node_3}
  data_node_1 | {host=localhost,port=55432,dbname=db_data_node_1,available=true}
+ data_node_2 | {host=localhost,port=55432,dbname=db_data_node_2,available=true}
+ data_node_3 | {host=localhost,port=55432,dbname=db_data_node_3,available=true}
 (3 rows)
 
 SELECT * FROM alter_data_node('data_node_1', available=>true, host=>'foo.bar', port=>8989, database=>'new_db');
@@ -1892,12 +2102,12 @@ SELECT * FROM alter_data_node('data_node_1', available=>true, host=>'foo.bar', p
  data_node_1 | foo.bar | 8989 | new_db   | t
 (1 row)
 
-SELECT node_name, options FROM timescaledb_information.data_nodes;
-  node_name  |                        options                        
--------------+-------------------------------------------------------
+SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
+  node_name  |                             options                              
+-------------+------------------------------------------------------------------
  data_node_1 | {host=foo.bar,port=8989,dbname=new_db,available=true}
- data_node_2 | {host=localhost,port=55432,dbname=db_data_node_2}
- data_node_3 | {host=localhost,port=55432,dbname=db_data_node_3}
+ data_node_2 | {host=localhost,port=55432,dbname=db_data_node_2,available=true}
+ data_node_3 | {host=localhost,port=55432,dbname=db_data_node_3,available=true}
 (3 rows)
 
 -- just show current options:
@@ -1926,12 +2136,12 @@ SELECT * FROM alter_data_node('data_node_1', host=>'localhost', port=>:old_port,
  data_node_1 | localhost | 55432 | db_data_node_1 | t
 (1 row)
 
-SELECT node_name, options FROM timescaledb_information.data_nodes;
+SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
   node_name  |                             options                              
 -------------+------------------------------------------------------------------
  data_node_1 | {host=localhost,port=55432,dbname=db_data_node_1,available=true}
- data_node_2 | {host=localhost,port=55432,dbname=db_data_node_2}
- data_node_3 | {host=localhost,port=55432,dbname=db_data_node_3}
+ data_node_2 | {host=localhost,port=55432,dbname=db_data_node_2,available=true}
+ data_node_3 | {host=localhost,port=55432,dbname=db_data_node_3,available=true}
 (3 rows)
 
 DROP TABLE hyper1;

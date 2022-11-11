@@ -238,7 +238,19 @@ dist_ddl_state_add_data_node_list_from_table(const char *schema, const char *nam
 static void
 dist_ddl_state_add_data_node_list_from_ht(Hypertable *ht)
 {
+	ListCell *lc;
+
 	dist_ddl_state.data_node_list = ts_hypertable_get_data_node_name_list(ht);
+
+	/* Check that all DNs are "available" for this DDL operation, fail otherwise */
+	foreach (lc, dist_ddl_state.data_node_list)
+	{
+		const char *data_node_name = lfirst(lc);
+		ForeignServer *server = GetForeignServerByName(data_node_name, false);
+
+		if (!ts_data_node_is_available_by_server(server))
+			ereport(ERROR, (errmsg("some data nodes are not available for DDL commands")));
+	}
 }
 
 static void

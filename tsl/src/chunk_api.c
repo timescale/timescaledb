@@ -474,6 +474,14 @@ chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht,
 	ListCell *lc;
 	TupleDesc tupdesc;
 	AttInMetadata *attinmeta;
+
+	/*
+	 * In case of "unavailable" datanodes, the chunk->data_nodes list is already pruned
+	 * and doesn't contain "unavailable" datanodes. So this chunk creation will never
+	 * happen on such "unavailable" datanodes. By the same logic, metadata update on the
+	 * AN for the chunk->datanode mappings will only happen for the listed "live" DNs
+	 * and not for the "unavailable" ones
+	 */
 	List *target_data_nodes = data_nodes ? data_nodes : chunk->data_nodes;
 
 	get_create_chunk_result_type(&tupdesc);
