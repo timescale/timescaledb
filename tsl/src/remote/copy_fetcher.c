@@ -5,8 +5,11 @@
  */
 
 #include <postgres.h>
+#include <miscadmin.h>
 #include <port/pg_bswap.h>
 #include <libpq-fe.h>
+#include <storage/latch.h>
+#include <utils/palloc.h>
 
 #include "copy_fetcher.h"
 #include "tuplefactory.h"
@@ -67,9 +70,9 @@ copy_fetcher_reset(CopyFetcher *fetcher)
 static void
 copy_fetcher_send_fetch_request(DataFetcher *df)
 {
-	AsyncRequest *volatile req = NULL;
 	MemoryContext oldcontext;
 	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
+	TSConnectionError err;
 
 	if (fetcher->state.open)
 	{
@@ -79,68 +82,14 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 
 	/* make sure to have a clean state */
 	copy_fetcher_reset(fetcher);
+	oldcontext = MemoryContextSwitchTo(fetcher->state.req_mctx);
 
-	StringInfoData copy_query;
-	initStringInfo(&copy_query);
-	appendStringInfo(&copy_query, "copy (%s) to stdout with (format binary)", fetcher->state.stmt);
+	Assert(tuplefactory_is_binary(fetcher->state.tf));
 
-	PG_TRY();
-	{
-		oldcontext = MemoryContextSwitchTo(fetcher->state.req_mctx);
+	if (!remote_connection_begin_copy_out(df->conn, df->stmt, df->stmt_params, &err))
+		remote_connection_error_elog(&err, ERROR);
 
-		Assert(tuplefactory_is_binary(fetcher->state.tf));
-		req = async_request_send_with_stmt_params_elevel_res_format(fetcher->state.conn,
-																	copy_query.data,
-																	fetcher->state.stmt_params,
-																	ERROR,
-																	FORMAT_BINARY);
-		Assert(NULL != req);
-
-		/*
-		 * Single-row mode doesn't really influence the COPY queries, but setting
-		 * it here is a convenient way to prevent concurrent COPY requests on the
-		 * same connection. This can happen if we have multiple tables on the same
-		 * data node and still use the row-by-row fetcher.
-		 */
-		if (!async_request_set_single_row_mode(req))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONNECTION_FAILURE),
-					 errmsg("could not set single-row mode on connection to \"%s\"",
-							remote_connection_node_name(fetcher->state.conn)),
-					 errdetail("The aborted statement is: %s.", fetcher->state.stmt),
-					 errhint("Copy fetcher is not supported together with sub-queries."
-							 " Use cursor fetcher instead.")));
-		}
-
-		PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
-		if (res == NULL)
-		{
-			/* Shouldn't really happen but technically possible. */
-			TSConnectionError err;
-			remote_connection_get_error(fetcher->state.conn, &err);
-			remote_connection_error_elog(&err, ERROR);
-		}
-		if (PQresultStatus(res) != PGRES_COPY_OUT)
-		{
-			TSConnectionError err;
-			remote_connection_get_result_error(res, &err);
-			remote_connection_error_elog(&err, ERROR);
-		}
-
-		fetcher->state.open = true;
-		PQclear(res);
-		pfree(req);
-	}
-	PG_CATCH();
-	{
-		if (NULL != req)
-			pfree(req);
-
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
+	fetcher->state.open = true;
 	MemoryContextSwitchTo(oldcontext);
 }
 
@@ -242,54 +191,6 @@ copy_data_check_header(StringInfo copy_data)
 }
 
 /*
- * End the COPY after receiving EOF or canceling a query (e.g., due to a LIMIT
- * being reached).
- *
- * This should be called after canceling a query, or, after reading all data,
- * the file trailer, and getting an EOF return value.
- */
-static void
-end_copy(CopyFetcher *fetcher, bool canceled)
-{
-	PGconn *conn = remote_connection_get_pg_conn(fetcher->state.conn);
-	PGresult *final_pgres = NULL;
-	PGresult *pgres = NULL;
-	ExecStatusType received_status;
-
-	Assert(fetcher->state.open);
-
-	/* Read results until NULL */
-	while ((pgres = PQgetResult(conn)))
-	{
-		if (final_pgres == NULL)
-			final_pgres = pgres;
-		else
-			remote_result_close(pgres);
-	}
-
-	received_status = PQresultStatus(final_pgres);
-	remote_result_close(final_pgres);
-
-	if (canceled)
-	{
-		/* If the query was canceled during query execution by the access node
-		 * (e.g., due to reaching a LIMIT), expect either PGRES_COMMAND_OK
-		 * (query completed before cancel happened) or PGRES_FATAL_ERROR
-		 * (query abandoned before completion) */
-		if (received_status != PGRES_COMMAND_OK && received_status != PGRES_FATAL_ERROR)
-			remote_connection_elog(fetcher->state.conn, ERROR);
-	}
-	else if (received_status != PGRES_COMMAND_OK)
-	{
-		Assert(received_status == PGRES_FATAL_ERROR || received_status == PGRES_NONFATAL_ERROR);
-		remote_connection_elog(fetcher->state.conn, ERROR);
-	}
-
-	fetcher->state.open = false;
-	remote_connection_set_status(fetcher->state.conn, CONN_IDLE);
-}
-
-/*
  * Prematurely end the COPY before EOF is received.
  *
  * This happens for queries that are abandoned before reaching EOF, e.g., when
@@ -298,6 +199,8 @@ end_copy(CopyFetcher *fetcher, bool canceled)
 static void
 end_copy_before_eof(CopyFetcher *fetcher)
 {
+	TSConnectionError err;
+
 	/*
 	 * The fetcher state might not be open if the fetcher got initialized but
 	 * never executed due to executor constraints.
@@ -306,8 +209,11 @@ end_copy_before_eof(CopyFetcher *fetcher)
 		return;
 
 	Assert(!fetcher->state.eof);
-	remote_connection_cancel_query(fetcher->state.conn);
-	end_copy(fetcher, true);
+
+	if (!remote_connection_end_copy_out(fetcher->state.conn, true, &err))
+		remote_connection_error_elog(&err, ERROR);
+
+	fetcher->state.open = false;
 }
 
 /*
@@ -316,11 +222,8 @@ end_copy_before_eof(CopyFetcher *fetcher)
 static int
 copy_fetcher_complete(CopyFetcher *fetcher)
 {
-	/* Marked as volatile since it's modified in PG_TRY used in PG_CATCH */
-	AsyncResponseResult *volatile response = NULL;
 	char *volatile dataptr = NULL;
 	MemoryContext oldcontext;
-	PGconn *conn = remote_connection_get_pg_conn(fetcher->state.conn);
 
 	Assert(fetcher->state.open);
 	data_fetcher_validate(&fetcher->state);
@@ -349,13 +252,10 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 
 		for (row = 0; row < fetcher->state.fetch_size; row++)
 		{
-			MemoryContextSwitchTo(fetcher->state.req_mctx);
-
 			StringInfoData copy_data = { 0 };
 
-			copy_data.len = PQgetCopyData(conn,
-										  &copy_data.data,
-										  /* async = */ false);
+			MemoryContextSwitchTo(fetcher->state.req_mctx);
+			copy_data.len = remote_connection_get_copy_data(fetcher->state.conn, &copy_data.data);
 
 			/* Set dataptr to ensure data is freed with PQfreemem() in
 			 * PG_CATCH() clause in case error is thrown. */
@@ -366,8 +266,8 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 				/* Note: it is possible to get EOF without having received the
 				 * file trailer in case there's e.g., a remote error. */
 				fetcher->state.eof = true;
-				/* Should read final result with PQgetResult() until it
-				 * returns NULL. This happens below. */
+				/* Should read final result until it returns NULL. This
+				 * happens below. */
 				break;
 			}
 			else if (copy_data.len == -2)
@@ -403,10 +303,10 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 				 */
 				fetcher->file_trailer_received = true;
 
-				/* Next PQgetCopyData() should return -1, indicating EOF and
-				 * that the remote side ended the copy. The final result
-				 * (PGRES_COMMAND_OK) should then be read with
-				 * PQgetResult(). */
+				/* Next call to remote_connection_get_copy_data() should
+				 * return -1, indicating EOF and that the remote side ended
+				 * the copy. The final result (PGRES_COMMAND_OK) should then
+				 * be read. */
 			}
 			else
 			{
@@ -480,7 +380,7 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 				}
 			}
 			MemoryContextSwitchTo(fetcher->state.batch_mctx);
-			PQfreemem(copy_data.data);
+			remote_connection_free_mem(copy_data.data);
 			dataptr = NULL;
 		}
 
@@ -502,15 +402,19 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 		 * where tuples are first fetched in COPY mode, then a remote explain
 		 * is performed on the same connection within the same scan. */
 		if (fetcher->state.eof)
-			end_copy(fetcher, false);
+		{
+			TSConnectionError err;
+
+			if (!remote_connection_end_copy_out(fetcher->state.conn, false, &err))
+				remote_connection_error_elog(&err, ERROR);
+
+			fetcher->state.open = false;
+		}
 	}
 	PG_CATCH();
 	{
-		if (NULL != response)
-			async_response_result_close(response);
-
 		if (NULL != dataptr)
-			PQfreemem(dataptr);
+			remote_connection_free_mem(dataptr);
 
 		PG_RE_THROW();
 	}

@@ -25,7 +25,7 @@ typedef enum
 extern void remote_txn_init(RemoteTxn *entry, TSConnection *conn);
 extern RemoteTxn *remote_txn_begin_on_connection(TSConnection *conn);
 extern void remote_txn_begin(RemoteTxn *entry, int curlevel);
-extern bool remote_txn_abort(RemoteTxn *entry);
+extern bool remote_txn_abort(RemoteTxn *entry, const char **errmsg);
 extern void remote_txn_write_persistent_record(RemoteTxn *entry);
 extern void remote_txn_deallocate_prepared_stmts_if_needed(RemoteTxn *entry);
 extern bool remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel);

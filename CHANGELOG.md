@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #4804 Skip bucketing when start or end of refresh job is null
 * #4926 Fix corruption when inserting into compressed chunks
 * #5214 Fix use of prepared statement in async module
+* #5058 Make data node calls non-blocking and interruptible
 
 ## 2.9.2 (2023-01-26)
 

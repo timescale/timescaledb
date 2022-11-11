@@ -510,17 +510,19 @@ data_node_bootstrap_extension(TSConnection *conn)
 								quote_literal_cstr(EXTENSION_NAME));
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-		ereport(ERROR,
-				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+		remote_result_elog(res, ERROR);
 
 	if (PQntuples(res) == 0)
 	{
+		remote_result_close(res);
+
 		if (schema_oid != PG_PUBLIC_NAMESPACE)
 		{
-			PGresult *res = remote_connection_execf(conn,
-													"CREATE SCHEMA %s AUTHORIZATION %s",
-													schema_name_quoted,
-													quote_identifier(username));
+			res = remote_connection_execf(conn,
+										  "CREATE SCHEMA %s AUTHORIZATION %s",
+										  schema_name_quoted,
+										  quote_identifier(username));
+
 			if (PQresultStatus(res) != PGRES_COMMAND_OK)
 			{
 				const char *const sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
@@ -528,6 +530,8 @@ data_node_bootstrap_extension(TSConnection *conn)
 					(sqlstate && strcmp(sqlstate, ERRCODE_DUPLICATE_SCHEMA_STR) == 0);
 				if (!schema_exists)
 					remote_result_elog(res, ERROR);
+
+				remote_result_close(res);
 				/* If the schema already existed on the remote node, we got a
 				 * duplicate schema error and the schema was not created. In
 				 * that case, we log an error with a hint on how to fix the
@@ -538,6 +542,8 @@ data_node_bootstrap_extension(TSConnection *conn)
 						 errhint("Make sure that the data node does not contain any "
 								 "existing objects prior to adding it.")));
 			}
+
+			remote_result_close(res);
 		}
 
 		remote_connection_cmdf_ok(conn,
@@ -556,6 +562,7 @@ data_node_bootstrap_extension(TSConnection *conn)
 						   PQhost(remote_connection_get_pg_conn(conn)),
 						   PQport(remote_connection_get_pg_conn(conn)),
 						   PQgetvalue(res, 0, 1))));
+		remote_result_close(res);
 		data_node_validate_extension(conn);
 		return false;
 	}
@@ -592,7 +599,7 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 	{
 		List *node_options =
 			create_data_node_options(host, port, bootstrap_databases[i], username, password);
-		conn = remote_connection_open_with_options_nothrow(node_name, node_options, &err);
+		conn = remote_connection_open(node_name, node_options, &err);
 
 		if (conn)
 			return conn;
@@ -635,7 +642,8 @@ data_node_validate_extension_availability(TSConnection *conn)
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
-				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("failed to validate remote extension: %s", PQresultErrorMessage(res))));
 
 	if (PQntuples(res) == 0)
 		ereport(ERROR,
@@ -788,7 +796,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		 * necessary. Instead using a more straightforward approach here since
 		 * we do not need 2PC support. */
 		node_options = create_data_node_options(host, port, dbname, username, password);
-		conn = remote_connection_open_with_options(node_name, node_options, false);
+		conn = remote_connection_open_session(node_name, node_options, false);
 		Assert(NULL != conn);
 		remote_connection_cmd_ok(conn, "BEGIN");
 
@@ -1771,7 +1779,7 @@ drop_data_node_database(const ForeignServer *server)
 		server = data_node_get_foreign_server(nodename, ACL_USAGE, true, false);
 		/* Open a connection to the bootstrap database using the new server options */
 		conn_options = remote_connection_prepare_auth_options(server, userid);
-		conn = remote_connection_open_with_options_nothrow(nodename, conn_options, &err);
+		conn = remote_connection_open(nodename, conn_options, &err);
 
 		if (NULL != conn)
 			break;

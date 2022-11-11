@@ -150,6 +150,7 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 {
 	TSConnectionId *id = (TSConnectionId *) query->data;
 	ConnectionCacheEntry *entry = query->result;
+	MemoryContext old;
 
 	/*
 	 * Protects against errors in remote_connection_open, necessary since this
@@ -162,11 +163,9 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * because PGconn allocation happens using malloc. Which is why calling
 	 * remote_connection_close at cleanup is critical.
 	 */
-	entry->conn = remote_connection_open_by_id(*id);
-
-	/* Since this connection is managed by the cache, it should not auto-close
-	 * at the end of the transaction */
-	remote_connection_set_autoclose(entry->conn, false);
+	old = MemoryContextSwitchTo(ts_cache_memory_ctx(cache));
+	entry->conn = remote_connection_open_session_by_id(*id);
+	MemoryContextSwitchTo(old);
 
 	/* Set the hash values of the foreign server and role for cache
 	 * invalidation purposes */

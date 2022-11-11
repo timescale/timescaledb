@@ -135,7 +135,7 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	{
 		TSConnectionError err;
 
-		if (!remote_connection_end_copy(entry->conn, &err))
+		if (!remote_connection_end_copy_in(entry->conn, &err))
 			remote_connection_error_elog(&err, ERROR);
 	}
 
@@ -364,7 +364,7 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 #endif
 
 bool
-remote_txn_abort(RemoteTxn *entry)
+remote_txn_abort(RemoteTxn *entry, const char **errmsg)
 {
 	const char *abort_sql;
 	bool success = true;
@@ -386,13 +386,14 @@ remote_txn_abort(RemoteTxn *entry)
 	Assert(entry->conn != NULL);
 	Assert(remote_connection_xact_depth_get(entry->conn) > 0);
 
-	elog(DEBUG3, "aborting remote transaction on connection %p", entry->conn);
-
 	/* Already in bad state */
 	if (remote_connection_xact_is_transitioning(entry->conn))
+	{
+		if (errmsg != NULL)
+			*errmsg = "transaction is transitioning";
 		return false;
-	else if (in_error_recursion_trouble() ||
-			 PQstatus(remote_connection_get_pg_conn(entry->conn)) == CONNECTION_BAD)
+	}
+	else if (in_error_recursion_trouble())
 	{
 		/*
 		 * Don't try to recover the connection if we're already in error
@@ -402,6 +403,15 @@ remote_txn_abort(RemoteTxn *entry)
 		 * this ongoing connection and so no cleanup is necessary.
 		 */
 		remote_connection_xact_transition_begin(entry->conn);
+		if (errmsg != NULL)
+			*errmsg = "in error recursion";
+		return false;
+	}
+	else if (PQstatus(remote_connection_get_pg_conn(entry->conn)) == CONNECTION_BAD)
+	{
+		remote_connection_xact_transition_begin(entry->conn);
+		if (errmsg != NULL)
+			*errmsg = "bad connection";
 		return false;
 	}
 
@@ -414,13 +424,21 @@ remote_txn_abort(RemoteTxn *entry)
 	 * If so, request cancellation of the command.
 	 */
 	if (PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)) == PQTRANS_ACTIVE)
-		success = remote_connection_cancel_query(entry->conn);
+		success = remote_connection_cancel_query(entry->conn, errmsg);
 
-	if (success)
+	if (!success)
+		return false;
+
+	/* At this point any on going queries should have completed */
+	remote_connection_set_status(entry->conn, CONN_IDLE);
+	success = exec_cleanup_command(entry->conn, abort_sql);
+
+	if (!success)
 	{
-		/* At this point any on going queries should have completed */
-		remote_connection_set_status(entry->conn, CONN_IDLE);
-		success = exec_cleanup_command(entry->conn, abort_sql);
+		if (errmsg != NULL)
+			*errmsg = "ROLLBACK TRANSACTION failed";
+
+		return false;
 	}
 
 	/*
@@ -430,7 +448,7 @@ remote_txn_abort(RemoteTxn *entry)
 	 * prepared stmts are per session not per transaction. But we don't want
 	 * prepared_stmts to survive transactions in our use case.
 	 */
-	if (success && entry->have_prep_stmt)
+	if (entry->have_prep_stmt)
 		success = exec_cleanup_command(entry->conn, "DEALLOCATE ALL");
 
 	if (success)
@@ -441,6 +459,8 @@ remote_txn_abort(RemoteTxn *entry)
 		/* Everything succeeded, so we have finished transitioning */
 		remote_connection_xact_transition_end(entry->conn);
 	}
+	else if (errmsg != NULL)
+		*errmsg = "DEALLOCATE ALL failed";
 
 	return success;
 }
@@ -633,7 +653,7 @@ remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel)
 		 * data node, and if so, request cancellation of the command.
 		 */
 		if (PQtransactionStatus(pg_conn) == PQTRANS_ACTIVE &&
-			!remote_connection_cancel_query(entry->conn))
+			!remote_connection_cancel_query(entry->conn, NULL))
 			success = false;
 		else
 		{

@@ -24,21 +24,32 @@
 #include "export.h"
 #include "test_utils.h"
 #include "connection.h"
+#include <utils/palloc.h>
 
 TSConnection *
 get_connection()
 {
-	return remote_connection_open_with_options(
-		"testdb",
-		list_make4(makeDefElem("user",
-							   (Node *) makeString(GetUserNameFromId(GetUserId(), false)),
-							   -1),
-				   makeDefElem("host", (Node *) makeString("localhost"), -1),
-				   makeDefElem("dbname", (Node *) makeString(get_database_name(MyDatabaseId)), -1),
-				   makeDefElem("port",
-							   (Node *) makeString(pstrdup(GetConfigOption("port", false, false))),
-							   -1)),
-		false);
+	return remote_connection_open_session("testdb",
+										  list_make4(makeDefElem("user",
+																 (Node *) makeString(
+																	 GetUserNameFromId(GetUserId(),
+																					   false)),
+																 -1),
+													 makeDefElem("host",
+																 (Node *) makeString("localhost"),
+																 -1),
+													 makeDefElem("dbname",
+																 (Node *) makeString(
+																	 get_database_name(
+																		 MyDatabaseId)),
+																 -1),
+													 makeDefElem("port",
+																 (Node *) makeString(pstrdup(
+																	 GetConfigOption("port",
+																					 false,
+																					 false))),
+																 -1)),
+										  false);
 }
 
 static void
@@ -107,14 +118,21 @@ test_simple_queries()
 static void
 test_connection_and_result_leaks()
 {
-	TSConnection *conn, *subconn;
+	TSConnection *conn, *subconn, *subconn2;
 	PGresult *res;
 	RemoteConnectionStats *stats;
+	MemoryContext old;
+	MemoryContext mcxt;
 
+	mcxt = AllocSetContextCreate(CurrentMemoryContext, "test", ALLOCSET_SMALL_SIZES);
+
+	old = MemoryContextSwitchTo(mcxt);
 	stats = remote_connection_stats_get();
 	remote_connection_stats_reset();
 
 	conn = get_connection();
+	ASSERT_NUM_OPEN_CONNECTIONS(stats, 1);
+
 	res = remote_connection_exec(conn, "SELECT 1");
 	remote_connection_close(conn);
 
@@ -127,6 +145,8 @@ test_connection_and_result_leaks()
 
 	BeginInternalSubTransaction("conn leak test");
 
+	/* This connection is created on the subtransaction memory context */
+	Assert(CurrentMemoryContext == CurTransactionContext);
 	subconn = get_connection();
 	ASSERT_NUM_OPEN_CONNECTIONS(stats, 2);
 
@@ -135,7 +155,9 @@ test_connection_and_result_leaks()
 
 	BeginInternalSubTransaction("conn leak test 2");
 
-	res = remote_connection_exec(subconn, "SELECT 1");
+	subconn2 = get_connection();
+	ASSERT_NUM_OPEN_CONNECTIONS(stats, 3);
+	res = remote_connection_exec(subconn2, "SELECT 1");
 	ASSERT_NUM_OPEN_RESULTS(stats, 2);
 
 	/* Explicitly close one result */
@@ -149,20 +171,31 @@ test_connection_and_result_leaks()
 	ASSERT_NUM_OPEN_RESULTS(stats, 3);
 
 	RollbackAndReleaseCurrentSubTransaction();
-
-	/* Rollback should have cleared the two results created in the
-	 * sub-transaction, but not the one created before the sub-transaction */
-	ASSERT_NUM_OPEN_RESULTS(stats, 1);
+	/* The connection created in the rolled back transaction should be
+	 * destroyed */
+	ASSERT_NUM_OPEN_CONNECTIONS(stats, 2);
 
 	remote_connection_exec(subconn, "SELECT 1");
-	ASSERT_NUM_OPEN_RESULTS(stats, 2);
+	ASSERT_NUM_OPEN_RESULTS(stats, 4);
 
+	/* Note that releasing/committing the subtransaction does not delete the memory */
 	ReleaseCurrentSubTransaction();
 
-	/* Should only leave the original connection created before the first
-	 * sub-transaction, but no results */
+	/* The original and subconn still exists */
+	ASSERT_NUM_OPEN_CONNECTIONS(stats, 2);
+	ASSERT_NUM_OPEN_RESULTS(stats, 4);
+
+	remote_connection_exec(conn, "SELECT 1");
+	ASSERT_NUM_OPEN_RESULTS(stats, 5);
+
+	MemoryContextSwitchTo(old);
+	MemoryContextDelete(mcxt);
+
+	/* Original connection should be cleaned up along with its 3 results. The
+	 * subconn object was created on a subtransaction memory context that will
+	 * be cleared when the main transaction ends. */
 	ASSERT_NUM_OPEN_CONNECTIONS(stats, 1);
-	ASSERT_NUM_OPEN_RESULTS(stats, 0);
+	ASSERT_NUM_OPEN_RESULTS(stats, 2);
 
 	remote_connection_stats_reset();
 }

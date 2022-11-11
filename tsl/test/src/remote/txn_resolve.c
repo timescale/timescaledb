@@ -47,9 +47,15 @@ create_prepared_txn(TSConnectionId *id)
 static void
 create_rollback_prepared_txn(TSConnectionId *id)
 {
+	const char *errmsg = NULL;
+
 	RemoteTxn *tx =
 		prepared_txn(id, "INSERT INTO public.table_modified_by_txns VALUES ('rollback prepared');");
-	remote_txn_abort(tx);
+
+	if (!remote_txn_abort(tx, &errmsg))
+	{
+		elog(WARNING, "remote transcation abort failed: %s", errmsg);
+	}
 }
 
 Datum

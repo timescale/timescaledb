@@ -13,6 +13,8 @@
 #include <miscadmin.h>
 #include <parser/parse_type.h>
 #include <port/pg_bswap.h>
+#include <stdbool.h>
+#include <storage/latch.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
@@ -31,6 +33,7 @@
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
 #include "ts_catalog/chunk_data_node.h"
+#include <utils/palloc.h>
 
 #define DEFAULT_PG_DELIMITER '\t'
 #define DEFAULT_PG_NULL_VALUE "\\N"
@@ -313,13 +316,13 @@ get_copy_connection_to_data_node(RemoteCopyContext *context, TSConnectionId requ
 	if (status == CONN_IDLE)
 	{
 		TSConnectionError err;
-		if (!remote_connection_begin_copy(connection,
-										  psprintf("%s /* batch %d conn %p */",
-												   state->outgoing_copy_cmd,
-												   context->batch_ordinal,
-												   remote_connection_get_pg_conn(connection)),
-										  state->using_binary,
-										  &err))
+		if (!remote_connection_begin_copy_in(connection,
+											 psprintf("%s /* batch %d conn %p */",
+													  state->outgoing_copy_cmd,
+													  context->batch_ordinal,
+													  remote_connection_get_pg_conn(connection)),
+											 state->using_binary,
+											 &err))
 		{
 			remote_connection_error_elog(&err, ERROR);
 		}
@@ -400,6 +403,7 @@ flush_active_connections(CopyConnectionState *state)
 
 			/* Write out all the pending buffers. */
 			int res = PQflush(pg_conn);
+
 			if (res == -1)
 			{
 				TSConnectionError err;
@@ -433,13 +437,14 @@ flush_active_connections(CopyConnectionState *state)
 		 * and it's level-triggered, so we have to recreate the set each time.
 		 */
 		WaitEventSet *set =
-			CreateWaitEventSet(CurrentMemoryContext, list_length(busy_connections) + 1);
+			CreateWaitEventSet(CurrentMemoryContext, list_length(busy_connections) + 2);
 
 		/*
 		 * Postmaster-managed callers must handle postmaster death somehow,
 		 * as stated by the comments in WaitLatchOrSocket.
 		 */
 		(void) AddWaitEventToSet(set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET, NULL, NULL);
+		(void) AddWaitEventToSet(set, WL_LATCH_SET, PGINVALID_SOCKET, MyLatch, NULL);
 
 		/*
 		 * Add wait events for each busy connection.
@@ -450,28 +455,38 @@ flush_active_connections(CopyConnectionState *state)
 			TSConnection *conn = lfirst(busy_cell);
 			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
 			(void) AddWaitEventToSet(set,
-									 /* events = */ WL_SOCKET_WRITEABLE,
+									 /* events = */ WL_SOCKET_WRITEABLE | WL_SOCKET_READABLE,
 									 PQsocket(pg_conn),
 									 /* latch = */ NULL,
 									 /* user_data = */ NULL);
 		}
 
 		/* Wait. */
-		WaitEvent occurred[1];
+		WaitEvent occurred;
 		int wait_result PG_USED_FOR_ASSERTS_ONLY = WaitEventSetWait(set,
-																	/* timeout = */ 1000,
-																	occurred,
+																	-1,
+																	&occurred,
 																	/* nevents = */ 1,
 																	WAIT_EVENT_COPY_FILE_WRITE);
 
-		/*
-		 * The possible results are:
-		 * `0` -- Timeout. Just retry the flush, it will report errors in case
-		 *        there are any.
-		 * `1` -- We have successfully waited for something, we don't care,
-		 *        just continue flushing the rest of the list.
-		 */
-		Assert(wait_result == 0 || wait_result == 1);
+		Assert(wait_result == 1);
+
+		if (occurred.events & WL_LATCH_SET)
+		{
+			ResetLatch(MyLatch);
+			/* Check for interrupts at top of loop */
+		}
+
+		if (occurred.events & WL_SOCKET_READABLE)
+		{
+			TSConnection *conn = occurred.user_data;
+			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+
+			if (PQconsumeInput(pg_conn) == 0)
+			{
+				remote_connection_elog(conn, ERROR);
+			}
+		}
 
 		FreeWaitEventSet(set);
 
@@ -486,6 +501,90 @@ flush_active_connections(CopyConnectionState *state)
 	}
 }
 
+static void
+put_copy_end(CopyConnectionState *state)
+{
+	List *conns = NIL;
+	ListCell *lc;
+
+	conns = list_copy(state->connections_in_use);
+
+	while (true)
+	{
+		List *waiting_conns = NIL;
+
+		Assert(conns != NIL);
+
+		CHECK_FOR_INTERRUPTS();
+
+		foreach (lc, conns)
+		{
+			TSConnection *conn = lfirst(lc);
+			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+			int ret = PQputCopyEnd(pg_conn, NULL);
+
+			switch (ret)
+			{
+				case 1:
+					/* queued but need to flush. Done at the end of the
+					 * function. */
+					break;
+				case 0:
+					/* not queued, need to wait for write ready and retry */
+					waiting_conns = lappend(waiting_conns, conn);
+					break;
+				case -1:
+					/* Failure */
+					ereport(ERROR,
+							(errmsg("could not end remote COPY"),
+							 errdetail("%s", PQerrorMessage(pg_conn))));
+					break;
+				default:
+					pg_unreachable();
+			}
+		}
+
+		if (waiting_conns == NIL)
+			break;
+
+		WaitEventSet *wset =
+			CreateWaitEventSet(CurrentMemoryContext, list_length(waiting_conns) + 2);
+		(void) AddWaitEventToSet(wset, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET, NULL, NULL);
+		(void) AddWaitEventToSet(wset, WL_LATCH_SET, PGINVALID_SOCKET, MyLatch, NULL);
+
+		foreach (lc, waiting_conns)
+		{
+			TSConnection *conn = lfirst(lc);
+			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+			(void) AddWaitEventToSet(wset,
+									 /* events = */ WL_SOCKET_WRITEABLE,
+									 PQsocket(pg_conn),
+									 /* latch = */ NULL,
+									 /* user_data = */ conn);
+		}
+
+		WaitEvent occurred;
+		int wait_result PG_USED_FOR_ASSERTS_ONLY = WaitEventSetWait(wset,
+																	-1,
+																	&occurred,
+																	/* nevents = */ 1,
+																	WAIT_EVENT_COPY_FILE_WRITE);
+		Assert(wait_result == 1);
+
+		if (occurred.events & WL_LATCH_SET)
+		{
+			ResetLatch(MyLatch);
+			/* Check for interrupts at top of loop */
+		}
+
+		FreeWaitEventSet(wset);
+		conns = list_copy(waiting_conns);
+	}
+
+	/* Finally, flush all connections */
+	flush_active_connections(state);
+}
+
 /*
  * Flush all active data node connections and end COPY simultaneously, instead
  * of doing this one-by-one in remote_connection_end_copy(). Implies that there
@@ -494,8 +593,12 @@ flush_active_connections(CopyConnectionState *state)
 static void
 end_copy_on_success(CopyConnectionState *state)
 {
-	List *to_end_copy = NIL;
 	ListCell *lc;
+
+	if (state->connections_in_use == NIL)
+		return;
+
+	/* Do some sanity checking before ending */
 	foreach (lc, state->connections_in_use)
 	{
 		TSConnection *conn = lfirst(lc);
@@ -515,16 +618,15 @@ end_copy_on_success(CopyConnectionState *state)
 		 */
 		Assert(remote_connection_get_status(conn) == CONN_COPY_IN);
 
-		PGconn *pg_conn = remote_connection_get_pg_conn(conn);
-
 		/*
 		 * This function expects that the COPY processing so far was
 		 * successful, so the data connections should be in nonblocking
 		 * mode.
 		 */
-		Assert(PQisnonblocking(pg_conn));
+		Assert(PQisnonblocking(remote_connection_get_pg_conn(conn)));
 
-		PGresult *res = PQgetResult(pg_conn);
+		PGresult *res = remote_connection_get_result(conn);
+
 		if (res == NULL)
 		{
 			/*
@@ -561,44 +663,18 @@ end_copy_on_success(CopyConnectionState *state)
 
 		/* The connection is in PGRES_COPY_IN status, as expected. */
 		Assert(res != NULL && PQresultStatus(res) == PGRES_COPY_IN);
-
-		to_end_copy = lappend(to_end_copy, conn);
-
-		if (PQputCopyEnd(pg_conn, NULL) != 1)
-		{
-			ereport(ERROR,
-					(errmsg("could not end remote COPY"),
-					 errdetail("%s", PQerrorMessage(pg_conn))));
-		}
 	}
 
-	flush_active_connections(state);
-
-	/*
-	 * Switch the connections back into blocking mode because that's what the
-	 * non-COPY code expects.
-	 */
-	foreach (lc, to_end_copy)
-	{
-		TSConnection *conn = lfirst(lc);
-		PGconn *pg_conn = remote_connection_get_pg_conn(conn);
-
-		if (PQsetnonblocking(pg_conn, 0))
-		{
-			ereport(ERROR,
-					(errmsg("failed to switch the connection into blocking mode"),
-					 errdetail("%s", PQerrorMessage(pg_conn))));
-		}
-	}
+	put_copy_end(state);
 
 	/*
 	 * Verify that the copy has successfully finished on each connection.
 	 */
-	foreach (lc, to_end_copy)
+	foreach (lc, state->connections_in_use)
 	{
 		TSConnection *conn = lfirst(lc);
 		PGconn *pg_conn = remote_connection_get_pg_conn(conn);
-		PGresult *res = PQgetResult(pg_conn);
+		PGresult *res = remote_connection_get_result(conn);
 		if (res == NULL)
 		{
 			ereport(ERROR, (errmsg("unexpected NULL result when ending remote COPY")));
@@ -611,7 +687,8 @@ end_copy_on_success(CopyConnectionState *state)
 			remote_connection_error_elog(&err, ERROR);
 		}
 
-		res = PQgetResult(pg_conn);
+		res = remote_connection_get_result(conn);
+
 		if (res != NULL)
 		{
 			ereport(ERROR,
@@ -626,13 +703,12 @@ end_copy_on_success(CopyConnectionState *state)
 	 * connections are going to be still marked as CONN_COPY_IN, and the
 	 * remote_connection_end_copy() will bring each connection to a valid state.
 	 */
-	foreach (lc, to_end_copy)
+	foreach (lc, state->connections_in_use)
 	{
 		TSConnection *conn = (TSConnection *) lfirst(lc);
 		remote_connection_set_status(conn, CONN_IDLE);
 	}
 
-	list_free(to_end_copy);
 	list_free(state->connections_in_use);
 	state->connections_in_use = NIL;
 }
@@ -649,7 +725,7 @@ end_copy_on_failure(CopyConnectionState *state)
 		TSConnection *conn = lfirst(lc);
 
 		if (remote_connection_get_status(conn) == CONN_COPY_IN &&
-			!remote_connection_end_copy(conn, &err))
+			!remote_connection_end_copy_in(conn, &err))
 		{
 			failure = true;
 		}
@@ -1460,13 +1536,13 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	 */
 	StringInfoData copy_data = { .data = palloc(MAX_BATCH_BYTES), .maxlen = MAX_BATCH_BYTES };
 	ListCell *lc;
+
 	foreach (lc, data_nodes)
 	{
 		DataNodeRows *dn = lfirst(lc);
 		TSConnectionId required_id = remote_connection_id(dn->server_oid, GetUserId());
 		Assert(dn->connection == NULL);
 		dn->connection = get_copy_connection_to_data_node(context, required_id);
-		PGconn *pg_conn = remote_connection_get_pg_conn(dn->connection);
 
 		resetStringInfo(&copy_data);
 		for (int row = 0; row < dn->rows_total; row++)
@@ -1477,24 +1553,13 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 
 		/*
 		 * Send the copy data to the remote server.
-		 * It can't really return 0 ("would block") until it runs out
-		 * of memory. It just grows the buffer and tries to flush in
-		 * pqPutMsgEnd().
 		 */
-		int res = PQputCopyData(pg_conn, copy_data.data, copy_data.len);
+		TSConnectionError err;
 
-		if (res == -1)
+		if (!remote_connection_put_copy_data(dn->connection, copy_data.data, copy_data.len, &err))
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONNECTION_EXCEPTION),
-					 errmsg("could not send COPY data"),
-					 errdetail("%s", PQerrorMessage(pg_conn))));
+			remote_connection_error_elog(&err, ERROR);
 		}
-
-		/*
-		 * We don't have to specially flush the data here, because the flush is
-		 * attempted after finishing each protocol message (pqPutMsgEnd()).
-		 */
 	}
 }
 

@@ -245,7 +245,7 @@ test_node_death()
 	async_request_set_add_sql(set, conn, "SELECT 1");
 
 	remote_node_killer_kill(&rnk);
-	TestAssertTrue(false == remote_connection_cancel_query(conn));
+	TestAssertTrue(false == remote_connection_cancel_query(conn, NULL));
 
 	/* do cancel query after seeing error */
 	conn = get_connection();
@@ -256,7 +256,7 @@ test_node_death()
 
 	/* first we get error result */
 	TestEnsureError(async_request_set_wait_ok_result(set));
-	TestAssertTrue(false == remote_connection_cancel_query(conn));
+	TestAssertTrue(false == remote_connection_cancel_query(conn, NULL));
 
 	remote_connection_close(conn);
 }
@@ -284,7 +284,7 @@ test_timeout()
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_TIMEOUT);
 
 	/* cancel the locked query and do another query */
-	TestAssertTrue(remote_connection_cancel_query(conn));
+	TestAssertTrue(remote_connection_cancel_query(conn, NULL));
 	/* the txn is aborted waiting for abort */
 	TestEnsureError(async_request_wait_ok_result(async_request_send(conn, "SELECT 1;")));
 	async_request_wait_ok_command(async_request_send(conn, "ABORT;"));

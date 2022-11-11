@@ -192,12 +192,8 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 								req->res_format);
 	}
 
-	if (ret == 0)
+	if (ret == 0 || !remote_connection_flush(req->conn, NULL))
 	{
-		/*
-		 * null is fine to pass down as the res, the connection error message
-		 * will get through
-		 */
 		remote_connection_elog(req->conn, elevel);
 		return NULL;
 	}
@@ -714,7 +710,6 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 	ListCell *lc;
 	int rc;
 	WaitEvent event;
-	uint32 wait_event_info = PG_WAIT_EXTENSION;
 	AsyncRequest *wait_req;
 	AsyncResponse *result;
 	long timeout_ms = -1L;
@@ -753,15 +748,13 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 	while (true)
 	{
 		wait_req = NULL;
-		rc = WaitEventSetWait(we_set, timeout_ms, &event, 1, wait_event_info);
+		rc = WaitEventSetWait(we_set, timeout_ms, &event, 1, PG_WAIT_EXTENSION);
 
 		if (rc == 0)
 		{
 			result = async_response_timeout_create();
 			break;
 		}
-
-		CHECK_FOR_INTERRUPTS();
 
 		if (event.events & ~(WL_SOCKET_READABLE | WL_LATCH_SET))
 		{
@@ -778,6 +771,7 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 		if (event.events & WL_LATCH_SET)
 		{
 			ResetLatch(MyLatch);
+			CHECK_FOR_INTERRUPTS();
 		}
 
 		if (event.events & WL_SOCKET_READABLE)

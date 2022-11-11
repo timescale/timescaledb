@@ -56,3 +56,14 @@ SELECT 9, 'old trafford', 'MNU', 'MNC'
 WHERE NOT EXISTS (SELECT 1 FROM upsert);
 SELECT * FROM matches_reference ORDER BY 1,2,3,4;
 ROLLBACK;
+
+-- Test query/command cancelation with statement_timeout
+SET statement_timeout=200;
+-- Execute long-running query on data nodes
+\set ON_ERROR_STOP 0
+CALL distributed_exec('SELECT pg_sleep(5)');
+RESET statement_timeout;
+\set ON_ERROR_STOP 1
+-- Data node connections should be IDLE
+SELECT node_name, database, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1;

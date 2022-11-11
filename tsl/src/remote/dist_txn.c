@@ -178,10 +178,13 @@ dist_txn_xact_callback_abort()
 
 	remote_txn_store_foreach(store, remote_txn)
 	{
-		if (remote_txn_is_ongoing(remote_txn) && !remote_txn_abort(remote_txn))
+		const char *errmsg = NULL;
+
+		if (remote_txn_is_ongoing(remote_txn) && !remote_txn_abort(remote_txn, &errmsg))
 			elog(WARNING,
-				 "transaction rollback on data node \"%s\" failed",
-				 remote_connection_node_name(remote_txn_get_connection(remote_txn)));
+				 "transaction rollback on data node \"%s\" failed: %s",
+				 remote_connection_node_name(remote_txn_get_connection(remote_txn)),
+				 errmsg);
 	}
 }
 
