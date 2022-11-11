@@ -45,6 +45,7 @@
 
 #include <cross_module_fn.h>
 #include "jsonb_utils.h"
+#include "debug_assert.h"
 
 #define TELEMETRY_INITIAL_NUM_RUNS 12
 
@@ -334,7 +335,7 @@ bgw_job_filter_scheduled(const TupleInfo *ti, void *data)
 {
 	bool isnull;
 	Datum scheduled = slot_getattr(ti->slot, Anum_bgw_job_scheduled, &isnull);
-	Assert(!isnull);
+	Ensure(!isnull, "scheduled column was null");
 
 	return DatumGetBool(scheduled);
 }
@@ -625,6 +626,9 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 							   job->fd.scheduled ? "true" : "false")));
 		}
 	}
+
+	/* We don't care about duplicate jobs in release builds and will take the
+	 * last job */
 	Assert(list_length(jobs) <= 1);
 
 	return job;
@@ -726,18 +730,18 @@ get_job_lock_for_delete(int32 job_id)
 							&tag,
 							/* block */ true);
 	}
-	Assert(got_lock);
+	Ensure(got_lock, "unable to lock job id %d", job_id);
 }
 
 static ScanTupleResult
 bgw_job_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
-	bool isnull;
-	Datum datum = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull);
+	bool isnull_job_id;
+	Datum datum = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull_job_id);
 	int32 job_id = DatumGetInt32(datum);
 
-	Assert(!isnull);
+	Ensure(!isnull_job_id, "job id was null");
 
 	/* Also delete the bgw_stat entry */
 	ts_bgw_job_stat_delete(job_id);
@@ -1118,7 +1122,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	bool got_lock;
 
 	memcpy(&params, MyBgworkerEntry->bgw_extra, sizeof(BgwParams));
-	Assert(params.user_oid != 0 && params.job_id != 0);
+	Ensure(params.user_oid != 0 && params.job_id != 0,
+		   "job id or user oid was zero - job_id: %d, user_oid: %d",
+		   params.job_id,
+		   params.user_oid);
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
