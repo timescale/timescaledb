@@ -29,11 +29,14 @@ argument or resolve the type ambiguity by casting to the intended type.
 * #4840 Fix performance regressions in the copy code
 * #4823 Fix a crash that could occur when using nested user-defined functions with hypertables
 * #4898 Fix cagg migration failure when trying to resume
+* #4910 Fix a typo in process_compressed_data_out
 * #4955 Fix cagg migration for hypertables using timestamp without timezone
+* #4968 Check for interrupts in gapfill main loop
 
 **Thanks**
 * @jflambert for reporting a crash with nested user-defined functions.
 * @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
+* @kou for fixing a typo in process_compressed_data_out
 * @xvaara for helping reproduce a bug with bitmap scans in transparent decompression
 
 ## 2.8.1 (2022-10-06)

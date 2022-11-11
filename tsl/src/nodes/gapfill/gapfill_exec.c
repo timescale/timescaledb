@@ -11,6 +11,7 @@
 #include <catalog/pg_cast.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
+#include <miscadmin.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -810,6 +811,8 @@ gapfill_exec(CustomScanState *node)
 
 	while (true)
 	{
+		CHECK_FOR_INTERRUPTS();
+
 		/* fetch next tuple from subplan */
 		if (FETCHED_NONE == state->state)
 		{
