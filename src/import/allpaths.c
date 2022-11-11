@@ -826,10 +826,11 @@ ts_set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	check_index_predicates(root, rel);
 
 	/* Mark rel with estimated output rows, width, etc */
-	MemoryContext old = MemoryContextSwitchTo(ts_temporary_planner_context);
+	MemoryContext tmp = (MemoryContext) linitial(ts_planner_tmp_mcxt_list);
+	MemoryContext old = MemoryContextSwitchTo(tmp);
 	set_baserel_size_estimates(root, rel);
 	MemoryContextSwitchTo(old);
-	MemoryContextReset(ts_temporary_planner_context);
+	MemoryContextReset(tmp);
 }
 
 /* extracted from the same function in allpaths.c

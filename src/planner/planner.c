@@ -151,8 +151,21 @@ DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
  */
 static struct BaserelInfo_hash *ts_baserel_info = NULL;
 
-MemoryContext ts_temporary_planner_context = NULL;
-static List *ts_temporary_planner_context_list = NIL;
+/*
+ * A list of temporary memory contexts for planner use, the first one
+ * corresponding to the innermost timescaledb_planner call. Currently it is used
+ * to call selectivity estimation functions like scalararraysel, and reset after
+ * that, because they allocate a lot of memory which becomes a problem with
+ * large number of chunks.
+ * Note that we can't do with a single static variable like we do for other
+ * caches above, because timescaledb_planner is called recursively, and we are
+ * going to reset this context in the innermost calls. If we used a single
+ * context, this would also touch the state of the outermost call.
+ * PG 12 doesn't have list_delete_last(), so we're going to use the first cell
+ * as the innermost one, despite the fact that it's somewhat suboptimal in the
+ * newer PG versions where lists are implemented as arrays.
+ */
+List *ts_planner_tmp_mcxt_list = NIL;
 
 /*
  * Add information about a chunk to the baserel info cache. Used to cache the
@@ -562,9 +575,9 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 													 /* private_data = */ NULL);
 			}
 
-			ts_temporary_planner_context = AllocSetContextCreate(CurrentMemoryContext,
-				"ts temporary planner context", ALLOCSET_DEFAULT_SIZES);
-			ts_temporary_planner_context_list = lappend(ts_temporary_planner_context_list, ts_temporary_planner_context);
+			ts_planner_tmp_mcxt_list = lcons(
+				AllocSetContextCreate(CurrentMemoryContext, "ts temporary planner context", ALLOCSET_DEFAULT_SIZES),
+				ts_planner_tmp_mcxt_list);
 		}
 
 		if (prev_planner_hook != NULL)
@@ -615,19 +628,11 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 
-		if (ts_temporary_planner_context != NULL)
+		if (ts_planner_tmp_mcxt_list != NIL)
 		{
-			Assert(llast(ts_temporary_planner_context_list) == ts_temporary_planner_context);
-			MemoryContextDelete(ts_temporary_planner_context);
-			ts_temporary_planner_context_list = list_delete_last(ts_temporary_planner_context_list);
-			if (ts_temporary_planner_context_list != NIL)
-			{
-				ts_temporary_planner_context = llast(ts_temporary_planner_context_list);
-			}
-			else
-			{
-				ts_temporary_planner_context = NULL;
-			}
+			MemoryContext mcxt = (MemoryContext) linitial(ts_planner_tmp_mcxt_list);
+			MemoryContextDelete(mcxt);
+			ts_planner_tmp_mcxt_list = list_delete_first(ts_planner_tmp_mcxt_list);
 		}
 	}
 	PG_CATCH();
@@ -644,19 +649,11 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 
-		if (ts_temporary_planner_context != NULL)
+		if (ts_planner_tmp_mcxt_list != NIL)
 		{
-			Assert(llast(ts_temporary_planner_context_list) == ts_temporary_planner_context);
-			MemoryContextDelete(ts_temporary_planner_context);
-			ts_temporary_planner_context_list = list_delete_last(ts_temporary_planner_context_list);
-			if (ts_temporary_planner_context_list != NIL)
-			{
-				ts_temporary_planner_context = llast(ts_temporary_planner_context_list);
-			}
-			else
-			{
-				ts_temporary_planner_context = NULL;
-			}
+			MemoryContext mcxt = (MemoryContext) linitial(ts_planner_tmp_mcxt_list);
+			MemoryContextDelete(mcxt);
+			ts_planner_tmp_mcxt_list = list_delete_first(ts_planner_tmp_mcxt_list);
 		}
 
 		/* Pop the cache, but do not release since caches are auto-released on
