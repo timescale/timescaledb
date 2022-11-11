@@ -102,6 +102,7 @@ CROSSMODULE_WRAPPER(data_node_add);
 CROSSMODULE_WRAPPER(data_node_delete);
 CROSSMODULE_WRAPPER(data_node_attach);
 CROSSMODULE_WRAPPER(data_node_detach);
+CROSSMODULE_WRAPPER(data_node_alter);
 CROSSMODULE_WRAPPER(chunk_drop_replica);
 
 CROSSMODULE_WRAPPER(chunk_set_default_data_node);
@@ -505,6 +506,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.data_node_attach = error_no_default_fn_pg_community,
 	.data_node_ping = error_no_default_fn_pg_community,
 	.data_node_detach = error_no_default_fn_pg_community,
+	.data_node_alter = error_no_default_fn_pg_community,
 	.data_node_allow_new_chunks = error_no_default_fn_pg_community,
 	.data_node_block_new_chunks = error_no_default_fn_pg_community,
 	.distributed_exec = error_no_default_fn_pg_community,

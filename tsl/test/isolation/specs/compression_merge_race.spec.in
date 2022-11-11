@@ -53,7 +53,7 @@ setup {
    
    ALTER TABLE sensor_data SET (
    timescaledb.compress, 
-   timescaledb.compress_segmentby = 'sensor_id, cpu',
+   timescaledb.compress_segmentby = 'sensor_id',
    timescaledb.compress_chunk_time_interval = '2 hours');
 }
 

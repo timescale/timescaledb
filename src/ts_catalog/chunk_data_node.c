@@ -106,14 +106,15 @@ chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	Form_chunk_data_node form = (Form_chunk_data_node) GETSTRUCT(tuple);
+	ForeignServer *server;
 	ChunkDataNode *chunk_data_node;
 	MemoryContext old;
 
+	server = GetForeignServerByName(NameStr(form->node_name), false);
 	old = MemoryContextSwitchTo(ti->mctx);
 	chunk_data_node = palloc(sizeof(ChunkDataNode));
 	memcpy(&chunk_data_node->fd, form, sizeof(FormData_chunk_data_node));
-	chunk_data_node->foreign_server_oid =
-		get_foreign_server_oid(NameStr(form->node_name), /* missing_ok = */ false);
+	chunk_data_node->foreign_server_oid = server->serverid;
 	*nodes = lappend(*nodes, chunk_data_node);
 	MemoryContextSwitchTo(old);
 
@@ -338,4 +339,17 @@ ts_chunk_data_nodes_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(chunk_id));
+}
+
+void
+ts_chunk_data_nodes_scan_iterator_set_node_name(ScanIterator *it, const char *node_name)
+{
+	it->ctx.index =
+		catalog_get_index(ts_catalog_get(), CHUNK_DATA_NODE, CHUNK_DATA_NODE_NODE_NAME_IDX);
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_chunk_data_node_name_idx_node_name,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(node_name));
 }

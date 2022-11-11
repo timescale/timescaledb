@@ -2711,7 +2711,16 @@ ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cub
 			ts_hypercube_get_slice_by_dimension_id(cube, space_dim->fd.id);
 		const DimensionPartition *dp =
 			ts_dimension_partition_find(space_dim->dimension_partitions, slice->fd.range_start);
-		chunk_data_nodes = dp->data_nodes;
+		ListCell *lc;
+
+		/* Filter out data nodes that aren't available */
+		foreach (lc, dp->data_nodes)
+		{
+			char *node_name = lfirst(lc);
+
+			if (ts_data_node_is_available(node_name))
+				chunk_data_nodes = lappend(chunk_data_nodes, node_name);
+		}
 	}
 	else
 	{
@@ -2758,6 +2767,9 @@ typedef bool (*hypertable_data_node_filter)(const HypertableDataNode *hdn);
 static bool
 filter_non_blocked_data_nodes(const HypertableDataNode *node)
 {
+	if (!ts_data_node_is_available(NameStr(node->fd.node_name)))
+		return false;
+
 	return !node->fd.block_chunks;
 }
 

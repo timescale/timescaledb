@@ -1302,3 +1302,26 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 	ReleaseSysCache(source_tuple);
 	table_close(class_rel, RowExclusiveLock);
 }
+
+bool
+ts_data_node_is_available_by_server(const ForeignServer *server)
+{
+	ListCell *lc;
+
+	foreach (lc, server->options)
+	{
+		DefElem *elem = lfirst(lc);
+
+		if (strcmp(elem->defname, "available") == 0)
+			return defGetBoolean(elem);
+	}
+
+	/* Default to available if option is not yet added */
+	return true;
+}
+
+bool
+ts_data_node_is_available(const char *name)
+{
+	return ts_data_node_is_available_by_server(GetForeignServerByName(name, false));
+}

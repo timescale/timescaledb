@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#include "cache.h"
 #include <postgres.h>
-
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
@@ -17,22 +15,30 @@
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <compat/compat.h>
+#include <executor/tuptable.h>
 #include <extension.h>
+#include <fmgr.h>
 #include <funcapi.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
+#include <nodes/nodes.h>
+#include <nodes/value.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
+#include <utils/palloc.h>
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
 #include "config.h"
 #include "extension.h"
+#include "cache.h"
+#include "chunk.h"
 #include "fdw/fdw.h"
 #include "remote/async.h"
 #include "remote/connection.h"
@@ -45,7 +51,8 @@
 #include "dist_util.h"
 #include "utils/uuid.h"
 #include "mb/pg_wchar.h"
-#include "chunk.h"
+#include "scan_iterator.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_data_node.h"
 #include "ts_catalog/dimension_partition.h"
 #include "ts_catalog/hypertable_data_node.h"
@@ -678,6 +685,16 @@ get_server_port()
 	return pg_strtoint32(portstr);
 }
 
+static void
+validate_data_node_port(int port)
+{
+	if (port < 1 || port > PG_UINT16_MAX)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 (errmsg("invalid port number %d", port),
+				  errhint("The port number must be between 1 and %u.", PG_UINT16_MAX))));
+}
+
 /* set_distid may need to be false for some otherwise invalid configurations
  * that are useful for testing */
 static Datum
@@ -718,11 +735,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 (errmsg("data node name cannot be NULL"))));
 
-	if (port < 1 || port > PG_UINT16_MAX)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 (errmsg("invalid port number %d", port),
-				  errhint("The port number must be between 1 and %u.", PG_UINT16_MAX))));
+	validate_data_node_port(port);
 
 	result = get_database_info(MyDatabaseId, &database);
 	Assert(result);
@@ -1134,8 +1147,8 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			foreach (cs_lc, chunk_data_nodes)
 			{
 				ChunkDataNode *cdn = lfirst(cs_lc);
-
-				chunk_update_foreign_server_if_needed(cdn->fd.chunk_id, cdn->foreign_server_oid);
+				const Chunk *chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
+				chunk_update_foreign_server_if_needed(chunk, cdn->foreign_server_oid, false);
 				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																	NameStr(cdn->fd.node_name));
 			}
@@ -1413,6 +1426,240 @@ data_node_detach(PG_FUNCTION_ARGS)
 													 OP_DETACH);
 
 	PG_RETURN_INT32(removed);
+}
+
+enum Anum_show_conn
+{
+	Anum_alter_data_node_node_name = 1,
+	Anum_alter_data_node_host,
+	Anum_alter_data_node_port,
+	Anum_alter_data_node_database,
+	Anum_alter_data_node_available,
+	_Anum_alter_data_node_max,
+};
+
+#define Natts_alter_data_node (_Anum_alter_data_node_max - 1)
+
+static HeapTuple
+create_alter_data_node_tuple(TupleDesc tupdesc, const char *node_name, List *options)
+{
+	Datum values[Natts_alter_data_node];
+	bool nulls[Natts_alter_data_node] = { false };
+	ListCell *lc;
+
+	MemSet(nulls, false, sizeof(nulls));
+
+	values[AttrNumberGetAttrOffset(Anum_alter_data_node_node_name)] = CStringGetDatum(node_name);
+
+	foreach (lc, options)
+	{
+		DefElem *elem = lfirst(lc);
+
+		if (strcmp("host", elem->defname) == 0)
+		{
+			values[AttrNumberGetAttrOffset(Anum_alter_data_node_host)] =
+				CStringGetTextDatum(defGetString(elem));
+		}
+		else if (strcmp("port", elem->defname) == 0)
+		{
+			int port = atoi(defGetString(elem));
+			values[AttrNumberGetAttrOffset(Anum_alter_data_node_port)] = Int32GetDatum(port);
+		}
+		else if (strcmp("dbname", elem->defname) == 0)
+		{
+			values[AttrNumberGetAttrOffset(Anum_alter_data_node_database)] =
+				CStringGetDatum(defGetString(elem));
+		}
+		else if (strcmp("available", elem->defname) == 0)
+		{
+			values[AttrNumberGetAttrOffset(Anum_alter_data_node_available)] =
+				BoolGetDatum(defGetBoolean(elem));
+		}
+	}
+
+	return heap_form_tuple(tupdesc, values, nulls);
+}
+
+/*
+ * Switch data node to use for queries on chunks.
+ *
+ * When available=false it will switch from the given data node to another
+ * one, but only if the data node is currently used for queries on the chunk.
+ *
+ * When available=true it will switch to the given data node, if it is
+ * "primary" for the chunk (according to the current partitioning
+ * configuration).
+ */
+static void
+switch_data_node_on_chunks(const ForeignServer *datanode, bool available)
+{
+	unsigned int failed_update_count = 0;
+	ScanIterator it = ts_chunk_data_nodes_scan_iterator_create(CurrentMemoryContext);
+	ts_chunk_data_nodes_scan_iterator_set_node_name(&it, datanode->servername);
+
+	/* Scan for chunks that reference the given data node */
+	ts_scanner_foreach(&it)
+	{
+		TupleTableSlot *slot = ts_scan_iterator_slot(&it);
+		bool PG_USED_FOR_ASSERTS_ONLY isnull = false;
+		Datum chunk_id = slot_getattr(slot, Anum_chunk_data_node_chunk_id, &isnull);
+
+		Assert(!isnull);
+
+		const Chunk *chunk = ts_chunk_get_by_id(DatumGetInt32(chunk_id), true);
+		if (!chunk_update_foreign_server_if_needed(chunk, datanode->serverid, available))
+			failed_update_count++;
+	}
+
+	if (!available && failed_update_count > 0)
+		elog(WARNING, "could not switch data node on %u chunks", failed_update_count);
+
+	ts_scan_iterator_close(&it);
+}
+
+/*
+ * Append new data node options.
+ *
+ * When setting options via AlterForeignServer(), the defelem list must
+ * account for whether the an option already exists (is set) in the current
+ * options or it is newly added. These are different operations on a foreign
+ * server.
+ *
+ * Any options that already exist are purged from the current_options list so
+ * that only the options not set or added remains. This list can be merged
+ * with the new options to produce the full list of options (new and old).
+ */
+static List *
+append_data_node_option(List *new_options, List **current_options, const char *name, Node *value)
+{
+	DefElem *elem;
+	ListCell *lc;
+	bool option_found = false;
+#if PG13_LT
+	ListCell *prev_lc = NULL;
+#endif
+
+	foreach (lc, *current_options)
+	{
+		elem = lfirst(lc);
+
+		if (strcmp(elem->defname, name) == 0)
+		{
+			option_found = true;
+			/* Remove the option which is replaced so that the remaining
+			 * options can be merged later into an updated list */
+#if PG13_GE
+			*current_options = list_delete_cell(*current_options, lc);
+#else
+			*current_options = list_delete_cell(*current_options, lc, prev_lc);
+#endif
+			break;
+		}
+#if PG13_LT
+		prev_lc = lc;
+#endif
+	}
+
+	elem = makeDefElemExtended(NULL,
+							   pstrdup(name),
+							   value,
+							   option_found ? DEFELEM_SET : DEFELEM_ADD,
+							   -1);
+	return lappend(new_options, elem);
+}
+
+/*
+ * Alter a data node.
+ *
+ * Change the configuration of a data node, including host, port, and
+ * database.
+ *
+ * Can also be used to mark a data node "unavailable", which ensures it is no
+ * longer used for reads as long as there are replica chunks on other data
+ * nodes to use for reads instead. If it is not possible to fail over all
+ * chunks, a warning will be raised.
+ */
+Datum
+data_node_alter(PG_FUNCTION_ARGS)
+{
+	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+	const char *host = PG_ARGISNULL(1) ? NULL : TextDatumGetCString(PG_GETARG_TEXT_P(1));
+	const char *database = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
+	int port = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT32(3);
+	bool available_is_null = PG_ARGISNULL(4);
+	bool available = available_is_null ? true : PG_GETARG_BOOL(4);
+	ForeignServer *server = NULL;
+	List *current_options = NIL;
+	List *options = NIL;
+	TupleDesc tupdesc;
+	AlterForeignServerStmt alter_server_stmt = {
+		.type = T_AlterForeignServerStmt,
+		.servername = node_name ? pstrdup(node_name) : NULL,
+		.has_version = false,
+		.version = NULL,
+		.options = NIL,
+	};
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	/* Check if a data node with the given name actually exists, or raise an error. */
+	server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false /* missing_ok */);
+
+	if (host == NULL && database == NULL && port == -1 && available_is_null)
+		PG_RETURN_DATUM(
+			HeapTupleGetDatum(create_alter_data_node_tuple(tupdesc, node_name, server->options)));
+
+	current_options = list_copy(server->options);
+
+	if (host != NULL)
+		options = append_data_node_option(options,
+										  &current_options,
+										  "host",
+										  (Node *) makeString((char *) host));
+
+	if (database != NULL)
+		options = append_data_node_option(options,
+										  &current_options,
+										  "dbname",
+										  (Node *) makeString((char *) database));
+
+	if (port != -1)
+	{
+		validate_data_node_port(port);
+		options =
+			append_data_node_option(options, &current_options, "port", (Node *) makeInteger(port));
+	}
+
+	if (!available_is_null)
+		options = append_data_node_option(options,
+										  &current_options,
+										  "available",
+										  (Node *) makeString(available ? "true" : "false"));
+
+	alter_server_stmt.options = options;
+	AlterForeignServer(&alter_server_stmt);
+
+	/* Make changes to the data node (foreign server object) visible so that
+	 * the changes are present when we switch "primary" data node on chunks */
+	CommandCounterIncrement();
+
+	/* Update the currently used query data node on all affected chunks to
+	 * reflect the new status of the data node */
+	switch_data_node_on_chunks(server, available);
+
+	/* Add updated options last as they will take precedence over old options
+	 * when creating the result tuple. */
+	options = list_concat(current_options, options);
+
+	PG_RETURN_DATUM(HeapTupleGetDatum(create_alter_data_node_tuple(tupdesc, node_name, options)));
 }
 
 /*

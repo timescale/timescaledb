@@ -10,6 +10,7 @@
 #include <access/htup_details.h>
 #include <catalog/pg_proc.h>
 #include <common/int.h>
+#include <foreign/foreign.h>
 #include <nodes/pathnodes.h>
 #include <nodes/extensible.h>
 #include <utils/datetime.h>
@@ -201,5 +202,7 @@ extern TSDLLEXPORT void ts_alter_table_with_event_trigger(Oid relid, Node *cmd, 
 														  bool recurse);
 extern TSDLLEXPORT void ts_copy_relation_acl(const Oid source_relid, const Oid target_relid,
 											 const Oid owner_id);
+extern TSDLLEXPORT bool ts_data_node_is_available_by_server(const ForeignServer *server);
+extern TSDLLEXPORT bool ts_data_node_is_available(const char *node_name);
 
 #endif /* TIMESCALEDB_UTILS_H */

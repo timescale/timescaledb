@@ -305,3 +305,7 @@ GRANT SELECT ON _timescaledb_catalog.dimension_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.dimension TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.dimension table --
+
+-- changes related to alter_data_node()
+DROP INDEX _timescaledb_catalog.chunk_data_node_node_name_idx;
+DROP FUNCTION @extschema@.alter_data_node;

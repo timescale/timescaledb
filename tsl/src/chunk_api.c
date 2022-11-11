@@ -1767,6 +1767,6 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	 * This chunk might have this data node as primary, change that association
 	 * if so. Then delete the chunk_id and node_name association.
 	 */
-	chunk_update_foreign_server_if_needed(chunk->fd.id, serverid);
+	chunk_update_foreign_server_if_needed(chunk, serverid, false);
 	ts_chunk_data_node_delete_by_chunk_id_and_node_name(chunk->fd.id, node_name);
 }

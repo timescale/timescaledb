@@ -216,3 +216,12 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_start             "any",
     window_end               "any"
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
+
+CREATE OR REPLACE FUNCTION @extschema@.alter_data_node(
+    node_name              NAME,
+    host                   TEXT = NULL,
+    database               NAME = NULL,
+    port                   INTEGER = NULL,
+	available              BOOLEAN = NULL
+) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, available BOOLEAN)
+AS '@MODULE_PATHNAME@', 'ts_data_node_alter' LANGUAGE C VOLATILE;

@@ -35,7 +35,7 @@ setup {
 
    SELECT count(*) FROM sensor_data;
    
-   ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby = 'sensor_id, cpu');
+   ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby = 'sensor_id');
 }
 
 teardown {

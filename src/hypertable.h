@@ -153,7 +153,8 @@ extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(const Hypertable *ht,
 																	  List *constraint_list);
-extern List *ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube);
+extern TSDLLEXPORT List *ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht,
+															   const Hypercube *cube);
 extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(const Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(const Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(const Hypertable *ht,

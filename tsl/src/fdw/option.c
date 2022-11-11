@@ -132,6 +132,11 @@ option_validate(List *options_list, Oid catalog)
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						 errmsg("%s requires a non-negative integer value", def->defname)));
 		}
+		else if (strcmp(def->defname, "available") == 0)
+		{
+			/* This will throw an error if not a boolean */
+			defGetBoolean(def);
+		}
 	}
 }
 
@@ -154,6 +159,7 @@ init_ts_fdw_options(void)
 		/* fetch_size is available on both foreign data wrapper and server */
 		{ "fetch_size", ForeignDataWrapperRelationId },
 		{ "fetch_size", ForeignServerRelationId },
+		{ "available", ForeignServerRelationId },
 		{ NULL, InvalidOid }
 	};
 
