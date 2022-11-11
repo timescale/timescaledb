@@ -11,6 +11,7 @@
 #include <executor/nodeAgg.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/pg_list.h>
 #include <nodes/plannodes.h>
 #include <optimizer/appendinfo.h>
 #include <optimizer/clauses.h>
