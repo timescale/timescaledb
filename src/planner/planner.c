@@ -575,9 +575,16 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 													 /* private_data = */ NULL);
 			}
 
-			ts_planner_tmp_mcxt_list = lcons(
-				AllocSetContextCreate(CurrentMemoryContext, "ts temporary planner context", ALLOCSET_DEFAULT_SIZES),
-				ts_planner_tmp_mcxt_list);
+			/*
+			 * Create a temporary memory context that can optionally be used by
+			 * the planner at this level of timescaledb_planner(). The inner
+			 * recursive invocations of timescaledb_planner() will also create
+			 * their own temporary contexts.
+			 */
+			MemoryContext mcxt = AllocSetContextCreate(CurrentMemoryContext,
+													   "ts temporary planner context",
+													   ALLOCSET_DEFAULT_SIZES);
+			ts_planner_tmp_mcxt_list = lcons(mcxt, ts_planner_tmp_mcxt_list);
 		}
 
 		if (prev_planner_hook != NULL)
