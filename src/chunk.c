@@ -71,8 +71,6 @@ TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
-TS_FUNCTION_INFO_V1(ts_chunk_freeze_chunk);
-TS_FUNCTION_INFO_V1(ts_chunk_unfreeze_chunk);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
@@ -3549,6 +3547,17 @@ ts_chunk_unset_frozen(Chunk *chunk)
 #endif
 }
 
+bool
+ts_chunk_is_frozen(Chunk *chunk)
+{
+#if PG14_GE
+	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
+#else
+	elog(ERROR, "freeze chunk supported only for PG14 or greater");
+	return false;
+#endif
+}
+
 #if PG14_GE
 /* only caller is ts_chunk_unset_frozen. This code is in PG14 block as we run into
  * defined but unsed error in CI/CD builds for PG < 14.
@@ -4119,59 +4128,6 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 	}
 
 	return ht;
-}
-
-/* Data in a frozen chunk cannot be modified. So any operation
- * that rewrites data for a frozen chunk will be blocked.
- * Note that a frozen chunk can still be dropped.
- */
-Datum
-ts_chunk_freeze_chunk(PG_FUNCTION_ARGS)
-{
-	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk != NULL);
-	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on distributed chunk or foreign table \"%s\"",
-						get_rel_name(chunk_relid))));
-	}
-	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
-		PG_RETURN_BOOL(true);
-	/* get Share lock. will wait for other concurrent transactions that are
-	 * modifying the chunk. Does not block SELECTs on the chunk.
-	 * Does not block other DDL on the chunk table.
-	 */
-	DEBUG_WAITPOINT("freeze_chunk_before_lock");
-	LockRelationOid(chunk_relid, ShareLock);
-	bool ret = ts_chunk_set_frozen(chunk);
-	PG_RETURN_BOOL(ret);
-}
-
-Datum
-ts_chunk_unfreeze_chunk(PG_FUNCTION_ARGS)
-{
-	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk != NULL);
-	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on distributed chunk or foreign table \"%s\"",
-						get_rel_name(chunk_relid))));
-	}
-	if (!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
-		PG_RETURN_BOOL(true);
-	/* This is a previously frozen chunk. Only selects are permitted on this chunk.
-	 * This changes the status in the catalog to allow previously blocked operations.
-	 */
-	bool ret = ts_chunk_unset_frozen(chunk);
-	PG_RETURN_BOOL(ret);
 }
 
 Datum
