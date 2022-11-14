@@ -14,6 +14,8 @@ extern bool chunk_update_foreign_server_if_needed(const Chunk *chunk, Oid data_n
 												  bool available);
 extern Datum chunk_set_default_data_node(PG_FUNCTION_ARGS);
 extern Datum chunk_drop_replica(PG_FUNCTION_ARGS);
+extern Datum chunk_freeze_chunk(PG_FUNCTION_ARGS);
+extern Datum chunk_unfreeze_chunk(PG_FUNCTION_ARGS);
 extern int chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type);
 extern Datum chunk_create_replica_table(PG_FUNCTION_ARGS);
 

@@ -191,6 +191,7 @@ extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
