@@ -457,14 +457,20 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	}
 
 	/*
-	 * Compute the selectivity and cost of the local_conds, so we don't have
-	 * to do it over again for each path.  The best we can do for these
-	 * conditions is to estimate selectivity on the basis of local statistics.
+	 * Compute the selectivity and cost of the local and remote conditions, so
+	 * that we don't have to do it over again for each path. The best we can do
+	 * for these conditions is to estimate selectivity on the basis of local
+	 * statistics.
 	 */
 	fpinfo->local_conds_sel =
 		clauselist_selectivity(root, fpinfo->local_conds, rel->relid, JOIN_INNER, NULL);
 
 	cost_qual_eval(&fpinfo->local_conds_cost, fpinfo->local_conds, root);
+
+	fpinfo->remote_conds_sel =
+		clauselist_selectivity(root, fpinfo->remote_conds, rel->relid, JOIN_INNER, NULL);
+
+	cost_qual_eval(&fpinfo->remote_conds_cost, fpinfo->remote_conds, root);
 
 	/*
 	 * Set cached relation costs to some negative value, so that we can detect

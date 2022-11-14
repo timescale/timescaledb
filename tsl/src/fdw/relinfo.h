@@ -68,6 +68,10 @@ typedef struct TsFdwRelInfo
 	QualCost local_conds_cost;
 	Selectivity local_conds_sel;
 
+	/* Cost and selectivity of remote_conds. */
+	QualCost remote_conds_cost;
+	Selectivity remote_conds_sel;
+
 	/* Selectivity of join conditions */
 	Selectivity joinclause_sel;
 

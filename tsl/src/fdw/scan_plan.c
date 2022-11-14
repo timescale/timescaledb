@@ -75,7 +75,7 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 			 * checking ec_has_volatile here saves some cycles.
 			 */
 			if (pathkey_ec->ec_has_volatile || !(em_expr = find_em_expr_for_rel(pathkey_ec, rel)) ||
-				!is_foreign_expr(root, rel, em_expr))
+				!ts_is_foreign_expr(root, rel, em_expr))
 			{
 				query_pathkeys_ok = false;
 				break;
@@ -490,7 +490,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 				remote_where = lappend(remote_where, rinfo->clause);
 			else if (list_member_ptr(fpinfo->local_conds, rinfo))
 				local_exprs = lappend(local_exprs, rinfo->clause);
-			else if (is_foreign_expr(root, rel, rinfo->clause))
+			else if (ts_is_foreign_expr(root, rel, rinfo->clause))
 				remote_where = lappend(remote_where, rinfo->clause);
 			else
 				local_exprs = lappend(local_exprs, rinfo->clause);
@@ -706,7 +706,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 			 * If any GROUP BY expression is not shippable, then we cannot
 			 * push down aggregation to the data node.
 			 */
-			if (!is_foreign_expr(root, grouped_rel, expr))
+			if (!ts_is_foreign_expr(root, grouped_rel, expr))
 				return false;
 
 			/*
@@ -726,7 +726,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 			/*
 			 * Non-grouping expression we need to compute.  Is it shippable?
 			 */
-			if (is_foreign_expr(root, grouped_rel, expr))
+			if (ts_is_foreign_expr(root, grouped_rel, expr))
 			{
 				/* Yes, so add to tlist as-is; OK to suppress duplicates */
 				tlist = add_to_flat_tlist(tlist, list_make1(expr));
@@ -740,7 +740,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 				 * If any aggregate expression is not shippable, then we
 				 * cannot push down aggregation to the data node.
 				 */
-				if (!is_foreign_expr(root, grouped_rel, (Expr *) aggvars))
+				if (!ts_is_foreign_expr(root, grouped_rel, (Expr *) aggvars))
 					return false;
 
 				/*
@@ -801,7 +801,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 											 grouped_rel->relids,
 											 NULL,
 											 NULL);
-			if (is_foreign_expr(root, grouped_rel, expr))
+			if (ts_is_foreign_expr(root, grouped_rel, expr))
 				fpinfo->remote_conds = lappend(fpinfo->remote_conds, rinfo);
 			else
 				fpinfo->local_conds = lappend(fpinfo->local_conds, rinfo);
@@ -837,7 +837,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 			 */
 			if (IsA(expr, Aggref))
 			{
-				if (!is_foreign_expr(root, grouped_rel, expr))
+				if (!ts_is_foreign_expr(root, grouped_rel, expr))
 					return false;
 
 				tlist = add_to_flat_tlist(tlist, list_make1(expr));
