@@ -173,6 +173,7 @@ SELECT datname, usename, application_name, state, query, wait_event_type, wait_e
 SET client_min_messages TO WARNING;
 SELECT delete_job(:job_id);
 RESET client_min_messages;
+SELECT count(*) FROM wait_for_logentry(:job_id);
 SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 
 --
