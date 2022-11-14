@@ -569,6 +569,55 @@ SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
  Thu May 05 01:00:00 2022 PDT |    222 |   222
 (1 row)
 
+--TEST GUC variable to enable/disable OSM chunk
+SET timescaledb.enable_tiered_reads=false;
+EXPLAIN (COSTS OFF) SELECT * from ht_try;
+          QUERY PLAN           
+-------------------------------
+ Seq Scan on _hyper_5_10_chunk
+(1 row)
+
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
+   Index Cond: (timec > 'Sat Jan 01 01:00:00 2022 PST'::timestamp with time zone)
+(2 rows)
+
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
+   Index Cond: (timec < 'Sun Jan 01 01:00:00 2023 PST'::timestamp with time zone)
+(2 rows)
+
+SET timescaledb.enable_tiered_reads=true;
+EXPLAIN (COSTS OFF) SELECT * from ht_try;
+              QUERY PLAN               
+---------------------------------------
+ Append
+   ->  Foreign Scan on child_fdw_table
+   ->  Seq Scan on _hyper_5_10_chunk
+(3 rows)
+
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Append
+   ->  Foreign Scan on child_fdw_table
+   ->  Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
+         Index Cond: (timec > 'Sat Jan 01 01:00:00 2022 PST'::timestamp with time zone)
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Append
+   ->  Foreign Scan on child_fdw_table
+   ->  Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
+         Index Cond: (timec < 'Sun Jan 01 01:00:00 2023 PST'::timestamp with time zone)
+(4 rows)
+
 --TEST insert into a OSM chunk fails. actually any insert will fail. But we just need
 -- to mock the hook and make sure the timescaledb code works correctly.
 SELECT ts_setup_osm_hook();
