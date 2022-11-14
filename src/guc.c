@@ -73,6 +73,7 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
+bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_async_append = true;
@@ -285,6 +286,18 @@ _guc_init(void)
 							 "Enable the optimization that combines different chunks belonging to "
 							 "the same hypertable into a single query per data_node",
 							 &ts_guc_enable_per_data_node_queries,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_tiered_reads",
+							 "Enable tiered data reads",
+							 "Enable reading of tiered data by including a foreign table "
+							 "representing the data in the object storage into the query plan",
+							 &ts_guc_enable_osm_reads,
 							 true,
 							 PGC_USERSET,
 							 0,

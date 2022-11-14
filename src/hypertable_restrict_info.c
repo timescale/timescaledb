@@ -20,6 +20,7 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "partitioning.h"
 #include "scan_iterator.h"
@@ -664,6 +665,18 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 		 * No restrictions on hyperspace. Just enumerate all the chunks.
 		 */
 		chunk_ids = ts_chunk_get_chunk_ids_by_hypertable_id(ht->fd.id);
+
+		/*
+		 * If the hypertable has an OSM chunk it would end up in the list
+		 * as well. We need to remove it when OSM reads are disabled via GUC
+		 * variable.
+		 */
+		if (!ts_guc_enable_osm_reads)
+		{
+			int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+
+			chunk_ids = list_delete_int(chunk_ids, osm_chunk_id);
+		}
 	}
 	else
 	{
@@ -686,16 +699,25 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 		}
 
 		/*
-		 * Always include the OSM chunk if we have one. It has some virtual
-		 * dimension slices (at the moment, (+inf, +inf) slice for time, but it
-		 * used to be different and might change again.) So sometimes it will
-		 * match and sometimes it won't, so we have to check if it's already
-		 * there not to add a duplicate.
+		 * Always include the OSM chunk if we have one and OSM reads are
+		 * enabled. It has some virtual dimension slices (at the moment,
+		 * (+inf, +inf) slice for time, but it used to be different and might
+		 * change again.) So sometimes it will match and sometimes it won't,
+		 * so we have to check if it's already there not to add a duplicate.
+		 * Similarly if OSM reads are disabled then we exclude the OSM chunk.
 		 */
 		int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
-		if (osm_chunk_id != 0 && !list_member_int(chunk_ids, osm_chunk_id))
+
+		if (osm_chunk_id != INVALID_CHUNK_ID)
 		{
-			chunk_ids = lappend_int(chunk_ids, osm_chunk_id);
+			if (!ts_guc_enable_osm_reads)
+			{
+				chunk_ids = list_delete_int(chunk_ids, osm_chunk_id);
+			}
+			else
+			{
+				chunk_ids = list_append_unique_int(chunk_ids, osm_chunk_id);
+			}
 		}
 	}
 

@@ -11,6 +11,7 @@
 
 #include "debug_point.h"
 #include "dimension_vector.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypercube.h"
 #include "scan_iterator.h"
