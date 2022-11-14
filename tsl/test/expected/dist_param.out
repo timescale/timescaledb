@@ -16,6 +16,7 @@ select 1 from add_data_node('data_node_1', host => 'localhost',
 (1 row)
 
 grant usage on foreign server data_node_1 to public;
+grant create on schema public to :ROLE_1;
 set role :ROLE_1;
 reset client_min_messages;
 -- helper function: float -> pseudorandom float [0..1].

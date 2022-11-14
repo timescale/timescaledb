@@ -789,6 +789,7 @@ SELECT node_name, database, node_created, database_created, extension_created FR
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 CREATE TABLE hyper1 (time timestamptz, location int, temp float);
