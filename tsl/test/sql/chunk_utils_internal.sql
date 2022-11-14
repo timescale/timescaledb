@@ -344,6 +344,16 @@ SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 0
 
 SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
 
+--TEST GUC variable to enable/disable OSM chunk
+SET timescaledb.enable_tiered_reads=false;
+EXPLAIN (COSTS OFF) SELECT * from ht_try;
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+SET timescaledb.enable_tiered_reads=true;
+EXPLAIN (COSTS OFF) SELECT * from ht_try;
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+
 --TEST insert into a OSM chunk fails. actually any insert will fail. But we just need
 -- to mock the hook and make sure the timescaledb code works correctly.
 
