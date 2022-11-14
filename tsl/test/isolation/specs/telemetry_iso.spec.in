@@ -20,6 +20,9 @@ setup {
 
 teardown {
   DROP TABLE compress;
+  DROP TABLE compressed_chunks;
+  DROP TABLE decompressed_chunks;
+  DROP TABLE telemetry;
 }
 
 session "s1"
