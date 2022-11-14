@@ -13,6 +13,7 @@ drop database if exists :"DN_DBNAME_1";
 select 1 from add_data_node('data_node_1', host => 'localhost',
                             database => :'DN_DBNAME_1');
 grant usage on foreign server data_node_1 to public;
+grant create on schema public to :ROLE_1;
 set role :ROLE_1;
 reset client_min_messages;
 

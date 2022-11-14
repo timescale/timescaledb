@@ -153,7 +153,7 @@ m["include"].append(
             "snapshot": "snapshot",
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON",
             # below tests are tracked as part of #4838
-            "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15 bgw_custom cagg_dump' "
+            "installcheck_args": "SKIPS='003_connections_privs 001_simple_multinode 004_multinode_rdwr_1pc data_node_bootstrap dist_hypertable-15 bgw_custom cagg_dump dist_move_chunk' "
             # below tests are tracked as part of #4835
             "IGNORES='telemetry_stats dist_query dist_partial_agg plan_hashagg partialize_finalize dist_fetcher_type dist_remote_error jit-15 "
             # below tests are tracked as part of #4837
