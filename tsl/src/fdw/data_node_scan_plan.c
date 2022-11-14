@@ -22,23 +22,27 @@
 #include <parser/parsetree.h>
 #include <utils/memutils.h>
 
+#include <math.h>
+
+#include <compat/compat.h>
+#include <debug.h>
+#include <debug_guc.h>
+#include <dimension.h>
 #include <export.h>
+#include <func_cache.h>
 #include <hypertable_cache.h>
-#include <planner.h>
 #include <import/allpaths.h>
 #include <import/planner.h>
-#include <func_cache.h>
-#include <dimension.h>
-#include <compat/compat.h>
-#include <debug_guc.h>
-#include <debug.h>
+#include <planner.h>
 
-#include "relinfo.h"
-#include "data_node_chunk_assignment.h"
-#include "scan_plan.h"
 #include "data_node_scan_plan.h"
+
+#include "data_node_chunk_assignment.h"
 #include "data_node_scan_exec.h"
+#include "deparse.h"
 #include "fdw_utils.h"
+#include "relinfo.h"
+#include "scan_plan.h"
 
 /*
  * DataNodeScan is a custom scan implementation for scanning hypertables on
@@ -256,6 +260,43 @@ build_data_node_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 	return part_rels;
 }
 
+/* Callback argument for ts_ec_member_matches_foreign */
+typedef struct
+{
+	Expr *current;		/* current expr, or NULL if not yet found */
+	List *already_used; /* expressions already dealt with */
+} ts_ec_member_foreign_arg;
+
+/*
+ * Detect whether we want to process an EquivalenceClass member.
+ *
+ * This is a callback for use by generate_implied_equalities_for_column.
+ */
+static bool
+ts_ec_member_matches_foreign(PlannerInfo *root, RelOptInfo *rel, EquivalenceClass *ec,
+							 EquivalenceMember *em, void *arg)
+{
+	ts_ec_member_foreign_arg *state = (ts_ec_member_foreign_arg *) arg;
+	Expr *expr = em->em_expr;
+
+	/*
+	 * If we've identified what we're processing in the current scan, we only
+	 * want to match that expression.
+	 */
+	if (state->current != NULL)
+		return equal(expr, state->current);
+
+	/*
+	 * Otherwise, ignore anything we've already processed.
+	 */
+	if (list_member(state->already_used, expr))
+		return false;
+
+	/* This is the new target to process. */
+	state->current = expr;
+	return true;
+}
+
 static void
 add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 {
@@ -282,6 +323,222 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 
 	/* Add paths with pathkeys */
 	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, data_node_scan_path_create);
+
+	/*
+	 * Thumb through all join clauses for the rel to identify which outer
+	 * relations could supply one or more safe-to-send-to-remote join clauses.
+	 * We'll build a parameterized path for each such outer relation.
+	 *
+	 * Note that in case we have multiple local tables, this outer relation
+	 * here may be the result of joining the local tables together. For an
+	 * example, see the multiple join in the dist_param test.
+	 *
+	 * It's convenient to represent each candidate outer relation by the
+	 * ParamPathInfo node for it.  We can then use the ppi_clauses list in the
+	 * ParamPathInfo node directly as a list of the interesting join clauses for
+	 * that rel.  This takes care of the possibility that there are multiple
+	 * safe join clauses for such a rel, and also ensures that we account for
+	 * unsafe join clauses that we'll still have to enforce locally (since the
+	 * parameterized-path machinery insists that we handle all movable clauses).
+	 */
+	List *ppi_list = NIL;
+	ListCell *lc;
+	foreach (lc, baserel->joininfo)
+	{
+		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+		Relids required_outer;
+		ParamPathInfo *param_info;
+
+		/* Check if clause can be moved to this rel */
+		if (!join_clause_is_movable_to(rinfo, baserel))
+		{
+			continue;
+		}
+
+		/* See if it is safe to send to remote */
+		if (!ts_is_foreign_expr(root, baserel, rinfo->clause))
+		{
+			continue;
+		}
+
+		/* Calculate required outer rels for the resulting path */
+		required_outer = bms_union(rinfo->clause_relids, baserel->lateral_relids);
+		/* We do not want the data node rel itself listed in required_outer */
+		required_outer = bms_del_member(required_outer, baserel->relid);
+
+		/*
+		 * required_outer probably can't be empty here, but if it were, we
+		 * couldn't make a parameterized path.
+		 */
+		if (bms_is_empty(required_outer))
+		{
+			continue;
+		}
+
+		/* Get the ParamPathInfo */
+		param_info = get_baserel_parampathinfo(root, baserel, required_outer);
+		Assert(param_info != NULL);
+
+		/*
+		 * Add it to list unless we already have it.  Testing pointer equality
+		 * is OK since get_baserel_parampathinfo won't make duplicates.
+		 */
+		ppi_list = list_append_unique_ptr(ppi_list, param_info);
+	}
+
+	/*
+	 * The above scan examined only "generic" join clauses, not those that
+	 * were absorbed into EquivalenceClauses.  See if we can make anything out
+	 * of EquivalenceClauses.
+	 */
+	if (baserel->has_eclass_joins)
+	{
+		/*
+		 * We repeatedly scan the eclass list looking for column references
+		 * (or expressions) belonging to the data node rel.  Each time we find
+		 * one, we generate a list of equivalence joinclauses for it, and then
+		 * see if any are safe to send to the remote.  Repeat till there are
+		 * no more candidate EC members.
+		 */
+		ts_ec_member_foreign_arg arg;
+
+		arg.already_used = NIL;
+		for (;;)
+		{
+			List *clauses;
+
+			/* Make clauses, skipping any that join to lateral_referencers */
+			arg.current = NULL;
+			clauses = generate_implied_equalities_for_column(root,
+															 baserel,
+															 ts_ec_member_matches_foreign,
+															 (void *) &arg,
+															 baserel->lateral_referencers);
+
+			/* Done if there are no more expressions in the data node rel */
+			if (arg.current == NULL)
+			{
+				Assert(clauses == NIL);
+				break;
+			}
+
+			/* Scan the extracted join clauses */
+			foreach (lc, clauses)
+			{
+				RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+				Relids required_outer;
+				ParamPathInfo *param_info;
+
+				/* Check if clause can be moved to this rel */
+				if (!join_clause_is_movable_to(rinfo, baserel))
+				{
+					continue;
+				}
+
+				/* See if it is safe to send to remote */
+				if (!ts_is_foreign_expr(root, baserel, rinfo->clause))
+				{
+					continue;
+				}
+
+				/* Calculate required outer rels for the resulting path */
+				required_outer = bms_union(rinfo->clause_relids, baserel->lateral_relids);
+				required_outer = bms_del_member(required_outer, baserel->relid);
+				if (bms_is_empty(required_outer))
+				{
+					continue;
+				}
+
+				/* Get the ParamPathInfo */
+				param_info = get_baserel_parampathinfo(root, baserel, required_outer);
+				Assert(param_info != NULL);
+
+				/* Add it to list unless we already have it */
+				ppi_list = list_append_unique_ptr(ppi_list, param_info);
+			}
+
+			/* Try again, now ignoring the expression we found this time */
+			arg.already_used = lappend(arg.already_used, arg.current);
+		}
+	}
+
+	/*
+	 * Now build a path for each useful outer relation.
+	 */
+	foreach (lc, ppi_list)
+	{
+		ParamPathInfo *param_info = (ParamPathInfo *) lfirst(lc);
+		Cost startup_cost = 0;
+		Cost run_cost = 0;
+		double rows = baserel->tuples > 1 ? baserel->tuples : 123456;
+
+		/* Run remote non-join clauses. */
+		const double remote_sel_sane =
+			(fpinfo->remote_conds_sel > 0 && fpinfo->remote_conds_sel <= 1) ?
+				fpinfo->remote_conds_sel :
+				0.1;
+
+		startup_cost += baserel->reltarget->cost.startup;
+		startup_cost += fpinfo->remote_conds_cost.startup;
+		run_cost += fpinfo->remote_conds_cost.per_tuple * rows;
+		run_cost += cpu_tuple_cost * rows;
+		run_cost += seq_page_cost * baserel->pages;
+		rows *= remote_sel_sane;
+
+		/* Run remote join clauses. */
+		QualCost remote_join_cost;
+		cost_qual_eval(&remote_join_cost, param_info->ppi_clauses, root);
+		/*
+		 * We don't have up to date per-column statistics for distributed
+		 * hypertables currently, so the join estimates are going to be way off.
+		 * The worst is when they are too low and we end up transferring much
+		 * more rows from the data node that we expected. Just hardcode it at
+		 * 0.1 per clause for now.
+		 */
+		const double remote_join_sel = pow(0.1, list_length(param_info->ppi_clauses));
+
+		startup_cost += remote_join_cost.startup;
+		run_cost += remote_join_cost.per_tuple * rows;
+		rows *= remote_join_sel;
+
+		/* Transfer the resulting tuples over the network. */
+		startup_cost += fpinfo->fdw_startup_cost;
+		run_cost += fpinfo->fdw_tuple_cost * rows;
+
+		/* Run local filters. */
+		const double local_sel_sane =
+			(fpinfo->local_conds_sel > 0 && fpinfo->local_conds_sel <= 1) ?
+				fpinfo->local_conds_sel :
+				0.5;
+
+		startup_cost += fpinfo->local_conds_cost.startup;
+		run_cost += fpinfo->local_conds_cost.per_tuple * rows;
+		run_cost += cpu_tuple_cost * rows;
+		rows *= local_sel_sane;
+
+		/* Compute the output targetlist. */
+		run_cost += baserel->reltarget->cost.per_tuple * rows;
+
+		/*
+		 * ppi_rows currently won't get looked at by anything, but still we
+		 * may as well ensure that it matches our idea of the rowcount.
+		 */
+		param_info->ppi_rows = rows;
+
+		/* Make the path */
+		path = data_node_scan_path_create(root,
+										  baserel,
+										  NULL, /* default pathtarget */
+										  rows,
+										  startup_cost,
+										  startup_cost + run_cost,
+										  NIL, /* no pathkeys */
+										  param_info->ppi_req_outer,
+										  NULL,
+										  NIL); /* no fdw_private list */
+
+		add_path(baserel, (Path *) path);
+	}
 }
 
 /*

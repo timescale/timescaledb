@@ -16,6 +16,7 @@ set(TEST_FILES
     compression_bgw.sql
     compression_permissions.sql
     compression_qualpushdown.sql
+    dist_param.sql
     dist_views.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql

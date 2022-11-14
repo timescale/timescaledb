@@ -39,7 +39,7 @@ extern void deparseUpdateSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, 
 extern void deparseDeleteSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,
 							 List *returningList, List **retrieved_attrs);
 
-extern bool is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr);
+extern bool ts_is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr);
 
 extern void classify_conditions(PlannerInfo *root, RelOptInfo *baserel, List *input_conds,
 								List **remote_conds, List **local_conds);

@@ -262,7 +262,7 @@ classify_conditions(PlannerInfo *root, RelOptInfo *baserel, List *input_conds, L
 	{
 		RestrictInfo *ri = lfirst_node(RestrictInfo, lc);
 
-		if (is_foreign_expr(root, baserel, ri->clause))
+		if (ts_is_foreign_expr(root, baserel, ri->clause))
 			*remote_conds = lappend(*remote_conds, ri);
 		else
 			*local_conds = lappend(*local_conds, ri);
@@ -391,7 +391,7 @@ foreign_expr_contains_mutable_functions(Node *clause)
  * Returns true if given expr is safe to evaluate on the data node.
  */
 bool
-is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
+ts_is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
 {
 	foreign_glob_cxt glob_cxt;
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(baserel);
