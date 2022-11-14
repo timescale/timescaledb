@@ -553,7 +553,6 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				 * or portal memory contexts could also be suitable, but they
 				 * don't exist for SPI calls.
 				 */
-				MemoryContextStats(CurrentMemoryContext);
 				ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
 													 /* nelements = */ 1,
 													 /* private_data = */ NULL);
