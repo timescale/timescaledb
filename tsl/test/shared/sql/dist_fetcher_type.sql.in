@@ -173,3 +173,7 @@ WHERE
     m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
     AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
 ORDER BY 1 DESC LIMIT 1;
+
+-- Test copy fetcher when query is aborted before EOF due to LIMIT
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
