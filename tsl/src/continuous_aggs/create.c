@@ -959,6 +959,26 @@ cagg_agg_validate(Node *node, void *context)
 static bool
 cagg_query_supported(Query *query, StringInfo hint, StringInfo detail, const bool finalized)
 {
+/*
+ * For now deprecate partial aggregates on release builds only.
+ * Once migration tests are made compatible with PG15 enable deprecation
+ * on debug builds as well.
+ */
+#ifndef DEBUG
+#if PG15_GE
+	if (!finalized)
+	{
+		/* continuous aggregates with old format will not be allowed */
+		appendStringInfoString(detail,
+							   "Continuous Aggregates with partials is not supported anymore.");
+		appendStringInfoString(hint,
+							   "Define the Continuous Aggregate with \"finalized\" parameter set "
+							   "to true.");
+		return false;
+	}
+#endif
+#endif
+
 	if (query->commandType != CMD_SELECT)
 	{
 		appendStringInfoString(hint, "Use a SELECT query in the continuous aggregate view.");
