@@ -954,17 +954,21 @@ static bool
 can_exclude_chunk(List *constraints, List *baserestrictinfo)
 {
 	/*
-	 * Regardless of the setting of constraint_exclusion, detect
-	 * constant-FALSE-or-NULL restriction clauses.  Because const-folding will
-	 * reduce "anything AND FALSE" to just "FALSE", any such case should
-	 * result in exactly one baserestrictinfo entry.  This doesn't fire very
-	 * often, but it seems cheap enough to be worth doing anyway.  (Without
-	 * this, we'd miss some optimizations that 9.5 and earlier found via much
-	 * more roundabout methods.)
+	 * Detect constant-FALSE-or-NULL restriction clauses. If we have such a
+	 * clause, no rows from the chunk are going to match. Unlike the postgres
+	 * analog of this code in relation_excluded_by_constraints, we can't expect
+	 * a single const false restrictinfo in this case, because we don't try to
+	 * fold the restrictinfos after evaluating the mutable functions.
+	 * We have to check this separately from the subsequent predicate_refuted_by.
+	 * That function can also work with the normal CHECK constraints, and they
+	 * don't fail if the constraint evaluates to null given the restriction info.
+	 * That's why it has to prove that the CHECK constraint evaluates to false,
+	 * and this doesn't follow from having a const null restrictinfo.
 	 */
-	if (list_length(baserestrictinfo) == 1)
+	ListCell *lc;
+	foreach (lc, baserestrictinfo)
 	{
-		RestrictInfo *rinfo = (RestrictInfo *) linitial(baserestrictinfo);
+		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 		Expr *clause = rinfo->clause;
 
 		if (clause && IsA(clause, Const) &&
