@@ -6,7 +6,6 @@ set(TEST_FILES
     bgw_custom.sql
     bgw_policy.sql
     cagg_errors.sql
-    cagg_errors_deprecated.sql
     cagg_invalidation.sql
     cagg_permissions.sql
     cagg_policy.sql
@@ -55,6 +54,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl_dist_ht.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
+    cagg_errors_deprecated.sql
     cagg_migrate_integer.sql
     cagg_migrate_integer_dist_ht.sql
     cagg_migrate_timestamp.sql

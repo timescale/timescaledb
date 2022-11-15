@@ -132,3 +132,19 @@ FROM _timescaledb_catalog.hypertable h
 INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
 WHERE d.interval_length IS NULL; 
 DROP FUNCTION _timescaledb_internal.update_dimension_partition;
+
+-- Report warning when partial aggregates are used
+DO $$
+DECLARE
+  cagg_name text;
+BEGIN
+    FOR cagg_name IN
+      SELECT
+        format('%I.%I', user_view_schema, user_view_name)
+      FROM _timescaledb_catalog.continuous_agg
+      WHERE finalized IS FALSE
+      ORDER BY 1
+    LOOP
+      RAISE WARNING 'Continuous Aggregate: % with old format will not be supported with PG15. You should upgrade to the new format', cagg_name;
+    END LOOP;
+END $$;
