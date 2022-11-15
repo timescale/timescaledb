@@ -268,3 +268,21 @@ WHERE
     AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
 ORDER BY 1 DESC LIMIT 1;
 ERROR:  cannot use COPY fetcher because the plan is parameterized
+-- Test copy fetcher when query is aborted before EOF due to LIMIT
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+             time             | device_id | v0 | v1 | v2  | v3 
+------------------------------+-----------+----+----+-----+----
+ Fri Dec 31 16:00:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+(11 rows)
+

@@ -89,6 +89,8 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'dat
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+-- set artificially low fetch_size to test fetcher behavior
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fetch_size '10');
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null

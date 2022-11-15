@@ -199,7 +199,13 @@ fill_connection_error(TSConnectionError *err, int errcode, const char *errmsg,
 		return false;
 
 	fill_simple_error(err, errcode, errmsg, conn);
-	err->connmsg = pstrdup(PQerrorMessage(conn->pg_conn));
+	/* The connection error from the remote side contains its own ERROR prefix
+	 * and is ended by a newline. Make sure to strip that before emitting a
+	 * local error. */
+	err->connmsg = pchomp(PQerrorMessage(conn->pg_conn));
+
+	if (strncmp("ERROR:  ", err->connmsg, 8) == 0)
+		err->connmsg += 8;
 
 	return false;
 }
