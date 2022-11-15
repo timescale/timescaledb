@@ -30,6 +30,7 @@ set(TEST_FILES
     insert_returning.sql
     lateral.sql
     misc.sql
+    null_exclusion.sql
     partition.sql
     partitioning.sql
     pg_dump_unprivileged.sql

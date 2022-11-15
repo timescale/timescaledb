@@ -1,0 +1,126 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+create table metrics(ts timestamp, id int, value float);
+select create_hypertable('metrics', 'ts');
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
+NOTICE:  adding not-null constraint to column "ts"
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+(1 row)
+
+insert into metrics values ('2022-02-02 02:02:02', 2, 2.),
+    ('2023-03-03 03:03:03', 3, 3.);
+analyze metrics;
+-- non-const condition
+explain (analyze, costs off, summary off, timing off)
+select * from metrics
+where ts >= (select max(ts) from metrics);
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
+   Chunks excluded during runtime: 1
+   InitPlan 2 (returns $1)
+     ->  Result (actual rows=1 loops=1)
+           InitPlan 1 (returns $0)
+             ->  Limit (actual rows=1 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=1 loops=1)
+                         Order: metrics_1.ts DESC
+                         ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
+                               Index Cond: (ts IS NOT NULL)
+                               Heap Fetches: 1
+                         ->  Index Only Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                               Index Cond: (ts IS NOT NULL)
+                               Heap Fetches: 0
+   ->  Seq Scan on _hyper_1_1_chunk (never executed)
+         Filter: (ts >= $1)
+   ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
+         Filter: (ts >= $1)
+(18 rows)
+
+-- two non-const conditions
+explain (analyze, costs off, summary off, timing off)
+select * from metrics
+where ts >= (select max(ts) from metrics)
+    and id = 1;
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+   Chunks excluded during runtime: 1
+   InitPlan 2 (returns $1)
+     ->  Result (actual rows=1 loops=1)
+           InitPlan 1 (returns $0)
+             ->  Limit (actual rows=1 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=1 loops=1)
+                         Order: metrics_1.ts DESC
+                         ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
+                               Index Cond: (ts IS NOT NULL)
+                               Heap Fetches: 1
+                         ->  Index Only Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                               Index Cond: (ts IS NOT NULL)
+                               Heap Fetches: 0
+   ->  Seq Scan on _hyper_1_1_chunk (never executed)
+         Filter: ((ts >= $1) AND (id = 1))
+   ->  Seq Scan on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Filter: ((ts >= $1) AND (id = 1))
+         Rows Removed by Filter: 1
+(19 rows)
+
+-- condition that becomes const null after evaluating the param
+explain (analyze, costs off, summary off, timing off)
+select * from metrics
+where ts >= (select max(ts) from metrics where id = -1);
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+   Chunks excluded during runtime: 2
+   InitPlan 2 (returns $1)
+     ->  Result (actual rows=1 loops=1)
+           InitPlan 1 (returns $0)
+             ->  Limit (actual rows=0 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=0 loops=1)
+                         Order: metrics_1.ts DESC
+                         ->  Index Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=0 loops=1)
+                               Index Cond: (ts IS NOT NULL)
+                               Filter: (id = '-1'::integer)
+                               Rows Removed by Filter: 1
+                         ->  Index Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=0 loops=1)
+                               Index Cond: (ts IS NOT NULL)
+                               Filter: (id = '-1'::integer)
+                               Rows Removed by Filter: 1
+   ->  Seq Scan on _hyper_1_1_chunk (never executed)
+         Filter: (ts >= $1)
+   ->  Seq Scan on _hyper_1_2_chunk (never executed)
+         Filter: (ts >= $1)
+(20 rows)
+
+-- const null condition and some other condition
+explain (analyze, costs off, summary off, timing off)
+select * from metrics
+where ts >= (select max(ts) from metrics where id = -1)
+    and id = 1;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+   Chunks excluded during runtime: 2
+   InitPlan 2 (returns $1)
+     ->  Result (actual rows=1 loops=1)
+           InitPlan 1 (returns $0)
+             ->  Limit (actual rows=0 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=0 loops=1)
+                         Order: metrics_1.ts DESC
+                         ->  Index Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=0 loops=1)
+                               Index Cond: (ts IS NOT NULL)
+                               Filter: (id = '-1'::integer)
+                               Rows Removed by Filter: 1
+                         ->  Index Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=0 loops=1)
+                               Index Cond: (ts IS NOT NULL)
+                               Filter: (id = '-1'::integer)
+                               Rows Removed by Filter: 1
+   ->  Seq Scan on _hyper_1_1_chunk (never executed)
+         Filter: ((ts >= $1) AND (id = 1))
+   ->  Seq Scan on _hyper_1_2_chunk (never executed)
+         Filter: ((ts >= $1) AND (id = 1))
+(20 rows)
+

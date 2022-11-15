@@ -95,6 +95,16 @@ ORDER BY c.id;
 \set ECHO none
 -- diff compressed and uncompressed results
 :DIFF_CMD
+-- This is to illustrate that we have some null device_id values. This fact
+-- might influence the runtime chunk exclusion when doing joins on device_id.
+select count(*) from metrics_ordered_idx
+where extract(minute from time) = 0 and device_id is null
+;
+ count 
+-------
+     1
+(1 row)
+
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
@@ -328,20 +338,20 @@ WHERE extract(minute FROM d.time) = 0;
                      ->  Custom Scan (ChunkAppend) on metrics_ordered_idx m_1 (actual rows=0 loops=389)
                            Order: m_1."time" DESC
                            Hypertables excluded during runtime: 0
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_2 (actual rows=0 loops=389)
-                                 ->  Index Scan Backward using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=0 loops=389)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_2 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=0 loops=388)
                                        Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_3 (actual rows=0 loops=389)
-                                 ->  Index Scan Backward using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=0 loops=389)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_3 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=0 loops=388)
                                        Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_4 (actual rows=0 loops=389)
-                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=0 loops=389)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_4 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=0 loops=388)
                                        Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_5 (actual rows=0 loops=305)
-                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=0 loops=305)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_5 (actual rows=0 loops=304)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=0 loops=304)
                                        Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_6 (actual rows=0 loops=305)
-                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=0 loops=305)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_6 (actual rows=0 loops=304)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=0 loops=304)
                                        Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
 (48 rows)
 
@@ -389,20 +399,20 @@ WHERE extract(minute FROM d.time) = 0;
                ->  Custom Scan (ChunkAppend) on metrics_ordered_idx m_1 (actual rows=0 loops=389)
                      Order: m_1."time" DESC
                      Hypertables excluded during runtime: 0
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_2 (actual rows=0 loops=389)
-                           ->  Index Scan Backward using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=0 loops=389)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_2 (actual rows=0 loops=388)
+                           ->  Index Scan Backward using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=0 loops=388)
                                  Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_3 (actual rows=0 loops=389)
-                           ->  Index Scan Backward using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=0 loops=389)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_3 (actual rows=0 loops=388)
+                           ->  Index Scan Backward using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=0 loops=388)
                                  Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_4 (actual rows=0 loops=389)
-                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=0 loops=389)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_4 (actual rows=0 loops=388)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=0 loops=388)
                                  Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_5 (actual rows=0 loops=305)
-                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=0 loops=305)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_5 (actual rows=0 loops=304)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=0 loops=304)
                                  Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_6 (actual rows=0 loops=305)
-                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=0 loops=305)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_6 (actual rows=0 loops=304)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=0 loops=304)
                                  Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
 (44 rows)
 

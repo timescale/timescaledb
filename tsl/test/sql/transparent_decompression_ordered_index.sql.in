@@ -118,6 +118,12 @@ RESET client_min_messages;
 -- diff compressed and uncompressed results
 :DIFF_CMD
 
+-- This is to illustrate that we have some null device_id values. This fact
+-- might influence the runtime chunk exclusion when doing joins on device_id.
+select count(*) from metrics_ordered_idx
+where extract(minute from time) = 0 and device_id is null
+;
+
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
