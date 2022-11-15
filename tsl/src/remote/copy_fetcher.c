@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <port/pg_bswap.h>
+#include <libpq-fe.h>
 
 #include "copy_fetcher.h"
 #include "tuplefactory.h"
@@ -18,6 +19,7 @@ typedef struct CopyFetcher
 	/* Data for virtual tuples of the current retrieved batch. */
 	Datum *batch_values;
 	bool *batch_nulls;
+	bool file_trailer_received;
 } CopyFetcher;
 
 static void copy_fetcher_send_fetch_request(DataFetcher *df);
@@ -58,6 +60,7 @@ static void
 copy_fetcher_reset(CopyFetcher *fetcher)
 {
 	fetcher->state.open = false;
+	fetcher->file_trailer_received = false;
 	data_fetcher_reset(&fetcher->state);
 }
 
@@ -71,7 +74,6 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 	if (fetcher->state.open)
 	{
 		/* data request has already been sent */
-		Assert(fetcher->state.data_req != NULL);
 		return;
 	}
 
@@ -107,13 +109,9 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 					 errmsg("could not set single-row mode on connection to \"%s\"",
 							remote_connection_node_name(fetcher->state.conn)),
 					 errdetail("The aborted statement is: %s.", fetcher->state.stmt),
-					 errhint(
-						 "Row-by-row fetching of data is not supported together with sub-queries."
-						 " Use cursor fetcher instead.")));
+					 errhint("Copy fetcher is not supported together with sub-queries."
+							 " Use cursor fetcher instead.")));
 		}
-
-		fetcher->state.data_req = req;
-		fetcher->state.open = true;
 
 		PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
 		if (res == NULL)
@@ -130,7 +128,9 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 			remote_connection_error_elog(&err, ERROR);
 		}
 
+		fetcher->state.open = true;
 		PQclear(res);
+		pfree(req);
 	}
 	PG_CATCH();
 	{
@@ -140,6 +140,7 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
 	MemoryContextSwitchTo(oldcontext);
 }
 
@@ -241,6 +242,75 @@ copy_data_check_header(StringInfo copy_data)
 }
 
 /*
+ * End the COPY after receiving EOF or canceling a query (e.g., due to a LIMIT
+ * being reached).
+ *
+ * This should be called after canceling a query, or, after reading all data,
+ * the file trailer, and getting an EOF return value.
+ */
+static void
+end_copy(CopyFetcher *fetcher, bool canceled)
+{
+	PGconn *conn = remote_connection_get_pg_conn(fetcher->state.conn);
+	PGresult *final_pgres = NULL;
+	PGresult *pgres = NULL;
+	ExecStatusType received_status;
+
+	Assert(fetcher->state.open);
+
+	/* Read results until NULL */
+	while ((pgres = PQgetResult(conn)))
+	{
+		if (final_pgres == NULL)
+			final_pgres = pgres;
+		else
+			remote_result_close(pgres);
+	}
+
+	received_status = PQresultStatus(final_pgres);
+	remote_result_close(final_pgres);
+
+	if (canceled)
+	{
+		/* If the query was canceled during query execution by the access node
+		 * (e.g., due to reaching a LIMIT), expect either PGRES_COMMAND_OK
+		 * (query completed before cancel happened) or PGRES_FATAL_ERROR
+		 * (query abandoned before completion) */
+		if (received_status != PGRES_COMMAND_OK && received_status != PGRES_FATAL_ERROR)
+			remote_connection_elog(fetcher->state.conn, ERROR);
+	}
+	else if (received_status != PGRES_COMMAND_OK)
+	{
+		Assert(received_status == PGRES_FATAL_ERROR || received_status == PGRES_NONFATAL_ERROR);
+		remote_connection_elog(fetcher->state.conn, ERROR);
+	}
+
+	fetcher->state.open = false;
+	remote_connection_set_status(fetcher->state.conn, CONN_IDLE);
+}
+
+/*
+ * Prematurely end the COPY before EOF is received.
+ *
+ * This happens for queries that are abandoned before reaching EOF, e.g., when
+ * using LIMITs.
+ */
+static void
+end_copy_before_eof(CopyFetcher *fetcher)
+{
+	/*
+	 * The fetcher state might not be open if the fetcher got initialized but
+	 * never executed due to executor constraints.
+	 */
+	if (!fetcher->state.open)
+		return;
+
+	Assert(!fetcher->state.eof);
+	remote_connection_cancel_query(fetcher->state.conn);
+	end_copy(fetcher, true);
+}
+
+/*
  * Process response for ongoing async request
  */
 static int
@@ -248,15 +318,12 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 {
 	/* Marked as volatile since it's modified in PG_TRY used in PG_CATCH */
 	AsyncResponseResult *volatile response = NULL;
+	char *volatile dataptr = NULL;
 	MemoryContext oldcontext;
-	AsyncRequestSet *fetch_req_wrapper = async_request_set_create();
+	PGconn *conn = remote_connection_get_pg_conn(fetcher->state.conn);
 
 	Assert(fetcher->state.open);
-	Assert(fetcher->state.data_req != NULL);
-
 	data_fetcher_validate(&fetcher->state);
-
-	async_request_set_add(fetch_req_wrapper, fetcher->state.data_req);
 
 	/*
 	 * We'll store the tuples in the batch_mctx.  First, flush the previous
@@ -286,43 +353,30 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 
 			StringInfoData copy_data = { 0 };
 
-			copy_data.len = PQgetCopyData(remote_connection_get_pg_conn(fetcher->state.conn),
+			copy_data.len = PQgetCopyData(conn,
 										  &copy_data.data,
 										  /* async = */ false);
 
+			/* Set dataptr to ensure data is freed with PQfreemem() in
+			 * PG_CATCH() clause in case error is thrown. */
+			dataptr = copy_data.data;
+
 			if (copy_data.len == -1)
 			{
-				/*
-				 * According to the docs, this means EOF, but in practice we get
-				 * it when there is an error. Check for error and report it.
-				 */
+				/* Note: it is possible to get EOF without having received the
+				 * file trailer in case there's e.g., a remote error. */
 				fetcher->state.eof = true;
-
-				PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
-				if (res == NULL)
-				{
-					/* Shouldn't really happen but technically possible. */
-					TSConnectionError err;
-					remote_connection_get_error(fetcher->state.conn, &err);
-					remote_connection_error_elog(&err, ERROR);
-				}
-				if (PQresultStatus(res) != PGRES_COPY_OUT)
-				{
-					TSConnectionError err;
-					remote_connection_get_result_error(res, &err);
-					remote_connection_error_elog(&err, ERROR);
-				}
+				/* Should read final result with PQgetResult() until it
+				 * returns NULL. This happens below. */
 				break;
 			}
 			else if (copy_data.len == -2)
 			{
 				/*
 				 * Error. The docs say: consult PQerrorMessage() for the reason.
-				 * remote_connection_get_error() will do this for us.
+				 * remote_connection_elog() will do this for us.
 				 */
-				TSConnectionError err;
-				remote_connection_get_error(fetcher->state.conn, &err);
-				remote_connection_error_elog(&err, ERROR);
+				remote_connection_elog(fetcher->state.conn, ERROR);
 			}
 
 			copy_data.maxlen = copy_data.len;
@@ -338,85 +392,102 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 			const int16 natts = copy_data_read_int16(&copy_data);
 			if (natts == -1)
 			{
-				fetcher->state.eof = true;
-				break;
-			}
+				Assert(!fetcher->file_trailer_received && !fetcher->state.eof);
+				/*
+				 * From the PostgreSQL (libpq) docs: The file trailer consists
+				 * of a 16-bit integer word containing -1. This is easily
+				 * distinguished from a tuple's field-count word. A reader
+				 * should report an error if a field-count word is neither -1
+				 * nor the expected number of columns. This provides an extra
+				 * check against somehow getting out of sync with the data.
+				 */
+				fetcher->file_trailer_received = true;
 
-			/*
-			 * There is also one case where no tupdesc attributes are retrieved.
-			 * This is when we do `select count(*) from t`, and
-			 * `enable_partitionwise_aggregate` is 0, so the data node queries
-			 * become `select null from ...` and we should get 1 NULL attribute
-			 * from COPY.
-			 */
-			int16 expected_natts = Max(1, retrieved_natts);
-			if (natts != expected_natts)
-			{
-				elog(ERROR,
-					 "wrong number of attributes for a COPY tuple: expected %d, got %d",
-					 expected_natts,
-					 natts);
+				/* Next PQgetCopyData() should return -1, indicating EOF and
+				 * that the remote side ended the copy. The final result
+				 * (PGRES_COMMAND_OK) should then be read with
+				 * PQgetResult(). */
 			}
-
-			Datum *values = &fetcher->batch_values[tupdesc_natts * row];
-			bool *nulls = &fetcher->batch_nulls[tupdesc_natts * row];
-			for (int i = 0; i < tupdesc_natts; i++)
+			else
 			{
-				nulls[i] = true;
-			}
-
-			MemoryContextSwitchTo(fetcher->state.tuple_mctx);
-			for (int i = 0; i < retrieved_natts; i++)
-			{
-				const int att = list_nth_int(retrieved_attrs, i) - 1;
-				Assert(att >= 0);
-				Assert(att < tupdesc_natts);
-				const int32 att_bytes = copy_data_read_int32(&copy_data);
-				if (att_bytes == -1)
+				Assert(!fetcher->file_trailer_received && !fetcher->state.eof);
+				/*
+				 * There is also one case where no tupdesc attributes are retrieved.
+				 * This is when we do `select count(*) from t`, and
+				 * `enable_partitionwise_aggregate` is 0, so the data node queries
+				 * become `select null from ...` and we should get 1 NULL attribute
+				 * from COPY.
+				 */
+				int16 expected_natts = Max(1, retrieved_natts);
+				if (natts != expected_natts)
 				{
-					/*
-					 * NULL. From the Postgres docs:
-					 * Usually, a receive function should be declared STRICT; if
-					 * it is not, it will be called with a NULL first parameter
-					 * when reading a NULL input value. The function must still
-					 * return NULL in this case, unless it raises an error.
-					 * (This case is mainly meant to support domain receive
-					 * functions, which might need to reject NULL inputs.)
-					 * https://www.postgresql.org/docs/current/sql-createtype.html
-					 */
-					if (!attconv->conv_funcs[att].fn_strict)
-					{
-						values[att] = ReceiveFunctionCall(&attconv->conv_funcs[att],
-														  NULL,
-														  attconv->ioparams[att],
-														  attconv->typmods[att]);
-					}
-					else
-					{
-						values[att] = PointerGetDatum(NULL);
-					}
-					nulls[att] = true;
-					continue;
+					elog(ERROR,
+						 "wrong number of attributes for a COPY tuple: expected %d, got %d",
+						 expected_natts,
+						 natts);
 				}
 
-				StringInfoData att_data = { 0 };
-				att_data.data = copy_data_read_bytes(&copy_data, att_bytes);
-				att_data.len = att_bytes;
+				Datum *values = &fetcher->batch_values[tupdesc_natts * row];
+				bool *nulls = &fetcher->batch_nulls[tupdesc_natts * row];
+				for (int i = 0; i < tupdesc_natts; i++)
+				{
+					nulls[i] = true;
+				}
 
-				values[att] = ReceiveFunctionCall(&attconv->conv_funcs[att],
-												  &att_data,
-												  attconv->ioparams[att],
-												  attconv->typmods[att]);
-				nulls[att] = false;
+				MemoryContextSwitchTo(fetcher->state.tuple_mctx);
+				for (int i = 0; i < retrieved_natts; i++)
+				{
+					const int att = list_nth_int(retrieved_attrs, i) - 1;
+					Assert(att >= 0);
+					Assert(att < tupdesc_natts);
+					const int32 att_bytes = copy_data_read_int32(&copy_data);
+					if (att_bytes == -1)
+					{
+						/*
+						 * NULL. From the Postgres docs:
+						 * Usually, a receive function should be declared STRICT; if
+						 * it is not, it will be called with a NULL first parameter
+						 * when reading a NULL input value. The function must still
+						 * return NULL in this case, unless it raises an error.
+						 * (This case is mainly meant to support domain receive
+						 * functions, which might need to reject NULL inputs.)
+						 * https://www.postgresql.org/docs/current/sql-createtype.html
+						 */
+						if (!attconv->conv_funcs[att].fn_strict)
+						{
+							values[att] = ReceiveFunctionCall(&attconv->conv_funcs[att],
+															  NULL,
+															  attconv->ioparams[att],
+															  attconv->typmods[att]);
+						}
+						else
+						{
+							values[att] = PointerGetDatum(NULL);
+						}
+						nulls[att] = true;
+						continue;
+					}
+
+					StringInfoData att_data = { 0 };
+					att_data.data = copy_data_read_bytes(&copy_data, att_bytes);
+					att_data.len = att_bytes;
+
+					values[att] = ReceiveFunctionCall(&attconv->conv_funcs[att],
+													  &att_data,
+													  attconv->ioparams[att],
+													  attconv->typmods[att]);
+					nulls[att] = false;
+				}
 			}
-
 			MemoryContextSwitchTo(fetcher->state.batch_mctx);
-
 			PQfreemem(copy_data.data);
+			dataptr = NULL;
 		}
 
-		fetcher->state.num_tuples = row;
+		/* Don't count the file trailer as a row if this was the last batch */
+		fetcher->state.num_tuples = fetcher->file_trailer_received ? row - 1 : row;
 		fetcher->state.next_tuple_idx = 0;
+
 		/* Must be EOF if we didn't get as many tuples as we asked for. */
 		if (fetcher->state.num_tuples < fetcher->state.fetch_size)
 		{
@@ -425,56 +496,27 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 
 		fetcher->state.batch_count++;
 
+		/* Finish the COPY here instead of at scan end (fetcher close) in
+		 * order to not leave the connection in COPY_OUT mode. This is
+		 * necessary to handle, e.g., remote EXPLAINs (together with ANALYZE)
+		 * where tuples are first fetched in COPY mode, then a remote explain
+		 * is performed on the same connection within the same scan. */
 		if (fetcher->state.eof)
-		{
-			pfree(fetcher->state.data_req);
-			fetcher->state.data_req = NULL;
-
-			int end_res = PQendcopy(remote_connection_get_pg_conn(fetcher->state.conn));
-			if (end_res != 0)
-			{
-				TSConnectionError err;
-				remote_connection_get_error(fetcher->state.conn, &err);
-				remote_connection_error_elog(&err, ERROR);
-			}
-
-			/*
-			 * Shouldn't have any activity on the connection after we have
-			 * finished COPY. Just double-check.
-			 */
-			PGresult *pgres = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
-			if (pgres)
-			{
-				TSConnectionError err;
-				remote_connection_get_result_error(pgres, &err);
-				if (err.msg == NULL)
-				{
-					err.msg = "internal program error: remaining activity on the data node "
-							  "connection after finishing COPY";
-				}
-				remote_connection_error_elog(&err, ERROR);
-			}
-
-			remote_connection_set_status(fetcher->state.conn, CONN_IDLE);
-		}
+			end_copy(fetcher, false);
 	}
 	PG_CATCH();
 	{
-		if (NULL != fetcher->state.data_req)
-		{
-			pfree(fetcher->state.data_req);
-			fetcher->state.data_req = NULL;
-		}
-
 		if (NULL != response)
 			async_response_result_close(response);
+
+		if (NULL != dataptr)
+			PQfreemem(dataptr);
 
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
 	MemoryContextSwitchTo(oldcontext);
-	pfree(fetch_req_wrapper);
 
 	return fetcher->state.num_tuples;
 }
@@ -550,41 +592,15 @@ copy_fetcher_close(DataFetcher *df)
 {
 	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
-	/*
-	 * The fetcher state might not be open if the fetcher got initialized but
-	 * never executed due to executor constraints.
-	 */
-	if (fetcher->state.open && fetcher->state.data_req != NULL)
-	{
-		int end_res = PQendcopy(remote_connection_get_pg_conn(fetcher->state.conn));
-		if (end_res != 0)
-		{
-			TSConnectionError err;
-			remote_connection_get_error(fetcher->state.conn, &err);
-			remote_connection_error_elog(&err, ERROR);
-		}
+	Assert((df->eof && fetcher->file_trailer_received) || !df->eof);
 
-		/*
-		 * Shouldn't have any activity on the connection after we have
-		 * finished COPY. Just double-check.
-		 */
-		PGresult *pgres = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
-		if (pgres)
-		{
-			TSConnectionError err;
-			remote_connection_get_result_error(pgres, &err);
-			if (err.msg == NULL)
-			{
-				err.msg = "internal program error: remaining activity on the data node connection "
-						  "after finishing COPY";
-			}
-			remote_connection_error_elog(&err, ERROR);
-		}
+	/* Check for premature ending of COPY (i.e., before reaching EOF). Note,
+	 * if EOF was reached, we closed already in the main processing loop so no
+	 * need to end_copy() here in that case. */
+	if (!fetcher->state.eof)
+		end_copy_before_eof(fetcher);
 
-		async_request_discard_response(fetcher->state.data_req);
-		pfree(fetcher->state.data_req);
-		fetcher->state.data_req = NULL;
-	}
+	Assert(!fetcher->state.open);
 	copy_fetcher_reset(fetcher);
 }
 
@@ -594,8 +610,10 @@ copy_fetcher_rescan(DataFetcher *df)
 	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 
 	if (fetcher->state.batch_count > 1)
+	{
 		/* we're over the first batch so we need to close fetcher and restart from clean state */
 		copy_fetcher_close(df);
+	}
 	else
 		/* we can reuse current batch of results */
 		fetcher->state.next_tuple_idx = 0;
