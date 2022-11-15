@@ -163,9 +163,9 @@ jobs:
         sudo coredumpctl gdb <<<"
           set verbose on
           show debug-file-directory
-          printf "query = '%s'\n\n", debug_query_string
+          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
           frame function ExceptionalCondition
-          printf "condition = '%s'\n", conditionName
+          printf "'"'"condition = '%s'\n"'"'", conditionName
           bt full
         " | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
