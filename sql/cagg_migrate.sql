@@ -360,24 +360,36 @@ CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_refresh_n
 LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    _cagg REGCLASS;
+    _cagg_name TEXT;
+    _override BOOLEAN;
 BEGIN
-    _cagg := format('%I.%I', _cagg_data.user_view_schema, _plan_step.config->>'cagg_name_new')::REGCLASS;
+    SELECT (config->>'override')::BOOLEAN
+    INTO _override
+    FROM _timescaledb_catalog.continuous_agg_migrate_plan_step
+    WHERE mat_hypertable_id = _cagg_data.mat_hypertable_id
+    AND type = 'OVERRIDE CAGG';
 
-    CASE _plan_step.config->>'window_start_type'
-        WHEN 'timestamp with time zone' THEN
-            CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::timestamptz, NULL);
-        WHEN 'timestamp without time zone' THEN
-            CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::timestamp, NULL);
-        WHEN 'bigint' THEN
-            CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::bigint, NULL);
-        WHEN 'integer' THEN
-            CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::integer, NULL);
-        WHEN 'smallint' THEN
-            CALL @extschema@.refresh_continuous_aggregate(_cagg, (_plan_step.config->>'window_start')::smallint, NULL);
-        ELSE
-            RAISE EXCEPTION 'Invalid data type % for time bucket', _plan_step.config->>'window_start_type';
-    END CASE;
+    _cagg_name = _plan_step.config->>'cagg_name_new';
+
+    IF _override IS TRUE THEN
+        _cagg_name = _cagg_data.user_view_name;
+    END IF;
+
+    --
+    -- Since we're still having problems with the `refresh_continuous_aggregate` executed inside procedures
+    -- and the issue isn't easy/trivial to fix we decided to skip this step here WARNING users to do it
+    -- manually after the migration.
+    --
+    -- We didn't remove this step to make backward compatibility with potential existing and not finished
+    -- migrations.
+    --
+    -- Related issue: (https://github.com/timescale/timescaledb/issues/4913)
+    --
+    RAISE WARNING
+        'refresh the continuous aggregate after the migration executing this statement: "CALL @extschema@.refresh_continuous_aggregate(%, CAST(% AS %), NULL);"',
+        quote_literal(format('%I.%I', _cagg_data.user_view_schema, _cagg_name)),
+        quote_literal(_plan_step.config->>'window_start'),
+        _plan_step.config->>'window_start_type';
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 

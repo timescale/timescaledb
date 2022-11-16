@@ -205,7 +205,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:149: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
-psql:include/cagg_migrate_common.sql:149: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:149: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
  mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                        
 -------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -276,7 +276,7 @@ psql:include/cagg_migrate_common.sql:178: NOTICE:  drop cascades to 6 other obje
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 psql:include/cagg_migrate_common.sql:179: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:180: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:180: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
     h.schema_name AS "NEW_MAT_SCHEMA_NAME",
@@ -408,7 +408,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
-psql:include/cagg_migrate_common.sql:232: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:232: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                             View "public.conditions_summary_daily"
@@ -511,7 +511,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
-psql:include/cagg_migrate_common.sql:254: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:254: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 psql:include/cagg_migrate_common.sql:254: NOTICE:  drop cascades to 6 other objects
 psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1002 not found, skipping
 psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1001 not found, skipping
@@ -623,7 +623,7 @@ GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_st
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- all necessary permissions granted
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:324: NOTICE:  continuous aggregate "conditions_summary_daily_new" is already up-to-date
+psql:include/cagg_migrate_common.sql:324: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 -- check migrated data. should return 0 (zero) rows
 SELECT * FROM conditions_summary_daily
 EXCEPT
