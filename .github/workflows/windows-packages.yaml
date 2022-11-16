@@ -1,13 +1,11 @@
 # Test installation of windows package for latest version
 name: Windows Packages
 on:
-  schedule:
-    # run daily 0:00 on main branch
-    - cron: '0 0 * * *'
   push:
     tags:
     - '*'
     branches:
+    - main
     - release_test
 jobs:
   config:

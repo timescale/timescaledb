@@ -1,13 +1,11 @@
 # Test installation of our homebrew tap for latest version
 name: Homebrew
 on:
-  schedule:
-    # run daily 20:00 on main branch
-    - cron: '0 20 * * *'
   push:
     tags:
     - '*'
     branches:
+    - main
     - release_test
 
 jobs:

@@ -8,11 +8,9 @@
 # in a new minor postgresql version.
 name: ABI Test
 on:
-  schedule:
-    # run daily 20:00 on main branch
-    - cron: '0 20 * * *'
   push:
     branches:
+      - main
       - prerelease_test
 jobs:
   config:

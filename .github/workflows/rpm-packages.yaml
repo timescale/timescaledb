@@ -1,13 +1,11 @@
 # Test rpm package installation for latest version
 name: RPM packages
 on:
-  schedule:
-    # run daily 0:00 on main branch
-    - cron: '0 0 * * *'
   push:
     tags:
     - '*'
     branches:
+    - main
     - release_test
 jobs:
   rpm_tests:

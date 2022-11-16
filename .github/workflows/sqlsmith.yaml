@@ -1,11 +1,9 @@
 name: SQLsmith
 on:
-  schedule:
-    # run daily 20:00 on main branch
-    - cron: '0 2 * * *'
   workflow_dispatch:
   push:
     branches:
+      - main
       - sqlsmith
 jobs:
   config:

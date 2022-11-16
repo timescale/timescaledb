@@ -1,10 +1,8 @@
 name: Test Update and Downgrade
 on:
-  schedule:
-    # run daily 20:00 on main branch
-    - cron: '0 20 * * *'
   push:
     branches:
+      - main
       - prerelease_test
   pull_request:
 jobs:
