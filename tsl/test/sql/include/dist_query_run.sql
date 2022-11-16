@@ -294,7 +294,7 @@ DROP TABLE join_test;
 -----------------------------------------------------------------
 \set TEST_DESC '\n######### CTEs/Sub-queries\n'
 
--- CTE / subquery 
+-- CTE / subquery
 \qecho :TEST_DESC
 :PREFIX
 WITH top_n AS (

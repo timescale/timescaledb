@@ -30,7 +30,7 @@ SELECT compress_chunk(:'CHUNK_FULL_NAME');
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
--- test for qual pushdown 
+-- test for qual pushdown
 explain (costs off, verbose)
 SELECT
 FROM hyper
@@ -109,7 +109,7 @@ SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
 (1 row)
 
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
@@ -120,7 +120,7 @@ order by factorid, end_dt;
 
 explain (costs off, verbose)
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
@@ -139,7 +139,7 @@ order by factorid, end_dt;
 
 --no pushdown here
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
@@ -150,7 +150,7 @@ order by factorid, end_dt;
 
 explain (costs off, verbose)
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
@@ -169,15 +169,15 @@ order by factorid, end_dt;
 --should fail
 \set ON_ERROR_STOP 0
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date = 10;
-ERROR:  operator does not exist: date = integer at character 84
+ERROR:  operator does not exist: date = integer at character 83
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date = 'dec 2010'::date;
-ERROR:  invalid input syntax for type date: "dec 2010" at character 86
+ERROR:  invalid input syntax for type date: "dec 2010" at character 85
 -- test casts between different char types are pushed down
 CREATE TABLE pushdown_relabel(time timestamptz NOT NULL, dev_vc varchar(10), dev_c char(10));
 SELECT table_name FROM create_hypertable('pushdown_relabel', 'time');

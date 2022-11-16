@@ -348,7 +348,7 @@ SELECT wait_worker_counts(1,0,0,0);
  t
 (1 row)
 
--- Make sure a restart with restoring on first starts the background worker 
+-- Make sure a restart with restoring on first starts the background worker
 BEGIN;
 SELECT _timescaledb_internal.restart_background_workers();
  restart_background_workers 
@@ -370,7 +370,7 @@ SELECT wait_worker_counts(1,0,0,0);
  t
 (1 row)
 
---And post_restore starts them 
+--And post_restore starts them
 BEGIN;
 SELECT timescaledb_post_restore();
  timescaledb_post_restore 

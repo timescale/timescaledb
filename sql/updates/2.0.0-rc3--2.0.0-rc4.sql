@@ -75,12 +75,12 @@ SELECT id, schema_name, table_name, associated_schema_name, associated_table_pre
        chunk_target_size,
        CASE WHEN compressed is FALSE  AND compressed_hypertable_id IS NOT NULL THEN 1
             WHEN compressed is TRUE THEN 2
-            ELSE 0 
+            ELSE 0
        END,
        compressed_hypertable_id,
        replication_factor
 FROM _timescaledb_internal.hypertable_tmp;
- 
+
 -- add self referential foreign key
 ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_compressed_hypertable_id_fkey FOREIGN KEY ( compressed_hypertable_id )
  REFERENCES _timescaledb_catalog.hypertable( id );
@@ -90,39 +90,39 @@ DROP TABLE _timescaledb_internal.hypertable_tmp;
 DROP TABLE _timescaledb_internal.tmp_hypertable_seq_value;
 
 -- add all the other foreign keys
-ALTER TABLE _timescaledb_catalog.hypertable_data_node 
+ALTER TABLE _timescaledb_catalog.hypertable_data_node
 ADD CONSTRAINT hypertable_data_node_hypertable_id_fkey
-FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id ); 
-ALTER TABLE _timescaledb_catalog.tablespace ADD CONSTRAINT tablespace_hypertable_id_fkey 
-FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id ) 
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_catalog.dimension ADD CONSTRAINT dimension_hypertable_id_fkey 
-FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id ) 
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_hypertable_id_fkey 
-FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id ); 
-ALTER TABLE _timescaledb_catalog.chunk_index ADD CONSTRAINT chunk_index_hypertable_id_fkey 
-FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id ) 
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_config.bgw_job ADD CONSTRAINT bgw_job_hypertable_id_fkey 
+FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id );
+ALTER TABLE _timescaledb_catalog.tablespace ADD CONSTRAINT tablespace_hypertable_id_fkey
 FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id )
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_catalog.continuous_agg ADD CONSTRAINT 
-continuous_agg_mat_hypertable_id_fkey FOREIGN KEY ( mat_hypertable_id ) 
-REFERENCES _timescaledb_catalog.hypertable( id ) 
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_catalog.continuous_agg ADD CONSTRAINT 
-continuous_agg_raw_hypertable_id_fkey FOREIGN KEY ( raw_hypertable_id ) 
-REFERENCES _timescaledb_catalog.hypertable( id ) 
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold 
-ADD CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey 
-FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable( id ) 
-ON DELETE CASCADE; 
-ALTER TABLE _timescaledb_catalog.hypertable_compression ADD CONSTRAINT 
-hypertable_compression_hypertable_id_fkey FOREIGN KEY ( hypertable_id ) 
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.dimension ADD CONSTRAINT dimension_hypertable_id_fkey
+FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id )
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_hypertable_id_fkey
+FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id );
+ALTER TABLE _timescaledb_catalog.chunk_index ADD CONSTRAINT chunk_index_hypertable_id_fkey
+FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id )
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_config.bgw_job ADD CONSTRAINT bgw_job_hypertable_id_fkey
+FOREIGN KEY ( hypertable_id ) REFERENCES _timescaledb_catalog.hypertable( id )
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_agg ADD CONSTRAINT
+continuous_agg_mat_hypertable_id_fkey FOREIGN KEY ( mat_hypertable_id )
 REFERENCES _timescaledb_catalog.hypertable( id )
-ON DELETE CASCADE; 
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_agg ADD CONSTRAINT
+continuous_agg_raw_hypertable_id_fkey FOREIGN KEY ( raw_hypertable_id )
+REFERENCES _timescaledb_catalog.hypertable( id )
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ADD CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey
+FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable( id )
+ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.hypertable_compression ADD CONSTRAINT
+hypertable_compression_hypertable_id_fkey FOREIGN KEY ( hypertable_id )
+REFERENCES _timescaledb_catalog.hypertable( id )
+ON DELETE CASCADE;
 
 GRANT SELECT ON _timescaledb_catalog.hypertable_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.hypertable TO PUBLIC;

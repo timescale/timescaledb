@@ -7,14 +7,14 @@
 
 
 -- A table for the first chunk will be created on the data node, where it is not present.
-SELECT chunk_name, data_nodes 
-FROM timescaledb_information.chunks 
+SELECT chunk_name, data_nodes
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'dist_chunk_copy'
 ORDER BY 1, 2;
 
 -- Non-distributed chunk will be used to test an error
-SELECT chunk_name 
-FROM timescaledb_information.chunks 
+SELECT chunk_name
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions'
 ORDER BY 1;
 

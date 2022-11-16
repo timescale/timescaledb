@@ -8,7 +8,7 @@
 -- * drop_chunk
 -- * attach_foreign_table_chunk
 CREATE OR REPLACE VIEW chunk_view AS
-  SELECT 
+  SELECT
     ht.table_name AS hypertable_name,
     srcch.schema_name AS schema_name,
     srcch.table_name AS chunk_name,
@@ -292,7 +292,7 @@ SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
  t
 (1 row)
 
-SELECT table_name, status 
+SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
     table_name    | status 
 ------------------+--------
@@ -535,7 +535,7 @@ SELECT * FROM ht_try ORDER BY 1;
 (2 rows)
 
 SELECT relname, relowner::regrole FROM pg_class
-WHERE relname in ( select chunk_name FROM chunk_view 
+WHERE relname in ( select chunk_name FROM chunk_view
                    WHERE hypertable_name = 'ht_try' )
 ORDER BY relname;
       relname      |  relowner   
@@ -560,13 +560,13 @@ SELECT * from ht_try ORDER BY 1;
  Thu May 05 01:00:00 2022 PDT |    222 |   222
 (2 rows)
 
-SELECT * from ht_try WHERE timec < '2022-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE timec < '2022-01-01 01:00' ORDER BY 1;
             timec             | acq_id | value 
 ------------------------------+--------+-------
  Wed Jan 01 01:00:00 2020 PST |    100 |  1000
 (1 row)
 
-SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1;
             timec             | acq_id | value 
 ------------------------------+--------+-------
  Wed Jan 01 01:00:00 2020 PST |    100 |  1000
@@ -578,7 +578,7 @@ SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 0
  Wed Jan 01 01:00:00 2020 PST |    100 |  1000
 (1 row)
 
-SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
             timec             | acq_id | value 
 ------------------------------+--------+-------
  Thu May 05 01:00:00 2022 PDT |    222 |   222
@@ -612,7 +612,6 @@ ERROR:  must be owner of hypertable "ht_try"
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_internal.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 ERROR:  "non_ht" is not a hypertable
- 
 \set ON_ERROR_STOP 1
 -- TEST drop the hypertable and make sure foreign chunks are dropped as well --
 \c :TEST_DBNAME :ROLE_4;
@@ -876,7 +875,7 @@ FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
  _hyper_8_15_chunk |      0
 (1 row)
 
--- Copy should work now 
+-- Copy should work now
 COPY test1.copy_test FROM STDIN DELIMITER ',';
 -- Test that unfreeze works even if somebody has dropped one the block triggers
 SELECT _timescaledb_internal.freeze_chunk( :'COPY_CHNAME');

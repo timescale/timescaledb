@@ -37,8 +37,8 @@ NOTICE:  adding not-null constraint to column "Time"
 (1 row)
 
 -- This will generate 24 chunks
-INSERT INTO test1 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test1
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 12 2 hour chunks
@@ -103,8 +103,8 @@ NOTICE:  adding not-null constraint to column "Time"
 (1 row)
 
 -- This will generate 24 1 hour chunks.
-INSERT INTO test2 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test2
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
@@ -261,8 +261,8 @@ SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 1;
 
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
-INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name 
-INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id) 
+INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
+INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id)
 LIMIT 1 \gset
 DROP INDEX :INDEXNAME;
 -- We dropped the index from compressed chunk thats needed to determine sequence numbers
@@ -308,8 +308,8 @@ NOTICE:  adding not-null constraint to column "Time"
 (1 row)
 
 -- This will generate 24 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 12 2 hour chunks.
@@ -350,8 +350,8 @@ SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 (1 row)
 
 -- This will generate another 24 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-03 1:00'::TIMESTAMPTZ, '2018-03-04 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 6 chunks from the additional 24 chunks.
@@ -416,8 +416,8 @@ SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 (1 row)
 
 -- This will generate another 3 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-04 1:00'::TIMESTAMPTZ, '2018-03-04 3:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
@@ -475,8 +475,8 @@ SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 (1 row)
 
 -- This will generate another 3 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-04 4:00'::TIMESTAMPTZ, '2018-03-04 6:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
@@ -553,8 +553,8 @@ NOTICE:  adding not-null constraint to column "Time"
 (1 row)
 
 -- This will generate 24 chunks
-INSERT INTO test7 
-SELECT t, i, gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()  
+INSERT INTO test7
+SELECT t, i, gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 12 2 hour chunks with ordering by j column before time column, causing recompression to occur during merge.

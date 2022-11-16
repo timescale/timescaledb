@@ -271,7 +271,7 @@ SELECT slices AS "SLICES"
 FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
@@ -280,14 +280,14 @@ DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
 
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
 
 -- Test that creat_chunk fails since chunk table already exists
@@ -302,7 +302,7 @@ DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 -- Demonstrate that current settings for dimensions don't affect create_chunk_table
@@ -312,7 +312,7 @@ DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2, '3d');
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 DROP TABLE chunkapi;
@@ -320,7 +320,7 @@ DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 -- Test create_chunk_table if a colliding chunk exists
@@ -378,7 +378,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 SELECT attach_tablespace('tablespace1', 'chunkapi');
 SELECT attach_tablespace('tablespace2', 'chunkapi');
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
@@ -423,7 +423,7 @@ DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 SELECT attach_tablespace('tablespace1', 'chunkapi');
 SELECT attach_tablespace('tablespace2', 'chunkapi');
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
@@ -452,7 +452,7 @@ DROP TABLE original_chunk_constraints_metadata;
 
 -- The chunk should inherit the hypertable
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
 
 -- Show chunk's attached to the table
@@ -498,7 +498,7 @@ FROM show_chunks('chunkapi') ch;
 
 -- The chunk should inherit the hypertable
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
 
 -- Test that it is possible to query the data via the hypertable

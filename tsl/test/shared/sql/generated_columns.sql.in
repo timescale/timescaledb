@@ -34,12 +34,12 @@ SELECT table_name FROM create_hypertable('gencol_test', 'a', 'b', 2, chunk_time_
 
 -- check if default generated expression can be dropped (works on >= PG13)
 SELECT table_name FROM create_hypertable('gencol_test', 'a',  chunk_time_interval=>10);
-SELECT attname, atthasdef, attidentity, attgenerated, attnotnull 
+SELECT attname, atthasdef, attidentity, attgenerated, attnotnull
 FROM pg_attribute where attname = 'b' and attrelid = 'gencol_test'::regclass;
 \set ON_ERROR_STOP 0
 ALTER TABLE gencol_test ALTER COLUMN b DROP EXPRESSION;
 \set ON_ERROR_STOP 1
-SELECT attname, atthasdef, attidentity, attgenerated, attnotnull 
+SELECT attname, atthasdef, attidentity, attgenerated, attnotnull
 FROM pg_attribute where attname = 'b' and attrelid = 'gencol_test'::regclass;
 
 DROP TABLE gencol_test;

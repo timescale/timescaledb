@@ -261,19 +261,19 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 INSERT INTO conditions
 SELECT generate_series('2021-08-01 00:00'::timestamp, '2021-08-31 00:00'::timestamp, '1 day'), 'NYC', 'nycity', 40, 40;
 
-SELECT id, table_name, status from _timescaledb_catalog.chunk 
-where hypertable_id = (select id from _timescaledb_catalog.hypertable 
+SELECT id, table_name, status from _timescaledb_catalog.chunk
+where hypertable_id = (select id from _timescaledb_catalog.hypertable
                        where table_name = 'conditions')
-order by id; 
+order by id;
 
---running job second time, wait for it to complete 
+--running job second time, wait for it to complete
 select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
 SELECT wait_for_job_to_run(:job_id_4, 2);
 
-SELECT id, table_name, status from _timescaledb_catalog.chunk 
-where hypertable_id = (select id from _timescaledb_catalog.hypertable 
+SELECT id, table_name, status from _timescaledb_catalog.chunk
+where hypertable_id = (select id from _timescaledb_catalog.hypertable
                        where table_name = 'conditions')
-order by id; 
+order by id;
 
 
 -- Decompress chunks before create the cagg
@@ -299,7 +299,7 @@ SELECT count(*) FROM conditions_summary_daily;
 -- TESTs for alter_job_set_hypertable_id API
 
 SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, NULL);
-SELECT id, proc_name, hypertable_id 
+SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 -- error case, try to associate with a PG relation
@@ -310,13 +310,13 @@ SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, 'custom_log
 -- TEST associate the cagg with the job
 SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, 'conditions_summary_daily'::regclass);
 
-SELECT id, proc_name, hypertable_id 
+SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 --verify that job is dropped when cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary_daily;
 
-SELECT id, proc_name, hypertable_id 
+SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 -- Stop Background Workers
@@ -332,9 +332,9 @@ LANGUAGE PLPGSQL
 AS $$
 DECLARE
   drop_after interval;
-BEGIN 
+BEGIN
     SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
-    IF drop_after IS NULL THEN 
+    IF drop_after IS NULL THEN
         RAISE EXCEPTION 'Config must be not NULL and have drop_after';
     END IF ;
 END
@@ -344,12 +344,12 @@ CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
 AS $$
 DECLARE
   drop_after interval;
-BEGIN 
+BEGIN
     IF config IS NULL THEN
         RETURN;
     END IF;
     SELECT jsonb_object_field_text (config, 'drop_after')::interval INTO STRICT drop_after;
-    IF drop_after IS NULL THEN 
+    IF drop_after IS NULL THEN
         RAISE EXCEPTION 'Config can be NULL but must have drop_after if not';
     END IF ;
 END
@@ -360,7 +360,7 @@ CREATE OR REPLACE PROCEDURE test_proc_with_check(job_id int, config jsonb)
 LANGUAGE PLPGSQL
 AS $$
 BEGIN
-  RAISE NOTICE 'Will only print this if config passes checks, my config is %', config; 
+  RAISE NOTICE 'Will only print this if config passes checks, my config is %', config;
 END
 $$;
 
@@ -372,7 +372,7 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc);
 select add_job('test_proc_with_check', '5 secs', config => NULL, check_config => 'test_config_check_func'::regproc);
 select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
-select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_func'::regproc) 
+select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "2 weeks"}', check_config => 'test_config_check_func'::regproc)
 as job_with_func_check_id \gset
 
 
@@ -382,30 +382,30 @@ select config from alter_job(:job_with_func_check_id, config => '{"drop_after":"
 
 
 -- test that jobs with an incorrect check function signature will not be registered
--- these are all incorrect function signatures 
+-- these are all incorrect function signatures
 
 CREATE OR REPLACE FUNCTION test_config_check_func_0args() RETURNS VOID
 AS $$
-BEGIN 
+BEGIN
     RAISE NOTICE 'I take no arguments and will validate anything you give me!';
 END
 $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION test_config_check_func_2args(config jsonb, intarg int) RETURNS VOID
 AS $$
-BEGIN 
+BEGIN
     RAISE NOTICE 'I take two arguments (jsonb, int) and I should fail to run!';
 END
 $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE FUNCTION test_config_check_func_intarg(config int) RETURNS VOID
 AS $$
-BEGIN 
+BEGIN
     RAISE NOTICE 'I take one argument which is an integer and I should fail to run!';
 END
 $$ LANGUAGE PLPGSQL;
 
--- -- this should fail, it has an incorrect check function 
+-- -- this should fail, it has an incorrect check function
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_0args'::regproc);
 -- -- so should this
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_2args'::regproc);
@@ -417,7 +417,7 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 -- when called with a valid check function and a NULL config no check should occur
 CREATE OR REPLACE FUNCTION test_config_check_func(config jsonb) RETURNS VOID
 AS $$
-BEGIN 
+BEGIN
     RAISE NOTICE 'This message will get printed for both NULL and not NULL config';
 END
 $$ LANGUAGE PLPGSQL;
@@ -431,7 +431,7 @@ select add_job('test_proc_with_check', '5 secs', config => '{}', check_config =>
 -- check function not returning void
 CREATE OR REPLACE FUNCTION test_config_check_func_returns_int(config jsonb) RETURNS INT
 AS $$
-BEGIN 
+BEGIN
     raise notice 'I print a message, and then I return least(1,2)';
     RETURN LEAST(1, 2);
 END
@@ -439,7 +439,7 @@ $$ LANGUAGE PLPGSQL;
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc,
 initial_start => :'time_zero'::timestamptz) as job_id_int \gset
 
--- drop the registered check function, verify that alter_job will work and print a warning that 
+-- drop the registered check function, verify that alter_job will work and print a warning that
 -- the check is being skipped due to the check function missing
 ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
 select job_id, schedule_interval, config, check_config from alter_job(:job_id, schedule_interval => '1 hour');
@@ -453,7 +453,7 @@ select job_id, schedule_interval, config, check_config from alter_job(:job_id, c
 -- do not drop the current check function but register a new one
 CREATE OR REPLACE FUNCTION substitute_check_func(config jsonb) RETURNS VOID
 AS $$
-BEGIN 
+BEGIN
     RAISE NOTICE 'This message is a substitute of the previously printed one';
 END
 $$ LANGUAGE PLPGSQL;
@@ -474,7 +474,7 @@ grant usage on schema test_schema to user_noexec;
 
 CREATE OR REPLACE FUNCTION test_schema.test_config_check_func_privileges(config jsonb) RETURNS VOID
 AS $$
-BEGIN 
+BEGIN
     RAISE NOTICE 'This message will only get printed if privileges suffice';
 END
 $$ LANGUAGE PLPGSQL;
@@ -497,10 +497,10 @@ select job_id, schedule_interval, config, check_config from alter_job(:job_id_al
 -- test that we can unregister the check function
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 0);
 -- no message printed now
-select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, config => '{}'); 
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, config => '{}');
 
 -- test the case where we have a background job that registers jobs with a check fn
-CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS 
+CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
     perform add_job('test_proc_with_check', schedule_interval => '10 secs', config => '{}', check_config => 'renamed_func');
@@ -527,7 +527,7 @@ DROP ROLE user_noexec;
 -- test with aggregate check proc
 create function jsonb_add (j1 jsonb, j2 jsonb) returns jsonb
 AS $$
-BEGIN 
+BEGIN
     RETURN j1 || j2;
 END
 $$ LANGUAGE PLPGSQL;

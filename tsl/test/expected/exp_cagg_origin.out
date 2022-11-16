@@ -752,7 +752,7 @@ SELECT * FROM conditions_summary_policy;
 SELECT add_continuous_aggregate_policy('conditions_summary_policy',
     -- Historically, 1 month is just a synonym to 30 days here.
     -- See interval_to_int64() and interval_to_int128().
-    start_offset => INTERVAL '2 months', 
+    start_offset => INTERVAL '2 months',
     end_offset => INTERVAL '1 day',
     schedule_interval => INTERVAL '1 hour');
 ERROR:  policy refresh window too small

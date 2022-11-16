@@ -48,7 +48,7 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE serie
 --note that without time transform things work too
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
 
---The query should still use the index on timeCustom, even though the GROUP BY/ORDER BY is on the transformed time 't'. 
+--The query should still use the index on timeCustom, even though the GROUP BY/ORDER BY is on the transformed time 't'.
 --However, current query plans show that it does not.
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;

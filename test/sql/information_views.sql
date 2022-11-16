@@ -69,6 +69,6 @@ INSERT into test_table_int SELECT generate_series( 1, 20), 100;
  SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'ht1' ORDER BY chunk_name;
  SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORDER BY chunk_name;
 
-\x 
+\x
 SELECT * FROM timescaledb_information.dimensions ORDER BY hypertable_name, dimension_number;
-\x 
+\x

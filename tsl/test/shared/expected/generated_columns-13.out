@@ -42,7 +42,7 @@ SELECT table_name FROM create_hypertable('gencol_test', 'a',  chunk_time_interva
  gencol_test
 (1 row)
 
-SELECT attname, atthasdef, attidentity, attgenerated, attnotnull 
+SELECT attname, atthasdef, attidentity, attgenerated, attnotnull
 FROM pg_attribute where attname = 'b' and attrelid = 'gencol_test'::regclass;
  attname | atthasdef | attidentity | attgenerated | attnotnull 
 ---------+-----------+-------------+--------------+------------
@@ -52,7 +52,7 @@ FROM pg_attribute where attname = 'b' and attrelid = 'gencol_test'::regclass;
 \set ON_ERROR_STOP 0
 ALTER TABLE gencol_test ALTER COLUMN b DROP EXPRESSION;
 \set ON_ERROR_STOP 1
-SELECT attname, atthasdef, attidentity, attgenerated, attnotnull 
+SELECT attname, atthasdef, attidentity, attgenerated, attnotnull
 FROM pg_attribute where attname = 'b' and attrelid = 'gencol_test'::regclass;
  attname | atthasdef | attidentity | attgenerated | attnotnull 
 ---------+-----------+-------------+--------------+------------

@@ -11,8 +11,8 @@ CREATE TABLE test1 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks
-INSERT INTO test1 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test1
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 
@@ -38,8 +38,8 @@ CREATE TABLE test2 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 1 hour chunks.
-INSERT INTO test2 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test2
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 
@@ -109,8 +109,8 @@ SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 1;
 
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
-INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name 
-INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id) 
+INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
+INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id)
 LIMIT 1 \gset
 
 DROP INDEX :INDEXNAME;
@@ -131,8 +131,8 @@ CREATE TABLE test6 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test6', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 
@@ -143,8 +143,8 @@ SELECT compress_chunk(i) FROM show_chunks('test6') i;
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 
 -- This will generate another 24 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-03 1:00'::TIMESTAMPTZ, '2018-03-04 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 6 chunks from the additional 24 chunks.
@@ -154,8 +154,8 @@ SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 
 -- This will generate another 3 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-04 1:00'::TIMESTAMPTZ, '2018-03-04 3:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
@@ -166,8 +166,8 @@ SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
 
 -- This will generate another 3 chunks
-INSERT INTO test6 
-SELECT t, i, gen_rand_minstd() 
+INSERT INTO test6
+SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-04 4:00'::TIMESTAMPTZ, '2018-03-04 6:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 3 chunks from the additional 3 chunks.
@@ -188,8 +188,8 @@ CREATE TABLE test7 ("Time" timestamptz, i integer, j integer, k integer, value i
 SELECT table_name from create_hypertable('test7', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks
-INSERT INTO test7 
-SELECT t, i, gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()  
+INSERT INTO test7
+SELECT t, i, gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 

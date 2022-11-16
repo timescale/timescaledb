@@ -43,12 +43,11 @@ CREATE TABLE trigger_events (
    tg_op text,
    tg_name text
 );
-  
 CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);	
+    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);
     RETURN NEW;
 END
 $BODY$;
@@ -476,7 +475,7 @@ CREATE OR REPLACE FUNCTION temp_increment_trigger()
 $BODY$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-	   NEW.temp_c = NEW.temp_c+1.0;	   
+	   NEW.temp_c = NEW.temp_c+1.0;
 	END IF;
     RETURN NEW;
 END

@@ -76,7 +76,7 @@ WHERE t1_timescale.a=5
 ORDER BY 1, 2, 3, 4;
 
 SELECT * FROM t1_timescale
-RIGHT JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20 
+RIGHT JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
 ORDER BY 1, 2, 3, 4;
 
 SELECT * FROM t1_timescale
@@ -85,10 +85,10 @@ WHERE t1_timescale.a=5
 ORDER BY 1, 2, 3, 4;
 
 SELECT * FROM t1_timescale
-LEFT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20 
-WHERE t1_timescale.a IN ( 10, 15, 20, 25) 
+LEFT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20
+WHERE t1_timescale.a IN ( 10, 15, 20, 25)
 ORDER BY 1, 2, 3, 4;
 
 SELECT * FROM t1_timescale
-RIGHT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20 
+RIGHT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20
 ORDER BY 1, 2, 3, 4;

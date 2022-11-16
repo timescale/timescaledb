@@ -45,9 +45,9 @@ LANGUAGE C VOLATILE STRICT;
 
 /* compression policy */
 CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
-    hypertable REGCLASS, compress_after "any", 
+    hypertable REGCLASS, compress_after "any",
     if_not_exists BOOL = false,
-    schedule_interval INTERVAL = NULL, 
+    schedule_interval INTERVAL = NULL,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL
 )
@@ -61,9 +61,9 @@ LANGUAGE C VOLATILE STRICT;
 
 /* continuous aggregates policy */
 CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_policy(
-    continuous_aggregate REGCLASS, start_offset "any", 
-    end_offset "any", schedule_interval INTERVAL, 
-    if_not_exists BOOL = false, 
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL = false,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL
 )

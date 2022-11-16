@@ -107,7 +107,7 @@ FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap
 -- Now drop the database manually before using the drop_database option
 DROP DATABASE bootstrap_test;
 \set ON_ERROR_STOP 0
--- Expect an error since the database does not exist. 
+-- Expect an error since the database does not exist.
 SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
 \set ON_ERROR_STOP 1
 

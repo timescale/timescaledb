@@ -46,7 +46,7 @@ SELECT add_dimension('dist_table', 'timedim', chunk_time_interval=>'7 days'::int
 INSERT INTO dist_table SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 80, '2020-01-01'
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
 ALTER TABLE dist_table SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
--- Test views with compression 
+-- Test views with compression
 BEGIN;
 SELECT compress_chunk(chunk)
 FROM show_chunks('dist_table') AS chunk
@@ -64,7 +64,7 @@ WHERE hypertable_name = 'dist_table';
  public            | dist_table      | test_role_1 |              3 |          3 | t                   | t              |                  2 | {db_dist_views_1,db_dist_views_2,db_dist_views_3} | 
 (1 row)
 
-SELECT * from timescaledb_information.chunks 
+SELECT * from timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace |            data_nodes             
 -------------------+-----------------+-----------------------+-----------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+-----------------------------------
@@ -73,7 +73,7 @@ ORDER BY hypertable_name, chunk_name;
  public            | dist_table      | _timescaledb_internal | _dist_hyper_1_3_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | f             |                  | {db_dist_views_1,db_dist_views_3}
 (3 rows)
 
-SELECT * from timescaledb_information.dimensions 
+SELECT * from timescaledb_information.dimensions
 ORDER BY hypertable_name, dimension_number;
  hypertable_schema | hypertable_name | dimension_number | column_name |       column_type        | dimension_type | time_interval | integer_interval | integer_now_func | num_partitions 
 -------------------+-----------------+------------------+-------------+--------------------------+----------------+---------------+------------------+------------------+----------------
@@ -82,7 +82,7 @@ ORDER BY hypertable_name, dimension_number;
  public            | dist_table      |                3 | timedim     | date                     | Time           | @ 7 days      |                  |                  |               
 (3 rows)
 
-SELECT * FROM chunks_detailed_size('dist_table'::regclass) 
+SELECT * FROM chunks_detailed_size('dist_table'::regclass)
 ORDER BY chunk_name, node_name;
      chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |    node_name    
 -----------------------+-----------------------+-------------+-------------+-------------+-------------+-----------------

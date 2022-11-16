@@ -1433,7 +1433,7 @@ $$);
 
 DROP TABLE disttable_serial;
 
--- Test insert batching case which will hit the limit of arguments for 
+-- Test insert batching case which will hit the limit of arguments for
 -- prepared statements (65k).
 --
 -- Issue: #1702
@@ -1515,7 +1515,7 @@ CREATE TABLE test_1702 (
 	dummy68	int	,
 	dummy69	int	,
 	dummy70	int	,
-	dummy71	int	
+	dummy71	int
 );
 
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
@@ -1601,8 +1601,8 @@ SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device
 DROP TABLE disttable;
 
 CREATE TABLE disttable(
-    time timestamptz NOT NULL, 
-    device int, 
+    time timestamptz NOT NULL,
+    device int,
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
@@ -1836,7 +1836,7 @@ SELECT * FROM disttable ORDER BY 1;
 
 -- Check distributed hypertable within procedure properly drops remote tables
 --
--- #3663 
+-- #3663
 --
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
@@ -2066,7 +2066,7 @@ insert into pruned_chunks_2 select * from pruned_chunks_1 WHERE time > '2022-01-
 -- TEST freeze_chunk api. does not work for distributed chunks
 SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
 FROM timescaledb_information.chunks
-WHERE hypertable_name = 'pruned_chunks_1' 
+WHERE hypertable_name = 'pruned_chunks_1'
 ORDER BY chunk_name LIMIT 1
 \gset
 

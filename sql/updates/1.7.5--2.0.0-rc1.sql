@@ -208,9 +208,9 @@ $BODY$;
 CREATE FUNCTION _timescaledb_internal.ts_tmp_get_interval( intval bigint)
 RETURNS INTERVAL LANGUAGE SQL AS
 $BODY$
-   SELECT format('%sd %ss', intval/86400000000, (intval%86400000000)/1E6)::interval; 
+   SELECT format('%sd %ss', intval/86400000000, (intval%86400000000)/1E6)::interval;
 $BODY$;
- 
+
 UPDATE
   _timescaledb_config.bgw_job job
 SET
@@ -218,19 +218,19 @@ SET
   proc_schema = '_timescaledb_internal',
   proc_name = 'policy_refresh_continuous_aggregate',
   job_type = 'custom',
-  config = 
-    CASE WHEN _timescaledb_internal.ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+  config =
+    CASE WHEN _timescaledb_internal.ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype)
     THEN
-    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
-        CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
-            THEN NULL 
-            ELSE _timescaledb_internal.ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
-        END 
+    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset',
+        CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807
+            THEN NULL
+            ELSE _timescaledb_internal.ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT
+        END
     , 'end_offset', _timescaledb_internal.ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
     ELSE
-    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
-        CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
-            THEN NULL 
+    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset',
+        CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807
+            THEN NULL
             ELSE cagg.ignore_invalidation_older_than::BIGINT
         END
     , 'end_offset', cagg.refresh_lag::BIGINT)
@@ -328,20 +328,20 @@ DECLARE
 BEGIN
     FOR cagg in SELECT * FROM _timescaledb_catalog.continuous_agg
     LOOP
-        SELECT * INTO dimrow 
-        FROM _timescaledb_catalog.dimension dim 
+        SELECT * INTO dimrow
+        FROM _timescaledb_catalog.dimension dim
         WHERE dim.hypertable_id = cagg.raw_hypertable_id AND dim.num_slices IS NULL AND dim.interval_length IS NOT NULL;
 
         IF dimrow.column_type IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype)
         THEN
-            IF cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
+            IF cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807
             THEN
                 end_val := -210866803200000001;
             ELSE
                 end_val := (extract(epoch from now()) * 1000000 - cagg.ignore_invalidation_older_than)::int8;
             END IF;
         ELSE
-            IF cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
+            IF cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807
             THEN
                 end_val := -2147483649;
             ELSE
@@ -350,7 +350,7 @@ BEGIN
             END IF;
         END IF;
 
-        INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log 
+        INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
           VALUES (cagg.mat_hypertable_id, -9223372036854775808, -9223372036854775808, end_val);
     END LOOP;
 END $$;
@@ -746,7 +746,7 @@ $BODY$
       (ch.total_bytes - COALESCE( ch.index_bytes , 0 ) - COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_heap_size , 0 ))::bigint  as heap_bytes,
       (COALESCE( ch.index_bytes, 0 ) + COALESCE( ch.compressed_index_size , 0) )::bigint as index_bytes,
       (COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_toast_size, 0 ))::bigint as toast_bytes,
-      (ch.total_bytes + COALESCE( ch.compressed_total_size, 0 ))::bigint as total_bytes 
+      (ch.total_bytes + COALESCE( ch.compressed_total_size, 0 ))::bigint as total_bytes
    FROM
 	  _timescaledb_internal.hypertable_chunk_local_size ch
    WHERE
@@ -851,7 +851,7 @@ CREATE FUNCTION @extschema@.hypertable_compression_stats (hypertable REGCLASS)
         node_name name)
     LANGUAGE SQL
     STABLE STRICT
-    AS	
+    AS
 $BODY$
 	SELECT
         count(*)::bigint AS total_chunks,
@@ -968,7 +968,7 @@ $BODY$;
 
 CREATE FUNCTION @extschema@.hypertable_size(
     hypertable              REGCLASS)
-RETURNS BIGINT 
+RETURNS BIGINT
 LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
    -- One row per data node is returned (in case of a distributed

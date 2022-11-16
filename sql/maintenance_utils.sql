@@ -75,7 +75,7 @@ BEGIN
     -- 8: compressed partial
 
     chunk_name := parse_ident(chunk::text);
-    CASE 
+    CASE
     WHEN status = 0 THEN
         RAISE EXCEPTION 'call compress_chunk instead of recompress_chunk';
     WHEN status = 1 THEN

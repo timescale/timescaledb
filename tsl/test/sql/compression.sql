@@ -329,7 +329,7 @@ SELECT
   CASE WHEN true THEN 'foo' ELSE 'bar' END,
   COALESCE(NULL,'coalesce'),
   avg(v1) + avg(v2) AS avg1,
-  avg(v1+v2) AS avg2, 
+  avg(v1+v2) AS avg2,
   count(*) AS cnt
 FROM metrics
 GROUP BY 1 WITH NO DATA;
@@ -537,8 +537,8 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch 
-       , _timescaledb_catalog.chunk compch 
+FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+       , _timescaledb_catalog.chunk compch
   WHERE ht.table_name = 'stattest' AND ch.hypertable_id = ht.id
         AND compch.id = ch.compressed_chunk_id AND ch.compressed_chunk_id > 0  \gset
 
@@ -582,13 +582,13 @@ INSERT INTO stattest2 SELECT '2020/06/20 01:00'::TIMESTAMPTZ ,1 , generate_serie
 INSERT INTO stattest2 SELECT '2020/07/20 01:00'::TIMESTAMPTZ ,1 , generate_series(1, 200, 1);
 
 SELECT  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id and ht.table_name like 'stattest2'
  ORDER BY ch1.id limit 1;
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM 
+ WHERE relname in ( SELECT ch.table_name FROM
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
 order by relname;
@@ -598,16 +598,16 @@ order by relname;
 --overwrite pg_class stats for the compressed chunk.
 UPDATE pg_class
 SET reltuples = 0, relpages = 0
- WHERE relname in ( SELECT ch.table_name FROM 
-    _timescaledb_catalog.chunk ch, 
+ WHERE relname in ( SELECT ch.table_name FROM
+    _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.hypertable ht
-  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id 
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM 
+ WHERE relname in ( SELECT ch.table_name FROM
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
 order by relname;
@@ -622,13 +622,13 @@ ANALYZE :STAT_COMP_TABLE;
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM 
+ WHERE relname in ( SELECT ch.table_name FROM
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
 ORDER BY relname;
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM 
+ WHERE relname in ( SELECT ch.table_name FROM
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
 ORDER BY relname;
@@ -636,13 +636,13 @@ ORDER BY relname;
 --analyze on stattest2 should not overwrite
 ANALYZE stattest2;
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM 
+ WHERE relname in ( SELECT ch.table_name FROM
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
 ORDER BY relname;
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM 
+ WHERE relname in ( SELECT ch.table_name FROM
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
 ORDER BY relname;
@@ -675,8 +675,8 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
 SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
 
---now reload data into the dropped chunks region, then compress 
--- then verify chunk status/dropped column 
+--now reload data into the dropped chunks region, then compress
+-- then verify chunk status/dropped column
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 SELECT count(*)
 FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch) q;

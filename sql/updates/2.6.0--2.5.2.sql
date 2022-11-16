@@ -108,7 +108,7 @@ BEGIN
         cnt := cnt + 1;
     END LOOP;
     IF cnt > 0 THEN
-       RAISE EXCEPTION 'cannot downgrade as compression is enabled for continuous aggregates' 
+       RAISE EXCEPTION 'cannot downgrade as compression is enabled for continuous aggregates'
             USING DETAIL = 'Please disable compression on all continuous aggregates before downgrading.',
             HINT = 'To disable compression, call decompress_chunk to decompress chunks, then drop any existing compression policy on the continuous aggregate, and finally run ALTER MATERIALIZED VIEW % SET timescaledb.compress = ''false''. ';
     END IF;

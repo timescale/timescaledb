@@ -57,17 +57,17 @@ CREATE TABLE _timescaledb_internal.tmp_chunk_seq_value AS
 SELECT last_value, is_called FROM _timescaledb_catalog.chunk_id_seq;
 
 --drop foreign keys on chunk table
-ALTER TABLE _timescaledb_catalog.chunk_constraint DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.chunk_constraint DROP CONSTRAINT
 chunk_constraint_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.chunk_index DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.chunk_index DROP CONSTRAINT
 chunk_index_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.chunk_data_node DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.chunk_data_node DROP CONSTRAINT
 chunk_data_node_chunk_id_fkey;
-ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT 
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT
 bgw_policy_chunk_stats_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.compression_chunk_size DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.compression_chunk_size DROP CONSTRAINT
 compression_chunk_size_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.compression_chunk_size DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.compression_chunk_size DROP CONSTRAINT
 compression_chunk_size_compressed_chunk_id_fkey;
 ALTER TABLE _timescaledb_catalog.chunk_copy_operation DROP CONSTRAINT
 chunk_copy_operation_chunk_id_fkey;
@@ -117,31 +117,31 @@ SELECT setval('_timescaledb_catalog.chunk_id_seq', last_value, is_called) FROM _
 ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_compressed_chunk_id_fkey FOREIGN KEY ( compressed_chunk_id )
  REFERENCES _timescaledb_catalog.chunk( id );
 
---add foreign key constraint 
-ALTER TABLE _timescaledb_catalog.chunk 
-      ADD CONSTRAINT chunk_hypertable_id_fkey 
+--add foreign key constraint
+ALTER TABLE _timescaledb_catalog.chunk
+      ADD CONSTRAINT chunk_hypertable_id_fkey
       FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
 
 --add the foreign key constraints
-ALTER TABLE _timescaledb_catalog.chunk_constraint ADD CONSTRAINT 
-chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id); 
+ALTER TABLE _timescaledb_catalog.chunk_constraint ADD CONSTRAINT
+chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id);
 ALTER TABLE _timescaledb_catalog.chunk_index ADD CONSTRAINT
-chunk_index_chunk_id_fkey FOREIGN KEY (chunk_id) 
+chunk_index_chunk_id_fkey FOREIGN KEY (chunk_id)
 REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.chunk_data_node ADD CONSTRAINT
-chunk_data_node_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id);  
+chunk_data_node_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id);
 ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats ADD CONSTRAINT
-bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) 
-REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE; 
+bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id)
+REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.compression_chunk_size ADD CONSTRAINT
-compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) 
-REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE; 
+compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id)
+REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.compression_chunk_size ADD CONSTRAINT
-compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) 
-REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE; 
+compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id)
+REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.chunk_copy_operation ADD CONSTRAINT
 chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE;
 

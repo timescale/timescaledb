@@ -207,7 +207,7 @@ INSERT into test_table_int SELECT generate_series( 1, 20), 100;
  public            | test_table_int  | _timescaledb_internal | _hyper_5_9_chunk | time              | bigint                 |             |           |                  20 |                30 | f             |                  | 
 (3 rows)
 
-\x 
+\x
 SELECT * FROM timescaledb_information.dimensions ORDER BY hypertable_name, dimension_number;
 -[ RECORD 1 ]-----+-------------------------
 hypertable_schema | closed
@@ -265,4 +265,4 @@ integer_interval  | 10
 integer_now_func  | table_int_now
 num_partitions    | 
 
-\x 
+\x

@@ -168,7 +168,7 @@ WHERE uncomp_hyper.table_name like 'test_retention_table';
 (1 row)
 
 ------------------------------
--- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks 
+-- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks
 -- (see issue https://github.com/timescale/timescaledb/issues/1810).
 -- More tests for reorder policy can be found at bgw_reorder_drop_chunks.sql
 ------------------------------

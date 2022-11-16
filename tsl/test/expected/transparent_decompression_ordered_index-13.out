@@ -583,7 +583,7 @@ ORDER BY time;
 SET enable_mergejoin = TRUE;
 SET enable_hashjoin = TRUE;
 --end github issue 1558
--- github issue 2673 
+-- github issue 2673
 -- nested loop join with parameterized path
 -- join condition has a segment by column and another column.
 SET enable_hashjoin = false;
@@ -596,8 +596,8 @@ WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
 SELECT met.*, lookup.*
 FROM metrics_ordered_idx met join lookup
 ON met.device_id = lookup.did and met.v0 = lookup.version
-WHERE met.time > '2000-01-19 19:00:00-05' 
-      and met.time < '2000-01-20 20:00:00-05'; 
+WHERE met.time > '2000-01-19 19:00:00-05'
+      and met.time < '2000-01-20 20:00:00-05';
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=2 loops=1)
@@ -617,8 +617,8 @@ WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
 SELECT met.*, lookup.*
 FROM metrics_ordered_idx met join lookup
 ON met.device_id = lookup.did and met.v0 = lookup.version
-WHERE met.time > '2000-01-19 19:00:00-05' 
-      and met.time < '2000-01-20 20:00:00-05' 
+WHERE met.time > '2000-01-19 19:00:00-05'
+      and met.time < '2000-01-20 20:00:00-05'
       and met.device_id = 3 and met.v0 = 5;
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -638,8 +638,8 @@ WHERE met.time > '2000-01-19 19:00:00-05'
 WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
 SELECT met.*, lookup.*
 FROM metrics_ordered_idx met join lookup
-ON met.device_id = lookup.did and met.v0 = lookup.version 
-WHERE met.time = '2000-01-19 19:00:00-05' 
+ON met.device_id = lookup.did and met.v0 = lookup.version
+WHERE met.time = '2000-01-19 19:00:00-05'
       and met.device_id = 3
       and met.device_id_peer = 3 and met.v0 = 5;
                                                                                       QUERY PLAN                                                                                       
@@ -659,11 +659,11 @@ WHERE met.time = '2000-01-19 19:00:00-05'
 -- lateral subquery
 :PREFIX
 WITH f1 as ( SELECT * from (values( 7, 5, 4) , (4, 5, 5) ) as lu( device_id, device_id_peer, v0) )
-SELECT * FROM  metrics_ordered_idx met 
+SELECT * FROM  metrics_ordered_idx met
 JOIN LATERAL
   ( SELECT node, f1.* from nodetime , f1
     WHERE  node = f1.device_id) q
-ON met.device_id = q.node and met.device_id_peer = q.device_id_peer 
+ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
    and met.v0 = q.v0 and met.v0 > 2 and time = '2018-01-19 20:00:00-05';
                                                                                       QUERY PLAN                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -682,7 +682,7 @@ ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
                Filter: ((_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
 (13 rows)
 
--- filter on compressed attr (v0) with seqscan enabled and indexscan 
+-- filter on compressed attr (v0) with seqscan enabled and indexscan
 -- disabled. filters on compressed attr should be above the seq scan.
 SET enable_seqscan = true;
 SET enable_indexscan = false;
@@ -690,10 +690,10 @@ SET enable_indexscan = false;
 WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
 SELECT met.*, lookup.*
 FROM metrics_ordered_idx met join lookup
-ON met.device_id = lookup.did and met.v0 = lookup.version 
+ON met.device_id = lookup.did and met.v0 = lookup.version
    and met.device_id = 3
-WHERE met.time > '2000-01-19 19:00:00-05' 
-      and met.time < '2000-01-20 20:00:00-05' 
+WHERE met.time > '2000-01-19 19:00:00-05'
+      and met.time < '2000-01-20 20:00:00-05'
       and met.device_id = 3
       and met.device_id_peer = 3 and met.v0 = 5;
                                                                                                             QUERY PLAN                                                                                                            
@@ -713,7 +713,7 @@ RESET enable_hashjoin  ;
 RESET enable_mergejoin;
 RESET enable_material ;
 RESET enable_indexscan ;
---end github issue 2673 
+--end github issue 2673
 SET enable_seqscan = TRUE;
 \ir include/transparent_decompression_constraintaware.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -1016,16 +1016,16 @@ CREATE TABLE entity
   name text
 );
 INSERT INTO entity values(10, 'VMEM', 'cpu');
-CREATE TABLE entity_m2 
-( 
- timec         timestamp with time zone  NOT NULL, 
- entity_oid    bigint                    , 
- entity_hash   bigint                    , 
- type          text               , 
- current       double precision, 
- capacity      double precision, 
- utilization   double precision, 
- peak          double precision       
+CREATE TABLE entity_m2
+(
+ timec         timestamp with time zone  NOT NULL,
+ entity_oid    bigint                    ,
+ entity_hash   bigint                    ,
+ type          text               ,
+ current       double precision,
+ capacity      double precision,
+ utilization   double precision,
+ peak          double precision
 );
 SELECT create_hypertable('entity_m2', 'timec', chunk_time_interval=>'30 days'::interval);
    create_hypertable    
@@ -1037,8 +1037,8 @@ INSERT INTO entity_m2 values (
  '2020-12-21 15:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
 INSERT INTO entity_m2 values (
  '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
-ALTER TABLE entity_m2 SET (timescaledb.compress, 
-timescaledb.compress_segmentby = 'entity_oid', 
+ALTER TABLE entity_m2 SET (timescaledb.compress,
+timescaledb.compress_segmentby = 'entity_oid',
 timescaledb.compress_orderby = 'type, timec');
 SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
              compress_chunk              
@@ -1046,15 +1046,15 @@ SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
  _timescaledb_internal._hyper_5_13_chunk
 (1 row)
 
-CREATE TABLE entity_m1 
-( 
-timec         timestamp with time zone  , 
- entity_oid    bigint                    , 
- entity_hash   bigint                    , 
- type          text               , 
- current       double precision, 
- capacity      double precision, 
- utilization   double precision 
+CREATE TABLE entity_m1
+(
+timec         timestamp with time zone  ,
+ entity_oid    bigint                    ,
+ entity_hash   bigint                    ,
+ type          text               ,
+ current       double precision,
+ capacity      double precision,
+ utilization   double precision
 );
 SELECT create_hypertable('entity_m1', 'timec', chunk_time_interval=>'30 days'::interval);
 NOTICE:  adding not-null constraint to column "timec"
@@ -1101,8 +1101,8 @@ SELECT m.timec, avg(m.utilization) AS avg_util
 (2 rows)
 
 --now compress the other table too and rerun the query --
-ALTER TABLE entity_m1 SET (timescaledb.compress, 
-timescaledb.compress_segmentby = 'entity_oid', 
+ALTER TABLE entity_m1 SET (timescaledb.compress,
+timescaledb.compress_segmentby = 'entity_oid',
 timescaledb.compress_orderby = 'type, timec');
 SELECT compress_chunk(c) FROM show_chunks('entity_m1') c;
              compress_chunk              

@@ -15,7 +15,7 @@ BEGIN
     PERFORM add_data_node('dn1', host=>'localhost', database=>'dn1');
 	CREATE TABLE disthyper (time timestamptz, device int, temp float);
 	PERFORM create_distributed_hypertable('disthyper', 'time', 'device');
-	INSERT INTO disthyper VALUES ('2020-12-20 12:18', 1, 27.9);	
+	INSERT INTO disthyper VALUES ('2020-12-20 12:18', 1, 27.9);
   END IF;
 END
 $$;

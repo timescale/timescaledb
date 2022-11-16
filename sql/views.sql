@@ -302,7 +302,7 @@ ORDER BY table_name,
   orderby_column_index;
 
 -- troubleshooting job errors view
-CREATE OR REPLACE VIEW timescaledb_information.job_errors AS 
+CREATE OR REPLACE VIEW timescaledb_information.job_errors AS
 SELECT
     job_id,
     error_data ->> 'proc_schema' as proc_schema,
@@ -311,8 +311,8 @@ SELECT
     start_time,
     finish_time,
     error_data ->> 'sqlerrcode' AS sqlerrcode,
-    CASE WHEN error_data ->>'message' IS NOT NULL THEN 
-      CASE WHEN error_data ->>'detail' IS NOT NULL THEN 
+    CASE WHEN error_data ->>'message' IS NOT NULL THEN
+      CASE WHEN error_data ->>'detail' IS NOT NULL THEN
         CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data ->>'detail', '. ', error_data->>'hint')
         ELSE concat(error_data ->>'message', ' ', error_data ->>'detail')
         END

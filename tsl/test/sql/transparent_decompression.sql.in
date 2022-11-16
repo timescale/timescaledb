@@ -271,7 +271,7 @@ $sql$;
 
 -- repro for core dump related to total_table_pages setting that get
 -- adjusted during decompress path.
-CREATE SEQUENCE vessel_id_seq 
+CREATE SEQUENCE vessel_id_seq
     INCREMENT 1
     START 1    MINVALUE 1
     MAXVALUE 9223372036854775807
@@ -294,14 +294,14 @@ CREATE INDEX motion_table_t2_vessel_id_idx on motion_table(vessel_id);
 SELECT create_hypertable( 'motion_table', 'dataloggertime', chunk_time_interval=> '7 days'::interval);
 
 --- do not modify the data. We need atleast this volume to reproduce issues with pages/tuple counts etc. ---
-INSERT into motion_table(datalogger_id, vessel_id, bus_id, src_id, 
+INSERT into motion_table(datalogger_id, vessel_id, bus_id, src_id,
    dataloggertime, interval_s)
 SELECT 1, random(), random() , random() ,
        generate_series( '2020-01-02 10:00'::timestamp, '2020-01-10 10::00'::timestamp, '1 min'::interval), 1.1;
 
-INSERT into motion_table(datalogger_id, vessel_id, bus_id, src_id, 
+INSERT into motion_table(datalogger_id, vessel_id, bus_id, src_id,
    dataloggertime, interval_s)
-SELECT 1, random(), 2, 3, 
+SELECT 1, random(), 2, 3,
        generate_series( '2020-01-10 8:00'::timestamp, '2020-01-10 10::00'::timestamp, '1 min'::interval), 1.1;
 
 ALTER TABLE motion_table SET ( timescaledb.compress,
@@ -313,8 +313,8 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'motion_table';
 
 -- compress only the first one ---
-SELECT compress_chunk( chunk_table) 
-FROM ( SELECT chunk_schema || '.' || chunk_name as chunk_table 
+SELECT compress_chunk( chunk_table)
+FROM ( SELECT chunk_schema || '.' || chunk_name as chunk_table
        FROM timescaledb_information.chunks
        WHERE hypertable_name = 'motion_table' ORDER BY range_start limit 1 ) q;
 

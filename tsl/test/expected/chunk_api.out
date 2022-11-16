@@ -580,7 +580,7 @@ LIMIT 1 \gset
 SELECT slices AS "SLICES"
 FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
  relname  
 ----------
@@ -603,7 +603,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
   3 |            1 |     1515024000000000 | 1519024000000000
 (2 rows)
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
@@ -618,7 +618,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 (2 rows)
 
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
  relname 
 ---------
@@ -640,7 +640,7 @@ NOTICE:  adding not-null constraint to column "time"
              3 | public      | chunkapi   | t
 (1 row)
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
@@ -657,7 +657,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2, '3d');
              4 | public      | chunkapi   | t
 (1 row)
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
@@ -673,7 +673,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
              5 | public      | chunkapi   | t
 (1 row)
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
@@ -759,7 +759,7 @@ SELECT attach_tablespace('tablespace2', 'chunkapi');
  
 (1 row)
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
@@ -818,7 +818,7 @@ SELECT attach_tablespace('tablespace2', 'chunkapi');
  
 (1 row)
 
-SELECT count(*) FROM 
+SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
@@ -886,7 +886,7 @@ DROP TABLE original_chunk_constraints;
 DROP TABLE original_chunk_constraints_metadata;
 -- The chunk should inherit the hypertable
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
  relname  
 ----------
@@ -955,7 +955,7 @@ FROM show_chunks('chunkapi') ch;
 
 -- The chunk should inherit the hypertable
 SELECT relname
-FROM pg_catalog.pg_inherits, pg_class 
+FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
  relname  
 ----------

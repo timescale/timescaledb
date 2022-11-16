@@ -167,7 +167,7 @@ SET default_transaction_read_only TO off;
 DROP TABLE disttable;
 
 -- Test some read-only cases of DDL operations
--- 
+--
 CREATE TABLE test_table(time bigint NOT NULL, device int);
 SELECT * FROM create_hypertable('test_table', 'time', chunk_time_interval => 1000000::bigint);
 INSERT INTO test_table VALUES (0, 1), (1, 1), (2, 2);
@@ -216,7 +216,7 @@ COPY test_table (time, device) FROM STDIN DELIMITER ',';
 COPY (SELECT * FROM test_Table ORDER BY time) TO STDOUT;
 
 -- Test Continuous Aggregates
--- 
+--
 SET default_transaction_read_only TO off;
 
 CREATE TABLE test_contagg (
@@ -257,13 +257,13 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 ALTER TABLE test_table_int SET (timescaledb.compress);
 INSERT INTO test_table_int VALUES (0, 1), (10,10);
 SELECT add_compression_policy('test_table_int', '1'::integer) as comp_job_id \gset
-SELECT config as comp_job_config 
+SELECT config as comp_job_config
 FROM _timescaledb_config.bgw_job WHERE id = :comp_job_id \gset
 SET default_transaction_read_only TO on;
 CALL _timescaledb_internal.policy_compression(:comp_job_id, :'comp_job_config');
 SET default_transaction_read_only TO off;
 --verify chunks are not compressed
-SELECT count(*) , count(*) FILTER ( WHERE is_compressed is true) 
+SELECT count(*) , count(*) FILTER ( WHERE is_compressed is true)
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'test_table_int';
 --cleanup

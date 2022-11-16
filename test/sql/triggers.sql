@@ -287,14 +287,14 @@ SELECT * FROM vehicles;
 SELECT * FROM color;
 
 -- switch back to default user to run some dropping tests
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER; 
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
 
 \set ON_ERROR_STOP 0
--- test that disable trigger is disallowed 
+-- test that disable trigger is disallowed
 ALTER TABLE location DISABLE TRIGGER create_vehicle_trigger;
 \set ON_ERROR_STOP 1
 
--- test that drop trigger works 
+-- test that drop trigger works
 DROP TRIGGER create_color_trigger ON location;
 DROP TRIGGER create_vehicle_trigger ON location;
 

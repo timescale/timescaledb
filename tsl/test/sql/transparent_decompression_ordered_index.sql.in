@@ -152,16 +152,16 @@ CREATE TABLE entity
 
 INSERT INTO entity values(10, 'VMEM', 'cpu');
 
-CREATE TABLE entity_m2 
-( 
- timec         timestamp with time zone  NOT NULL, 
- entity_oid    bigint                    , 
- entity_hash   bigint                    , 
- type          text               , 
- current       double precision, 
- capacity      double precision, 
- utilization   double precision, 
- peak          double precision       
+CREATE TABLE entity_m2
+(
+ timec         timestamp with time zone  NOT NULL,
+ entity_oid    bigint                    ,
+ entity_hash   bigint                    ,
+ type          text               ,
+ current       double precision,
+ capacity      double precision,
+ utilization   double precision,
+ peak          double precision
 );
 
 SELECT create_hypertable('entity_m2', 'timec', chunk_time_interval=>'30 days'::interval);
@@ -171,21 +171,21 @@ INSERT INTO entity_m2 values (
 INSERT INTO entity_m2 values (
  '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
 
-ALTER TABLE entity_m2 SET (timescaledb.compress, 
-timescaledb.compress_segmentby = 'entity_oid', 
+ALTER TABLE entity_m2 SET (timescaledb.compress,
+timescaledb.compress_segmentby = 'entity_oid',
 timescaledb.compress_orderby = 'type, timec');
 
 SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
 
-CREATE TABLE entity_m1 
-( 
-timec         timestamp with time zone  , 
- entity_oid    bigint                    , 
- entity_hash   bigint                    , 
- type          text               , 
- current       double precision, 
- capacity      double precision, 
- utilization   double precision 
+CREATE TABLE entity_m1
+(
+timec         timestamp with time zone  ,
+ entity_oid    bigint                    ,
+ entity_hash   bigint                    ,
+ type          text               ,
+ current       double precision,
+ capacity      double precision,
+ utilization   double precision
 );
 
 SELECT create_hypertable('entity_m1', 'timec', chunk_time_interval=>'30 days'::interval);
@@ -225,8 +225,8 @@ SELECT m.timec, avg(m.utilization) AS avg_util
    GROUP BY 1 ORDER BY 1;
 
 --now compress the other table too and rerun the query --
-ALTER TABLE entity_m1 SET (timescaledb.compress, 
-timescaledb.compress_segmentby = 'entity_oid', 
+ALTER TABLE entity_m1 SET (timescaledb.compress,
+timescaledb.compress_segmentby = 'entity_oid',
 timescaledb.compress_orderby = 'type, timec');
 SELECT compress_chunk(c) FROM show_chunks('entity_m1') c;
 SELECT m.timec, avg(m.utilization) AS avg_util

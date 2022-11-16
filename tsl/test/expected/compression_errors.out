@@ -40,7 +40,7 @@ HINT:  Use separate columns for the timescaledb.compress_orderby and timescaledb
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
 -- this is acceptable: having previously set the default value for orderby
--- and skipping orderby on a subsequent alter command 
+-- and skipping orderby on a subsequent alter command
 create table default_skipped (a integer not null, b integer, c integer, d integer);
 select create_hypertable('default_skipped', 'a', chunk_time_interval=> 10);
       create_hypertable       
@@ -350,7 +350,7 @@ ALTER TABLE table_constr ADD COLUMN newcol integer NOT NULL;
 ERROR:  cannot add column with NOT NULL constraint without default to a hypertable that has compression enabled
 ALTER TABLE table_constr ADD COLUMN newcol integer DEFAULT random() + random();
 ERROR:  cannot add column with non-constant default expression to a hypertable that has compression enabled
-ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer REFERENCES fortable(col); 
+ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer REFERENCES fortable(col);
 ERROR:  cannot add column with constraints to a hypertable that has compression enabled
 ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer GENERATED ALWAYS AS IDENTITY;
 ERROR:  cannot add column with constraints to a hypertable that has compression enabled
@@ -521,7 +521,7 @@ SELECT create_hypertable('metric', 'time', 'dev_id', 10);
  (27,public,metric,t)
 (1 row)
 
-ALTER TABLE metric SET (                                      
+ALTER TABLE metric SET (
 timescaledb.compress,
 timescaledb.compress_segmentby = 'dev_id',
 timescaledb.compress_orderby = 'time DESC'
@@ -541,7 +541,7 @@ ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
 -- column already exists the second time
 ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
 NOTICE:  column "medium" of relation "metric" already exists, skipping
--- also add one without IF NOT EXISTS 
+-- also add one without IF NOT EXISTS
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
 ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
 ERROR:  column "medium_1" of relation "metric" already exists

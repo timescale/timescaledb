@@ -12,7 +12,7 @@ SELECT format('\! diff -u --label "Distributed results" --label "Local results" 
 \set PREFIX 'EXPLAIN (verbose, costs off)'
 \set ORDER_BY_1 'ORDER BY 1'
 \set ORDER_BY_1_2 'ORDER BY 1,2'
-\set ECHO queries 
+\set ECHO queries
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% RUNNING TESTS on table: metrics_dist
 %%% PREFIX: EXPLAIN (verbose, costs off)

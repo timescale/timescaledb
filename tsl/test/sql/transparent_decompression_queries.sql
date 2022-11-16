@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
---TEST github issue 1650 character segment by column 
+--TEST github issue 1650 character segment by column
 CREATE TABLE test_chartab ( job_run_id INTEGER NOT NULL, mac_id CHAR(16) NOT NULL, rtt INTEGER NOT NULL, ts TIMESTAMP(3) NOT NULL );
 
 SELECT create_hypertable('test_chartab', 'ts', chunk_time_interval => interval '1 day', migrate_data => true);
@@ -68,7 +68,7 @@ GROUP BY 2, 3;
 RESET enable_hashagg;
 
 -- test if volatile function quals are applied to compressed chunks
-CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL 
+CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL
 LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -82,11 +82,11 @@ $BODY$;
 
 -- the function cannot be pushed down to compressed chunk
 -- but should be applied as a filter on decompresschunk
-SELECT * from test_chartab 
+SELECT * from test_chartab
 WHERE check_equal_228(rtt) ORDER BY ts;
 
-EXPLAIN (analyze,costs off,timing off,summary off) 
-SELECT * from test_chartab 
+EXPLAIN (analyze,costs off,timing off,summary off)
+SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
 
 -- test pseudoconstant qual #3241

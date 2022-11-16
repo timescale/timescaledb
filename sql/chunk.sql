@@ -52,7 +52,7 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_show' LANGUAGE C VOLATILE;
 -- table will be renamed and/or moved as necessary.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk(
        hypertable REGCLASS,
-       slices JSONB,	   
+       slices JSONB,
        schema_name NAME = NULL,
        table_name NAME = NULL,
 	   chunk_table REGCLASS = NULL)
