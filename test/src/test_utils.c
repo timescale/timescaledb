@@ -243,15 +243,19 @@ TS_FUNCTION_INFO_V1(ts_debug_allocated_bytes);
 Datum
 ts_debug_allocated_bytes(PG_FUNCTION_ARGS)
 {
+	MemoryContext context = NULL;
 	char *context_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
 	if (strcmp(context_name, "PortalContext") == 0)
 	{
-#if PG13_GE
-		PG_RETURN_UINT64(MemoryContextMemAllocated(PortalContext, /* recurse = */ true));
-#else
-		/* Don't have this function on PG 12. */
-		PG_RETURN_UINT64(1);
-#endif
+		context = PortalContext;
+	}
+	else if (strcmp(context_name, "CacheMemoryContext") == 0)
+	{
+		context = CacheMemoryContext;
+	}
+	else if (strcmp(context_name, "TopMemoryContext") == 0)
+	{
+		context = TopMemoryContext;
 	}
 	else
 	{
@@ -261,4 +265,12 @@ ts_debug_allocated_bytes(PG_FUNCTION_ARGS)
 						context_name)));
 		PG_RETURN_NULL();
 	}
+
+#if !PG13_GE
+	/* Don't have this function on PG 12. */
+	(void) context;
+	PG_RETURN_UINT64(1);
+#else
+	PG_RETURN_UINT64(MemoryContextMemAllocated(context, /* recurse = */ true));
+#endif
 }

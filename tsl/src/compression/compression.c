@@ -1965,6 +1965,8 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 					out_isnull[column->min_metadata_attr_offset] = true;
 					out_isnull[column->max_metadata_attr_offset] = true;
 				}
+
+				segment_meta_min_max_builder_reset(column->min_max_metadata_builder);
 			}
 		}
 		/* if there is no compressor, this must be a segmenter */

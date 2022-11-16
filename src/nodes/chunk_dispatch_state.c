@@ -159,7 +159,9 @@ chunk_dispatch_exec(CustomScanState *node)
 #endif
 		Assert(ts_cm_functions->compress_row_exec != NULL);
 		TupleTableSlot *orig_slot = slot;
+		old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 		slot = ts_cm_functions->compress_row_exec(cis->compress_info->compress_state, slot);
+		MemoryContextSwitchTo(old);
 		/* If we have cagg defined on the hypertable, we have to execute
 		 * the function that records invalidations directly as AFTER ROW
 		 * triggers do not work with compressed chunks.
