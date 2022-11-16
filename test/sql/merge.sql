@@ -13,7 +13,7 @@ SELECT create_hypertable(
   'conditions',
   'time',
   chunk_time_interval => INTERVAL '5 seconds');
-  
+
 
 INSERT INTO conditions
 SELECT time, location, 14 as temperature
@@ -56,7 +56,7 @@ select hypertable_name, count(*) as num_of_chunks from timescaledb_information.c
 -- average logic here is a mess but it works
 SELECT COALESCE(c.time, cu.time) as time,
        COALESCE(c.location, cu.location) as location,
-       (COALESCE(c.temperature, cu.temperature) + COALESCE(cu.temperature, c.temperature))/2 as temperature 
+       (COALESCE(c.temperature, cu.temperature) + COALESCE(cu.temperature, c.temperature))/2 as temperature
 FROM conditions AS c FULL JOIN conditions_updated AS cu
 ON c.time = cu.time AND c.location = cu.location;
 

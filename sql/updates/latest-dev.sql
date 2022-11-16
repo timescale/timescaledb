@@ -307,9 +307,9 @@ CREATE TABLE _timescaledb_internal.tmp_dimension_seq_value AS
 SELECT last_value, is_called FROM _timescaledb_catalog.dimension_id_seq;
 
 --drop foreign keys on dimension table
-ALTER TABLE _timescaledb_catalog.dimension_partition DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.dimension_partition DROP CONSTRAINT
 dimension_partition_dimension_id_fkey;
-ALTER TABLE _timescaledb_catalog.dimension_slice DROP CONSTRAINT 
+ALTER TABLE _timescaledb_catalog.dimension_slice DROP CONSTRAINT
 dimension_slice_dimension_id_fkey;
 
 --drop dependent views
@@ -364,11 +364,11 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '')
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
 
 --add the foreign key constraints
-ALTER TABLE _timescaledb_catalog.dimension_partition ADD CONSTRAINT 
-dimension_partition_dimension_id_fkey FOREIGN KEY (dimension_id) 
-REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE; 
+ALTER TABLE _timescaledb_catalog.dimension_partition ADD CONSTRAINT
+dimension_partition_dimension_id_fkey FOREIGN KEY (dimension_id)
+REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.dimension_slice ADD CONSTRAINT
-dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) 
+dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id)
 REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE;
 
 --cleanup

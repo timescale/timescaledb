@@ -81,8 +81,8 @@ NOTICE:  [db_dist_policy_3]:
 
 SET ROLE :ROLE_1;
 CREATE TABLE conditions(
-    time BIGINT NOT NULL, 
-    device INT, 
+    time BIGINT NOT NULL,
+    device INT,
     value FLOAT
 );
 SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device', 3,

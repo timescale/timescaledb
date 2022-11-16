@@ -30,7 +30,7 @@ INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.
 SELECT * from show_chunks('dist_test');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
 
-SELECT sum(device) FROM dist_test; 
+SELECT sum(device) FROM dist_test;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
 
 -- ensure data node name is provided and has proper type
@@ -103,7 +103,7 @@ CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyp
 CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
-SELECT sum(device) FROM dist_test; 
+SELECT sum(device) FROM dist_test;
 
 -- Check that they can be called from inside a procedure without
 -- generating warnings or error messages (#3495).

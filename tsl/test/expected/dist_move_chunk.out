@@ -72,7 +72,7 @@ _timescaledb_internal._dist_hyper_1_3_chunk
  
 (1 row)
 
-SELECT sum(device) FROM dist_test; 
+SELECT sum(device) FROM dist_test;
  sum 
 -----
  846
@@ -270,7 +270,7 @@ sum
  
 (1 row)
 
-SELECT sum(device) FROM dist_test; 
+SELECT sum(device) FROM dist_test;
  sum 
 -----
  846

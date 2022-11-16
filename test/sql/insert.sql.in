@@ -163,20 +163,20 @@ SELECT create_hypertable(
 	migrate_data => TRUE
 );
 EXPLAIN (costs off)
-INSERT INTO readings 
-SELECT '2020-05-09 10:34:35.296288+00', 1, 0 
+INSERT INTO readings
+SELECT '2020-05-09 10:34:35.296288+00', 1, 0
 WHERE NOT EXISTS (
-	SELECT 1 
-	FROM readings 
-	WHERE sensor_id = 1 
+	SELECT 1
+	FROM readings
+	WHERE sensor_id = 1
 		AND toe = '2020-05-09 10:34:35.296288+00'
 );
-INSERT INTO readings 
-SELECT '2020-05-09 10:34:35.296288+00', 1, 0 
+INSERT INTO readings
+SELECT '2020-05-09 10:34:35.296288+00', 1, 0
 WHERE NOT EXISTS (
-	SELECT 1 
-	FROM readings 
-	WHERE sensor_id = 1 
+	SELECT 1
+	FROM readings
+	WHERE sensor_id = 1
 		AND toe = '2020-05-09 10:34:35.296288+00'
 );
 DROP TABLE readings;

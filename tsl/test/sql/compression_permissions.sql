@@ -90,7 +90,7 @@ select '2019-04-01 00:00+0'::timestamp with time zone, 'NYC', 'klick', 55, 75;
 select count(*) from conditions;
 update conditions
 set location = 'SFO'
-where timec = '2019-04-01 00:00+0'::timestamp with time zone; 
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 GRANT UPDATE, DELETE on conditions to :ROLE_DEFAULT_PERM_USER_2;
@@ -114,7 +114,7 @@ select location from conditions where timec = '2019-04-01 00:00+0';
 
 CREATE VIEW v2 as select * from conditions;
 select count(*) from v2;
---should fail after revoking permissions 
+--should fail after revoking permissions
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 REVOKE SELECT on conditions FROM :ROLE_DEFAULT_PERM_USER_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
@@ -182,10 +182,10 @@ ORDER BY hypertable, chunk;
 
 --TEST user that has insert permission can insert into a compressed chunk
 GRANT INSERT ON conditions TO :ROLE_DEFAULT_PERM_USER;
-SELECT count(*) FROM conditions; 
-SELECT count(*) FROM ( SELECT show_chunks('conditions'))q; 
+SELECT count(*) FROM conditions;
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --insert into a compressed chunk --
 INSERT INTO conditions VALUES( '2018-12-02 00:00'::timestamp, 'NYC', 75, 95);
-SELECT count(*) FROM conditions; 
-SELECT count(*) FROM ( SELECT show_chunks('conditions'))q; 
+SELECT count(*) FROM conditions;
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;

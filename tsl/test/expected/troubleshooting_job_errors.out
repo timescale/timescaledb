@@ -33,8 +33,8 @@ $$;
 select add_job('job_fail', '4 minutes') as jobf_id \gset
 -- test jobs that try to update concurrently
 CREATE TABLE custom_log (
-    a int, 
-    b int, 
+    a int,
+    b int,
     msg text
 );
 insert into custom_log values (0, 0, 'msg0');
@@ -108,7 +108,7 @@ select pg_sleep(20);
 (1 row)
 
 -- exclude the retention policy
-select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode 
+select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.job_errors WHERE job_id != 2;
  job_id |                     err_message                     | sqlerrcode 
 --------+-----------------------------------------------------+------------

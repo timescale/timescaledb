@@ -130,7 +130,7 @@ CREATE FUNCTION _timescaledb_internal.update_dimension_partition(hypertable REGC
 SELECT _timescaledb_internal.update_dimension_partition(format('%I.%I', h.schema_name, h.table_name))
 FROM _timescaledb_catalog.hypertable h
 INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
-WHERE d.interval_length IS NULL; 
+WHERE d.interval_length IS NULL;
 DROP FUNCTION _timescaledb_internal.update_dimension_partition;
 
 -- Report warning when partial aggregates are used

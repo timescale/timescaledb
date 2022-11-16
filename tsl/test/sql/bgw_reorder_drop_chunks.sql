@@ -309,7 +309,7 @@ SELECT ts_bgw_params_reset_time();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 
--- Test for timestamp 
+-- Test for timestamp
 CREATE TABLE test_drop_chunks_table_tsntz(time date, drop_order int);
 SELECT create_hypertable('test_drop_chunks_table_tsntz', 'time', chunk_time_interval => INTERVAL '1 week');
 

@@ -231,7 +231,7 @@ SELECT * FROM truncate_normal, truncate_nested;
 -------+-------
 (0 rows)
 
--- test TRUNCATE can be performed by a user 
+-- test TRUNCATE can be performed by a user
 -- with TRUNCATE privilege who is not table owner
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE ROLE owner WITH LOGIN;

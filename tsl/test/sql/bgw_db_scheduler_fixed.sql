@@ -107,8 +107,8 @@ CREATE TABLE public.bgw_log(
 );
 
 CREATE VIEW sorted_bgw_log AS
-    SELECT msg_no, application_name, 
-    regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') 
+    SELECT msg_no, application_name,
+    regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection')
     AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 
 CREATE TABLE public.bgw_dsm_handle_store(
@@ -134,7 +134,7 @@ SELECT * FROM sorted_bgw_log;
 --
 
 TRUNCATE bgw_log;
--- this function sets the counter (microseconds) that corresponds to the current time to the 
+-- this function sets the counter (microseconds) that corresponds to the current time to the
 -- given value (defalut 0, and the default for setting the latch is false)
 SELECT ts_bgw_params_reset_time();
 SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s',scheduled:= false);
@@ -232,7 +232,7 @@ SELECT * FROM sorted_bgw_log;
 
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
 
--- what we aim to verify here is the following: 
+-- what we aim to verify here is the following:
 -- 1. that the job is run again on its next scheduled slot, if the next_start calculated based
 -- on failure count would surpass it
 -- the next_start on failure is calculated by adding failure_count * retry_period to finish time
@@ -248,14 +248,14 @@ SELECT * FROM sorted_bgw_log;
 
 -- as we have a job on a fixed_schedule, the next_start will not be more than the next scheduled slot
 -- If the calculated next_start is more than the next scheduled execution slot, then
--- we will execute again at the next scheduled slot. 
+-- we will execute again at the next scheduled slot.
 -- again this is before the next scheduled slot so the job retries before then
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425); -- will see 3 failures now
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
--- will see 4 failures now 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(625); 
+-- will see 4 failures now
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(625);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;

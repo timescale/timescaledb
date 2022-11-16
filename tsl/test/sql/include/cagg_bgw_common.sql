@@ -281,7 +281,7 @@ select view_name, view_definition from timescaledb_information.continuous_aggreg
 where view_name::text like '%test_continuous_agg_view';
 
 select job_status, last_run_duration
-from timescaledb_information.job_stats ps, timescaledb_information.continuous_aggregates cagg 
+from timescaledb_information.job_stats ps, timescaledb_information.continuous_aggregates cagg
 where cagg.view_name::text like '%test_continuous_agg_view'
 and cagg.materialization_hypertable_name = ps.hypertable_name;
 

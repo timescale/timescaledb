@@ -38,8 +38,8 @@ select add_job('job_fail', '4 minutes') as jobf_id \gset
 
 -- test jobs that try to update concurrently
 CREATE TABLE custom_log (
-    a int, 
-    b int, 
+    a int,
+    b int,
     msg text
 );
 
@@ -81,7 +81,7 @@ select delete_job(:jobf_id);
 
 select pg_sleep(20);
 -- exclude the retention policy
-select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode 
+select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.job_errors WHERE job_id != 2;
 
 ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;

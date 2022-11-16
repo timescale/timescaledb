@@ -499,7 +499,7 @@ DROP trigger t4_constraint ON trigger_test;
 -- now add a new column to the table and insert into a new chunk
 ALTER TABLE trigger_test ADD COLUMN addcolv varchar(10);
 ALTER TABLE trigger_test ADD COLUMN addcoli integer;
-INSERT INTO trigger_test(time, device, value, addcolv, addcoli) 
+INSERT INTO trigger_test(time, device, value, addcolv, addcoli)
 VALUES ( '2010-01-01', 10, 10, 'ten', 222);
 SELECT compress_chunk(c, true) FROM show_chunks('trigger_test') c;
 

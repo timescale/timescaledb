@@ -74,7 +74,7 @@ SELECT wait_for_job_to_run(:short_job_drifting, 1);
 (1 row)
 
 -- select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(15000);
-select next_start as next_start_short from timescaledb_information.job_stats where job_id = :short_job_fixed \gset 
+select next_start as next_start_short from timescaledb_information.job_stats where job_id = :short_job_fixed \gset
 -- verify the next_start is 15 seconds after the initial_start for the fixed schedule job
 select :'next_start_short'::timestamptz - :'initial_start_given'::timestamptz as schedule_diff;
  schedule_diff 

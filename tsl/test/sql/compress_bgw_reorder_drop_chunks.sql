@@ -96,7 +96,7 @@ INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = unco
 WHERE uncomp_hyper.table_name like 'test_retention_table';
 
 ------------------------------
--- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks 
+-- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks
 -- (see issue https://github.com/timescale/timescaledb/issues/1810).
 -- More tests for reorder policy can be found at bgw_reorder_drop_chunks.sql
 ------------------------------

@@ -28,7 +28,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.is_main_table(
 $BODY$
      SELECT EXISTS(
          SELECT 1 FROM _timescaledb_catalog.hypertable h
-         WHERE h.schema_name = is_main_table.schema_name AND 
+         WHERE h.schema_name = is_main_table.schema_name AND
                h.table_name = is_main_table.table_name
      );
 $BODY$ SET search_path TO pg_catalog, pg_temp;

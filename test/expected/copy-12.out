@@ -88,7 +88,7 @@ CREATE TABLE "hyper2" (
     "time" bigint NOT NULL,
     "value" double precision NOT NULL
 );
-SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10); 
+SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10);
   create_hypertable  
 ---------------------
  (3,public,hyper2,t)
@@ -180,7 +180,7 @@ SELECT create_hypertable('hyper_copy', 'time', chunk_time_interval => 2);
  (6,public,hyper_copy,t)
 (1 row)
 
--- First copy call with default client_min_messages, to get rid of the 
+-- First copy call with default client_min_messages, to get rid of the
 -- building index "_hyper_XXX_chunk_hyper_copy_time_idx" on table "_hyper_XXX_chunk" serially
 -- messages
 \copy hyper_copy FROM data/copy_data.csv WITH csv header;
@@ -217,7 +217,7 @@ $BODY$;
 -- Before trigger (CIM_SINGLE should be used)
 CREATE TRIGGER hyper_copy_trigger_insert_before
     BEFORE INSERT ON hyper_copy
-    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger(); 
+    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger();
 \copy hyper_copy FROM data/copy_data.csv WITH csv header;
 DEBUG:  Using normal unbuffered copy operation (CIM_SINGLE) because triggers are defined on the destination table.
 SELECT count(*) FROM hyper_copy;
@@ -233,7 +233,7 @@ SET client_min_messages TO DEBUG1;
 -- After trigger (CIM_MULTI_CONDITIONAL should be used)
 CREATE TRIGGER hyper_copy_trigger_insert_after
     AFTER INSERT ON hyper_copy
-    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger(); 
+    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger();
 \copy hyper_copy FROM data/copy_data.csv WITH csv header;
 DEBUG:  Using optimized multi-buffer copy operation (CIM_MULTI_CONDITIONAL).
 SELECT count(*) FROM hyper_copy;
@@ -282,7 +282,7 @@ SELECT count(*) FROM hyper_copy_noindex;
 -- Before trigger (CIM_SINGLE should be used)
 CREATE TRIGGER hyper_copy_trigger_insert_before
     BEFORE INSERT ON hyper_copy_noindex
-    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger(); 
+    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger();
 \copy hyper_copy_noindex FROM data/copy_data.csv WITH csv header;
 SET client_min_messages TO DEBUG1;
 \copy hyper_copy_noindex FROM data/copy_data.csv WITH csv header;
@@ -298,7 +298,7 @@ SELECT count(*) FROM hyper_copy_noindex;
 DROP TRIGGER hyper_copy_trigger_insert_before ON hyper_copy_noindex;
 CREATE TRIGGER hyper_copy_trigger_insert_after
     AFTER INSERT ON hyper_copy_noindex
-    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger(); 
+    FOR EACH ROW EXECUTE FUNCTION empty_test_trigger();
 \copy hyper_copy_noindex FROM data/copy_data.csv WITH csv header;
 SET client_min_messages TO DEBUG1;
 \copy hyper_copy_noindex FROM data/copy_data.csv WITH csv header;
@@ -395,10 +395,10 @@ CREATE TRIGGER table_with_chunk_trigger_before_trigger
     BEFORE INSERT ON :chunk_schema.:chunk_name
     FOR EACH ROW EXECUTE FUNCTION count_test_chunk_trigger();
 -- Insert data
--- 25 tuples are already imported. The trigger is executed before tuples 
+-- 25 tuples are already imported. The trigger is executed before tuples
 -- are copied into the 4th chunk. So, the trigger should report 25+3 = 28
--- This test requires that the multi-insert buffers of the other chunks 
--- are flushed before the trigger is executed. 
+-- This test requires that the multi-insert buffers of the other chunks
+-- are flushed before the trigger is executed.
 SET client_min_messages TO DEBUG1;
 \copy table_with_chunk_trigger FROM data/copy_data.csv WITH csv header;
 DEBUG:  Using optimized multi-buffer copy operation (CIM_MULTI_CONDITIONAL).
@@ -416,7 +416,7 @@ CREATE TRIGGER table_with_chunk_trigger_after_trigger
     AFTER INSERT ON :chunk_schema.:chunk_name
     FOR EACH ROW EXECUTE FUNCTION count_test_chunk_trigger();
 -- Insert data
--- 50 tuples are already imported. The trigger is executed after all 
+-- 50 tuples are already imported. The trigger is executed after all
 -- tuples are imported. So, the trigger should report 50+25 = 75
 SET client_min_messages TO DEBUG1;
 \copy table_with_chunk_trigger FROM data/copy_data.csv WITH csv header;

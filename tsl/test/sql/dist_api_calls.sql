@@ -30,8 +30,8 @@ GRANT CREATE ON SCHEMA public TO :ROLE_1;
 -- Create a distributed hypertable with data
 SET ROLE :ROLE_1;
 CREATE TABLE disttable(
-    time timestamptz NOT NULL, 
-    device int, 
+    time timestamptz NOT NULL,
+    device int,
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
@@ -92,8 +92,8 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT approximate_row_count('disttable'
 -- Test with native replication
 --
 CREATE TABLE disttable_repl(
-    time timestamptz NOT NULL, 
-    device int, 
+    time timestamptz NOT NULL,
+    device int,
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable_repl', 'time', 'device', 3, replication_factor => 2);

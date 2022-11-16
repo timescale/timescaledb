@@ -485,7 +485,7 @@ ALTER TABLE test_table_integer ALTER COLUMN val TYPE float;
 ALTER TABLE test_table_bigint ALTER COLUMN val TYPE float;
 \set ON_ERROR_STOP 1
 
---create a cont agg view on the ht with compressed chunks as well 
+--create a cont agg view on the ht with compressed chunks as well
 SELECT compress_chunk(chunk, true) FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
 
@@ -500,14 +500,14 @@ CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, NULL);
 SELECT * FROM test_recomp_int ORDER BY 1;
 SELECT * FROM test_recomp_int_cont_view ORDER BY 1;
 
---TEST cagg triggers work on distributed hypertables when we insert into 
+--TEST cagg triggers work on distributed hypertables when we insert into
 -- compressed chunks.
-SELECT 
+SELECT
 CASE WHEN compress_chunk(chunk, true) IS NOT NULL THEN 'compress' END AS ch
  FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
 
-SELECT * FROM test_recomp_int_cont_view 
+SELECT * FROM test_recomp_int_cont_view
 WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
 
 --insert into an existing compressed chunk and a new chunk
@@ -515,10 +515,10 @@ SET timescaledb.enable_distributed_insert_with_copy=false;
 
 INSERT INTO test_recomp_int VALUES (1, 10), (2,10), (3, 10);
 INSERT INTO test_recomp_int VALUES(51, 10);
- 
+
 --refresh the cagg and verify the new results
 CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, 100);
-SELECT * FROM test_recomp_int_cont_view 
+SELECT * FROM test_recomp_int_cont_view
 WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
 
 --repeat test with copy setting turned to true
@@ -526,7 +526,7 @@ SET timescaledb.enable_distributed_insert_with_copy=true;
 INSERT INTO test_recomp_int VALUES (4, 10);
 
 CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, 100);
-SELECT * FROM test_recomp_int_cont_view 
+SELECT * FROM test_recomp_int_cont_view
 WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
 
 --TEST drop one of the compressed chunks in test_recomp_int. The catalog
@@ -617,14 +617,14 @@ ORDER BY 1;
 
 -- test ADD COLUMN IF NOT EXISTS on a distributed hypertable
 CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
- 
+
 SELECT create_distributed_hypertable('metric', 'time');
-ALTER TABLE metric SET (                                     
+ALTER TABLE metric SET (
 timescaledb.compress,
 timescaledb.compress_segmentby = 'dev_id',
 timescaledb.compress_orderby = 'time DESC'
 );
- 
+
 INSERT INTO metric(time, val, dev_id)
 SELECT s.*, 3.14+1, 1
 FROM generate_series('2021-07-01 00:00:00'::timestamp,
@@ -646,12 +646,12 @@ ALTER TABLE metric ADD COLUMN "medium_1" varchar;
 -- [] - ["medium_1"]
 \set ON_ERROR_STOP 0
 ALTER TABLE metric ADD COLUMN "medium_1" varchar;
- 
+
 SELECT * FROM metric limit 5;
 SELECT * FROM metric where medium is not null;
 
 -- INSERTs operate normally on the added column
-INSERT INTO metric (time, val, dev_id, medium) 
+INSERT INTO metric (time, val, dev_id, medium)
 SELECT s.*, 3.14+1, 1, 'medium_value_text'
 FROM generate_series('2021-08-18 00:00:00'::timestamp,
                     '2021-08-19 00:02:00'::timestamp, '30 s'::interval) s;

@@ -24,7 +24,7 @@ WHERE id = :job_id;
 INSERT INTO continuous_agg_max_mat_date
     SELECT generate_series('2019-09-01'::date, '2019-09-10'::date, '1 day');
 --- to prevent NOTICES set message level to warning
-SET client_min_messages TO warning; 
+SET client_min_messages TO warning;
 SET timescaledb.current_timestamp_mock = '2019-09-10 00:00';
 CALL run_job(:job_id);
 SELECT * FROM max_mat_view_date order by 1;
@@ -44,7 +44,7 @@ SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 days', '1 h
 INSERT INTO continuous_agg_timestamp
     SELECT generate_series('2019-09-01 00:00'::timestamp, '2019-09-10 00:00'::timestamp, '1 day');
 --- to prevent NOTICES set message level to warning
-SET client_min_messages TO warning; 
+SET client_min_messages TO warning;
 SET timescaledb.current_timestamp_mock = '2019-09-11 00:00';
 CALL run_job(:job_id);
 SELECT * FROM max_mat_view_timestamp;

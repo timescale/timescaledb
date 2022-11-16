@@ -46,8 +46,8 @@ $$);
 
 SET ROLE :ROLE_1;
 CREATE TABLE conditions(
-    time BIGINT NOT NULL, 
-    device INT, 
+    time BIGINT NOT NULL,
+    device INT,
     value FLOAT
 );
 

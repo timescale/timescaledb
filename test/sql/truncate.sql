@@ -111,7 +111,7 @@ SELECT * FROM test.show_subtables('"two_Partitions"');
 SELECT * FROM "two_Partitions";
 SELECT * FROM truncate_normal, truncate_nested;
 
--- test TRUNCATE can be performed by a user 
+-- test TRUNCATE can be performed by a user
 -- with TRUNCATE privilege who is not table owner
 \c :TEST_DBNAME :ROLE_SUPERUSER
 

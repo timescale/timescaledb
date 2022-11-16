@@ -234,7 +234,7 @@ SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
 generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
-SELECT chunk_name, primary_dimension, range_start, range_end 
+SELECT chunk_name, primary_dimension, range_start, range_end
 FROM  timescaledb_information.chunks
 WHERE hypertable_name = 'test_adaptive' ORDER BY chunk_name;
     chunk_name     | primary_dimension |             range_start             |              range_end              
@@ -334,7 +334,7 @@ WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_36_c
 WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_35_chunk"
 WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_36_chunk"
 WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_37_chunk"
-SELECT chunk_name, primary_dimension, range_start, range_end 
+SELECT chunk_name, primary_dimension, range_start, range_end
 FROM  timescaledb_information.chunks
 WHERE hypertable_name = 'test_adaptive_no_index' ORDER BY chunk_name;
     chunk_name     | primary_dimension |             range_start             |              range_end              
@@ -496,7 +496,7 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
 \x
-SELECT chunk_name, range_start, range_end 
+SELECT chunk_name, range_start, range_end
 FROM  timescaledb_information.chunks
 WHERE hypertable_name = 'test_adaptive_space' ORDER BY chunk_name;
 -[ RECORD 1 ]------------------------------------

@@ -212,7 +212,7 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_2_chunk');
 (2 rows)
 
 \set ON_ERROR_STOP 0
--- cannot move a chunk with no reorder index on first call 
+-- cannot move a chunk with no reorder index on first call
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1');
 ERROR:  there is no previously clustered index for table "_hyper_1_2_chunk"
 -- cannot move a chunk without a destination tablespace set
@@ -221,12 +221,12 @@ ERROR:  valid chunk, destination_tablespace, and index_destination_tablespaces a
 -- cannot move a chunk without an index_destination_tablespace set
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 ERROR:  valid chunk, destination_tablespace, and index_destination_tablespaces are required
--- cannot move a chunk or an index to a tablespace we do not have create permissions on 
+-- cannot move a chunk or an index to a tablespace we do not have create permissions on
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 ERROR:  permission denied for tablespace "tablespace2"
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 ERROR:  permission denied for tablespace "tablespace2"
--- cannot move to a nonexistent tablespace 
+-- cannot move to a nonexistent tablespace
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace3', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 ERROR:  tablespace "tablespace3" does not exist
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace3', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
@@ -242,7 +242,7 @@ BEGIN;
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 ERROR:  move cannot run inside a transaction block
 END;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2 
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 -- must be hypertable owner to move a chunk
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
 ERROR:  must be owner of hypertable "cluster_test"

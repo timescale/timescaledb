@@ -24,7 +24,7 @@ ORDER BY ch1.id LIMIT 1 \gset
 
 SELECT compress_chunk(:'CHUNK_FULL_NAME');
 
--- test for qual pushdown 
+-- test for qual pushdown
 explain (costs off, verbose)
 SELECT
 FROM hyper
@@ -61,28 +61,28 @@ INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00'
 
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
 
 explain (costs off, verbose)
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
 
 --no pushdown here
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
 
 explain (costs off, verbose)
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
@@ -90,12 +90,12 @@ order by factorid, end_dt;
 --should fail
 \set ON_ERROR_STOP 0
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date = 10;
 
 select factorid, end_dt, logret
-from metaseg_tab 
+from metaseg_tab
 where fmid = 56
 and end_dt::date = 'dec 2010'::date;
 

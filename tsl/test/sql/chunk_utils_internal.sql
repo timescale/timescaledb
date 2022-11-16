@@ -10,7 +10,7 @@
 -- * attach_foreign_table_chunk
 
 CREATE OR REPLACE VIEW chunk_view AS
-  SELECT 
+  SELECT
     ht.table_name AS hypertable_name,
     srcch.schema_name AS schema_name,
     srcch.table_name AS chunk_name,
@@ -174,7 +174,7 @@ ORDER BY chunk_name LIMIT 1
 SELECT  compress_chunk( :'CHNAME');
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
 
-SELECT table_name, status 
+SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
 
 --now chunk is frozen, cannot decompress
@@ -328,7 +328,7 @@ ORDER BY chunk_name;
 SELECT * FROM ht_try ORDER BY 1;
 
 SELECT relname, relowner::regrole FROM pg_class
-WHERE relname in ( select chunk_name FROM chunk_view 
+WHERE relname in ( select chunk_name FROM chunk_view
                    WHERE hypertable_name = 'ht_try' )
 ORDER BY relname;
 
@@ -337,11 +337,11 @@ FROM pg_inherits WHERE inhparent = 'ht_try'::regclass ORDER BY 1;
 
 --TEST chunk exclusion code does not filter out OSM chunk
 SELECT * from ht_try ORDER BY 1;
-SELECT * from ht_try WHERE timec < '2022-01-01 01:00' ORDER BY 1; 
-SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE timec < '2022-01-01 01:00' ORDER BY 1;
+SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1;
 SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 01:00' ORDER BY 1;
 
-SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1; 
+SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
 
 --TEST insert into a OSM chunk fails. actually any insert will fail. But we just need
 -- to mock the hook and make sure the timescaledb code works correctly.
@@ -361,7 +361,7 @@ SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table')
 -- TEST error try to attach to non hypertable
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_internal.attach_osm_table_chunk('non_ht', 'child_fdw_table');
- 
+
 \set ON_ERROR_STOP 1
 
 -- TEST drop the hypertable and make sure foreign chunks are dropped as well --
@@ -546,7 +546,7 @@ SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER 
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
 
--- Copy should work now 
+-- Copy should work now
 COPY test1.copy_test FROM STDIN DELIMITER ',';
 2020-01-01 01:10:00+01,1
 2021-01-01 01:10:00+01,1

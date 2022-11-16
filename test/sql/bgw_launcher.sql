@@ -155,7 +155,7 @@ SELECT wait_greater(:'orig_backend_start', :'TEST_DBNAME_2');
 -- Make sure running pre_restore function stops background workers
 SELECT timescaledb_pre_restore();
 SELECT wait_worker_counts(1,0,0,0);
--- Make sure a restart with restoring on first starts the background worker 
+-- Make sure a restart with restoring on first starts the background worker
 BEGIN;
 SELECT _timescaledb_internal.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
@@ -163,7 +163,7 @@ COMMIT;
 -- Then the worker dies when it sees that restoring is on after the txn commits
 SELECT wait_worker_counts(1,0,0,0);
 
---And post_restore starts them 
+--And post_restore starts them
 BEGIN;
 SELECT timescaledb_post_restore();
 SELECT wait_worker_counts(1,0,1,0);
