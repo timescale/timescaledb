@@ -746,7 +746,7 @@ SELECT
   date_trunc('second',last_start) AS last_start,
   date_trunc('second',last_finish) AS last_finish,
   date_trunc('second',next_start) AS next_start,
-  last_successful_finish
+  date_trunc('second',last_successful_finish) as last_successful_finish
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
 
