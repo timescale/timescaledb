@@ -1764,16 +1764,16 @@ SELECT
   date_trunc('second',last_start) AS last_start,
   date_trunc('second',last_finish) AS last_finish,
   date_trunc('second',next_start) AS next_start,
-  last_successful_finish
+  date_trunc('second',last_successful_finish) as last_successful_finish
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
- job_id |          last_start          |         last_finish          |          next_start          |      last_successful_finish      
---------+------------------------------+------------------------------+------------------------------+----------------------------------
+ job_id |          last_start          |         last_finish          |          next_start          |    last_successful_finish    
+--------+------------------------------+------------------------------+------------------------------+------------------------------
    1026 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 16:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST
    1027 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Sat Jan 15 16:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST
-   1028 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Fri Jan 21 16:00:00 2000 PST | Fri Dec 31 16:00:00.005 1999 PST
-   1029 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Mon Jul 31 16:00:00 2000 PDT | Fri Dec 31 16:00:00.025 1999 PST
-   1030 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Mon Jul 31 16:00:00 2000 PDT | Fri Dec 31 16:00:00.025 1999 PST
-   1031 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Sat Jan 15 16:00:00 2000 PST | Fri Dec 31 16:00:00.025 1999 PST
+   1028 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Fri Jan 21 16:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST
+   1029 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Mon Jul 31 16:00:00 2000 PDT | Fri Dec 31 16:00:00 1999 PST
+   1030 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Mon Jul 31 16:00:00 2000 PDT | Fri Dec 31 16:00:00 1999 PST
+   1031 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | Sat Jan 15 16:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST
 (6 rows)
 
