@@ -53,7 +53,7 @@ jobs:
     - name: Check trailing whitespace
       if: always()
       run: |
-        find . -name '*.[ch]' -exec perl -pi -e 's/[ \t]+$//' {} +
+        find . -type f -regex '.*\.\(c\|h\|sql\|sql\.in\)$' -exec perl -pi -e 's/[ \t]+$//' {} +
         git diff --exit-code
 
     - name: Check code formatting
