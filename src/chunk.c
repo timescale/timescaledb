@@ -66,6 +66,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/hypertable_data_node.h"
 #include "utils.h"
+#include "debug_assert.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);

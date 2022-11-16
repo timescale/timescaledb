@@ -10,6 +10,15 @@
 #include <postgres.h>
 
 /*
+ * Try to use file name without path that is available on the newer compilers.
+ */
+#ifdef __FILE_NAME__
+#define ENSURE_FILE_NO_PATH __FILE_NAME__
+#else
+#define ENSURE_FILE_NO_PATH __FILE__
+#endif
+
+/*
  * Macro that expands to an assert in debug builds and to an ereport in
  * release builds.
  *
@@ -34,8 +43,8 @@
 		if (!(COND))                                                                               \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
-					 errdetail("Assertion '" #COND "' failed."),                                   \
-					 errmsg(FMT, ##__VA_ARGS__)));                                                 \
+					 errmsg("assertion '%s' at %s:%d failed", #COND, ENSURE_FILE_NO_PATH, __LINE__),                                   \
+					 errdetail(FMT, ##__VA_ARGS__)));                                                 \
 	} while (0)
 #endif
 
