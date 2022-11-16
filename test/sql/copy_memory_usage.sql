@@ -13,11 +13,11 @@ create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2
 select create_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '90 day');
 
 -- This is where we log the memory usage.
-create table portal_memory_log(id serial, bytes int);
+create table portal_memory_log(id serial, bytes bigint);
 
 -- Returns the amount of memory currently allocated in a given
 -- memory context. Only works for PortalContext, and doesn't work for PG 12.
-create or replace function ts_debug_allocated_bytes(text) returns int
+create or replace function ts_debug_allocated_bytes(text) returns bigint
     as :MODULE_PATHNAME, 'ts_debug_allocated_bytes'
     language c strict volatile;
 
@@ -25,7 +25,7 @@ create or replace function ts_debug_allocated_bytes(text) returns int
 create function log_memory() returns trigger as $$
     begin
         insert into portal_memory_log
-            values (default, (select ts_debug_allocated_bytes('PortalContext')));
+            values (default, ts_debug_allocated_bytes('PortalContext'));
         return new;
     end;
 $$ language plpgsql;

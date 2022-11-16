@@ -815,6 +815,11 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);
 
+	/*
+	 * The chunk search functions may leak memory, so switch to a temporary
+	 * memory context.
+	 */
+	MemoryContext old_context = MemoryContextSwitchTo(GetPerTupleMemoryContext(state->estate));
 	if (state->compress_info)
 	{
 		ResultRelInfo *orig_chunk_rri = state->compress_info->orig_result_relation_info;
@@ -838,6 +843,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
 			ts_chunk_set_unordered(chunk);
 	}
+	MemoryContextSwitchTo(old_context);
 
 	table_close(state->rel, NoLock);
 	if (state->slot)
