@@ -315,11 +315,37 @@ tsl_create_distributed_insert_path(PlannerInfo *root, ModifyTablePath *mtpath, I
 					if (rte->rtekind == RTE_SUBQUERY)
 					{
 						distributed = false;
-						if (distributed_rtes_walker((Node *) rte->subquery, &distributed) &&
-							distributed)
+						Node *jtnode = (Node *) root->parse->jointree;
+						if (IsA(jtnode, FromExpr))
 						{
-							copy_possible = false;
-							break;
+							FromExpr *f = (FromExpr *) jtnode;
+							ListCell *l;
+							foreach (l, f->fromlist)
+							{
+								Node *n = (Node *) lfirst(l);
+								if (IsA(n, RangeTblRef))
+								{
+									RangeTblEntry *r =
+										planner_rt_fetch(((RangeTblRef *) n)->rtindex, root);
+									switch (r->rtekind)
+									{
+										case RTE_RELATION:
+											distributed_rtes_walker((Node *) r, &distributed);
+											break;
+										case RTE_SUBQUERY:
+											distributed_rtes_walker((Node *) r->subquery,
+																	&distributed);
+											break;
+										default:
+											break;
+									}
+									if (distributed)
+									{
+										copy_possible = false;
+										break;
+									}
+								}
+							}
 						}
 					}
 				}
