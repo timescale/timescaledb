@@ -17,6 +17,8 @@ SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- PG15 requires this explicit GRANT on schema public
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 
 -- Setup test variables
 \set IS_DISTRIBUTED TRUE

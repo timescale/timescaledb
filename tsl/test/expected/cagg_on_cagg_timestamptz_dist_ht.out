@@ -33,6 +33,8 @@ FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- PG15 requires this explicit GRANT on schema public
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- Setup test variables
 \set IS_DISTRIBUTED TRUE
 \set IS_TIME_DIMENSION TRUE
