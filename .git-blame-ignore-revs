@@ -19,3 +19,5 @@
 68aec9593c0f37dddbaa4f2e2b34a9ba3f5b11d9
 # Switch to clang-format-14
 7758f5959c8ed64499ab0e6bb66c30464b11dd81
+# Remove trailing whitespaces from test code
+a4356f342f1732857a1d8057f71219b50f1919b2
