@@ -609,6 +609,7 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT "num_caggs_on_distributed_hypertables"
 #define REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT "num_caggs_using_real_time_aggregation"
 #define REQ_RELKIND_CAGG_FINALIZED "num_caggs_finalized"
+#define REQ_RELKIND_CAGG_NESTED "num_caggs_nested"
 
 static JsonbValue *
 add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
@@ -702,6 +703,7 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 						   REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT,
 						   cs->uses_real_time_aggregation_count);
 		ts_jsonb_add_int64(parse_state, REQ_RELKIND_CAGG_FINALIZED, cs->finalized);
+		ts_jsonb_add_int64(parse_state, REQ_RELKIND_CAGG_NESTED, cs->nested);
 	}
 
 	return pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);

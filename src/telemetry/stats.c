@@ -273,6 +273,9 @@ process_continuous_agg(CaggStats *cs, Form_pg_class class, const ContinuousAgg *
 
 	if (ContinuousAggIsFinalized(cagg))
 		cs->finalized++;
+
+	if (cagg->data.parent_mat_hypertable_id != INVALID_HYPERTABLE_ID)
+		cs->nested++;
 }
 
 static void
