@@ -85,9 +85,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_copy_long.sql
     dist_ddl.sql
     dist_move_chunk.sql
-    dist_partial_agg.sql
     dist_policy.sql
-    dist_query.sql
     dist_util.sql
     dist_triggers.sql
     dist_backup.sql
@@ -162,6 +160,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_hypertable.sql.in
     remote_copy.sql.in
     dist_grant.sql.in
+    dist_partial_agg.sql.in
+    dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in
     continuous_aggs.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
