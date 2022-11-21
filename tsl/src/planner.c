@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <catalog/pg_trigger.h>
+#include <commands/extension.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 #include <foreign/fdwapi.h>
@@ -24,6 +25,7 @@
 #include "ts_catalog/hypertable_compression.h"
 #include "hypertable.h"
 #include "nodes/compress_dml/compress_dml.h"
+#include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/data_node_dispatch.h"
 #include "nodes/data_node_copy.h"
@@ -31,6 +33,8 @@
 #include "planner.h"
 
 #include <math.h>
+
+#define OSM_EXTENSION_NAME "timescaledb_osm"
 
 static bool
 is_dist_hypertable_involved(PlannerInfo *root)
@@ -48,6 +52,21 @@ is_dist_hypertable_involved(PlannerInfo *root)
 
 	return false;
 }
+
+#if PG14_GE
+static int osm_present = -1;
+
+static bool
+is_osm_present()
+{
+	if (osm_present == -1)
+	{
+		Oid osm_oid = get_extension_oid(OSM_EXTENSION_NAME, true);
+		osm_present = OidIsValid(osm_oid);
+	}
+	return osm_present;
+}
+#endif
 
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
@@ -114,10 +133,28 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 			ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
 	}
 }
+
 void
 tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						 Hypertable *ht)
 {
+#if PG14_GE
+	if (is_osm_present())
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
+		if (chunk && ts_chunk_is_frozen(chunk))
+		{
+			ListCell *lc;
+			foreach (lc, rel->pathlist)
+			{
+				Path **pathptr = (Path **) &lfirst(lc);
+				*pathptr = frozen_chunk_dml_generate_path(*pathptr, chunk);
+			}
+			return;
+		}
+	}
+#endif
+
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		ListCell *lc;

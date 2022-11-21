@@ -27,11 +27,14 @@ CREATE OR REPLACE VIEW chunk_view AS
 GRANT SELECT on chunk_view TO PUBLIC;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- fake presence of timescaledb_osm
+INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extversion) SELECT 1,'timescaledb_osm',10,11,false,'1.0';
+
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 
---mock hooks for OSM intercation with timescaledb
+-- mock hooks for OSM interaction with timescaledb
 CREATE OR REPLACE FUNCTION ts_setup_osm_hook( ) RETURNS VOID
 AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 
@@ -61,10 +64,8 @@ WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
 
--- Freeze and check trigger
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
+-- Freeze
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
 
 SELECT * from test1.hyper1 ORDER BY 1;
 
@@ -121,7 +122,7 @@ ROLLBACK;
 INSERT INTO test1.hyper1 VALUES ( 11, 11);
 
 -- Test truncating table should fail
-TRUNCATE test1.hyper1;
+TRUNCATE :CHNAME;
 
 SELECT * from test1.hyper1 ORDER BY 1;
 
@@ -494,33 +495,6 @@ COPY test1.copy_test FROM STDIN DELIMITER ',';
 -- Count existing rows
 SELECT COUNT(*) FROM test1.copy_test;
 
--- Test dump & restore
-\c postgres :ROLE_SUPERUSER
-\! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
-
-\c :TEST_DBNAME
-
--- Make sure tables was droped by pg_dump_aux_dump.sh
-\set ON_ERROR_STOP 0
-SELECT * FROM test1.copy_test;
-\set ON_ERROR_STOP 1
-
-SET client_min_messages = ERROR;
-CREATE EXTENSION timescaledb CASCADE;
-RESET client_min_messages;
-
---\! cp dump/pg_dump.sql /tmp/dump.sql
-SELECT timescaledb_pre_restore();
-\! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-SELECT timescaledb_post_restore();
-SELECT _timescaledb_internal.stop_background_workers();
-
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
--- Make sure the chunk is still frozen
--- Check trigger
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
-
 -- Check state
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
@@ -539,9 +513,6 @@ SELECT COUNT(*) FROM test1.copy_test;
 -- Check unfreeze restored chunk
 SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
 
--- Check trigger
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
-
 -- Check state
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
@@ -551,22 +522,6 @@ COPY test1.copy_test FROM STDIN DELIMITER ',';
 2020-01-01 01:10:00+01,1
 2021-01-01 01:10:00+01,1
 \.
-
--- Test that unfreeze works even if somebody has dropped one the block triggers
-SELECT _timescaledb_internal.freeze_chunk( :'COPY_CHNAME');
-
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
-
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
-DROP TRIGGER frozen_chunk_modify_blocker_row ON :COPY_CHNAME;
-
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
-SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
-
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
 
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
