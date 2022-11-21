@@ -179,15 +179,6 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
  */
 #define CHUNK_STATUS_COMPRESSED_PARTIAL 8
 
-/* The name of the trigger function that blocks data modifications on frozen chunks */
-#define TS_FROZEN_TRIGGER_NAME_FUNCTION "frozen_chunk_modify_blocker"
-
-/* The name of the row freeze trigger */
-#define TS_FROZEN_TRIGGER_NAME_ROW "frozen_chunk_modify_blocker_row"
-
-/* The name of the statement freeze trigger */
-#define TS_FROZEN_TRIGGER_NAME_STMT "frozen_chunk_modify_blocker_stmt"
-
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 {
@@ -3558,30 +3549,6 @@ ts_chunk_set_partial(Chunk *chunk)
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
 }
 
-#if PG14_GE
-/* Install a new trigger of the given table OID */
-static void
-install_chunk_trigger(CreateTrigStmt *stmt, Oid table_oid)
-{
-	ObjectAddress objaddr;
-
-	objaddr = CreateTrigger(stmt,
-							NULL,
-							table_oid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							NULL,
-							false,
-							false);
-
-	if (!OidIsValid(objaddr.objectId))
-		elog(ERROR, "could not create internal blocker trigger on %d", table_oid);
-}
-#endif
-
 /* No inserts, updates, and deletes are permitted on a frozen chunk.
  * Compression policies etc do not run on a frozen chunk.
  * Only valid operation is dropping the chunk
@@ -3590,59 +3557,6 @@ bool
 ts_chunk_set_frozen(Chunk *chunk)
 {
 #if PG14_GE
-
-	char *relname = get_rel_name(chunk->table_id);
-	Oid schemaid = get_rel_namespace(chunk->table_id);
-	char *schema = get_namespace_name(schemaid);
-
-	/* Create a trigger that reject data modifications on the frozen chunk.
-	 *
-	 * Operations like inserts and compression / decompression check the
-	 * state of chunks directly in the code path. However, operations like
-	 * updates and deletes are handled by PostgreSQL. For these remaining
-	 * operations, the trigger is responsible for rejecting the operation
-	 * on the frozen chunk.
-	 *
-	 * We need to create a row and a statement trigger. To block
-	 * INSERT / UPDATE / DELETE operations, we need a row trigger. Since
-	 * the trigger is installed on the chunk, a statement-based trigger
-	 * will not fire for the individual chunks on these operations.
-	 *
-	 * A trigger that fires on TRUNCATE operations needs to be a statement
-	 * trigger; PostgreSQL does not support row based TRUNCATE triggers.
-	 * These triggers will also fire on the individual chunks.
-	 */
-
-	/* Row based INSERT / UPDATE / DELETE trigger */
-	CreateTrigStmt stmt_chunk_trigger_row = {
-		.type = T_CreateTrigStmt,
-		.row = true,
-		.timing = TRIGGER_TYPE_BEFORE,
-		.trigname = TS_FROZEN_TRIGGER_NAME_ROW,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-							   makeString(TS_FROZEN_TRIGGER_NAME_FUNCTION)),
-		.args = NIL,
-		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_DELETE | TRIGGER_TYPE_UPDATE,
-	};
-
-	install_chunk_trigger(&stmt_chunk_trigger_row, chunk->table_id);
-
-	/* Statement based TRUNCATE trigger */
-	CreateTrigStmt stmt_chunk_trigger_statement = {
-		.type = T_CreateTrigStmt,
-		.row = false,
-		.timing = TRIGGER_TYPE_BEFORE,
-		.trigname = TS_FROZEN_TRIGGER_NAME_STMT,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-							   makeString(TS_FROZEN_TRIGGER_NAME_FUNCTION)),
-		.args = NIL,
-		.events = TRIGGER_TYPE_TRUNCATE,
-	};
-
-	install_chunk_trigger(&stmt_chunk_trigger_statement, chunk->table_id);
-
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_FROZEN);
 #else
 	elog(ERROR, "freeze chunk supported only for PG14 or greater");
@@ -3654,48 +3568,6 @@ bool
 ts_chunk_unset_frozen(Chunk *chunk)
 {
 #if PG14_GE
-	Relation tgrel;
-	ScanKeyData skey[1];
-	SysScanDesc tgscan;
-	HeapTuple tuple;
-	int deleted_triggers = 0;
-
-	/* Search for the freeze triggers on the chunk and remove them. */
-	tgrel = table_open(TriggerRelationId, RowExclusiveLock);
-
-	ScanKeyInit(&skey[0],
-				Anum_pg_trigger_tgrelid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(chunk->table_id));
-
-	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true, NULL, 1, skey);
-
-	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
-	{
-		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
-
-		if ((namestrcmp(&(trig->tgname), TS_FROZEN_TRIGGER_NAME_STMT) == 0) ||
-			(namestrcmp(&(trig->tgname), TS_FROZEN_TRIGGER_NAME_ROW) == 0))
-		{
-			ObjectAddress objaddr = { .classId = TriggerRelationId, .objectId = trig->oid };
-			performDeletion(&objaddr, DROP_RESTRICT, 0);
-			deleted_triggers++;
-		}
-	}
-
-	systable_endscan(tgscan);
-	table_close(tgrel, RowExclusiveLock);
-
-	if (deleted_triggers != 2)
-	{
-		ereport(WARNING,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("found only %d frozen trigger on %s (2 expected)",
-						deleted_triggers,
-						get_rel_name(chunk->table_id))));
-	}
-
 	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN);
 #else
 	elog(ERROR, "freeze chunk supported only for PG14 or greater");

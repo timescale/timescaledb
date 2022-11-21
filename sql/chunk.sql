@@ -100,12 +100,3 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.attach_osm_table_chunk(
    hypertable REGCLASS,
    chunk REGCLASS)
 RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_attach_osm_table_chunk' LANGUAGE C VOLATILE;
-
--- Trigger that blocks modifications on frozen chunks
-CREATE OR REPLACE FUNCTION _timescaledb_internal.frozen_chunk_modify_blocker() RETURNS trigger
-   LANGUAGE plpgsql STRICT AS
-$BODY$
-BEGIN
-     RAISE EXCEPTION 'unable to modify frozen chunk %s', TG_TABLE_NAME;
-END;
-$BODY$ SET search_path TO pg_catalog, pg_temp;

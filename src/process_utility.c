@@ -1151,6 +1151,14 @@ process_truncate(ProcessUtilityArgs *args)
 														   chunk->hypertable_relid,
 														   CACHE_FLAG_NONE);
 
+						/*
+						 * Block direct TRUNCATE on frozen chunk.
+						 */
+#if PG14_GE
+						if (ts_chunk_is_frozen(chunk))
+							elog(ERROR, "cannot TRUNCATE frozen chunk \"%s\"", get_rel_name(relid));
+#endif
+
 						Assert(ht != NULL);
 
 						/* If the hypertable has continuous aggregates, then invalidate

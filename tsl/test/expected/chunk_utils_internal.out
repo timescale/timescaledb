@@ -24,10 +24,12 @@ CREATE OR REPLACE VIEW chunk_view AS
       AND chcons.dimension_slice_id = dimsl.id;
 GRANT SELECT on chunk_view TO PUBLIC;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- fake presence of timescaledb_osm
+INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extversion) SELECT 1,'timescaledb_osm',10,11,false,'1.0';
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
---mock hooks for OSM intercation with timescaledb
+-- mock hooks for OSM interaction with timescaledb
 CREATE OR REPLACE FUNCTION ts_setup_osm_hook( ) RETURNS VOID
 AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_undo_osm_hook( ) RETURNS VOID
@@ -62,24 +64,12 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
--- Freeze and check trigger
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
- tgname | tgtype 
---------+--------
-(0 rows)
-
+-- Freeze
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
  freeze_chunk 
 --------------
  t
 (1 row)
-
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
-              tgname              | tgtype 
-----------------------------------+--------
- frozen_chunk_modify_blocker_row  |     31
- frozen_chunk_modify_blocker_stmt |     34
-(2 rows)
 
 SELECT * from test1.hyper1 ORDER BY 1;
  time | temp 
@@ -101,13 +91,13 @@ SELECT * from test1.hyper1 ORDER BY 1;
 UPDATE test1.hyper1 SET temp = 40 WHERE time = 20;
 -- Frozen chunk is affected
 UPDATE test1.hyper1 SET temp = 40 WHERE temp = 0.5;
-ERROR:  unable to modify frozen chunk _hyper_1_1_chunks
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is frozen
 -- Frozen chunk is affected
 UPDATE test1.hyper1 SET temp = 40 WHERE time = 10;
-ERROR:  unable to modify frozen chunk _hyper_1_1_chunks
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is frozen
 -- Frozen chunk is affected
 DELETE FROM test1.hyper1 WHERE time = 10;
-ERROR:  unable to modify frozen chunk _hyper_1_1_chunks
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is frozen
 SELECT * from test1.hyper1 ORDER BY 1;
  time | temp 
 ------+------
@@ -118,7 +108,7 @@ SELECT * from test1.hyper1 ORDER BY 1;
 BEGIN;
 DELETE FROM test1.hyper1 WHERE time = 20;
 DELETE FROM test1.hyper1 WHERE temp = 0.5;
-ERROR:  unable to modify frozen chunk _hyper_1_1_chunks
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is frozen
 ROLLBACK;
 -- TEST update on unfrozen chunk should be possible
 BEGIN;
@@ -147,12 +137,9 @@ SELECT * FROM test1.hyper1 WHERE time = 30;
 (1 row)
 
 UPDATE test1.hyper1 SET temp = 40 WHERE time = 30::text::float;
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is frozen
 SELECT * FROM test1.hyper1 WHERE time = 30;
- time | temp 
-------+------
-   30 |   40
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 -- TEST delete on unfrozen chunks should be possible
 BEGIN;
@@ -180,18 +167,16 @@ SELECT * FROM test1.hyper1 WHERE time = 30;
 (1 row)
 
 DELETE FROM test1.hyper1 WHERE time = 30::text::float;
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is frozen
 SELECT * FROM test1.hyper1 WHERE time = 30;
- time | temp 
-------+------
-(0 rows)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 -- TEST inserts into a frozen chunk fails
 INSERT INTO test1.hyper1 VALUES ( 11, 11);
-ERROR:  Insert not permitted on frozen chunk "_hyper_1_1_chunk" 
+ERROR:  cannot INSERT into frozen chunk "_hyper_1_1_chunk"
 -- Test truncating table should fail
-TRUNCATE test1.hyper1;
-ERROR:  unable to modify frozen chunk _hyper_1_1_chunks
+TRUNCATE :CHNAME;
+ERROR:  cannot TRUNCATE frozen chunk "_hyper_1_1_chunk"
 SELECT * from test1.hyper1 ORDER BY 1;
  time | temp 
 ------+------
@@ -305,13 +290,13 @@ SELECT  decompress_chunk( :'CHNAME');
 ERROR:  decompress_chunk not permitted on frozen chunk "_hyper_2_3_chunk" 
 --insert into frozen chunk, should fail
 INSERT INTO public.table_to_compress VALUES ('2020-01-01 10:00', 12, 77);
-ERROR:  Insert not permitted on frozen chunk "_hyper_2_3_chunk" 
+ERROR:  cannot INSERT into frozen chunk "_hyper_2_3_chunk"
 --touches all chunks
 UPDATE public.table_to_compress SET value = 3;
-ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is compressed
+ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
 --touches only frozen chunk
 DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
-ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is compressed
+ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
 \set ON_ERROR_STOP 1
 --try to refreeze
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
@@ -781,7 +766,7 @@ FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
 \set ON_ERROR_STOP 0
 -- Copy should fail because one of che chunks is frozen
 COPY test1.copy_test FROM STDIN DELIMITER ',';
-ERROR:  Insert not permitted on frozen chunk "_hyper_8_15_chunk" 
+ERROR:  cannot INSERT into frozen chunk "_hyper_8_15_chunk"
 \set ON_ERROR_STOP 1
 -- Count existing rows
 SELECT COUNT(*) FROM test1.copy_test;
@@ -789,48 +774,6 @@ SELECT COUNT(*) FROM test1.copy_test;
 -------
      2
 (1 row)
-
--- Test dump & restore
-\c postgres :ROLE_SUPERUSER
-\! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
-\c :TEST_DBNAME
--- Make sure tables was droped by pg_dump_aux_dump.sh
-\set ON_ERROR_STOP 0
-SELECT * FROM test1.copy_test;
-ERROR:  relation "test1.copy_test" does not exist at character 15
-\set ON_ERROR_STOP 1
-SET client_min_messages = ERROR;
-CREATE EXTENSION timescaledb CASCADE;
-RESET client_min_messages;
---\! cp dump/pg_dump.sql /tmp/dump.sql
-SELECT timescaledb_pre_restore();
- timescaledb_pre_restore 
--------------------------
- t
-(1 row)
-
-\! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-SELECT timescaledb_post_restore();
- timescaledb_post_restore 
---------------------------
- t
-(1 row)
-
-SELECT _timescaledb_internal.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
--- Make sure the chunk is still frozen
--- Check trigger
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
-              tgname              | tgtype 
-----------------------------------+--------
- frozen_chunk_modify_blocker_row  |     31
- frozen_chunk_modify_blocker_stmt |     34
-(2 rows)
 
 -- Check state
 SELECT table_name, status
@@ -843,7 +786,7 @@ FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
 \set ON_ERROR_STOP 0
 -- Copy should fail because one of che chunks is frozen
 COPY test1.copy_test FROM STDIN DELIMITER ',';
-ERROR:  Insert not permitted on frozen chunk "_hyper_8_15_chunk" 
+ERROR:  cannot INSERT into frozen chunk "_hyper_8_15_chunk"
 \set ON_ERROR_STOP 1
 -- Count existing rows
 SELECT COUNT(*) FROM test1.copy_test;
@@ -859,14 +802,6 @@ SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
  t
 (1 row)
 
--- Check trigger
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
-              tgname              | tgtype 
-----------------------------------+--------
- frozen_chunk_modify_blocker_row  |     31
- frozen_chunk_modify_blocker_stmt |     34
-(2 rows)
-
 -- Check state
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
@@ -877,53 +812,6 @@ FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
 
 -- Copy should work now
 COPY test1.copy_test FROM STDIN DELIMITER ',';
--- Test that unfreeze works even if somebody has dropped one the block triggers
-SELECT _timescaledb_internal.freeze_chunk( :'COPY_CHNAME');
- freeze_chunk 
---------------
- t
-(1 row)
-
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
-    table_name     | status 
--------------------+--------
- _hyper_8_15_chunk |      4
-(1 row)
-
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
-              tgname              | tgtype 
-----------------------------------+--------
- frozen_chunk_modify_blocker_row  |     31
- frozen_chunk_modify_blocker_stmt |     34
-(2 rows)
-
-DROP TRIGGER frozen_chunk_modify_blocker_row ON :COPY_CHNAME;
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
-              tgname              | tgtype 
-----------------------------------+--------
- frozen_chunk_modify_blocker_stmt |     34
-(1 row)
-
-SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
-WARNING:  found only 1 frozen trigger on _hyper_8_15_chunk (2 expected)
- unfreeze_chunk 
-----------------
- t
-(1 row)
-
-SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'COPY_CHNAME'::regclass ORDER BY tgname, tgtype;
- tgname | tgtype 
---------+--------
-(0 rows)
-
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
-    table_name     | status 
--------------------+--------
- _hyper_8_15_chunk |      0
-(1 row)
-
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
