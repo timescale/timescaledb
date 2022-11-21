@@ -153,6 +153,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_children": 0,                         +
          "num_relations": 2,                        +
          "num_reltuples": 0,                        +
+         "num_caggs_nested": 0,                     +
          "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
          "num_caggs_using_real_time_aggregation": 2 +
@@ -301,6 +302,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_children": 4,                         +
          "num_relations": 2,                        +
          "num_reltuples": 0,                        +
+         "num_caggs_nested": 0,                     +
          "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
          "num_caggs_using_real_time_aggregation": 2 +
@@ -451,6 +453,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_children": 4,                         +
          "num_relations": 2,                        +
          "num_reltuples": 452,                      +
+         "num_caggs_nested": 0,                     +
          "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
          "num_caggs_using_real_time_aggregation": 1 +
@@ -950,6 +953,7 @@ FROM relations;
      "num_children": 8,                        +
      "num_relations": 4,                       +
      "num_reltuples": 452,                     +
+     "num_caggs_nested": 0,                    +
      "num_caggs_finalized": 2,                 +
      "num_caggs_on_distributed_hypertables": 2,+
      "num_caggs_using_real_time_aggregation": 3+
@@ -1140,6 +1144,47 @@ SELECT jsonb_pretty(get_telemetry_report() -> 'stats_by_job_type');
          "max_consecutive_failures": 1         +
      }                                         +
  }
+(1 row)
+
+-- create nested continuous aggregates - copied from cagg_on_cagg_common
+CREATE TABLE conditions (
+  time timestamptz NOT NULL,
+  temperature int
+);
+SELECT create_hypertable('conditions', 'time');
+    create_hypertable     
+--------------------------
+ (10,public,conditions,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW conditions_summary_hourly_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+  time_bucket('1 hour', "time") AS bucket,
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+CREATE MATERIALIZED VIEW conditions_summary_daily_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+  time_bucket('1 day', "bucket") AS bucket,
+  SUM(temperature) AS temperature
+FROM conditions_summary_hourly_1
+GROUP BY 1
+WITH NO DATA;
+CREATE MATERIALIZED VIEW conditions_summary_weekly_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+  time_bucket('1 week', "bucket") AS bucket,
+  SUM(temperature) AS temperature
+FROM conditions_summary_daily_2
+GROUP BY 1
+WITH NO DATA;
+SELECT jsonb_pretty(get_telemetry_report() -> 'relations' -> 'continuous_aggregates' -> 'num_caggs_nested');
+ jsonb_pretty 
+--------------
+ 2
 (1 row)
 
 DROP VIEW relations;

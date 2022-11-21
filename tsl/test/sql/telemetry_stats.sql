@@ -312,6 +312,43 @@ false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0),
 false, 1, interval '00:00:00', interval '00:00:02', 0, 1, 0, 1, 0);
 SELECT jsonb_pretty(get_telemetry_report() -> 'stats_by_job_type');
 
+
+-- create nested continuous aggregates - copied from cagg_on_cagg_common
+CREATE TABLE conditions (
+  time timestamptz NOT NULL,
+  temperature int
+);
+
+SELECT create_hypertable('conditions', 'time');
+CREATE MATERIALIZED VIEW conditions_summary_hourly_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+  time_bucket('1 hour', "time") AS bucket,
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+  time_bucket('1 day', "bucket") AS bucket,
+  SUM(temperature) AS temperature
+FROM conditions_summary_hourly_1
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW conditions_summary_weekly_3
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+  time_bucket('1 week', "bucket") AS bucket,
+  SUM(temperature) AS temperature
+FROM conditions_summary_daily_2
+GROUP BY 1
+WITH NO DATA;
+
+SELECT jsonb_pretty(get_telemetry_report() -> 'relations' -> 'continuous_aggregates' -> 'num_caggs_nested');
+
 DROP VIEW relations;
 DROP MATERIALIZED VIEW telemetry_report;
 

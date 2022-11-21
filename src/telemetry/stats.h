@@ -76,6 +76,7 @@ typedef struct CaggStats
 	int64 on_distributed_hypertable_count;
 	int64 uses_real_time_aggregation_count;
 	int64 finalized;
+	int64 nested;
 } CaggStats;
 
 typedef struct TelemetryStats
