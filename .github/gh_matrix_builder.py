@@ -155,7 +155,7 @@ m["include"].append(
             # below tests are tracked as part of #4972
             "installcheck_args": "SKIPS='dist_move_chunk' "
             # below tests are tracked as part of #4835
-            "IGNORES='telemetry_stats dist_query dist_partial_agg plan_hashagg partialize_finalize dist_fetcher_type "
+            "IGNORES='telemetry_stats plan_hashagg partialize_finalize dist_fetcher_type "
             # below tests are tracked as part of #4837
             "remote_txn'",
         }

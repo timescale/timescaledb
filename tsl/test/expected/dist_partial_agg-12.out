@@ -73,6 +73,7 @@ NOTICE:  [db_dist_partial_agg_3]:
  
 (1 row)
 
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'location', 3, chunk_time_interval => INTERVAL '1 day');
  table_name 

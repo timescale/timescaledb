@@ -8,6 +8,7 @@
 /compression_permissions-*.sql
 /continuous_aggs-*.sql
 /dist_grant-*.sql
+/dist_query-*.sql
 /dist_hypertable-*.sql
 /dist_partial_agg-*.sql
 /hypertable_distributed-*.sql

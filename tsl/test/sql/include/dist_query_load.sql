@@ -17,6 +17,7 @@ FROM (
 ) a;
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
 
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 -- Create a "normal" PG table as reference, one two-dimensional

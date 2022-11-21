@@ -27,7 +27,7 @@ SELECT * FROM test.remote_exec('{ db_dist_partial_agg_1, db_dist_partial_agg_2, 
 $$
        CREATE TYPE custom_type AS (high int, low int);
 $$);
-
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'location', 3, chunk_time_interval => INTERVAL '1 day');
 
