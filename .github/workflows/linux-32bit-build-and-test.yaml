@@ -44,7 +44,7 @@ jobs:
         apt-get update
         apt-get install -y gnupg postgresql-common
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl libtest-most-perl sudo gdb git wget
+        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl libtest-most-perl sudo gdb git wget gawk
         apt-get install -y postgresql-${PG_MAJOR} postgresql-server-dev-${PG_MAJOR}
 
     - name: Build pg_isolation_regress
@@ -82,8 +82,8 @@ jobs:
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
-        if [[ -s regression.log ]]; then echo "regression_diff=true"; fi >>$GITHUB_OUTPUT
         cat regression.log
 
     - name: Coredumps
@@ -91,15 +91,24 @@ jobs:
       id: coredumps
       shell: bash
       run: |
+        # wait in case there are in-progress coredumps
+        sleep 10
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
           apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<EOT | tee -a stacktraces.log
-              printf "%s\n\n", debug_query_string
+            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
+              set verbose on
+              set trace-commands on
+              show debug-file-directory
+              printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+              frame function ExceptionalCondition
+              printf "'"'"condition = '%s'\n"'"'", conditionName
+              up 1
+              l
               bt full
-        EOT
+            " | tee -a stacktrace.log
           done
           echo "coredumps=true" >>$GITHUB_OUTPUT
           exit 1
@@ -110,16 +119,18 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Regression diff linux-i386 PG${{ matrix.pg }}
-        path: regression.log
+        path: |
+          regression.log
+          installcheck.log
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
-        path: stacktraces.log
+        path: stacktrace.log
 
-    - name: Save postmaster.log
+    - name: Save PostgreSQL log
       if: always()
       uses: actions/upload-artifact@v3
       with:
@@ -135,3 +146,28 @@ jobs:
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
 
+    - name: Upload test results to the database
+      if: always()
+      shell: bash
+      env:
+        # GitHub Actions allow you neither to use the env context for the job name,
+        # nor to access the job name from the step context, so we have to
+        # duplicate it to work around this nonsense.
+        JOB_NAME: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh

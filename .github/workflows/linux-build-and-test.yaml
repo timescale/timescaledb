@@ -199,12 +199,15 @@ jobs:
       run: |
         sudo coredumpctl gdb <<<"
           set verbose on
+          set trace-commands on
           show debug-file-directory
           printf "'"'"query = '%s'\n\n"'"'", debug_query_string
           frame function ExceptionalCondition
           printf "'"'"condition = '%s'\n"'"'", conditionName
+          up 1
+          l
           bt full
-        " | tee stacktrace.log
+        " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
         grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
 
