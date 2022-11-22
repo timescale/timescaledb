@@ -152,10 +152,8 @@ m["include"].append(
             "pg": 15,
             "snapshot": "snapshot",
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON",
-            # below tests are tracked as part of #4972
-            "installcheck_args": "SKIPS='dist_move_chunk' "
             # below tests are tracked as part of #4835
-            "IGNORES='telemetry_stats partialize_finalize dist_fetcher_type "
+            "installcheck_args": "IGNORES='telemetry_stats partialize_finalize dist_fetcher_type "
             # below tests are tracked as part of #4837
             "remote_txn'",
         }
