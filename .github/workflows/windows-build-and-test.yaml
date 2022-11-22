@@ -65,7 +65,6 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      if: matrix.pg != '12'
       uses: Vampire/setup-wsl@v1
       with:
         additional-packages:
@@ -94,6 +93,9 @@ jobs:
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
+      env:
+        WSLENV: GITHUB_OUTPUT/p
+      shell: wsl-bash {0}
       run: |
         echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
 
@@ -204,7 +206,7 @@ jobs:
       id: collectlogs
       if: always() && matrix.pg != '12'
       env:
-        WSLENV: GITHUB_OUTPUT
+        WSLENV: GITHUB_OUTPUT/p
       shell: wsl-bash {0}
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
