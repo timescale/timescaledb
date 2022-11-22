@@ -43,6 +43,7 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "cross_module_fn.h"
+#include "debug_assert.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -704,7 +705,9 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		{
 			/* Hypertable reloid not specified by the caller, look it up. */
 			parent_reloid = ts_hypertable_id_to_relid(hypertable_id);
-			Assert(OidIsValid(parent_reloid));
+			Ensure(OidIsValid(parent_reloid),
+				   "unable to get valid parent Oid for hypertable %d",
+				   hypertable_id);
 
 			ht = ts_planner_get_hypertable(parent_reloid, CACHE_FLAG_NONE);
 			Assert(ht != NULL);
