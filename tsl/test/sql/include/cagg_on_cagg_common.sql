@@ -158,6 +158,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
+-- TRUNCATE tests
+TRUNCATE :CAGG_NAME_2TH_LEVEL;
+-- This full refresh will remove all the data from the 3TH level cagg
+CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+-- Should return no rows
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+-- If we have all the data in the bottom levels caggs we can rebuild
+CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+-- Now we have all the data
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+
 -- DROP tests
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
