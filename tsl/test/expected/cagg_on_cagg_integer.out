@@ -267,25 +267,59 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
      10 |           2
 (2 rows)
 
+-- TRUNCATE tests
+TRUNCATE :CAGG_NAME_2TH_LEVEL;
+-- This full refresh will remove all the data from the 3TH level cagg
+CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+-- Should return no rows
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+ bucket | temperature 
+--------+-------------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+ bucket | temperature 
+--------+-------------
+(0 rows)
+
+-- If we have all the data in the bottom levels caggs we can rebuild
+CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+-- Now we have all the data
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+ bucket | temperature 
+--------+-------------
+      0 |          17
+      5 |          20
+     10 |           2
+(3 rows)
+
+SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+ bucket | temperature 
+--------+-------------
+      0 |          37
+     10 |           2
+(2 rows)
+
 -- DROP tests
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:164: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:178: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:165: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:179: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:166: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:180: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:167: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
+psql:include/cagg_on_cagg_common.sql:185: NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:188: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -308,11 +342,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:185: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
+psql:include/cagg_on_cagg_common.sql:199: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:188: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:202: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -327,9 +361,9 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:195: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+psql:include/cagg_on_cagg_common.sql:209: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:198: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:212: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
 \set ON_ERROR_STOP 1
