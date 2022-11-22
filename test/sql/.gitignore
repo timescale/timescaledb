@@ -13,6 +13,7 @@
 /partitioning-*.sql
 /partitionwise-*.sql
 /plan_expand_hypertable-*.sql
+/plan_hashagg-*.sql
 /plan_hashagg_optimized-*.sql
 /plan_hypertable_cache-*.sql
 /plan_hypertable_inline-*.sql
