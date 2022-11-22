@@ -1,8 +1,12 @@
 name: Regression
 on:
   schedule:
-    # run daily 20:00 on main branch
-    - cron: '0 20 * * *'
+    # run daily 0:00 on main branch
+    # Since we use the date as a part of the cache key to ensure no
+    # stale cache entries hiding build failures we need to make sure
+    # we have a cache entry present before workflows that depend on cache
+    # are run.
+    - cron: '0 0 * * *'
   push:
     branches:
       - prerelease_test
