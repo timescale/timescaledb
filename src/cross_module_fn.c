@@ -106,6 +106,7 @@ CROSSMODULE_WRAPPER(data_node_alter);
 CROSSMODULE_WRAPPER(chunk_drop_replica);
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
+CROSSMODULE_WRAPPER(chunks_drop_stale);
 
 CROSSMODULE_WRAPPER(chunk_set_default_data_node);
 CROSSMODULE_WRAPPER(chunk_get_relstats);
@@ -520,6 +521,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_drop_replica = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
+	.chunks_drop_stale = error_no_default_fn_pg_community,
 	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
 	.get_and_validate_data_node_list = get_and_validate_data_node_list_default_fn,
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,

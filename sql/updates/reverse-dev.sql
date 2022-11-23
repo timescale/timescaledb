@@ -429,3 +429,6 @@ ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan
         REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id);
 
 ANALYZE _timescaledb_catalog.continuous_agg;
+
+-- changes related to drop_stale_chunks()
+DROP FUNCTION _timescaledb_internal.drop_stale_chunks;

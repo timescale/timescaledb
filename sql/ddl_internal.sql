@@ -54,3 +54,9 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.health() RETURNS
 TABLE (node_name NAME, healthy BOOL, in_recovery BOOL, error TEXT)
 AS '@MODULE_PATHNAME@', 'ts_health_check' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_stale_chunks(
+    node_name NAME,
+    chunks integer[] = NULL
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;

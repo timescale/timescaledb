@@ -16,6 +16,8 @@ extern Datum chunk_set_default_data_node(PG_FUNCTION_ARGS);
 extern Datum chunk_drop_replica(PG_FUNCTION_ARGS);
 extern Datum chunk_freeze_chunk(PG_FUNCTION_ARGS);
 extern Datum chunk_unfreeze_chunk(PG_FUNCTION_ARGS);
+extern Datum chunk_drop_stale_chunks(PG_FUNCTION_ARGS);
+extern void ts_chunk_drop_stale_chunks(const char *node_name, ArrayType *chunks_array);
 extern int chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type);
 extern Datum chunk_create_replica_table(PG_FUNCTION_ARGS);
 

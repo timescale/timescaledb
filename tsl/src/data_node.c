@@ -1647,6 +1647,11 @@ data_node_alter(PG_FUNCTION_ARGS)
 	alter_server_stmt.options = options;
 	AlterForeignServer(&alter_server_stmt);
 
+	/* Drop stale chunks on the unavailable data node, if we are going to
+	 * make it available again */
+	if (!available_is_null && available && !ts_data_node_is_available_by_server(server))
+		ts_chunk_drop_stale_chunks(node_name, NULL);
+
 	/* Make changes to the data node (foreign server object) visible so that
 	 * the changes are present when we switch "primary" data node on chunks */
 	CommandCounterIncrement();
