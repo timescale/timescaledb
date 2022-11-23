@@ -25,6 +25,7 @@
 #include <utils/snapmgr.h>
 #include <executor/executor.h>
 #include <parser/parse_func.h>
+#include <storage/lmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <fmgr.h>
@@ -560,4 +561,207 @@ chunk_unfreeze_chunk(PG_FUNCTION_ARGS)
 	 */
 	bool ret = ts_chunk_unset_frozen(chunk);
 	PG_RETURN_BOOL(ret);
+}
+
+static List *
+chunk_id_list_create(ArrayType *array)
+{
+	/* create a sorted list of chunk ids from array */
+	ArrayIterator it;
+	Datum id_datum;
+	List *id_list = NIL;
+	bool isnull;
+
+	it = array_create_iterator(array, 0, NULL);
+	while (array_iterate(it, &id_datum, &isnull))
+	{
+		if (isnull)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("chunks array arguments cannot be NULL")));
+		id_list = lappend_int(id_list, DatumGetInt32(id_datum));
+	}
+	array_free_iterator(it);
+
+	(void) list_sort_compat(id_list, list_int_cmp_compat);
+	return id_list;
+}
+
+static List *
+chunk_id_list_exclusive_right_merge_join(const List *an_list, const List *dn_list)
+{
+	/*
+	 * merge join two sorted list and return only values which exclusively
+	 * exists in the right target (dn_list list)
+	 */
+	List *result = NIL;
+	const ListCell *l = list_head(an_list);
+	const ListCell *r = list_head(dn_list);
+	for (;;)
+	{
+		if (l && r)
+		{
+			int compare = list_int_cmp_compat(l, r);
+			if (compare == 0)
+			{
+				/* l = r */
+				l = lnext_compat(an_list, l);
+				r = lnext_compat(dn_list, r);
+			}
+			else if (compare < 0)
+			{
+				/* l < r */
+				/* chunk exists only on the access node */
+				l = lnext_compat(an_list, l);
+			}
+			else
+			{
+				/* l > r */
+				/* chunk exists only on the data node */
+				result = lappend_int(result, lfirst_int(r));
+				r = lnext_compat(dn_list, r);
+			}
+		}
+		else if (l)
+		{
+			/* chunk exists only on the access node */
+			l = lnext_compat(an_list, l);
+		}
+		else if (r)
+		{
+			/* chunk exists only on the data node */
+			result = lappend_int(result, lfirst_int(r));
+			r = lnext_compat(dn_list, r);
+		}
+		else
+		{
+			break;
+		}
+	}
+	return result;
+}
+
+/*
+ * chunk_drop_stale_chunks:
+ *
+ * This function drops chunks on a specified data node if those chunks are
+ * not known by the access node (chunks array).
+ *
+ * This function is intended to be used on the access node and data node.
+ */
+void
+ts_chunk_drop_stale_chunks(const char *node_name, ArrayType *chunks_array)
+{
+	DistUtilMembershipStatus membership;
+
+	/* execute according to the node membership */
+	membership = dist_util_membership();
+	if (membership == DIST_MEMBER_ACCESS_NODE)
+	{
+		StringInfo cmd = makeStringInfo();
+		bool first = true;
+
+		if (node_name == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("node_name argument cannot be NULL")));
+		if (chunks_array != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("chunks argument cannot be used on the access node")));
+
+		/* get an exclusive lock on the chunks catalog table to prevent new chunk
+		 * creation during this operation */
+		LockRelationOid(ts_catalog_get()->tables[CHUNK].id, AccessExclusiveLock);
+
+		/* generate query to execute drop_stale_chunks() on the data node */
+		appendStringInfo(cmd, "SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[");
+
+		/* scan for chunks that reference the given data node */
+		ScanIterator it = ts_chunk_data_nodes_scan_iterator_create(CurrentMemoryContext);
+		ts_chunk_data_nodes_scan_iterator_set_node_name(&it, node_name);
+		ts_scanner_foreach(&it)
+		{
+			TupleTableSlot *slot = ts_scan_iterator_slot(&it);
+			bool PG_USED_FOR_ASSERTS_ONLY isnull = false;
+			int32 node_chunk_id;
+
+			node_chunk_id =
+				DatumGetInt32(slot_getattr(slot, Anum_chunk_data_node_node_chunk_id, &isnull));
+			Assert(!isnull);
+
+			appendStringInfo(cmd, "%s%d", first ? "" : ",", node_chunk_id);
+			first = false;
+		}
+		ts_scan_iterator_close(&it);
+
+		appendStringInfo(cmd, "]::integer[])");
+
+		/* execute command on the data node */
+		ts_dist_cmd_run_on_data_nodes(cmd->data, list_make1((char *) node_name), true);
+	}
+	else if (membership == DIST_MEMBER_DATA_NODE)
+	{
+		List *an_chunk_id_list = NIL;
+		List *dn_chunk_id_list = NIL;
+		List *dn_chunk_id_list_stale = NIL;
+		ListCell *lc;
+		Cache *htcache;
+
+		if (node_name != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("node_name argument cannot be used on the data node")));
+
+		if (chunks_array == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("chunks argument cannot be NULL")));
+
+		/* get a sorted list of chunk ids from the supplied chunks id argument array */
+		an_chunk_id_list = chunk_id_list_create(chunks_array);
+
+		/* get a local sorted list of chunk ids */
+		dn_chunk_id_list = ts_chunk_get_all_chunk_ids(RowExclusiveLock);
+
+		/* merge join two sorted list and get chunk ids which exists locally */
+		dn_chunk_id_list_stale =
+			chunk_id_list_exclusive_right_merge_join(an_chunk_id_list, dn_chunk_id_list);
+
+		/* drop stale chunks */
+		htcache = ts_hypertable_cache_pin();
+		foreach (lc, dn_chunk_id_list_stale)
+		{
+			const Chunk *chunk = ts_chunk_get_by_id(lfirst_int(lc), false);
+			Hypertable *ht;
+
+			/* chunk might be already dropped by previous drop, if the chunk was compressed */
+			if (chunk == NULL)
+				continue;
+
+			/* ensure that we drop only chunks related to distributed hypertables */
+			ht = ts_hypertable_cache_get_entry(htcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
+			if (hypertable_is_distributed_member(ht))
+				ts_chunk_drop(chunk, DROP_RESTRICT, DEBUG1);
+		}
+		ts_cache_release(htcache);
+	}
+	else
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("current server is not an access node or data node")));
+	}
+}
+
+Datum
+chunk_drop_stale_chunks(PG_FUNCTION_ARGS)
+{
+	char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+	ArrayType *chunks_array = PG_ARGISNULL(1) ? NULL : PG_GETARG_ARRAYTYPE_P(1);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	ts_chunk_drop_stale_chunks(node_name, chunks_array);
+	PG_RETURN_VOID();
 }

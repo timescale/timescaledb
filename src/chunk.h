@@ -215,7 +215,9 @@ extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
+extern TSDLLEXPORT List *ts_chunk_get_all_chunk_ids(LOCKMODE lockmode);
 extern TSDLLEXPORT List *ts_chunk_get_data_node_name_list(const Chunk *chunk);
+
 extern bool TSDLLEXPORT ts_chunk_has_data_node(const Chunk *chunk, const char *node_name);
 extern List *ts_chunk_data_nodes_copy(const Chunk *chunk);
 extern TSDLLEXPORT Chunk *ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube,

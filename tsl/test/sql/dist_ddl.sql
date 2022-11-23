@@ -731,6 +731,7 @@ SELECT create_distributed_hypertable('hyper', 'time', 'device', 4, chunk_time_in
 INSERT INTO hyper SELECT t, ceil((random() * 5))::int, random() * 80
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-05'::timestamptz, '1 minute') as t;
 ANALYZE hyper;
+DROP TABLE hyper;
 
 --
 -- Ensure single query multi-statement command is blocked
@@ -895,6 +896,135 @@ CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_distributed_hypertable('drf_test', 'time');
 SELECT is_distributed, replication_factor FROM timescaledb_information.hypertables WHERE hypertable_name = 'drf_test';
 DROP TABLE drf_test;
+
+-- test drop_stale_chunks()
+--
+
+-- test directly on a data node first
+CREATE TABLE dist_test(time timestamptz NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3, replication_factor => 3);
+INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+\c :DATA_NODE_1
+
+-- check call arguments when executed on data node
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.drop_stale_chunks(NULL, NULL);
+SELECT _timescaledb_internal.drop_stale_chunks('dn1', NULL);
+\set ON_ERROR_STOP 1
+
+-- direct call to all chunks other then 19, 21
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+
+SET client_min_messages TO DEBUG1;
+SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19, 21]::integer[]);
+RESET client_min_messages;
+
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+
+-- ensure that drop_stale_chunks() does not affect local chunks
+CREATE TABLE local_test(time timestamptz NOT NULL, device int, temp float);
+SELECT create_hypertable('local_test', 'time', 'device', 3);
+INSERT INTO local_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+SELECT * from show_chunks('local_test');
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+
+SET client_min_messages TO DEBUG1;
+SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19]::integer[]);
+RESET client_min_messages;
+
+SELECT * from show_chunks('local_test');
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+DROP TABLE local_test;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP TABLE dist_test;
+
+-- test from access node
+CREATE TABLE dist_test(time timestamptz NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3, replication_factor => 3);
+INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+-- check call arguments when executed on access node
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.drop_stale_chunks( NULL, NULL);
+SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[1,2,3]);
+\set ON_ERROR_STOP 1
+
+-- create stale chunk by dropping them from access node
+DROP FOREIGN TABLE _timescaledb_internal._dist_hyper_35_36_chunk;
+DROP FOREIGN TABLE _timescaledb_internal._dist_hyper_35_37_chunk;
+
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+---- drop stale chunks 36, 37 on data nodes
+SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_1');
+SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_2');
+SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_3');
+
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+-- test drop_stale_chunks() with compressed chunk
+ALTER TABLE dist_test set (timescaledb.compress, timescaledb.compress_segmentby = 'device', timescaledb.compress_orderby = 'time');
+SELECT compress_chunk('_timescaledb_internal._dist_hyper_35_38_chunk');
+
+\c :DATA_NODE_1
+
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+SELECT * from show_chunks('dist_test');
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+DROP FOREIGN TABLE _timescaledb_internal._dist_hyper_35_38_chunk;
+
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+-- drop stale chunk 38
+SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_1');
+SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_2');
+SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_3');
+
+\c :DATA_NODE_1
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+SELECT * from show_chunks('dist_test');
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP TABLE dist_test;
+
+-- test alter_data_node() auto drop stale chunks on available
+--
+CREATE TABLE dist_test(time timestamptz NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3, replication_factor => 3);
+INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+SELECT alter_data_node(:'DATA_NODE_1', available => false);
+
+-- create stale chunks
+DROP FOREIGN TABLE _timescaledb_internal._dist_hyper_36_41_chunk;
+DROP FOREIGN TABLE _timescaledb_internal._dist_hyper_36_42_chunk;
+
+\c :DATA_NODE_1
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+SELECT * from show_chunks('dist_test');
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+-- drop stale chunks by making data node available
+SELECT alter_data_node(:'DATA_NODE_1', available => true);
+
+\c :DATA_NODE_1
+SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
+SELECT * from show_chunks('dist_test');
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+DROP TABLE dist_test;
 
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;

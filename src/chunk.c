@@ -3261,6 +3261,28 @@ ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 	return chunkids;
 }
 
+List *
+ts_chunk_get_all_chunk_ids(LOCKMODE lockmode)
+{
+	List *chunkids = NIL;
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, lockmode, CurrentMemoryContext);
+	ts_scan_iterator_set_index(&iterator, CHUNK, CHUNK_ID_INDEX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4GE,
+								   Int32GetDatum(0));
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum id = slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_id, &isnull);
+		if (!isnull)
+			chunkids = lappend_int(chunkids, DatumGetInt32(id));
+	}
+
+	return chunkids;
+}
+
 static ChunkResult
 chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 {

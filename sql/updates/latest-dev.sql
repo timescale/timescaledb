@@ -496,3 +496,10 @@ ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan
         REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id);
 
 ANALYZE _timescaledb_catalog.continuous_agg;
+
+-- changes related to drop_stale_chunks()
+CREATE FUNCTION _timescaledb_internal.drop_stale_chunks(
+    node_name NAME,
+    chunks integer[] = NULL
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;

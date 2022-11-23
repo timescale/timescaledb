@@ -201,6 +201,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_drop_replica = chunk_drop_replica,
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
+	.chunks_drop_stale = chunk_drop_stale_chunks,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.get_and_validate_data_node_list = hypertable_get_and_validate_data_nodes,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,

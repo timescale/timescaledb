@@ -66,6 +66,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.dimension_slice_get_constraint_sql(integer)
  _timescaledb_internal.drop_chunk(regclass)
  _timescaledb_internal.drop_dist_ht_invalidation_trigger(integer)
+ _timescaledb_internal.drop_stale_chunks(name,integer[])
  _timescaledb_internal.finalize_agg(text,name,name,name[],bytea,anyelement)
  _timescaledb_internal.finalize_agg_ffunc(internal,text,name,name,name[],bytea,anyelement)
  _timescaledb_internal.finalize_agg_sfunc(internal,text,name,name,name[],bytea,anyelement)
