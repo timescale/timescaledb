@@ -21,6 +21,7 @@
 #include "debug_point.h"
 #include "dist_util.h"
 #include "remote/dist_commands.h"
+#include "data_node.h"
 #include "dist_backup.h"
 
 #define TS_ACCESS_NODE_TYPE "access_node"
@@ -114,6 +115,9 @@ create_distributed_restore_point(PG_FUNCTION_ARGS)
 					 errmsg("distributed restore point must be created on the access node"),
 					 errhint("Connect to the access node and create the distributed restore point "
 							 "from there.")));
+
+		/* Ensure all data nodes are available */
+		data_node_fail_if_nodes_are_unavailable();
 
 		/*
 		 * In order to achieve synchronization across the multinode cluster,

@@ -35,6 +35,7 @@ extern List *data_node_get_node_name_list_with_aclcheck(AclMode mode, bool fail_
 extern List *data_node_get_filtered_node_name_list(ArrayType *nodearr, AclMode mode,
 												   bool fail_on_aclcheck);
 extern List *data_node_get_node_name_list(void);
+extern void data_node_fail_if_nodes_are_unavailable(void);
 extern List *data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode,
 															 bool fail_on_aclcheck);
 extern List *data_node_array_to_node_name_list(ArrayType *nodearr);

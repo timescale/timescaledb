@@ -131,6 +131,32 @@ SELECT pg_lsn(:'lsn_3') > pg_lsn(:'lsn_2') as valid_lsn;
  t
 (1 row)
 
+-- test create_distributed_restore_point() when one of the nodes if unavailable
+SELECT alter_data_node(:'DATA_NODE_1', available => false);
+                    alter_data_node                    
+-------------------------------------------------------
+ (db_dist_backup_1,localhost,55432,db_dist_backup_1,f)
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT create_distributed_restore_point('test');
+ERROR:  some data nodes are not available
+\set ON_ERROR_STOP 1
+SELECT alter_data_node(:'DATA_NODE_1', available => true);
+                    alter_data_node                    
+-------------------------------------------------------
+ (db_dist_backup_1,localhost,55432,db_dist_backup_1,t)
+(1 row)
+
+SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('test') ORDER BY node_name;
+    node_name     |  node_type  | valid_lsn 
+------------------+-------------+-----------
+ db_dist_backup_1 | data_node   | t
+ db_dist_backup_2 | data_node   | t
+ db_dist_backup_3 | data_node   | t
+                  | access_node | t
+(4 rows)
+
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;
