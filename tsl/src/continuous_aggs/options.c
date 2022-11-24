@@ -101,34 +101,11 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 {
 	List *retlist = NIL;
 	ListCell *lc;
-	Oid cagg_view_oid;
-
-	/*
-	 * Get the direct_view definition for the finalized version because
-	 * the user view doesn't have the "GROUP BY" clause anymore.
-	 */
-	if (ContinuousAggIsFinalized(agg))
-		cagg_view_oid =
-			get_relname_relid(NameStr(agg->data.direct_view_name),
-							  get_namespace_oid(NameStr(agg->data.direct_view_schema), false));
-	else
-		cagg_view_oid =
-			get_relname_relid(NameStr(agg->data.user_view_name),
-							  get_namespace_oid(NameStr(agg->data.user_view_schema), false));
-
-	Relation cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
-	RuleLock *cagg_view_rules = cagg_view_rel->rd_rules;
-	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);
-	RewriteRule *rule = cagg_view_rules->rules[0];
-	if (rule->event != CMD_SELECT)
-		ereport(ERROR, (errcode(ERRCODE_TS_UNEXPECTED), errmsg("unexpected rule event for view")));
-
-	Query *cagg_view_query = copyObject(linitial(rule->actions));
-	table_close(cagg_view_rel, NoLock); /* lock with be released at end of txn*/
+	Query *cagg_view_query = ts_continuous_agg_get_query(agg);
 	Oid mat_relid = mat_ht->main_table_relid;
 	Query *finalize_query;
-	/* the view rule has dummy old and new range table entries as the 1st and 2nd entries
-	 */
+
+	/* The view rule has dummy old and new range table entries as the 1st and 2nd entries */
 	Assert(list_length(cagg_view_query->rtable) >= 2);
 	if (cagg_view_query->setOperations)
 	{
@@ -146,6 +123,7 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	{
 		finalize_query = cagg_view_query;
 	}
+
 	foreach (lc, finalize_query->groupClause)
 	{
 		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
