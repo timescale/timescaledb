@@ -110,6 +110,16 @@ SELECT pg_lsn(:'lsn_2') > pg_lsn(:'lsn_1') as valid_lsn;
 SELECT pg_create_restore_point('dist_rp') as lsn_3 \gset
 SELECT pg_lsn(:'lsn_3') > pg_lsn(:'lsn_2') as valid_lsn;
 
+-- test create_distributed_restore_point() when one of the nodes if unavailable
+SELECT alter_data_node(:'DATA_NODE_1', available => false);
+
+\set ON_ERROR_STOP 0
+SELECT create_distributed_restore_point('test');
+\set ON_ERROR_STOP 1
+
+SELECT alter_data_node(:'DATA_NODE_1', available => true);
+SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('test') ORDER BY node_name;
+
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;

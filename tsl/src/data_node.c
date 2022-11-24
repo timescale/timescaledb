@@ -1946,6 +1946,24 @@ data_node_get_node_name_list_with_aclcheck(AclMode mode, bool fail_on_aclcheck)
 	return nodes;
 }
 
+void
+data_node_fail_if_nodes_are_unavailable(void)
+{
+	/* Get a list of data nodes and ensure all of them are available */
+	List *data_node_list = data_node_get_node_name_list_with_aclcheck(ACL_NO_CHECK, false);
+	ListCell *lc;
+
+	foreach (lc, data_node_list)
+	{
+		const char *node_name = lfirst(lc);
+		const ForeignServer *server;
+
+		server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false);
+		if (!ts_data_node_is_available_by_server(server))
+			ereport(ERROR, (errmsg("some data nodes are not available")));
+	}
+}
+
 /*
  * Get server list with optional ACL check.
  *
