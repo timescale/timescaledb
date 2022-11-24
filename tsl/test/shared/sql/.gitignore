@@ -2,6 +2,7 @@
 /constify_now-*.sql
 /decompress_join-*.sql
 /dist_distinct-*.sql
+/dist_fetcher_type-*.sql
 /dist_remote_error-*.sql
 /dist_remote_error.text
 /gapfill-*.sql
