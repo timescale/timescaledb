@@ -33,6 +33,18 @@ typedef struct BgwParams
 	 * connection. */
 	Oid user_oid;
 
+	/**
+	 * Job will croak silently and not print normal errors. This is used for
+	 * the telemetry job to avoid spamming the log with unrelated issues or
+	 * block a shutdown because it is using a blocking system call.
+	 *
+	 * @note It does not affect printing inside the actual job so you need to
+	 * make sure that you use a suitable level for those. You should also keep
+	 * in mind that these jobs exits quickly, so no atexit handlers will be
+	 * executed.
+	 */
+	bool croak_silently;
+
 	/** Job id to use for the worker when executing the job */
 	int32 job_id;
 

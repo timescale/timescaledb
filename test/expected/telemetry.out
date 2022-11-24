@@ -311,28 +311,28 @@ SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1-rc1"
 ----------------------------------------------------------------
 -- Test well-formed response but invalid versions
 SELECT test_check_version_response('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "is_up_to_date": false}');
-WARNING:  server did not return a valid TimescaleDB version: version string is too long
+NOTICE:  server did not return a valid TimescaleDB version: version string is too long
  test_check_version_response 
 -----------------------------
  
 (1 row)
 
 SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1+rc1", "is_up_to_date": false}');
-WARNING:  server did not return a valid TimescaleDB version: version string has invalid characters
+NOTICE:  server did not return a valid TimescaleDB version: version string has invalid characters
  test_check_version_response 
 -----------------------------
  
 (1 row)
 
 SELECT test_check_version_response('{"current_timescaledb_version": "@10.1.1", "is_up_to_date": false}');
-WARNING:  server did not return a valid TimescaleDB version: version string has invalid characters
+NOTICE:  server did not return a valid TimescaleDB version: version string has invalid characters
  test_check_version_response 
 -----------------------------
  
 (1 row)
 
 SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1@", "is_up_to_date": false}');
-WARNING:  server did not return a valid TimescaleDB version: version string has invalid characters
+NOTICE:  server did not return a valid TimescaleDB version: version string has invalid characters
  test_check_version_response 
 -----------------------------
  
@@ -354,7 +354,7 @@ ERROR:  malformed telemetry response body
 SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
-WARNING:  telemetry could not connect to "noservice.timescale.com"
+NOTICE:  telemetry could not connect to "noservice.timescale.com"
  test_telemetry_main_conn 
 --------------------------
  f

@@ -37,7 +37,10 @@ ts_connection_create(ConnectionType type)
 	Connection *conn;
 
 	if (type == _CONNECTION_MAX)
-		elog(ERROR, "invalid connection type");
+	{
+		elog(NOTICE, "invalid connection type");
+		return NULL;
+	}
 
 	if (NULL == conn_ops[type])
 		ereport(ERROR,
