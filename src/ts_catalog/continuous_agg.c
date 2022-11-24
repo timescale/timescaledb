@@ -38,6 +38,7 @@
 #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
+#include "errors.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
@@ -1897,4 +1898,40 @@ ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(cagg_oid))));
 
 	return ownerid;
+}
+
+Query *
+ts_continuous_agg_get_query(ContinuousAgg *cagg)
+{
+	Oid cagg_view_oid;
+	Relation cagg_view_rel;
+	RuleLock *cagg_view_rules;
+	RewriteRule *rule;
+	Query *cagg_view_query;
+
+	/*
+	 * Get the direct_view definition for the finalized version because
+	 * the user view doesn't have the "GROUP BY" clause anymore.
+	 */
+	if (ContinuousAggIsFinalized(cagg))
+		cagg_view_oid =
+			get_relname_relid(NameStr(cagg->data.direct_view_name),
+							  get_namespace_oid(NameStr(cagg->data.direct_view_schema), false));
+	else
+		cagg_view_oid =
+			get_relname_relid(NameStr(cagg->data.user_view_name),
+							  get_namespace_oid(NameStr(cagg->data.user_view_schema), false));
+
+	cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
+	cagg_view_rules = cagg_view_rel->rd_rules;
+	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);
+
+	rule = cagg_view_rules->rules[0];
+	if (rule->event != CMD_SELECT)
+		ereport(ERROR, (errcode(ERRCODE_TS_UNEXPECTED), errmsg("unexpected rule event for view")));
+
+	cagg_view_query = (Query *) copyObject(linitial(rule->actions));
+	table_close(cagg_view_rel, NoLock);
+
+	return cagg_view_query;
 }

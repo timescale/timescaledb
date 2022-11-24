@@ -33,10 +33,44 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 
 SET timezone TO 'UTC';
 
--- Run tests
+--
+-- Run common tests
+--
 \ir include/cagg_on_cagg_common.sql
 
--- cleanup
+--
+-- Validation test for variable bucket on top of fixed bucket
+--
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 month\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'60 days\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket'
+\ir include/cagg_on_cagg_validations.sql
+
+--
+-- Validation test for non-multiple bucket sizes
+--
+\set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'3 hours\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
+\ir include/cagg_on_cagg_validations.sql
+
+--
+-- Validation test for equal bucket sizes
+--
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\ir include/cagg_on_cagg_validations.sql
+
+--
+-- Validation test for bucket size less than source
+--
+\set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
+\ir include/cagg_on_cagg_validations.sql
+
+-- Cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

@@ -31,10 +31,36 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \set BUCKET_WIDTH_2TH 'INTEGER \'5\''
 \set BUCKET_WIDTH_3TH 'INTEGER \'10\''
 
--- Run tests
+--
+-- Run common tests
+--
 \ir include/cagg_on_cagg_common.sql
 
--- cleanup
+--
+-- Validation test for non-multiple bucket sizes
+--
+\set BUCKET_WIDTH_1ST 'INTEGER \'2\''
+\set BUCKET_WIDTH_2TH 'INTEGER \'5\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
+\ir include/cagg_on_cagg_validations.sql
+
+--
+-- Validation test for equal bucket sizes
+--
+\set BUCKET_WIDTH_1ST 'INTEGER \'2\''
+\set BUCKET_WIDTH_2TH 'INTEGER \'2\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\ir include/cagg_on_cagg_validations.sql
+
+--
+-- Validation test for bucket size less than source
+--
+\set BUCKET_WIDTH_1ST 'INTEGER \'4\''
+\set BUCKET_WIDTH_2TH 'INTEGER \'2\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
+\ir include/cagg_on_cagg_validations.sql
+
+-- Cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
