@@ -6,7 +6,6 @@ set(TEST_FILES_SHARED
     decompress_placeholdervar.sql
     dist_chunk.sql
     dist_distinct_pushdown.sql
-    dist_fetcher_type.sql
     dist_gapfill.sql
     dist_insert.sql
     dist_queries.sql
@@ -15,6 +14,7 @@ set(TEST_FILES_SHARED
 
 set(TEST_TEMPLATES_SHARED
     decompress_join.sql.in
+    dist_fetcher_type.sql.in
     gapfill.sql.in
     generated_columns.sql.in
     ordered_append.sql.in
