@@ -7,53 +7,23 @@ on:
     branches:
       - coverity_scan
 jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-    steps:
-    - name: Checkout source code
-      uses: actions/checkout@v3
-    - name: Read configuration
-      id: setter
-      run: python .github/gh_config_reader.py
 
   coverity:
     name: Coverity ${{ matrix.pg }}
     runs-on: ${{ matrix.os }}
-    needs: config
     strategy:
       fail-fast: false
       matrix:
-        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+        pg: [12,13,14]
         os: [ubuntu-20.04]
-    env:
-      PG_SRC_DIR: pgbuild
-      PG_INSTALL_DIR: postgresql
-      MAKE_JOBS: 4
     steps:
     - name: Install Dependencies
-      run: sudo apt install flex bison clang-9 llvm-9 llvm-9-dev llvm-9-tools
-
-    # this workflow depends on the cached postgres build from the main regression
-    # workflow since that workflow runs daily there should always be a cache hit
-    - name: Cache PostgreSQL ${{ matrix.pg }}
-      id: cache-postgresql
-      uses: actions/cache@v3
-      with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-gcc-Release
-
-    # we abort on cache miss otherwise we would have to reproduce most variables
-    # of the main regression build matrix in this workflow
-    - name: Abort on cache miss
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      run: false
-
-    - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
-        make -C ~/$PG_SRC_DIR install
-        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        sudo apt-get update
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt-get update
+        sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -67,7 +37,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         PATH="$GITHUB_WORKSPACE/coverity/bin:$PATH"
-        ./bootstrap -DCMAKE_BUILD_TYPE=Release -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR
+        ./bootstrap -DCMAKE_BUILD_TYPE=Release
         cov-build --dir cov-int make -C build
 
     - name: Upload report

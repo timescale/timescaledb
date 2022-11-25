@@ -94,9 +94,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}
+        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}
 
-    - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.build_type }}
+    - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
@@ -112,7 +112,7 @@ jobs:
         make -j $MAKE_JOBS -C src/test/isolation
         make -j $MAKE_JOBS -C contrib/postgres_fdw
 
-    - name: Install PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+    - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
         make -C ~/$PG_SRC_DIR install
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
