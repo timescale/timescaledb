@@ -2,8 +2,8 @@
 name: Sanitizer test
 on:
   schedule:
-    # run daily 20:00 on main branch
-    - cron: '0 20 * * *'
+    # run daily 21:00 on main branch
+    - cron: '0 21 * * *'
   push:
     branches:
       - prerelease_test
