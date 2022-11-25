@@ -1,33 +1,20 @@
 name: SQLsmith
 on:
   schedule:
-    # run daily 20:00 on main branch
+    # run daily 2:00 on main branch
     - cron: '0 2 * * *'
   workflow_dispatch:
   push:
     branches:
       - sqlsmith
 jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      pg14_latest: ${{ steps.setter.outputs.PG14_LATEST }}
-    steps:
-    - name: Checkout source code
-      uses: actions/checkout@v3
-    - name: Read configuration
-      id: setter
-      run: python .github/gh_config_reader.py
-
-  regress:
+  sqlsmith:
     name: SQLsmith PG${{ matrix.pg }}
     runs-on: ${{ matrix.os }}
-    needs: config
     strategy:
       matrix:
         os: ["ubuntu-20.04"]
-        pg: [ "${{ fromJson(needs.config.outputs.pg14_latest) }}" ]
-        cc: ["gcc"]
+        pg: [ "14" ]
         build_type: ["Debug"]
       fail-fast: false
     env:
@@ -38,36 +25,23 @@ jobs:
     - name: Install Linux Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install flex bison systemd-coredump gdb clang-9 llvm-9 llvm-9-dev llvm-9-tools build-essential autoconf autoconf-archive libpqxx-dev libboost-regex-dev libsqlite3-dev
 
-    # this workflow depends on the cached postgres build from the main regression
-    # workflow since that workflow runs daily there should always be a cache hit
-    - name: Cache PostgreSQL ${{ matrix.pg }}
-      id: cache-postgresql
-      uses: actions/cache@v3
-      with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
-
-    # we abort on cache miss otherwise we would have to reproduce most variables
-    # of the main regression build matrix in this workflow
-    - name: Abort on cache miss
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      run: false
-
-    - name: Install PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+    - name: Install Dependencies
       run: |
-        make -C ~/$PG_SRC_DIR install
-        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        sudo apt-get update
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev build-essential autoconf autoconf-archive libpqxx-dev libboost-regex-dev libsqlite3-dev
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt-get update
+        sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }}
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ${{ matrix.tsdb_build_args }}
         make -C build
-        make -C build install
+        sudo make -C build install
 
     - name: Checkout sqlsmith
       uses: actions/checkout@v3
@@ -86,8 +60,8 @@ jobs:
     - name: Setup test environment
       run: |
         mkdir ~/pgdata
-        ~/$PG_INSTALL_DIR/bin/initdb ~/pgdata
-        ~/$PG_INSTALL_DIR/bin/pg_ctl -D ~/pgdata start -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" -o "-cmax_prepared_transactions=100"
+        /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl initdb -D ~/pgdata
+        /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl -D ~/pgdata start -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp"
         psql -h /tmp postgres -c 'CREATE DATABASE smith;'
         psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
         psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
