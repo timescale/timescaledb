@@ -1105,7 +1105,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	StringInfo detail = makeStringInfo();
 	bool is_nested = false;
 	Query *prev_query = NULL;
-	ContinuousAgg *cagg_source = NULL;
+	ContinuousAgg *cagg_parent = NULL;
 
 	if (!cagg_query_supported(query, hint, detail, finalized))
 	{
@@ -1153,26 +1153,35 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
 		else
 		{
-			cagg_source = ts_continuous_agg_find_by_relid(rte->relid);
+			cagg_parent = ts_continuous_agg_find_by_relid(rte->relid);
 
-			if (!ContinuousAggIsFinalized(cagg_source))
+			if (!cagg_parent)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("invalid continuous aggregate query"),
+						 errhint("continuous aggregate needs to query hypertable or another "
+								 "continuous aggregate")));
+			}
+
+			if (!ContinuousAggIsFinalized(cagg_parent))
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("old format of continuous aggregate is not supported"),
 						 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
 								 "format.",
-								 NameStr(cagg_source->data.user_view_schema),
-								 NameStr(cagg_source->data.user_view_name))));
+								 NameStr(cagg_parent->data.user_view_schema),
+								 NameStr(cagg_parent->data.user_view_name))));
 			}
 
-			parent_mat_hypertable_id = cagg_source->data.mat_hypertable_id;
+			parent_mat_hypertable_id = cagg_parent->data.mat_hypertable_id;
 			hcache = ts_hypertable_cache_pin();
-			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_source->data.mat_hypertable_id);
+			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
 
 			/* get the querydef for the source cagg */
 			is_nested = true;
-			prev_query = ts_continuous_agg_get_query(cagg_source);
+			prev_query = ts_continuous_agg_get_query(cagg_parent);
 		}
 
 		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
@@ -1248,7 +1257,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 									part_dimension->column_attno,
 									part_dimension->fd.column_type,
 									part_dimension->fd.interval_length,
-									cagg_source->data.parent_mat_hypertable_id);
+									cagg_parent->data.parent_mat_hypertable_id);
 		}
 
 		ts_cache_release(hcache);
@@ -1347,8 +1356,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   cagg_name,
 							   width_out,
 							   message,
-							   NameStr(cagg_source->data.user_view_schema),
-							   NameStr(cagg_source->data.user_view_name),
+							   NameStr(cagg_parent->data.user_view_schema),
+							   NameStr(cagg_parent->data.user_view_name),
 							   width_out_parent)));
 		}
 	}

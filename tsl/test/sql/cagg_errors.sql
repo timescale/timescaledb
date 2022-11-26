@@ -535,3 +535,12 @@ CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucke
 --TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
 --Check error handling for this case
 SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;
+
+-- cagg on normal view should error out
+CREATE VIEW v1 AS SELECT now() AS time;
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM v1 GROUP BY 1;
+
+-- cagg on normal view should error out
+CREATE MATERIALIZED VIEW matv1 AS SELECT now() AS time;
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM matv1 GROUP BY 1;
+
