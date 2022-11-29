@@ -510,6 +510,18 @@ if(NOT EXISTS ${PG_INCLUDEDIR}/pg_config.h)
   )
 endif()
 
+# This is currently only available in snapshot branches so we cannot use the
+# normal pg version check to determine availability.
+if(EXISTS ${PG_INCLUDEDIR_SERVER}/utils/rel.h)
+  file(READ ${PG_INCLUDEDIR_SERVER}/utils/rel.h PG_UTILS_REL_H)
+  string(REGEX MATCH "RelationGetSmgr" PG_HAVE_RELATION_GET_SMGR
+               ${PG_UTILS_REL_H})
+endif()
+
+if(PG_HAVE_RELATION_GET_SMGR)
+  add_compile_definitions(PG_HAVE_RELATION_GET_SMGR=1)
+endif()
+
 file(READ ${PG_INCLUDEDIR}/pg_config.h PG_CONFIG_H)
 string(REGEX MATCH "#define USE_ASSERT_CHECKING 1" PG_USE_ASSERT_CHECKING
              ${PG_CONFIG_H})
