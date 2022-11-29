@@ -759,4 +759,34 @@ pg_strtoint64(const char *str)
 						 is_crosspart_update)
 #endif
 
+#if PG13_GE
+#ifndef PG_HAVE_RELATION_GET_SMGR
+#include <storage/smgr.h>
+/*
+ * RelationGetSmgr
+ *		Returns smgr file handle for a relation, opening it if needed.
+ *
+ * Very little code is authorized to touch rel->rd_smgr directly.  Instead
+ * use this function to fetch its value.
+ *
+ * Note: since a relcache flush can cause the file handle to be closed again,
+ * it's unwise to hold onto the pointer returned by this function for any
+ * long period.  Recommended practice is to just re-execute RelationGetSmgr
+ * each time you need to access the SMgrRelation.  It's quite cheap in
+ * comparison to whatever an smgr function is going to do.
+ *
+ * This has been backported but is not available in all minor versions so
+ * we backport ourselves for those versions.
+ *
+ */
+static inline SMgrRelation
+RelationGetSmgr(Relation rel)
+{
+	if (unlikely(rel->rd_smgr == NULL))
+		smgrsetowner(&(rel->rd_smgr), smgropen(rel->rd_node, rel->rd_backend));
+	return rel->rd_smgr;
+}
+#endif
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

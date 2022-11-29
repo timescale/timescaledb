@@ -703,31 +703,6 @@ has_other_before_insert_row_trigger_than_ts(ResultRelInfo *resultRelInfo)
 	return false;
 }
 
-#if PG13_GE
-/*
- * RelationGetSmgr
- *		Returns smgr file handle for a relation, opening it if needed.
- *
- * Very little code is authorized to touch rel->rd_smgr directly.  Instead
- * use this function to fetch its value.
- *
- * Note: since a relcache flush can cause the file handle to be closed again,
- * it's unwise to hold onto the pointer returned by this function for any
- * long period.  Recommended practice is to just re-execute RelationGetSmgr
- * each time you need to access the SMgrRelation.  It's quite cheap in
- * comparison to whatever an smgr function is going to do.
- *
- * copied verbatim from postgres because it is a static function
- */
-static inline SMgrRelation
-RelationGetSmgr(Relation rel)
-{
-	if (unlikely(rel->rd_smgr == NULL))
-		smgrsetowner(&(rel->rd_smgr), smgropen(rel->rd_node, rel->rd_backend));
-	return rel->rd_smgr;
-}
-#endif
-
 /*
  * Use COPY FROM to copy data from file to relation.
  */
