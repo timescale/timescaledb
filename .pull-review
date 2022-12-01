@@ -39,7 +39,6 @@ require_notification: false
 reviewers:
   svenklemm: {}
   mkindahl: {}
-  mfundul: {}
   fabriziomello: {}
   konskov: {}
   erimatnor: {}
@@ -49,6 +48,10 @@ reviewers:
   RafiaSabih: {}
   gayyappan: {}
   jnidzwetzki: {}
+  mahipv: {}
+  lkshminarayanan: {}
+  sb230132: {}
+  shhnwz: {}
 
 # list of users who will never be notified
 review_blacklist:
