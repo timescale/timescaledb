@@ -56,7 +56,7 @@ jobs:
             tsl_skips_version: dist_grant-13 dist_partial_agg-13
           - pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.1
-            tsl_skips_version: dist_partial_agg-14
+            tsl_skips_version: dist_partial_agg-14 dist_grant-14
     env:
       # PostgreSQL configuration
       PGPORT: 55432

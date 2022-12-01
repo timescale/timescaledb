@@ -75,6 +75,12 @@ jobs:
     - name: Build extension
       run: |
         BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
+        if [[ "${{matrix.test}}" == *backward ]]; then
+          # Alpine v3.17 updated its default libssl version to 3.0 but the older
+          # images use 1.0. Ensure that the builder image uses the same libssl version
+          # as the one used by the older test image by using Alpine 3.16.
+          BUILDER_IMAGE+="3.16"
+        fi
 
         docker run -i --rm -v $(pwd):/mnt ${BUILDER_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base krb5-dev openssl-dev git > /dev/null
@@ -90,6 +96,12 @@ jobs:
     - name: Run tests
       run: |
         TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
+        if [[ "${{matrix.test}}" == *forward ]]; then
+          # Alpine v3.17 updated its default libssl version to 3.0 but the older
+          # images use 1.0. Ensure that the test image uses the same libssl version
+          # as the one used by the older build image by using Alpine 3.16.
+          TEST_IMAGE+="3.16"
+        fi
 
         docker run -i --rm -v $(pwd):/mnt ${TEST_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base krb5-dev openssl-dev sudo > /dev/null

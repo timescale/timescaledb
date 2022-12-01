@@ -4,7 +4,7 @@ set -e
 set -o pipefail
 
 DO_CLEANUP=true
-SCRIPT_DIR=${SCRIPT_DIR:-$(dirname $0)}
+SCRIPT_DIR=${SCRIPT_DIR:-$(dirname "$0")}
 EXCLUDE_PATTERN=${EXCLUDE_PATTERN:-'^$'} # tests matching regex pattern will be excluded
 INCLUDE_PATTERN=${INCLUDE_PATTERN:-'.*'} # tests matching regex pattern will be included
 TEST_MAX=${TEST_MAX:-$((2**16))}
@@ -33,7 +33,7 @@ done
 
 shift $((OPTIND-1))
 
-if "$DO_CLEANUP" = "true"; then
+if [ "$DO_CLEANUP" == "true" ] ; then
     trap cleanup EXIT
 fi
 
@@ -61,12 +61,12 @@ cleanup() {
 docker_exec() {
     # Echo to stderr
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec $1 /bin/bash -c "$2"
+    docker exec "$1" /bin/bash -c "$2"
 }
 
 docker rm -f timescaledb-san 2>/dev/null || true
 
-docker run -d --privileged --name timescaledb-san --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TIMESCALE_DIR}:/timescaledb ${REMOTE_ORG}/${REMOTE_NAME}:${REMOTE_TAG}
+docker run -d --privileged --name timescaledb-san --env POSTGRES_HOST_AUTH_METHOD=trust -v "${TIMESCALE_DIR}":/timescaledb "${REMOTE_ORG}/${REMOTE_NAME}":"${REMOTE_TAG}"
 
 # Run these commands as root to copy the source into the
 # container. Make sure that all files in the copy is owned by user

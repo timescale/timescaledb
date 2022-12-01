@@ -3,7 +3,7 @@
 set -e
 set -o pipefail
 
-SCRIPT_DIR=$(dirname $0)
+SCRIPT_DIR=$(dirname "$0")
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 DO_CLEANUP=true
 
@@ -24,7 +24,7 @@ done
 
 shift $((OPTIND-1))
 
-if "$DO_CLEANUP" = "true"; then
+if [ "$DO_CLEANUP" == "true" ] ; then
     trap cleanup EXIT
 fi
 
@@ -42,16 +42,16 @@ cleanup() {
 docker_exec() {
     # Echo to stderr
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec $1 /bin/bash -c "$2"
+    docker exec "$1" /bin/bash -c "$2"
 }
 
 docker rm -f timescaledb-rp 2>/dev/null || true
-IMAGE_NAME=rp_test TAG_NAME=latest bash ${SCRIPT_DIR}/docker-build.sh
+IMAGE_NAME=rp_test TAG_NAME=latest bash "${SCRIPT_DIR}/docker-build.sh"
 
 # The odd contortion with the BASE_DIR is necessary since SCRIPT_DIR
 # is relative and --volume requires an absolute path.
 docker run --env TIMESCALEDB_TELEMETRY=off -d \
- --volume ${BASE_DIR}/scripts:/mnt/scripts \
+ --volume "${BASE_DIR}/scripts":/mnt/scripts \
  --name timescaledb-rp rp_test:latest
 
 echo "**** Testing ****"
