@@ -11,6 +11,7 @@ on:
   schedule:
     # run daily 20:00 on main branch
     - cron: '0 20 * * *'
+  pull_request:
   push:
     branches:
       - prerelease_test
