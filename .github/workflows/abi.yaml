@@ -45,27 +45,33 @@ jobs:
           - test: 12backward
             pg: 12
             builder: ${{ fromJson(needs.config.outputs.pg12_latest) }}
+            builder_openssl: openssl1.1-compat-dev
             tester: ${{ fromJson(needs.config.outputs.pg12_abi_min ) }}
           - test: 12forward
             pg: 12
             builder: ${{ fromJson(needs.config.outputs.pg12_abi_min ) }}
             tester: ${{ fromJson(needs.config.outputs.pg12_latest) }}
+            tester_openssl: openssl1.1-compat-dev
           - test: 13backward
             pg: 13
             builder: ${{ fromJson(needs.config.outputs.pg13_latest) }}
             tester: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}
+            tester_openssl: openssl3-dev
           - test: 13forward
             pg: 13
             builder: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}
+            builder_openssl: openssl3-dev
             tester: ${{ fromJson(needs.config.outputs.pg13_latest) }}
           - test: 14backward
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            builder_openssl: openssl1.1-compat-dev
             tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
           - test: 14forward
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
             tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            tester_openssl: openssl1.1-compat-dev
 
     steps:
 
@@ -77,7 +83,8 @@ jobs:
         BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
 
         docker run -i --rm -v $(pwd):/mnt ${BUILDER_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev openssl-dev git > /dev/null
+          OPENSSL=${{matrix.builder_openssl}}
+          apk add cmake gcc make build-base krb5-dev "${OPENSSL:-openssl-dev}" git > /dev/null
           git config --global --add safe.directory /mnt
           cd /mnt
           BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
@@ -92,7 +99,8 @@ jobs:
         TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
 
         docker run -i --rm -v $(pwd):/mnt ${TEST_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev openssl-dev sudo > /dev/null
+          OPENSSL=${{matrix.tester_openssl}}
+          apk add cmake gcc make build-base krb5-dev "${OPENSSL:-openssl-dev}" sudo > /dev/null
           cd /mnt
           cp build_abi/install_ext/* `pg_config --sharedir`/extension/
           cp build_abi/install_lib/* `pg_config --pkglibdir`
