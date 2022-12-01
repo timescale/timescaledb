@@ -819,32 +819,34 @@ EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT device, temp, avg(temp) OVER (PARTITION BY device)
 FROM disttable
 ORDER BY device, temp;
-                                                                                   QUERY PLAN                                                                                    
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Incremental Sort
-   Output: disttable_1.device, disttable_1.temp, (avg(disttable_1.temp) OVER (?))
-   Sort Key: disttable_1.device, disttable_1.temp
-   Presorted Key: disttable_1.device
+   Output: disttable.device, disttable.temp, (avg(disttable.temp) OVER (?))
+   Sort Key: disttable.device, disttable.temp
+   Presorted Key: disttable.device
    ->  WindowAgg
-         Output: disttable_1.device, disttable_1.temp, avg(disttable_1.temp) OVER (?)
-         ->  Merge Append
-               Sort Key: disttable_1.device
-               ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
-                     Output: disttable_1.device, disttable_1.temp
-                     Data node: db_dist_hypertable_1
-                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
-               ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
-                     Output: disttable_2.device, disttable_2.temp
-                     Data node: db_dist_hypertable_2
-                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_5_chunk
-                     Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
-               ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
-                     Output: disttable_3.device, disttable_3.temp
-                     Data node: db_dist_hypertable_3
-                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_6_chunk
-                     Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
-(23 rows)
+         Output: disttable.device, disttable.temp, avg(disttable.temp) OVER (?)
+         ->  Custom Scan (AsyncAppend)
+               Output: disttable.device, disttable.temp
+               ->  Merge Append
+                     Sort Key: disttable_1.device
+                     ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                           Output: disttable_1.device, disttable_1.temp
+                           Data node: db_dist_hypertable_1
+                           Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk
+                           Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+                     ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                           Output: disttable_2.device, disttable_2.temp
+                           Data node: db_dist_hypertable_2
+                           Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_5_chunk
+                           Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+                     ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
+                           Output: disttable_3.device, disttable_3.temp
+                           Data node: db_dist_hypertable_3
+                           Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_6_chunk
+                           Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+(25 rows)
 
 SELECT device, temp, avg(temp) OVER (PARTITION BY device)
 FROM disttable

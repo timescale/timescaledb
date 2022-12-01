@@ -300,8 +300,10 @@ CREATE OR REPLACE FUNCTION test.make_tablespace_path(prefix TEXT, test_name TEXT
        RETURNS TEXT LANGUAGE plpgsql AS
 $BODY$
 DECLARE
+    mkdirFlag TEXT := CASE WHEN sysname = 'Windows' THEN '' ELSE '-p ' END
+        FROM _timescaledb_internal.get_os_info();
     dirPath TEXT := format('%s%s', prefix, test_name);
-    createDir TEXT := format('mkdir %s', dirPath);
+    createDir TEXT := format('mkdir %s%s', mkdirFlag, dirPath);
 BEGIN
     EXECUTE format('COPY (SELECT 1) TO PROGRAM %s', quote_literal(createDir));
     RETURN dirPath;
