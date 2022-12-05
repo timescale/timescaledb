@@ -22,9 +22,26 @@ FROM (
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
 \set IS_DISTRIBUTED TRUE
+
+-- ########################################################
+-- ## INTEGER data type tests
+-- ########################################################
+\set IS_TIME_DIMENSION FALSE
+\set TIME_DIMENSION_DATATYPE INTEGER
+\ir include/cagg_migrate_common.sql
+
+-- ########################################################
+-- ## TIMESTAMP data type tests
+-- ########################################################
 \set IS_TIME_DIMENSION TRUE
 \set TIME_DIMENSION_DATATYPE TIMESTAMP
+\ir include/cagg_migrate_common.sql
 
+-- ########################################################
+-- ## TIMESTAMPTZ data type tests
+-- ########################################################
+\set IS_TIME_DIMENSION TRUE
+\set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
 \ir include/cagg_migrate_common.sql
 
 -- cleanup
