@@ -55,12 +55,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_drop_chunks.sql
     cagg_dump.sql
     cagg_errors_deprecated.sql
-    cagg_migrate_integer.sql
-    cagg_migrate_integer_dist_ht.sql
-    cagg_migrate_timestamp.sql
-    cagg_migrate_timestamp_dist_ht.sql
-    cagg_migrate_timestamptz.sql
-    cagg_migrate_timestamptz_dist_ht.sql
+    cagg_migrate.sql
+    cagg_migrate_dist_ht.sql
     cagg_multi.sql
     cagg_on_cagg_integer.sql
     cagg_on_cagg_integer_dist_ht.sql

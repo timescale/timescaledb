@@ -218,7 +218,7 @@ SELECT * FROM conditions_summary_daily
 EXCEPT
 SELECT * FROM conditions_summary_daily_new;
 
-CREATE VIEW cagg_jobs AS
+CREATE OR REPLACE VIEW cagg_jobs AS
 SELECT user_view_schema AS schema, user_view_name AS name, bgw_job.*
 FROM _timescaledb_config.bgw_job
 JOIN _timescaledb_catalog.continuous_agg ON mat_hypertable_id = hypertable_id
@@ -348,7 +348,7 @@ CALL cagg_migrate('conditions_summary_daily');
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
-CREATE FUNCTION execute_migration() RETURNS void AS
+CREATE OR REPLACE FUNCTION execute_migration() RETURNS void AS
 $$
 BEGIN
     CALL cagg_migrate('conditions_summary_daily');
@@ -364,3 +364,10 @@ BEGIN;
 SELECT execute_migration();
 ROLLBACK;
 \set ON_ERROR_STOP 1
+
+-- cleanup
+REVOKE SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan FROM :ROLE_DEFAULT_PERM_USER;
+REVOKE USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq FROM :ROLE_DEFAULT_PERM_USER;
+TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
+DROP MATERIALIZED VIEW conditions_summary_daily;
+DROP TABLE conditions;
