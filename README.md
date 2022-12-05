@@ -25,7 +25,6 @@ these other resources:
 - [Timescale Community Forum](https://www.timescale.com/forum/)
 - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes)
 
-
 For reference and clarity, all code files in this repository reference
 licensing in their header (either the Apache-2-open-source license
 or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE)
@@ -140,6 +139,12 @@ To build from source, see instructions
 
 ## Resources
 
+### Architecture documents
+
+- [Basic TimescaleDB Features](tsl/README.md)
+- [Advanced TimescaleDB Features](tsl/README.md)
+- [Testing TimescaleDB](test/README.md)
+
 ### Useful tools
 
 - [timescaledb-tune](https://github.com/timescale/timescaledb-tune): Helps
@@ -164,13 +169,11 @@ multiple workers.
 
 ### Releases & updates
 
- - [Timescale Release Notes & Future
-   Plans](https://tsdb.co/GitHubTimescaleReleaseNotes): see planned and
+ - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes): see planned and
    in-progress updates and detailed information about current and past
-   releases.
- - [Subscribe to Timescale Release
-   Notes](https://tsdb.co/GitHubTimescaleGetReleaseNotes) to get notified about
-   new releases, fixes, and early access/beta programs.
+   releases. - [Subscribe to Timescale Release
+   Notes](https://tsdb.co/GitHubTimescaleGetReleaseNotes) to get
+   notified about new releases, fixes, and early access/beta programs.
 
 ### Contributing
 
