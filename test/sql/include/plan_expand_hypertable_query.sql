@@ -197,6 +197,14 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
 
+\qecho time_bucket exclusion with timestamptz and timezone
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time,'UTC') < '2000-01-03' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time,'UTC') >= '2000-01-03' AND time_bucket('6h',time,'UTC') <= '2000-01-10' ORDER BY time;
+
+\qecho time_bucket exclusion with timestamptz, timezone and offset
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time,'UTC',NULL,'1h') < '2000-01-03' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time,'UTC',NULL,'1h') >= '2000-01-03' AND time_bucket('6h',time,'UTC') <= '2000-01-10' ORDER BY time;
+
 \qecho time_bucket exclusion with timestamptz and day interval
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;

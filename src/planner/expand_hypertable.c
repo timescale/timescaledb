@@ -97,11 +97,21 @@ is_chunk_exclusion_func(Expr *node)
 	return false;
 }
 
-static bool
+static inline bool
+is_time_bucket_function_args(List *args)
+{
+	if (list_length(args) == 2 || list_length(args) == 5)
+		return true;
+
+	return false;
+}
+
+static inline bool
 is_time_bucket_function(Expr *node)
 {
 	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
+		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0 &&
+		is_time_bucket_function_args(castNode(FuncExpr, node)->args))
 		return true;
 
 	return false;
@@ -327,10 +337,53 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 									constraint->inputcollid);
 }
 
+static Datum
+calculate_timestamptz_timezone_bucket(int strategy, Datum value, List *args)
+{
+	Assert(list_length(args) == 5);
+
+	if (TIMESTAMP_NOT_FINITE(DatumGetTimestampTz(value)))
+		return value;
+
+	Const *tzname = castNode(Const, lthird(args));
+	Const *offset = castNode(Const, lfifth(args));
+	Datum new_timestamp;
+	bool have_offset = (!offset->constisnull);
+
+	new_timestamp = DirectFunctionCall2(timestamptz_zone, tzname->constvalue, value);
+
+	if (have_offset)
+	{
+		/* Apply offset. */
+		new_timestamp =
+			DirectFunctionCall2(timestamp_mi_interval, new_timestamp, offset->constvalue);
+	}
+
+	/*
+	 * If the interval has a day component then the calculation needs
+	 * to take into account daylight saving time switches and thereby a
+	 * day would not always be exactly 24 hours. We mitigate this by
+	 * adding a safety buffer to account for these dst switches when
+	 * dealing with intervals with day component. These calculations
+	 * will be repeated with exact values during execution.
+	 * Since dst switches seem to range between -1 and 2 hours we set
+	 * the safety buffer to 4 hours.
+	 */
+	TimestampTz new_value = DatumGetTimestampTz(new_timestamp);
+
+	if (strategy == BTLessStrategyNumber || strategy == BTLessEqualStrategyNumber)
+		new_value += 4 * USECS_PER_HOUR;
+	else if (strategy == BTGreaterStrategyNumber || strategy == BTGreaterEqualStrategyNumber)
+		new_value -= 4 * USECS_PER_HOUR;
+
+	return TimestampTzGetDatum(new_value);
+}
+
 /*
  * Transform time_bucket calls of the following form in WHERE clause:
  *
  * time_bucket(width, column) OP value
+ * time_bucket(width, column, timezone, origin, offset) OP value
  *
  * Since time_bucket always returns the lower bound of the bucket
  * for lower bound comparisons the width is not relevant and the
@@ -359,7 +412,7 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
  * Expressions with value on the left side will be switched around
  * when building the expression for RestrictInfo.
  *
- * Caller must ensure that only 2 argument time_bucket versions
+ * Caller must ensure that only 2 or 5 argument time_bucket versions
  * are used.
  */
 static OpExpr *
@@ -370,13 +423,15 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 	FuncExpr *time_bucket = castNode(FuncExpr, (IsA(left, FuncExpr) ? left : right));
 	Expr *value = IsA(right, Const) ? right : left;
+	Const *constvalue = castNode(Const, value);
 
 	Const *width = linitial(time_bucket->args);
 	Oid opno = op->opno;
 	TypeCacheEntry *tce;
 	int strategy;
 
-	if (list_length(time_bucket->args) != 2 || !IsA(value, Const) || !IsA(width, Const))
+	if (!is_time_bucket_function_args(time_bucket->args) || !IsA(value, Const) ||
+		!IsA(width, Const))
 		return op;
 
 	/*
@@ -396,8 +451,50 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 	if (strategy == BTGreaterStrategyNumber || strategy == BTGreaterEqualStrategyNumber)
 	{
 		/* column > value */
+		Expr *subst = value;
+
+		/* time_bucket (bucket_width, ts, timezone, origin, offset) */
+		if (tce->type_id == TIMESTAMPTZOID && list_length(time_bucket->args) == 5)
+		{
+			Interval *interval = DatumGetIntervalP(width->constvalue);
+
+			Assert(width->consttype == INTERVALOID);
+
+			/*
+			 * Optimization can't be applied when interval has month component.
+			 */
+			if (interval->month != 0)
+				return op;
+
+			/*
+			 * If width interval has day component we merge it with time component
+			 */
+			if (interval->day != 0)
+			{
+				Datum datum;
+
+				constvalue->constvalue =
+					calculate_timestamptz_timezone_bucket(strategy,
+														  constvalue->constvalue,
+														  time_bucket->args);
+
+				if (DatumGetTimestampTz(constvalue->constvalue) >= TS_TIMESTAMP_END)
+					return op;
+
+				datum = TimestampTzGetDatum(DatumGetTimestampTz(constvalue->constvalue));
+
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+			}
+		}
+
 		op = copyObject(op);
-		op->args = list_make2(lsecond(time_bucket->args), value);
+		op->args = list_make2(lsecond(time_bucket->args), subst);
 
 		/*
 		 * if we switched operator we need to adjust OpExpr as well
@@ -417,13 +514,13 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		Datum datum;
 		int64 integralValue, integralWidth;
 
-		if (castNode(Const, value)->constisnull || width->constisnull)
+		if (constvalue->constisnull || width->constisnull)
 			return op;
 
 		switch (tce->type_id)
 		{
 			case INT2OID:
-				integralValue = const_datum_get_int(castNode(Const, value));
+				integralValue = const_datum_get_int(constvalue);
 				integralWidth = const_datum_get_int(width);
 
 				if (integralValue >= PG_INT16_MAX - integralWidth)
@@ -440,7 +537,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				break;
 
 			case INT4OID:
-				integralValue = const_datum_get_int(castNode(Const, value));
+				integralValue = const_datum_get_int(constvalue);
 				integralWidth = const_datum_get_int(width);
 
 				if (integralValue >= PG_INT32_MAX - integralWidth)
@@ -456,7 +553,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 										   tce->typbyval);
 				break;
 			case INT8OID:
-				integralValue = const_datum_get_int(castNode(Const, value));
+				integralValue = const_datum_get_int(constvalue);
 				integralWidth = const_datum_get_int(width);
 
 				if (integralValue >= PG_INT64_MAX - integralWidth)
@@ -486,13 +583,12 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				if (interval->time >= 0x3FFFFFFFFFFFFFll)
 					return op;
 
-				if (DatumGetDateADT(castNode(Const, value)->constvalue) >=
+				if (DatumGetDateADT(constvalue->constvalue) >=
 					(TS_DATE_END - interval->day +
 					 ceil((double) interval->time / (double) USECS_PER_DAY)))
 					return op;
 
-				datum = DateADTGetDatum(DatumGetDateADT(castNode(Const, value)->constvalue) +
-										interval->day +
+				datum = DateADTGetDatum(DatumGetDateADT(constvalue->constvalue) + interval->day +
 										ceil((double) interval->time / (double) USECS_PER_DAY));
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
@@ -532,14 +628,23 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 					interval->time += interval->day * USECS_PER_DAY;
 					interval->day = 0;
+
+					/* time_bucket (bucket_width, ts, timezone, origin, offset) */
+					if (list_length(time_bucket->args) == 5)
+					{
+						constvalue->constvalue =
+							calculate_timestamptz_timezone_bucket(strategy,
+																  constvalue->constvalue,
+																  time_bucket->args);
+					}
 				}
 
-				if (DatumGetTimestampTz(castNode(Const, value)->constvalue) >=
+				if (DatumGetTimestampTz(constvalue->constvalue) >=
 					(TS_TIMESTAMP_END - interval->time))
 					return op;
 
-				datum = TimestampTzGetDatum(
-					DatumGetTimestampTz(castNode(Const, value)->constvalue) + interval->time);
+				datum = TimestampTzGetDatum(DatumGetTimestampTz(constvalue->constvalue) +
+											interval->time);
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -581,12 +686,12 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 					interval->day = 0;
 				}
 
-				if (DatumGetTimestamp(castNode(Const, value)->constvalue) >=
+				if (DatumGetTimestamp(constvalue->constvalue) >=
 					(TS_TIMESTAMP_END - interval->time))
 					return op;
 
-				datum = TimestampGetDatum(DatumGetTimestamp(castNode(Const, value)->constvalue) +
-										  interval->time);
+				datum =
+					TimestampGetDatum(DatumGetTimestamp(constvalue->constvalue) + interval->time);
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -606,7 +711,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		 * adjust toplevel expression if datatypes changed
 		 * this can happen when comparing int4 values against int8 time_bucket
 		 */
-		if (tce->type_id != castNode(Const, value)->consttype)
+		if (tce->type_id != constvalue->consttype)
 		{
 			opno =
 				ts_get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, tce->type_id);
@@ -680,7 +785,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 			return quals;
 		}
 
-		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		if (IsA(qual, OpExpr) && is_time_bucket_function_args(castNode(OpExpr, qual)->args))
 		{
 			OpExpr *op = castNode(OpExpr, qual);
 			Expr *left = linitial(op->args);
@@ -696,13 +801,10 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 			/*
 			 * check for time_bucket comparisons
 			 * time_bucket(Const, time_colum) > Const
+			 * time_bucket(Const, time_colum, timezone, origin, offset) > Const
 			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
+			if ((IsA(left, FuncExpr) && IsA(right, Const) && is_time_bucket_function(left)) ||
+				(IsA(left, Const) && IsA(right, FuncExpr) && is_time_bucket_function(right)))
 			{
 				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
@@ -784,13 +886,10 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 			/*
 			 * check for time_bucket comparisons
 			 * time_bucket(Const, time_colum) > Const
+			 * time_bucket(Const, time_colum, timezone, origin, offset) > Const
 			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
+			if ((IsA(left, FuncExpr) && IsA(right, Const) && is_time_bucket_function(left)) ||
+				(IsA(left, Const) && IsA(right, FuncExpr) && is_time_bucket_function(right)))
 			{
 				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
