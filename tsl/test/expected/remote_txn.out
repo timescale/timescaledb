@@ -194,6 +194,10 @@ FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT remote_node_killer_set_event('pre-commit', 'loopback');
  remote_node_killer_set_event 
@@ -208,16 +212,14 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
 COMMIT;
-WARNING:  kill event: pre-commit
-WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: terminating connection due to administrator command
+RESET client_min_messages;
 SELECT debug_waitpoint_release('remote_conn_xact_end');
  debug_waitpoint_release 
 -------------------------
@@ -243,6 +245,10 @@ SELECT count(*) FROM pg_prepared_xacts;
      0
 (1 row)
 
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
  remote_node_killer_set_event 
@@ -257,7 +263,6 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -272,9 +277,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-0
 (1 row)
 
 COMMIT;
-WARNING:  kill event: waiting-commit
-WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: terminating connection due to administrator command
+RESET client_min_messages;
 SELECT debug_waitpoint_release('remote_conn_xact_end');
  debug_waitpoint_release 
 -------------------------
@@ -571,10 +575,10 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
 
 --during waiting-prepare-transaction the data node process could die before or after
 --executing the prepare transaction. To be safe to either case rollback using heal_server.
-SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
- bool 
-------
- t
+SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ count 
+-------
+     1
 (1 row)
 
 SELECT count(*) FROM pg_prepared_xacts;
@@ -800,10 +804,10 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state
-SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
- bool 
-------
- t
+SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ count 
+-------
+     1
 (1 row)
 
 --heal does not use the connection cache, so unaffected
@@ -910,9 +914,12 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 81;
 ALTER TABLE "S 1"."T 1" DROP CONSTRAINT t1_pkey,
 ADD CONSTRAINT t1_pkey PRIMARY KEY ("C 1") DEFERRABLE INITIALLY DEFERRED;
 --test ROLLBACK TRANSACTION on failure in PREPARE TRANSACTION.
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -926,8 +933,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
 (1 row)
 
 COMMIT;
-WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
+RESET client_min_messages;
 --connection should be removed since PREPARE TRANSACTION failed
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -945,16 +952,18 @@ SELECT count(*) FROM pg_prepared_xacts;
 --this has an error on the second connection. So should force conn1 to prepare transaction
 --ok and then have the txn fail on conn2. Thus conn1 would do a ROLLBACK PREPARED.
 --conn2 would do a ROLLBACK TRANSACTION.
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -970,8 +979,8 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 (2 rows)
 
 COMMIT;
-WARNING:  transaction rollback on data node "loopback2" failed
 ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
+RESET client_min_messages;
 --one connection should remain and be idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;

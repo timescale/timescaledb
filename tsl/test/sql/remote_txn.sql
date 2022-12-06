@@ -136,11 +136,16 @@ FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT remote_node_killer_set_event('pre-commit', 'loopback');
     SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
+RESET client_min_messages;
 SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 -- Failed connection should be cleared
@@ -150,6 +155,10 @@ FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20003;
 SELECT count(*) FROM pg_prepared_xacts;
 
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
     SELECT debug_waitpoint_enable('remote_conn_xact_end');
@@ -158,6 +167,7 @@ BEGIN;
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 COMMIT;
+RESET client_min_messages;
 SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --connection failed during commit, so should be cleared from the cache
@@ -293,7 +303,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
 
 --during waiting-prepare-transaction the data node process could die before or after
 --executing the prepare transaction. To be safe to either case rollback using heal_server.
-SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 SELECT count(*) FROM pg_prepared_xacts;
 SELECT count(*) from _timescaledb_catalog.remote_txn;
 
@@ -382,7 +392,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state
-SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 
 --heal does not use the connection cache, so unaffected
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -436,11 +446,16 @@ ALTER TABLE "S 1"."T 1" DROP CONSTRAINT t1_pkey,
 ADD CONSTRAINT t1_pkey PRIMARY KEY ("C 1") DEFERRABLE INITIALLY DEFERRED;
 
 --test ROLLBACK TRANSACTION on failure in PREPARE TRANSACTION.
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 COMMIT;
+RESET client_min_messages;
 
 --connection should be removed since PREPARE TRANSACTION failed
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -451,6 +466,10 @@ SELECT count(*) FROM pg_prepared_xacts;
 --this has an error on the second connection. So should force conn1 to prepare transaction
 --ok and then have the txn fail on conn2. Thus conn1 would do a ROLLBACK PREPARED.
 --conn2 would do a ROLLBACK TRANSACTION.
+-- We set min message level to "error" since order of warnings generated
+-- is different due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
@@ -459,6 +478,7 @@ BEGIN;
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 COMMIT;
+RESET client_min_messages;
 
 --one connection should remain and be idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
