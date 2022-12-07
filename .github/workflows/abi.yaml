@@ -21,9 +21,11 @@ jobs:
       pg12_abi_min: ${{ steps.config.outputs.pg12_abi_min }}
       pg13_abi_min: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_abi_min: ${{ steps.config.outputs.pg14_abi_min }}
+      pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg12_latest: ${{ steps.config.outputs.pg12_latest }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
+      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
 
     steps:
     - name: Checkout source code
@@ -33,13 +35,13 @@ jobs:
       run: python .github/gh_config_reader.py
 
   abi_test:
-    name: ABI Test ${{ matrix.type}} PG${{ matrix.test }}
+    name: ABI Test PG${{ matrix.test }}
     runs-on: ubuntu-latest
     needs: config
     strategy:
       fail-fast: false
       matrix:
-        test: [ "12backward", "12forward", "13backward", "13forward", "14backward", "14forward" ]
+        test: [ "12backward", "12forward", "13backward", "13forward", "14backward", "14forward", "15backward", "15forward" ]
         os: [ windows-2019 ]
         include:
           - test: 12backward
@@ -62,10 +64,21 @@ jobs:
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}
             tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
+            ignores: memoize
           - test: 14forward
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
             tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+          - test: 15backward
+            pg: 15
+            builder: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            tester: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
+            ignores: partialize_finalize
+          - test: 15forward
+            pg: 15
+            builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            ignores: partialize_finalize
 
     steps:
 
@@ -110,7 +123,7 @@ jobs:
           cp build_abi/install_lib/* `pg_config --pkglibdir`
           chown -R postgres /mnt
           set -o pipefail
-          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t regresscheck-shared IGNORES="memoize" | tee installcheck.log
+          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t regresscheck-shared IGNORES="${{matrix.ignores}}" | tee installcheck.log
         EOF
 
     - name: Show regression diffs
