@@ -114,6 +114,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 set(SOLO_TESTS
+    # dist_hypertable needs a lot of memory when the Sanitizer is active
+    dist_hypertable-${PG_VERSION_MAJOR}
     bgw_db_scheduler
     troubleshooting_job_errors
     bgw_db_scheduler_fixed
