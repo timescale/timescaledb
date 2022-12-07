@@ -32,9 +32,9 @@ env:
   LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
   # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
   #LDFLAGS: "-fsanitize=address,undefined"
-  ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
-  LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt print_suppressions=0 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
-  UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer.log log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+  ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+  LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt print_suppressions=0 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+  UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -74,6 +74,12 @@ jobs:
       id: get-date
       run: |
         echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
+    # Create a directory for sanitizer logs. This directory is referenced by
+    # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
+    - name: Create sanitizer log directory
+      run: |
+        mkdir ${{ github.workspace }}/sanitizer
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
@@ -186,7 +192,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: ${{ github.workspace }}/sanitizer.log
+        path: ${{ github.workspace }}/sanitizer
 
     - name: Upload test results to the database
       if: always()
