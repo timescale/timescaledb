@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+      pg15_latest: ${{ steps.setter.outputs.PG15_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
@@ -29,11 +30,16 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
         IGNORES: append-* debug_notice transparent_decompression-* transparent_decompress_chunk-* plan_skip_scan-12 pg_dump
+        SKIPS: chunk_adaptive
     strategy:
       fail-fast: false
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
+        include:
+          - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            skips_version: dist_move_chunk
+            ignores_version: telemetry_stats partialize_finalize
 
     steps:
 
@@ -77,7 +83,7 @@ jobs:
       run: |
         set -o pipefail
         export LANG=C.UTF-8
-        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES}" SKIPS="chunk_adaptive" | tee installcheck.log
+        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES} ${{ matrix.ignores_version }}" SKIPS="${SKIPS} ${{ matrix.skips_version }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

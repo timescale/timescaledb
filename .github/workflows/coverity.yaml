@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [12,13,14]
+        # run only on the 3 latest PG versions as we have rate limit on coverity
+        pg: [13, 14, 15]
         os: [ubuntu-20.04]
     steps:
     - name: Install Dependencies
