@@ -182,7 +182,7 @@ match($0, /^(test|    ) ([^ ]+)[ ]+\.\.\.[ ]+([^ ]+) (|\(.*\))[ ]+([0-9]+) ms$/,
 "${PSQL[@]}" -c "\copy test from tests.tsv"
 
 # Upload the logs.
-for x in {sanitizer,stacktrace,postgres-failure}.log *.diff
+for x in sanitizer/* {sanitizer,stacktrace,postgres-failure}.log *.diff
 do
     if ! [ -e "$x" ]; then continue ; fi
     "${PSQL[@]}" <<<"
