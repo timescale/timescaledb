@@ -7,6 +7,8 @@ on:
   push:
     branches:
       - prerelease_test
+  pull_request:
+
 env:
   name: "Sanitizer"
   PG_SRC_DIR: "pgbuild"
