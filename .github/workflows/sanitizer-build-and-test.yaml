@@ -37,11 +37,14 @@ env:
   ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
   LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt print_suppressions=0 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+  IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
+  SKIPS: "remote_txn"
 jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+      pg15_latest: ${{ steps.setter.outputs.PG15_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
@@ -61,6 +64,12 @@ jobs:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
         os: ["ubuntu-20.04"]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+        include:
+          - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            # telemetry_stats is ignored in PG15 due to #5037
+            # partialize_finalize is ignored in PG15 due to #4937
+            ignores_version: telemetry_stats partialize_finalize
+            skips_version: 002_replication_telemetry 003_connections_privs 004_multinode_rdwr_1pc
     steps:
     - name: Install Linux Dependencies
       run: |
@@ -130,7 +139,7 @@ jobs:
         # test seems to fail due to a PostgreSQL bug where AbortStartTime in
         # postmaster.c is not atomic but read/written across signal handlers
         # and ServerLoop.
-        make -k -C build installcheck SKIPS='remote_txn' IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed debug_notice' | tee installcheck.log
+        make -k -C build installcheck SKIPS="${SKIPS} ${{matrix.skips_version}}" IGNORES="${IGNORES} ${{matrix.ignores_version}}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

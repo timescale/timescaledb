@@ -26,6 +26,8 @@ from ci_settings import (
     PG13_LATEST,
     PG14_EARLIEST,
     PG14_LATEST,
+    PG15_EARLIEST,
+    PG15_LATEST,
 )
 
 # github event type which is either push, pull_request or schedule
@@ -134,6 +136,11 @@ def macos_config(overrides):
     base_config.update(overrides)
     return base_config
 
+# common installcheck_args for all pg15 tests
+# dist_move_chunk is skipped due to #4972
+# telemetry_stats is ignored due to #5037
+# partialize_finalize is ignored due to #4937
+pg15_installcheck_args = "SKIPS='dist_move_chunk' IGNORES='telemetry_stats partialize_finalize'"
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(build_debug_config({"pg": PG12_LATEST}))
@@ -141,24 +148,12 @@ m["include"].append(
     build_debug_config({"pg": PG13_LATEST, "cc": "clang-14", "cxx": "clang++-14"})
 )
 m["include"].append(build_debug_config({"pg": PG14_LATEST}))
+m["include"].append(build_debug_config({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args}))
 
-m["include"].append(build_release_config(macos_config({})))
-
-m["include"].append(build_without_telemetry({"pg": PG14_LATEST}))
-
-m["include"].append(
-    build_debug_config(
-        {
-            "pg": 15,
-            "snapshot": "snapshot",
-            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DEXPERIMENTAL=ON",
-            # below tests are tracked as part of #4972
-            "installcheck_args": "SKIPS='dist_move_chunk' "
-            # below tests are tracked as part of #4835
-            "IGNORES='telemetry_stats partialize_finalize'",
-        }
-    )
-)
+# test latest postgres release in MacOS
+m["include"].append(build_release_config(macos_config({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args})))
+# test latest postgres release without telemetry
+m["include"].append(build_without_telemetry({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args}))
 
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
@@ -198,18 +193,23 @@ if event_type != "pull_request":
         )
     )
 
+    # add debug test for first supported PG15 version
+    m["include"].append(build_debug_config({"pg": PG15_EARLIEST, "installcheck_args": pg15_installcheck_args}))
+
     # add debug test for MacOS
     m["include"].append(build_debug_config(macos_config({})))
 
-    # add release test for latest pg 12 and 13
+    # add release test for latest pg releases
     m["include"].append(build_release_config({"pg": PG12_LATEST}))
     m["include"].append(build_release_config({"pg": PG13_LATEST}))
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
+    m["include"].append(build_release_config({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args}))
 
     # add apache only test for latest pg
     m["include"].append(build_apache_config({"pg": PG12_LATEST}))
     m["include"].append(build_apache_config({"pg": PG13_LATEST}))
     m["include"].append(build_apache_config({"pg": PG14_LATEST}))
+    m["include"].append(build_apache_config({"pg": PG15_LATEST}))
 
     # to discover issues with upcoming releases we run CI against
     # the stable branches of supported PG releases
@@ -224,6 +224,7 @@ if event_type != "pull_request":
             }
         )
     )
+    m["include"].append(build_debug_config({"pg": 15, "snapshot": "snapshot", "installcheck_args": pg15_installcheck_args}))
 else:
     # Check if we need to check for the flaky tests. Determine which test files
     # have been changed in the PR. The sql files might include other files that

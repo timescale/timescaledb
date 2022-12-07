@@ -61,6 +61,7 @@ jobs:
           - pg: 15
             pkg_version: 15.0.1 # hardcoded due to issues with PG15.1 on chocolatey
             tsl_skips_version: dist_partial_agg-15 dist_grant-15
+            tsl_ignores_version: telemetry_stats partialize_finalize
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -172,7 +173,7 @@ jobs:
 
         # isolationtester is only packaged with pg14+ so we would have to build our own postgres
         # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" == "14" ]]; then
+        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
           make -C build_wsl isolationchecklocal | tee -a installcheck.log
         fi
 
@@ -200,11 +201,11 @@ jobs:
 
         # isolationtester is only packaged with pg14+ so we would have to build our own postgres
         # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" == "14" ]]; then
+        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
           make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
         fi
 
-        make -C build_wsl -k regresschecklocal-t IGNORES="${{ matrix.tsl_ignores }}" SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
+        make -C build_wsl -k regresschecklocal-t IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
 
     - name: Show regression diffs
       id: collectlogs
