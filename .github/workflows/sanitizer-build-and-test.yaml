@@ -119,7 +119,7 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=5
         make -j $MAKE_JOBS -C build
         make -C build install
 
