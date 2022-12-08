@@ -623,7 +623,6 @@ index_scan_sequence_number(Relation table_rel, Oid index_oid, ScanKeyData *scank
 	int32 result = 0;
 	bool is_null;
 	Relation index_rel = index_open(index_oid, AccessShareLock);
-	RelationInitIndexAccessInfo(index_rel);
 
 	IndexScanDesc index_scan =
 		index_beginscan(table_rel, index_rel, GetTransactionSnapshot(), num_scankeys, 0);
