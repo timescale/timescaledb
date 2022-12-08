@@ -206,6 +206,8 @@ jobs:
           printf "'"'"condition = '%s'\n"'"'", conditionName
           up 1
           l
+          info args
+          info locals
           bt full
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
