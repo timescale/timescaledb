@@ -610,8 +610,12 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		if (reset_baserel_info)
 		{
 			Assert(ts_baserel_info != NULL);
-			BaserelInfo_destroy(ts_baserel_info);
+			/* We need to do this fandango because if BaserelInfo_destroy
+			 * throw an error, ts_baserel_info will then not be reset to null,
+			 * leading to later queries using memory that does not exist. */
+			BaserelInfo_hash *tmp_baserel_info = ts_baserel_info;
 			ts_baserel_info = NULL;
+			BaserelInfo_destroy(tmp_baserel_info);
 		}
 
 		if (reset_fetcher_type)
