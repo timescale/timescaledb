@@ -38,7 +38,7 @@
 --
 \set BUCKET_WIDTH_1ST 'INTEGER \'2\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
-\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 
 --
@@ -94,7 +94,7 @@ SET timezone TO 'UTC';
 --
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
-\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 
 --
@@ -150,7 +150,7 @@ SET timezone TO 'UTC';
 --
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
-\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 
 --

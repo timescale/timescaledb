@@ -426,7 +426,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 \set BUCKET_WIDTH_1ST 'INTEGER \'2\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
-\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -450,7 +450,7 @@ WITH NO DATA;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 \echo :WARNING_MESSAGE
--- SHOULD ERROR because new bucket should not be equal to previous
+SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
@@ -459,15 +459,12 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be greater than the time bucket width of "public.conditions_summary_1" [2].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for bucket size less than source
@@ -834,7 +831,7 @@ psql:include/cagg_on_cagg_common.sql:181: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:185: NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_9_chunk
+psql:include/cagg_on_cagg_common.sql:185: NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_9_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -861,7 +858,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:199: NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_8_chunk
+psql:include/cagg_on_cagg_common.sql:199: NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_8_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -880,7 +877,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:209: NOTICE:  drop cascades to table _timescaledb_internal._hyper_9_7_chunk
+psql:include/cagg_on_cagg_common.sql:209: NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_7_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -988,7 +985,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
-\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -1012,7 +1009,7 @@ WITH NO DATA;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 \echo :WARNING_MESSAGE
--- SHOULD ERROR because new bucket should not be equal to previous
+SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
@@ -1021,15 +1018,12 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be greater than the time bucket width of "public.conditions_summary_1" [@ 1 hour].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for bucket size less than source
@@ -1395,7 +1389,7 @@ psql:include/cagg_on_cagg_common.sql:181: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:185: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_13_chunk
+psql:include/cagg_on_cagg_common.sql:185: NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_13_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -1422,7 +1416,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:199: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_12_chunk
+psql:include/cagg_on_cagg_common.sql:199: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_12_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -1441,7 +1435,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:209: NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_11_chunk
+psql:include/cagg_on_cagg_common.sql:209: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_11_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -1549,7 +1543,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
-\set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should not be equal to previous'
+\set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -1573,7 +1567,7 @@ WITH NO DATA;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 \echo :WARNING_MESSAGE
--- SHOULD ERROR because new bucket should not be equal to previous
+SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
@@ -1582,15 +1576,12 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be greater than the time bucket width of "public.conditions_summary_1" [@ 1 hour].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for bucket size less than source

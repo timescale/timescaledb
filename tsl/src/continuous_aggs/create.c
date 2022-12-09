@@ -1280,7 +1280,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	if (is_nested)
 	{
 		int64 bucket_width, bucket_width_parent;
-		bool is_greater_than_parent, is_multiple_of_parent;
+		bool is_greater_or_equal_than_parent, is_multiple_of_parent;
 
 		Assert(prev_query->groupClause);
 		caggtimebucket_validate(&bucket_info_parent,
@@ -1310,13 +1310,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								  bucket_info_parent.interval->month :
 								  bucket_info_parent.bucket_width;
 
-		/* check if the current bucket is greater than the parent */
-		is_greater_than_parent = (bucket_width <= bucket_width_parent);
+		/* check if the current bucket is greater or equal than the parent */
+		is_greater_or_equal_than_parent = (bucket_width >= bucket_width_parent);
 		/* check if buckets are multiple */
-		is_multiple_of_parent = ((bucket_width % bucket_width_parent) != 0);
+		is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
 
 		/* proceed with validation errors */
-		if (is_greater_than_parent || is_multiple_of_parent)
+		if (!is_greater_or_equal_than_parent || !is_multiple_of_parent)
 		{
 			Datum width, width_parent;
 			Oid outfuncid = InvalidOid;
@@ -1340,11 +1340,11 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			width_out_parent = DatumGetCString(OidFunctionCall1(outfuncid, width_parent));
 
 			/* new bucket should be greater than the parent */
-			if (is_greater_than_parent)
+			if (!is_greater_or_equal_than_parent)
 				message = "greater than";
 
 			/* new bucket should be multiple of the parent */
-			if (is_multiple_of_parent)
+			if (!is_multiple_of_parent)
 				message = "multiple of";
 
 			ereport(ERROR,
