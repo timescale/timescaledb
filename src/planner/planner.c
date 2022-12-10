@@ -456,7 +456,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				 errmsg("current transaction is aborted, "
 						"commands ignored until end of transaction block")));
 
-	planner_hcache_push();
+	Cache *cache = planner_hcache_push();
 
 	PG_TRY();
 	{
@@ -543,15 +543,23 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				 * only at the top-level call, hence this flag.
 				 */
 				reset_baserel_info = true;
+				Assert(cache->refcount > 0);
 
 				/*
-				 * This is a per-query cache, so we create it in the current
-				 * memory context for the top-level call of this function, which
-				 * hopefully should exist for the duration of the query. Message
-				 * or portal memory contexts could also be suitable, but they
-				 * don't exist for SPI calls.
+				 * reset_baserel_info is a per-query cache. It is located in the same
+				 * memory context as the hypertable cache. There are two reasons to
+				 * share the same memory context:
+				 *
+				 * (1) The hypertable cache is pinned in the timescaledb_planner. So,
+				 *     the memory context of the hypertable cache is valid as long
+				 *     as this cache is active.
+				 *
+				 * (2) Elements from the hypertable cache are referenced from this cache.
+				 *     Using the same memory context ensures that we can not end up in a
+				 *     situation where reset_baserel_info is valid, but the entries are
+				 *     just dangling pointers.
 				 */
-				ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
+				ts_baserel_info = BaserelInfo_create(ts_cache_memory_ctx(cache),
 													 /* nelements = */ 1,
 													 /* private_data = */ NULL);
 			}
@@ -595,7 +603,14 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 		if (reset_baserel_info)
 		{
+			/* The ts_baserel_info cache shares objects with the hypetable cache
+			 * and also shares the MemoryContext. So we assume that the hypertable
+			 * cache has not been destroyed in the meantime.
+			 */
+			Assert(planner_hcache_get() == cache);
+			Assert(cache->refcount > 0);
 			Assert(ts_baserel_info != NULL);
+
 			BaserelInfo_destroy(ts_baserel_info);
 			ts_baserel_info = NULL;
 		}
@@ -609,7 +624,14 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	{
 		if (reset_baserel_info)
 		{
+			/* The ts_baserel_info cache shares objects with the hypetable cache
+			 * and also shares the MemoryContext. So we assume that the hypertable
+			 * cache has not been destroyed in the meantime.
+			 */
+			Assert(planner_hcache_get() == cache);
+			Assert(cache->refcount > 0);
 			Assert(ts_baserel_info != NULL);
+
 			BaserelInfo_destroy(ts_baserel_info);
 			ts_baserel_info = NULL;
 		}
