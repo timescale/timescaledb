@@ -4,6 +4,12 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+**Bugfixes**
+* #5054 Fix segfault after second ANALYZE
+
+**Thanks**
+* @kyrias for reporting a crash when ANALYZE is executed on extended query protocol mode with extension loaded.
+
 ## 2.9.0
 This release adds major new features since the 2.8.1 release.
 We deem it moderate priority for upgrading.
