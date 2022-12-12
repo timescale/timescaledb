@@ -77,3 +77,21 @@ SELECT * FROM matches_reference ORDER BY 1,2,3,4;
 (3 rows)
 
 ROLLBACK;
+-- Test query/command cancelation with statement_timeout
+SET statement_timeout=200;
+-- Execute long-running query on data nodes
+\set ON_ERROR_STOP 0
+CALL distributed_exec('SELECT pg_sleep(5)');
+ERROR:  canceling statement due to statement timeout
+RESET statement_timeout;
+\set ON_ERROR_STOP 1
+-- Data node connections should be IDLE
+SELECT node_name, database, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1;
+  node_name  |  database   | connection_status | transaction_status | processing 
+-------------+-------------+-------------------+--------------------+------------
+ data_node_1 | data_node_1 | OK                | IDLE               | f
+ data_node_2 | data_node_2 | OK                | IDLE               | f
+ data_node_3 | data_node_3 | OK                | IDLE               | f
+(3 rows)
+
