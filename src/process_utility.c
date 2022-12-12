@@ -826,10 +826,9 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
  * from vacuum.c, only it filters out distributed hypertables and chunks
  * that have been compressed.
  */
-static List *
-ts_get_all_vacuum_rels(bool is_vacuumcmd)
+static void
+ts_get_all_vacuum_rels(bool is_vacuumcmd, List **vacrels, List **disthtrels)
 {
-	List *vacrels = NIL;
 	Relation pgclass;
 	TableScanDesc scan;
 	HeapTuple tuple;
@@ -867,7 +866,10 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		if (ht)
 		{
 			if (hypertable_is_distributed(ht))
+			{
+				*disthtrels = lappend_oid(*disthtrels, relid);
 				continue;
+			}
 		}
 		else
 		{
@@ -881,14 +883,12 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		 * We omit a RangeVar since it wouldn't be appropriate to complain
 		 * about failure to open one of these relations later.
 		 */
-		vacrels = lappend(vacrels, makeVacuumRelation(NULL, relid, NIL));
+		*vacrels = lappend(*vacrels, makeVacuumRelation(NULL, relid, NIL));
 	}
 
 	table_endscan(scan);
 	table_close(pgclass, AccessShareLock);
 	ts_cache_release(hcache);
-
-	return vacrels;
 }
 
 /* Vacuums/Analyzes a hypertable and all of it's chunks */
@@ -904,13 +904,23 @@ process_vacuum(ProcessUtilityArgs *args)
 	};
 	ListCell *lc;
 	Hypertable *ht;
-	List *vacuum_rels = NIL;
+	List *vacuum_rels = NIL, *vacuum_dist_rels = NIL;
 	bool is_vacuumcmd;
 
 	is_vacuumcmd = stmt->is_vacuumcmd;
 
 	if (stmt->rels == NIL)
-		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd);
+	{
+		ts_get_all_vacuum_rels(is_vacuumcmd, &vacuum_rels, &vacuum_dist_rels);
+		if (get_vacuum_options(stmt) & VACOPT_VERBOSE)
+			ereport(NOTICE,
+					errmsg("VERBOSE not supported on distributed hypertables, skipping"),
+					errhint("To analyze distributed hypertables, do not use VERBOSE"
+							" in your vacuum statement"));
+		else
+			foreach (lc, vacuum_dist_rels)
+				args->hypertable_list = lappend_oid(args->hypertable_list, lfirst_oid(lc));
+	}
 	else
 	{
 		Cache *hcache = ts_hypertable_cache_pin();

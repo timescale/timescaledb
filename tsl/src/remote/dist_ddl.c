@@ -11,10 +11,12 @@
 #include <commands/dbcommands.h>
 #include <commands/extension.h>
 #include <nodes/parsenodes.h>
+#include <nodes/makefuncs.h>
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/hsearch.h>
 
 #include <annotations.h>
 #include <guc.h>
@@ -210,6 +212,20 @@ dist_ddl_state_add_data_node_list(List *data_node_list)
 }
 
 static void
+dist_ddl_state_add_data_node_oid_list(List *data_node_list)
+{
+	ListCell *lc;
+	Assert(nodeTag(data_node_list) == T_OidList);
+
+	foreach (lc, data_node_list)
+		/* In case of an OID list, assume we're also sending
+		 * different command descriptors per data node to
+		 * ts_dist_multi_cmds_params_invoke_on_data_nodes().
+		 * Therefore the node should not be deduplicated. */
+		dist_ddl_state.data_node_list = lappend_oid(dist_ddl_state.data_node_list, lfirst_oid(lc));
+}
+
+static void
 dist_ddl_state_add_data_node_list_from_table(const char *schema, const char *name)
 {
 	FormData_hypertable form;
@@ -299,6 +315,104 @@ dist_ddl_inspect_hypertable_list(const ProcessUtilityArgs *args, Cache *hcache,
 	}
 }
 
+typedef struct data_node_hts
+{
+	Oid data_node;	 /* Foreign Server OID */
+	List *relations; /* List of Statement Nodes */
+} data_node_hts;
+
+static void
+dist_ddl_create_deparsed_statements(const ProcessUtilityArgs *args, NodeTag type,
+									List **cmd_descriptors, List **data_node_oids)
+{
+	ListCell *lc, *lc_data_node;
+
+	/* Only VacuumStmts are supported as of now */
+	Assert(type == T_VacuumStmt);
+
+	*cmd_descriptors = NIL;
+	*data_node_oids = NIL;
+	/* To create deparsed statements, we create a hashtab where each
+	 * data_node is a key and holds a list of hypertables */
+	HASHCTL hctl = { .keysize = sizeof(Oid),
+					 .entrysize = sizeof(data_node_hts),
+					 .hcxt = CurrentMemoryContext };
+	HTAB *data_node_htab = hash_create("data_node hypertables",
+									   list_length(data_node_get_node_name_list()),
+									   &hctl,
+									   HASH_CONTEXT | HASH_ELEM | HASH_BLOBS);
+
+	foreach (lc, args->hypertable_list)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, lfirst_oid(lc), CACHE_FLAG_NONE);
+		List *data_nodes = ts_hypertable_get_data_node_serverids_list(ht);
+		ts_cache_release(hcache);
+
+		foreach (lc_data_node, data_nodes)
+		{
+			bool found;
+			Oid dn = lfirst_oid(lc_data_node);
+			data_node_hts *dht = hash_search(data_node_htab, (void *) &dn, HASH_ENTER, &found);
+
+			if (!found)
+				dht->relations = NIL;
+
+			switch (type)
+			{
+				case (T_VacuumStmt):
+					dht->relations = lappend(dht->relations,
+											 makeVacuumRelation(NULL, ht->main_table_relid, NIL));
+
+					break;
+				default:
+					elog(ERROR, "unexpected statement node type in deparsing");
+
+					pg_unreachable();
+					break;
+			}
+		}
+	}
+
+	/*
+	 * Sequentially iterate through the hash, create a deparsed statement per Node
+	 */
+	data_node_hts *dht;
+	HASH_SEQ_STATUS hstatus;
+	hash_seq_init(&hstatus, data_node_htab);
+
+	while ((dht = (data_node_hts *) hash_seq_search(&hstatus)) != NULL)
+	{
+		Oid dn = dht->data_node;
+		DistCmdDescr *cmd_desc = palloc0(sizeof(DistCmdDescr));
+
+		switch (type)
+		{
+			case (T_VacuumStmt):
+			{
+				VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
+				VacuumStmt node_stmt = { .type = T_VacuumStmt,
+										 .options = stmt->options,
+										 .rels = dht->relations,
+										 .is_vacuumcmd = stmt->is_vacuumcmd };
+				cmd_desc->sql = deparse_vacuum(&node_stmt);
+
+				break;
+			}
+			default:
+				elog(ERROR, "unexpected statement node type in deparsing");
+
+				pg_unreachable();
+				break;
+		}
+
+		*data_node_oids = lappend_oid(*data_node_oids, dn);
+		*cmd_descriptors = lappend(*cmd_descriptors, cmd_desc);
+	}
+
+	hash_destroy(data_node_htab);
+}
+
 /*
  * Validate hypertable list and set a distributed hypertable, update
  * the data node list accordingly.
@@ -311,6 +425,7 @@ dist_ddl_state_set_hypertable(const ProcessUtilityArgs *args)
 	unsigned int num_hypertables = list_length(args->hypertable_list);
 	unsigned int num_dist_hypertables;
 	unsigned int num_dist_hypertable_members;
+	bool is_vacuum_stmt = (nodeTag(args->parsetree) == T_VacuumStmt);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
 
@@ -334,8 +449,17 @@ dist_ddl_state_set_hypertable(const ProcessUtilityArgs *args)
 	}
 
 	/*
-	 * Raise an error only if at least one of hypertables is
-	 * distributed. Otherwise this makes query_string unusable for remote
+	 * Allow VacuumStmts with multiple hypertables, as those can be
+	 * fully deparsed.
+	 */
+	if (is_vacuum_stmt)
+	{
+		ts_cache_release(hcache);
+		return true;
+	}
+	/*
+	 * Raise an error only if more than one hypertables is
+	 * distributed, as this makes the query_string unusable for remote
 	 * execution without deparsing.
 	 */
 	if (num_hypertables > 1)
@@ -868,6 +992,7 @@ static void
 dist_ddl_process_vacuum(const ProcessUtilityArgs *args)
 {
 	VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
+	List *cmd_descriptors, *data_node_oids;
 
 	/* Allow execution of VACUUM/ANALYZE commands on a data node without
 	 * enabling timescaledb.enable_client_ddl_on_data_nodes GUC */
@@ -882,7 +1007,11 @@ dist_ddl_process_vacuum(const ProcessUtilityArgs *args)
 	if (get_vacuum_options(stmt) & VACOPT_VERBOSE)
 		dist_ddl_error_raise_unsupported();
 
-	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START_NO_2PC, args);
+	dist_ddl_create_deparsed_statements(args, T_VacuumStmt, &cmd_descriptors, &data_node_oids);
+
+	dist_ddl_state_add_data_node_oid_list(data_node_oids);
+	dist_ddl_state_add_remote_command_list(cmd_descriptors);
+	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START_NO_2PC);
 }
 
 static void
@@ -1076,15 +1205,20 @@ dist_ddl_execute(bool transactional)
 static void
 dist_ddl_get_analyze_stats(const ProcessUtilityArgs *args)
 {
+	ListCell *lc;
 	VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
-	Oid relid = linitial_oid(args->hypertable_list);
 
 	if (!(get_vacuum_options(stmt) & VACOPT_ANALYZE))
 		return;
 
-	/* Refresh the local chunk stats by fetching stats
-	 * from remote data nodes. */
-	chunk_api_update_distributed_hypertable_stats(relid);
+	foreach (lc, args->hypertable_list)
+	{
+		Oid relid = lfirst_oid(lc);
+
+		/* Refresh the local chunk stats by fetching stats
+		 * from remote data nodes. */
+		chunk_api_update_distributed_hypertable_stats(relid);
+	}
 }
 
 static bool

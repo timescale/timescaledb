@@ -1107,3 +1107,88 @@ deparse_create_trigger(CreateTrigStmt *stmt)
 
 	return command->data;
 }
+
+/* Deparse a Vacuum statement */
+const char *
+deparse_vacuum(const VacuumStmt *stmt)
+{
+	ListCell *lc;
+	StringInfo command = makeStringInfo();
+	bool found_first_arg = false;
+
+	/* VACUUM|ANALYZE */
+	if (stmt->is_vacuumcmd)
+		appendStringInfoString(command, "VACUUM ");
+	else
+		appendStringInfoString(command, "ANALYZE ");
+
+	/* ( FULL, FREEZE, VERBOSE, ANALYZE, VACUUM ... ) */
+	if (stmt->options)
+	{
+		appendStringInfoString(command, "(");
+		foreach (lc, stmt->options)
+		{
+			DefElem *def = lfirst(lc);
+
+			if (found_first_arg)
+				appendStringInfoString(command, ", ");
+			else
+				found_first_arg = true;
+
+			appendStringInfo(command, "%s", def->defname);
+			if (def->arg)
+				appendStringInfo(command, " %s", defGetString(def));
+		}
+
+		appendStringInfoString(command, ") ");
+	}
+
+	/* Append relations */
+	found_first_arg = false;
+	foreach (lc, stmt->rels)
+	{
+		VacuumRelation *vacrel = (VacuumRelation *) lfirst(lc);
+		const char *schema_name = NULL, *rel_name;
+
+		if (found_first_arg)
+			appendStringInfoString(command, ", ");
+		else
+			found_first_arg = true;
+
+		if (vacrel->oid == InvalidOid)
+		{
+			RangeVar *rvar = vacrel->relation;
+
+			if (rvar->schemaname)
+				schema_name = rvar->schemaname;
+
+			rel_name = rvar->relname;
+		}
+		else
+		{
+			Relation rel = try_relation_open(vacrel->oid, AccessShareLock);
+			if (!rel)
+			{
+				ereport(WARNING,
+						(errcode(ERRCODE_WARNING),
+						 errmsg("relation has disappeared: %d", vacrel->oid)));
+				continue;
+			}
+
+			rel_name = get_rel_name(vacrel->oid);
+			schema_name = get_namespace_name(RelationGetNamespace(rel));
+
+			relation_close(rel, AccessShareLock);
+		}
+
+		if (schema_name)
+		{
+			appendStringInfoString(command, schema_name);
+			appendStringInfoString(command, ".");
+		}
+
+		appendStringInfoString(command, rel_name);
+	}
+
+	return command->data;
+}

@@ -1550,7 +1550,20 @@ chunk_api_update_distributed_hypertable_chunk_stats(Oid table_id, bool col_stats
 	FC_ARG(fcinfo, 0) = ObjectIdGetDatum(table_id);
 	FC_NULL(fcinfo, 0) = false;
 
-	fetch_remote_chunk_stats(ht, fcinfo, col_stats);
+	PG_TRY();
+	{
+		fetch_remote_chunk_stats(ht, fcinfo, col_stats);
+	}
+	PG_CATCH();
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("failed to analyze hypertable \"%s\"", get_rel_name(table_id))));
+		ts_cache_release(hcache);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	CommandCounterIncrement();
 
