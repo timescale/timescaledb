@@ -5,6 +5,15 @@
 accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
+**Bugfixes**
+* #5054 Fix segfault after second ANALYZE
+
+**Thanks**
+* @kyrias for reporting a crash when ANALYZE is executed on extended query protocol mode with extension loaded.
+
+## 2.9.0
+This release adds major new features since the 2.8.1 release.
+We deem it moderate priority for upgrading.
 
 This version adds time_bucket_gapfill function that allows
 specifying the timezone to bucket for. Unfortunately this introduces

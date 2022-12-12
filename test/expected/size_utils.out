@@ -744,3 +744,17 @@ SELECT * FROM hypertable_index_size('hypersize_time_idx');
                  24576
 (1 row)
 
+-- github issue #4857
+-- below procedure should not crash
+SET client_min_messages = ERROR;
+do
+$$
+DECLARE
+  o INT;
+BEGIN
+  FOR c IN 1..20 LOOP
+    ANALYZE;
+  END LOOP;
+END;
+$$;
+RESET client_min_messages;

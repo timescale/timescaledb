@@ -273,3 +273,18 @@ SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
+
+-- github issue #4857
+-- below procedure should not crash
+SET client_min_messages = ERROR;
+do
+$$
+DECLARE
+  o INT;
+BEGIN
+  FOR c IN 1..20 LOOP
+    ANALYZE;
+  END LOOP;
+END;
+$$;
+RESET client_min_messages;

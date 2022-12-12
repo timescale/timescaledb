@@ -906,6 +906,8 @@ process_vacuum(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	List *vacuum_rels = NIL;
 	bool is_vacuumcmd;
+	/* save original VacuumRelation list */
+	List *saved_stmt_rels = stmt->rels;
 
 	is_vacuumcmd = stmt->is_vacuumcmd;
 
@@ -975,6 +977,12 @@ process_vacuum(ProcessUtilityArgs *args)
 															  cp->compressed_relid);
 		}
 	}
+	/*
+	Restore original list. stmt->rels which has references to
+	VacuumRelation list is freed up, however VacuumStmt is not
+	cleaned up because of which there is a crash.
+	*/
+	stmt->rels = saved_stmt_rels;
 	return DDL_DONE;
 }
 
