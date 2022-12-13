@@ -225,10 +225,16 @@ planner_hcache_pop(bool release)
 
 	hcache = linitial(planner_hcaches);
 
-	if (release)
-		ts_cache_release(hcache);
-
 	planner_hcaches = list_delete_first(planner_hcaches);
+
+	if (release)
+	{
+		ts_cache_release(hcache);
+		/* If we pop a stack and discover a new hypertable cache, the basrel
+		 * cache can contain invalid entries, so we reset it. */
+		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))
+			BaserelInfo_reset(ts_baserel_info);
+	}
 }
 
 static bool
@@ -457,6 +463,27 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 						"commands ignored until end of transaction block")));
 
 	planner_hcache_push();
+	if (ts_baserel_info == NULL)
+	{
+		/*
+		 * The calls to timescaledb_planner can be recursive (e.g. when
+		 * evaluating an immutable SQL function at planning time). We want to
+		 * create and destroy the per-query baserel info table only at the
+		 * top-level call, hence this flag.
+		 */
+		reset_baserel_info = true;
+
+		/*
+		 * This is a per-query cache, so we create it in the current memory
+		 * context for the top-level call of this function, which hopefully
+		 * should exist for the duration of the query. Message or portal
+		 * memory contexts could also be suitable, but they don't exist for
+		 * SPI calls.
+		 */
+		ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
+											 /* nelements = */ 1,
+											 /* private_data = */ NULL);
+	}
 
 	PG_TRY();
 	{
@@ -532,28 +559,6 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 						ts_data_node_fetcher_scan_type = ts_guc_remote_data_fetcher;
 					}
 				}
-			}
-
-			if (ts_baserel_info == NULL)
-			{
-				/*
-				 * The calls to timescaledb_planner can be recursive (e.g. when
-				 * evaluating an immutable SQL function at planning time). We
-				 * want to create and destroy the per-query baserel info table
-				 * only at the top-level call, hence this flag.
-				 */
-				reset_baserel_info = true;
-
-				/*
-				 * This is a per-query cache, so we create it in the current
-				 * memory context for the top-level call of this function, which
-				 * hopefully should exist for the duration of the query. Message
-				 * or portal memory contexts could also be suitable, but they
-				 * don't exist for SPI calls.
-				 */
-				ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
-													 /* nelements = */ 1,
-													 /* private_data = */ NULL);
 			}
 		}
 
@@ -957,9 +962,9 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 			in_rte->inh = true;
 			reenabled_inheritance = true;
-			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid here
-			 * (due to adding more tables to the set of tables under consideration here). This is
-			 * especially true if dealing with foreign data wrappers. */
+			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid
+			 * here (due to adding more tables to the set of tables under consideration here).
+			 * This is especially true if dealing with foreign data wrappers. */
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
