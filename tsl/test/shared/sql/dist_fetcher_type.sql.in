@@ -177,3 +177,16 @@ ORDER BY 1 DESC LIMIT 1;
 -- Test copy fetcher when query is aborted before EOF due to LIMIT
 SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+
+-- Verify that cursor fetcher can be rewind before EOF due to an
+-- intermediate JOIN product reaching LIMIT
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT * FROM metrics_dist as m
+WHERE EXISTS
+    (SELECT *
+     FROM (SELECT m.time as t
+           FROM metrics_dist a INNER JOIN devices b
+                ON a.device_id = b.device_id
+           LIMIT 50) as subq
+     WHERE subq.t is NULL)
+LIMIT 1;
