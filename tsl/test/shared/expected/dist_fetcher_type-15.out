@@ -286,3 +286,19 @@ SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
  Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
 (11 rows)
 
+-- Verify that cursor fetcher can be rewind before EOF due to an
+-- intermediate JOIN product reaching LIMIT
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT * FROM metrics_dist as m
+WHERE EXISTS
+    (SELECT *
+     FROM (SELECT m.time as t
+           FROM metrics_dist a INNER JOIN devices b
+                ON a.device_id = b.device_id
+           LIMIT 50) as subq
+     WHERE subq.t is NULL)
+LIMIT 1;
+ time | device_id | v0 | v1 | v2 | v3 
+------+-----------+----+----+----+----
+(0 rows)
+

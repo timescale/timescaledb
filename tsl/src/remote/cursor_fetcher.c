@@ -371,10 +371,9 @@ cursor_fetcher_rewind(DataFetcher *df)
 	{
 		char sql[64];
 
-		Assert(cursor->state.eof || cursor->state.data_req != NULL);
-
-		if (!cursor->state.eof)
+		if (!cursor->state.eof && cursor->state.data_req != NULL)
 			async_request_discard_response(cursor->state.data_req);
+
 		/* We are beyond the first fetch, so need to rewind the remote end */
 		snprintf(sql, sizeof(sql), "MOVE BACKWARD ALL IN c%u", cursor->id);
 		remote_cursor_exec_cmd(cursor, sql);
