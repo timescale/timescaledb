@@ -205,3 +205,22 @@ SELECT 'test7' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql
 
 DROP TABLE test7;
+
+--#5090
+CREATE TABLE test8(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
+
+SELECT create_hypertable('test8', 'time', chunk_time_interval => INTERVAL '1 h');
+
+ALTER TABLE test8 set (timescaledb.compress,
+    timescaledb.compress_segmentby = 'series_id',
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_chunk_time_interval = '1 day');
+
+INSERT INTO test8 (time, series_id, value) SELECT t, s, 1 FROM generate_series(NOW(), NOW()+INTERVAL'4h', INTERVAL '30s') t CROSS JOIN generate_series(0, 100, 1) s;
+
+SELECT compress_chunk(c, true) FROM show_chunks('test8') c LIMIT 4;
+SET enable_indexscan TO OFF;
+SET enable_seqscan TO OFF;
+SET enable_bitmapscan TO ON;
+
+SELECT count(*) FROM test8 WHERE series_id = 1;
