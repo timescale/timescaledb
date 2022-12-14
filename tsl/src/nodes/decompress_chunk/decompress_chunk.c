@@ -426,14 +426,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		DecompressChunkPath *path;
 
 		/*
-		 * We skip any BitmapScan paths here as supporting those
-		 * would require fixing up the internal scan. Since we
+		 * We skip any BitmapScan parameterized paths here as supporting
+		 * those would require fixing up the internal scan. Since we
 		 * currently do not do this BitmapScans would be generated
 		 * when we have a parameterized path on a compressed column
 		 * that would have invalid references due to our
 		 * EquivalenceClasses.
 		 */
-		if (IsA(child_path, BitmapHeapPath))
+		if (IsA(child_path, BitmapHeapPath) && child_path->param_info)
 			continue;
 
 		/*
@@ -568,6 +568,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	}
 	/* set reloptkind to RELOPT_DEADREL to prevent postgresql from replanning this relation */
 	compressed_rel->reloptkind = RELOPT_DEADREL;
+
+	/* We should never get in the situation with no viable paths. */
+	Assert(chunk_rel->pathlist != NIL);
 }
 
 /*
@@ -1204,6 +1207,18 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 		add_partial_path(compressed_rel, compressed_path);
 	}
 
+	/*
+	 * We set enable_bitmapscan to false here to ensure any pathes with bitmapscan do not
+	 * displace other pathes. Note that setting the postgres GUC will not actually disable
+	 * the bitmapscan path creation but will instead create them with very high cost.
+	 * If bitmapscan were the dominant path after postgres planning we could end up
+	 * in a situation where we have no valid plan for this relation because we remove
+	 * bitmapscan pathes from the pathlist.
+	 */
+
+	bool old_bitmapscan = enable_bitmapscan;
+	enable_bitmapscan = false;
+
 	if (sort_info->can_pushdown_sort)
 	{
 		/*
@@ -1223,6 +1238,8 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
 	}
+
+	enable_bitmapscan = old_bitmapscan;
 }
 
 /*
