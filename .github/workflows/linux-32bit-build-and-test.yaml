@@ -63,6 +63,10 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
+        # The owner of the checkout directory and the files do not match. Add the directory to
+        # Git's "safe.directory" setting. Otherwise git would complain about
+        # 'detected dubious ownership in repository'
+        git config --global --add safe.directory $(pwd)
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/postgresql -DREQUIRE_ALL_TESTS=ON
         make -C build install
         chown -R postgres:postgres .
