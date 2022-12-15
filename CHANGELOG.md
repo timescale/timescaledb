@@ -4,13 +4,13 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
 **Bugfixes**
-* #5054 Fix segfault after second ANALYZE
+* #5101 Fix enabling compression on caggs with renamed columns
 
-**Thanks**
-* @kyrias for reporting a crash when ANALYZE is executed on extended query protocol mode with extension loaded.
+## 2.9.0 (2022-12-15)
 
-## 2.9.0
 This release adds major new features since the 2.8.1 release.
 We deem it moderate priority for upgrading.
 
@@ -60,15 +60,18 @@ This release also includes several bug fixes.
 * #4955 Fix cagg migration for hypertables using timestamp without timezone
 * #4968 Check for interrupts in gapfill main loop
 * #4988 Fix cagg migration crash when refreshing the newly created cagg
+* #5054 Fix segfault after second ANALYZE
+* #5086 Reset baserel cache on invalid hypertable cache
 
 **Thanks**
+* @byazici for reporting a problem with segmentby on compressed caggs
 * @jflambert for reporting a crash with nested user-defined functions.
 * @jvanns for reporting hypertable FK reference to vanilla PostgreSQL partitioned table doesn't seem to work
 * @kou for fixing a typo in process_compressed_data_out
-* @xvaara for helping reproduce a bug with bitmap scans in transparent decompression
-* @byazici for reporting a problem with segmentby on compressed caggs
+* @kyrias for reporting a crash when ANALYZE is executed on extended query protocol mode with extension loaded.
 * @tobiasdirksen for requesting Continuous aggregate on top of another continuous aggregate
 * @xima for reporting a bug in Cagg migration
+* @xvaara for helping reproduce a bug with bitmap scans in transparent decompression
 
 ## 2.8.1 (2022-10-06)
 
