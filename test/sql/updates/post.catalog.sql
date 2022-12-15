@@ -34,7 +34,7 @@ ORDER BY schema, name, initpriv;
 \df+ public.*;
 
 \dy
-\d+ public.*
+\d public.*
 
 \dx+ timescaledb
 SELECT count(*)

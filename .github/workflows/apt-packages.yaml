@@ -23,7 +23,7 @@ jobs:
         # Debian images:  10 (buster), 11 (bullseye)
         # Ubuntu images:  18.04 LTS (bionic), 20.04 LTS (focal), 21.10 (impish), 22.04 (jammy)
         image: [ "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy"]
-        pg: [ 12, 13, 14 ]
+        pg: [ 12, 13, 14, 15 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
