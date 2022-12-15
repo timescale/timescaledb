@@ -253,11 +253,28 @@ NOTICE:  adding not-null constraint to column "Time"
 INSERT INTO test5 SELECT t, 1, gen_rand_minstd() FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t;
 -- Compression is set to merge those 24 chunks into 1 24 hour chunk
 ALTER TABLE test5 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='24 hours');
-SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 1;
+SELECT
+  $$
+  SELECT * FROM test5 ORDER BY i, "Time"
+  $$ AS "QUERY" \gset
+SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_9_163_chunk
-(1 row)
+ _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_163_chunk
+(4 rows)
+
+-- Make sure sequence numbers are correctly fetched from index.
+SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+ _ts_meta_sequence_num 
+-----------------------
+                    10
+                    20
+                    30
+                    40
+(4 rows)
 
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
@@ -267,10 +284,31 @@ LIMIT 1 \gset
 DROP INDEX :INDEXNAME;
 -- We dropped the index from compressed chunk thats needed to determine sequence numbers
 -- during merge, merging will fallback to doing heap scans and work just fine.
-SELECT
-  $$
-  SELECT * FROM test5 ORDER BY i, "Time"
-  $$ AS "QUERY" \gset
+SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
+NOTICE:  chunk "_hyper_9_163_chunk" is already compressed
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_163_chunk
+(5 rows)
+
+-- Make sure sequence numbers are correctly fetched from heap.
+SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+ _ts_meta_sequence_num 
+-----------------------
+                    10
+                    20
+                    30
+                    40
+                    50
+                    60
+                    70
+                    80
+(8 rows)
+
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -280,7 +318,7 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_163_chunk" is already compressed
  count_compressed 
 ------------------
-               24
+               17
 (1 row)
 
                                      ?column?                                      | count 

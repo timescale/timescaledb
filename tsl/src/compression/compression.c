@@ -632,8 +632,8 @@ index_scan_sequence_number(Relation table_rel, Oid index_oid, ScanKeyData *scank
 	if (index_getnext_tid(index_scan, BackwardScanDirection))
 	{
 		result = index_getattr(index_scan->xs_itup,
-							   index_scan->xs_itupdesc->natts -
-								   1, /* Last attribute of the index is sequence number. */
+							   index_scan->xs_itupdesc
+								   ->natts, /* Last attribute of the index is sequence number. */
 							   index_scan->xs_itupdesc,
 							   &is_null);
 		if (is_null)
