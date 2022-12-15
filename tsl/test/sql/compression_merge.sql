@@ -105,7 +105,15 @@ INSERT INTO test5 SELECT t, 1, gen_rand_minstd() FROM generate_series('2018-03-0
 -- Compression is set to merge those 24 chunks into 1 24 hour chunk
 ALTER TABLE test5 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='24 hours');
 
-SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 1;
+SELECT
+  $$
+  SELECT * FROM test5 ORDER BY i, "Time"
+  $$ AS "QUERY" \gset
+
+SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
+
+-- Make sure sequence numbers are correctly fetched from index.
+SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
 
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
@@ -113,14 +121,15 @@ INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.
 INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id)
 LIMIT 1 \gset
 
+
 DROP INDEX :INDEXNAME;
 
 -- We dropped the index from compressed chunk thats needed to determine sequence numbers
 -- during merge, merging will fallback to doing heap scans and work just fine.
-SELECT
-  $$
-  SELECT * FROM test5 ORDER BY i, "Time"
-  $$ AS "QUERY" \gset
+SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
+
+-- Make sure sequence numbers are correctly fetched from heap.
+SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql
