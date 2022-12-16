@@ -55,7 +55,7 @@ jobs:
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}.1
             tsl_skips_version: dist_grant-13 dist_partial_agg-13
           - pg: 14
-            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.1
+            pkg_version: 14.5.1 # hardcoded due to issues with PG14.6 on chocolatey
             tsl_skips_version: dist_partial_agg-14 dist_grant-14
     env:
       # PostgreSQL configuration
