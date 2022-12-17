@@ -334,3 +334,18 @@ DROP MATERIALIZED VIEW metrics_summary;
 NOTICE:  drop cascades to 2 other objects
 DROP VIEW all_devices;
 DROP TABLE extra_devices;
+-- test enabling compression on cagg after column rename
+CREATE TABLE comp_rename(time timestamptz);
+SELECT table_name FROM create_hypertable('comp_rename', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ table_name  
+ comp_rename
+(1 row)
+
+CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
+NOTICE:  continuous aggregate "comp_rename_cagg" is already up-to-date
+ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";
+ALTER MATERIALIZED VIEW comp_rename_cagg SET ( timescaledb.compress='true');
+DROP TABLE comp_rename CASCADE;
+NOTICE:  drop cascades to 3 other objects

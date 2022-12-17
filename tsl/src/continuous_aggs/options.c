@@ -133,7 +133,7 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 		{
 			/* "resname" is the same as "mat column names" in the finalized version */
 			if (!cagg_tle->resjunk && cagg_tle->resname)
-				retlist = lappend(retlist, cagg_tle->resname);
+				retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
 		}
 		else
 		{

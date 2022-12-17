@@ -95,3 +95,16 @@ DROP MATERIALIZED VIEW metrics_compressed_summary;
 DROP MATERIALIZED VIEW metrics_summary;
 DROP VIEW all_devices;
 DROP TABLE extra_devices;
+
+-- test enabling compression on cagg after column rename
+CREATE TABLE comp_rename(time timestamptz);
+SELECT table_name FROM create_hypertable('comp_rename', 'time');
+
+CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
+
+ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";
+ALTER MATERIALIZED VIEW comp_rename_cagg SET ( timescaledb.compress='true');
+
+DROP TABLE comp_rename CASCADE;
+
