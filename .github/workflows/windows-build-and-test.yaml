@@ -16,6 +16,7 @@ jobs:
       pg12_latest: ${{ steps.config.outputs.pg12_latest }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
+      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
 
     steps:
     - name: Checkout source code
@@ -40,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 12, 13, 14 ]
+        pg: [ 12, 13, 14, 15 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata"]
@@ -57,6 +58,9 @@ jobs:
           - pg: 14
             pkg_version: 14.5.1 # hardcoded due to issues with PG14.6 on chocolatey
             tsl_skips_version: dist_partial_agg-14 dist_grant-14
+          - pg: 15
+            pkg_version: 15.0.1 # hardcoded due to issues with PG15.1 on chocolatey
+            tsl_skips_version: dist_partial_agg-15 dist_grant-15
     env:
       # PostgreSQL configuration
       PGPORT: 55432
