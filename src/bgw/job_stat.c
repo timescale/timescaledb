@@ -272,7 +272,7 @@ static float8
 calculate_jitter_percent()
 {
 	/* returns a number in the range [-0.125, 0.125] */
-	uint8 percent = random();
+	uint8 percent = rand();
 	return ldexp((double) (16 - (int) (percent % 32)), -7);
 }
 
@@ -305,7 +305,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	MemoryContext oldctx;
 	/* 2^(consecutive_failures) - 1, at most 2^20 */
 	int64 max_slots = (INT64CONST(1) << (int64) multiplier) - INT64CONST(1);
-	int64 rand_backoff = random() % (max_slots * USECS_PER_SEC);
+	int64 rand_backoff = rand() % (max_slots * USECS_PER_SEC);
 
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
