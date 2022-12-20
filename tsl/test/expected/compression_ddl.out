@@ -1231,3 +1231,45 @@ SELECT timescaledb_post_restore();
 (1 row)
 
 DROP TABLE issue4140;
+-- github issue 5104
+CREATE TABLE metric(
+	time TIMESTAMPTZ NOT NULL,
+	value DOUBLE PRECISION NOT NULL,
+	series_id BIGINT NOT NULL);
+SELECT create_hypertable('metric', 'time',
+	chunk_time_interval => interval '1 h',
+	create_default_indexes => false);
+  create_hypertable   
+----------------------
+ (22,public,metric,t)
+(1 row)
+
+-- enable compression
+ALTER TABLE metric set(timescaledb.compress,
+    timescaledb.compress_segmentby = 'series_id, value',
+    timescaledb.compress_orderby = 'time'
+);
+SELECT
+      comp_hypertable.schema_name AS "COMP_SCHEMA_NAME",
+      comp_hypertable.table_name AS "COMP_TABLE_NAME"
+FROM _timescaledb_catalog.hypertable uc_hypertable
+INNER JOIN _timescaledb_catalog.hypertable comp_hypertable ON (comp_hypertable.id = uc_hypertable.compressed_hypertable_id)
+WHERE uc_hypertable.table_name like 'metric' \gset
+-- get definition of compressed hypertable and notice the index
+\d :COMP_SCHEMA_NAME.:COMP_TABLE_NAME
+                    Table "_timescaledb_internal._compressed_hypertable_23"
+        Column         |                 Type                  | Collation | Nullable | Default 
+-----------------------+---------------------------------------+-----------+----------+---------
+ time                  | _timescaledb_internal.compressed_data |           |          | 
+ value                 | double precision                      |           |          | 
+ series_id             | bigint                                |           |          | 
+ _ts_meta_count        | integer                               |           |          | 
+ _ts_meta_sequence_num | integer                               |           |          | 
+ _ts_meta_min_1        | timestamp with time zone              |           |          | 
+ _ts_meta_max_1        | timestamp with time zone              |           |          | 
+Indexes:
+    "_compressed_hypertable_23_series_id_value__ts_meta_sequence_idx" btree (series_id, value, _ts_meta_sequence_num)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._compressed_hypertable_23 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
+
+DROP TABLE metric CASCADE;
