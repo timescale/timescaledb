@@ -517,3 +517,32 @@ SELECT timescaledb_pre_restore();
 DROP TABLE :ctable;
 SELECT timescaledb_post_restore();
 DROP TABLE issue4140;
+
+-- github issue 5104
+CREATE TABLE metric(
+	time TIMESTAMPTZ NOT NULL,
+	value DOUBLE PRECISION NOT NULL,
+	series_id BIGINT NOT NULL);
+
+SELECT create_hypertable('metric', 'time',
+	chunk_time_interval => interval '1 h',
+	create_default_indexes => false);
+
+-- enable compression
+ALTER TABLE metric set(timescaledb.compress,
+    timescaledb.compress_segmentby = 'series_id, value',
+    timescaledb.compress_orderby = 'time'
+);
+
+SELECT
+      comp_hypertable.schema_name AS "COMP_SCHEMA_NAME",
+      comp_hypertable.table_name AS "COMP_TABLE_NAME"
+FROM _timescaledb_catalog.hypertable uc_hypertable
+INNER JOIN _timescaledb_catalog.hypertable comp_hypertable ON (comp_hypertable.id = uc_hypertable.compressed_hypertable_id)
+WHERE uc_hypertable.table_name like 'metric' \gset
+
+-- get definition of compressed hypertable and notice the index
+\d :COMP_SCHEMA_NAME.:COMP_TABLE_NAME
+
+DROP TABLE metric CASCADE;
+
