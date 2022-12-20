@@ -430,24 +430,27 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 	List *indexcols = NIL;
 
 	StringInfo buf = makeStringInfo();
-
+	char **col_order = palloc0(sizeof(char *) * (compress_cols->numcols));
 	for (i = 0; i < compress_cols->numcols; i++)
 	{
 		FormData_hypertable_compression *col = &compress_cols->col_meta[i];
-
-		IndexElem *segment_elem = makeNode(IndexElem);
-
 		if (col->segmentby_column_index <= 0)
 			continue;
-
-		segment_elem->name = pstrdup(NameStr(col->attname));
-
-		/* if this isn't the first element, add a ',' before appending it */
-		if (list_length(indexcols) > 0)
-			appendStringInfoString(buf, ", ");
-		appendStringInfoString(buf, segment_elem->name);
-
-		indexcols = lappend(indexcols, segment_elem);
+		/* save column names part of segment by in same order */
+		col_order[col->segmentby_column_index - 1] = pstrdup(NameStr(col->attname));
+	}
+	for (i = 0; i < compress_cols->numcols; i++)
+	{
+		if (col_order[i])
+		{
+			IndexElem *segment_elem = makeNode(IndexElem);
+			segment_elem->name = col_order[i];
+			/* if this isn't the first element, add a ',' before appending it */
+			if (list_length(indexcols) > 0)
+				appendStringInfoString(buf, ", ");
+			appendStringInfoString(buf, segment_elem->name);
+			indexcols = lappend(indexcols, segment_elem);
+		}
 	}
 
 	if (list_length(indexcols) == 0)

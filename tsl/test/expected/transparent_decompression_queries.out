@@ -87,8 +87,8 @@ EXPLAIN (analyze,costs off,timing off,summary off) SELECT
 FROM merge_sort
 WHERE time < now()
 GROUP BY 2, 3;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=745 loops=1)
@@ -98,10 +98,7 @@ GROUP BY 2, 3;
                Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=120 loops=1)
                      Filter: ("time" < now())
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_4_10_chunk.device_id, compress_hyper_4_10_chunk.measure_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk__compressed_hypertable_4_device_id_me on compress_hyper_4_10_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=168 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
@@ -122,7 +119,7 @@ GROUP BY 2, 3;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
                            Filter: ("time" < now())
-(33 rows)
+(30 rows)
 
 -- this should exclude the decompressed chunk
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT
