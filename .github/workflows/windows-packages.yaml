@@ -4,6 +4,7 @@ on:
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
   push:
     tags:
     - '*'
@@ -16,9 +17,11 @@ jobs:
       pg12_earliest: ${{ steps.config.outputs.pg12_abi_min }}
       pg13_earliest: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_earliest: ${{ steps.config.outputs.pg14_abi_min }}
+      pg15_earliest: ${{ steps.config.outputs.pg15_abi_min }}
       pg12_latest: ${{ steps.config.outputs.pg12_latest }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
+      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
 
     steps:
     - name: Checkout source code
@@ -55,6 +58,12 @@ jobs:
           - test: 14max
             pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.1
+          - test: 15min
+            pg: 15
+            pkg_version: ${{ fromJson(needs.config.outputs.pg15_earliest) }}.1
+          - test: 15max
+            pg: 15
+            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.1
     env:
       # PostgreSQL configuration
       PGPORT: 6543
