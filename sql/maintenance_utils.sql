@@ -42,6 +42,12 @@ CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
     if_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
 
+-- experimental at first
+CREATE OR REPLACE FUNCTION @extschema@.recompress_chunk_experimental(
+    uncompressed_chunk REGCLASS,
+    if_compressed BOOLEAN = false
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_experimental' LANGUAGE C STRICT VOLATILE;
+
 -- Recompress a chunk
 --
 -- Will give an error if the chunk was not already compressed. In this
