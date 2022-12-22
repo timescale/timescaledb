@@ -4,6 +4,7 @@ on:
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
   push:
     tags:
     - '*'
@@ -86,4 +87,9 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
+
+    - name: PostgreSQL log
+      if: always()
+      run: |
+        cat /var/log/postgresql/postgresql-${{ matrix.pg }}-main.log
 
