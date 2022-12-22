@@ -68,9 +68,6 @@ ts_bgw_job_start(BgwJob *job, Oid user_oid)
 	BgwParams bgw_params = {
 		.job_id = Int32GetDatum(job->fd.id),
 		.user_oid = user_oid,
-#ifdef USE_TELEMETRY
-		.croak_silently = is_telemetry_job(job),
-#endif
 	};
 
 	strlcpy(bgw_params.bgw_main, job_entrypoint_function_name, sizeof(bgw_params.bgw_main));
@@ -1120,26 +1117,6 @@ ts_job_errors_insert_tuple(const FormData_job_error *job_err)
 	return true;
 }
 
-/**
- * Die silently without printing a message.
- *
- * This will also abort any connection attempts and reads that are blocking,
- * e.g., waiting for responses from the telemetry server. Also indicate to the
- * postmaster that it does not have to print a message.
- *
- * We do this deliberately to avoid having a telemetry job that blocks a
- * shutdown, but that means that the job has to be very careful about what it
- * writes and not use any atexit routines.
- */
-static void
-croak(SIGNAL_ARGS)
-{
-	/* We exit using exit status 0 so that it will only generate a debug log
-	 * message. If we exit with 1, it will log the exiting process with a log
-	 * message, which we want to avoid. */
-	_exit(0);
-}
-
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
@@ -1160,10 +1137,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	/*
 	 * do not use the default `bgworker_die` sigterm handler because it does
-	 * not respect critical sections. We install an silent signal handler for
-	 * invisible jobs, which will then die without printing an error message.
+	 * not respect critical sections
 	 */
-	pqsignal(SIGTERM, params.croak_silently ? croak : die);
+	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
