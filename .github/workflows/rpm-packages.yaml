@@ -29,6 +29,10 @@ jobs:
     - name: Add repositories
       run: |
         yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+        # we need EPEL on centos 7 to satisfy PG15 dependencies
+        if [[ "$(rpm -E %{rhel})" -eq "7" ]]; then yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm; fi
+
         tee /etc/yum.repos.d/timescale_timescaledb.repo <<EOL
         [timescale_timescaledb]
         name=timescale_timescaledb
