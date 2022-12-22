@@ -4,7 +4,6 @@ on:
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
-  pull_request:
   push:
     tags:
     - '*'
@@ -37,7 +36,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [ "12min", "12max", "13min", "13max", "14min", "14max" ]
+#        chocolatey packages for 14.6 and 15.1 are currently not available so we skip
+#        these tests for now
+#        test: [ "12min", "12max", "13min", "13max", "14min", "14max", "15min", "15max" ]
+        test: [ "12min", "12max", "13min", "13max", "14min", "15min" ]
         os: [ windows-2019 ]
         include:
           - test: 12min
@@ -55,15 +57,15 @@ jobs:
           - test: 14min
             pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1
-          - test: 14max
-            pg: 14
-            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.1
+#          - test: 14max
+#            pg: 14
+#            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.1
           - test: 15min
             pg: 15
             pkg_version: ${{ fromJson(needs.config.outputs.pg15_earliest) }}.1
-          - test: 15max
-            pg: 15
-            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.1
+#          - test: 15max
+#            pg: 15
+#            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.1
     env:
       # PostgreSQL configuration
       PGPORT: 6543
