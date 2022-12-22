@@ -1841,7 +1841,6 @@ data_node_delete(PG_FUNCTION_ARGS)
 	if (drop_database)
 	{
 		TS_PREVENT_IN_TRANSACTION_BLOCK(true);
-		drop_data_node_database(server);
 	}
 
 	/* close any pending connections */
@@ -1872,6 +1871,9 @@ data_node_delete(PG_FUNCTION_ARGS)
 	};
 
 	parsetree = (Node *) &stmt;
+
+	if (drop_database)
+		drop_data_node_database(server);
 
 	/* Make sure event triggers are invoked so that all dropped objects
 	 * are collected during a cascading drop. This ensures all dependent

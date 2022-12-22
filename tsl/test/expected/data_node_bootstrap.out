@@ -124,11 +124,6 @@ SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
 ERROR:  delete_data_node() cannot run inside a transaction block
 ROLLBACK;
 \set ON_ERROR_STOP 1
--- Using the drop_database option when there are active connections to
--- the data node should fail. But any connections in the current
--- session should be cleared when dropping the database. To test that
--- the connection is cleared, first create a connection in the
--- connection cache by inserting some data
 CREATE TABLE conditions (time timestamptz, device int, temp float);
 SELECT create_distributed_hypertable('conditions', 'time', 'device');
 WARNING:  only one data node was assigned to the hypertable
@@ -138,6 +133,73 @@ NOTICE:  adding not-null constraint to column "time"
  (1,public,conditions,t)
 (1 row)
 
+\set ON_ERROR_STOP 0
+-- Should fail because the data node is the last one
+SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+ERROR:  insufficient number of data nodes for distributed hypertable "conditions"
+\set ON_ERROR_STOP 1
+-- Add another data node
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test_2', host => 'localhost', database => 'bootstrap_test_2', bootstrap => true);
+    node_name     |     database     | node_created | database_created | extension_created 
+------------------+------------------+--------------+------------------+-------------------
+ bootstrap_test_2 | bootstrap_test_2 | t            | t                | t
+(1 row)
+
+SELECT attach_data_node('bootstrap_test_2', 'conditions');
+NOTICE:  the number of partitions in dimension "device" was increased to 2
+    attach_data_node    
+------------------------
+ (1,1,bootstrap_test_2)
+(1 row)
+
+-- Insert some data into the node
+INSERT INTO conditions VALUES ('2021-12-01 10:30', 2, 20.3);
+\set ON_ERROR_STOP 0
+-- Should fail because the data node still holds data
+SELECT * FROM delete_data_node('bootstrap_test_2', drop_database => true);
+ERROR:  insufficient number of data nodes
+\set ON_ERROR_STOP 1
+-- Data node's database still exists after failure to delete
+SELECT count(*) FROM pg_database WHERE datname = 'bootstrap_test_2';
+ count 
+-------
+     1
+(1 row)
+
+-- Delete the chunks so that we can delete the data node
+SELECT drop_chunks('conditions', older_than => '2022-01-01'::timestamptz);
+                 drop_chunks                 
+---------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+(1 row)
+
+SELECT * FROM delete_data_node('bootstrap_test_2', drop_database => true);
+NOTICE:  the number of partitions in dimension "device" of hypertable "conditions" was decreased to 1
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+-- The data node's database is dropped
+SELECT count(*) FROM pg_database WHERE datname = 'bootstrap_test_2';
+ count 
+-------
+     0
+(1 row)
+
+SELECT data_nodes FROM timescaledb_information.hypertables
+WHERE hypertable_name = 'conditions';
+    data_nodes    
+------------------
+ {bootstrap_test}
+(1 row)
+
+-- Using the drop_database option when there are active connections to
+-- the data node should fail. But any connections in the current
+-- session should be cleared when dropping the database. To test that
+-- the connection is cleared, first create a connection in the
+-- connection cache by inserting some data
 INSERT INTO conditions VALUES ('2021-12-01 10:30', 1, 20.3);
 DROP TABLE conditions;
 -- Now drop the data node and it should clear the connection from the

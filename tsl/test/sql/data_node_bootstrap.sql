@@ -82,13 +82,46 @@ SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
+CREATE TABLE conditions (time timestamptz, device int, temp float);
+SELECT create_distributed_hypertable('conditions', 'time', 'device');
+
+\set ON_ERROR_STOP 0
+-- Should fail because the data node is the last one
+SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+\set ON_ERROR_STOP 1
+
+-- Add another data node
+SELECT node_name, database, node_created, database_created, extension_created
+FROM add_data_node('bootstrap_test_2', host => 'localhost', database => 'bootstrap_test_2', bootstrap => true);
+SELECT attach_data_node('bootstrap_test_2', 'conditions');
+
+-- Insert some data into the node
+INSERT INTO conditions VALUES ('2021-12-01 10:30', 2, 20.3);
+
+\set ON_ERROR_STOP 0
+-- Should fail because the data node still holds data
+SELECT * FROM delete_data_node('bootstrap_test_2', drop_database => true);
+\set ON_ERROR_STOP 1
+
+-- Data node's database still exists after failure to delete
+SELECT count(*) FROM pg_database WHERE datname = 'bootstrap_test_2';
+
+-- Delete the chunks so that we can delete the data node
+SELECT drop_chunks('conditions', older_than => '2022-01-01'::timestamptz);
+
+SELECT * FROM delete_data_node('bootstrap_test_2', drop_database => true);
+
+-- The data node's database is dropped
+SELECT count(*) FROM pg_database WHERE datname = 'bootstrap_test_2';
+
+SELECT data_nodes FROM timescaledb_information.hypertables
+WHERE hypertable_name = 'conditions';
+
 -- Using the drop_database option when there are active connections to
 -- the data node should fail. But any connections in the current
 -- session should be cleared when dropping the database. To test that
 -- the connection is cleared, first create a connection in the
 -- connection cache by inserting some data
-CREATE TABLE conditions (time timestamptz, device int, temp float);
-SELECT create_distributed_hypertable('conditions', 'time', 'device');
 INSERT INTO conditions VALUES ('2021-12-01 10:30', 1, 20.3);
 DROP TABLE conditions;
 
