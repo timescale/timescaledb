@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4926 Fix corruption when inserting into compressed chunks
+* #5114 Fix issue with deleting data node and dropping database
 * #5130 Fix CAgg on CAgg variable bucket size validation
 * #5133 Fix CAgg on CAgg using different column order on the original hypertable
 * #5152 Fix adding column with NULL constraint to compressed hypertable
