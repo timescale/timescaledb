@@ -978,6 +978,11 @@ SELECT node_name, options FROM timescaledb_information.data_nodes order by node_
 -- just show current options:
 SELECT * FROM alter_data_node('data_node_1');
 
+DROP TABLE hyper1;
+DROP TABLE hyper2;
+DROP TABLE hyper3;
+DROP TABLE hyper_1dim;
+
 \set ON_ERROR_STOP 0
 -- test some error cases
 SELECT * FROM alter_data_node(NULL);
@@ -991,10 +996,6 @@ SELECT delete_data_node('data_node_1', drop_database=>true);
 SELECT * FROM alter_data_node('data_node_1', host=>'localhost', port=>:old_port, database=>:'DN_DBNAME_1');
 SELECT node_name, options FROM timescaledb_information.data_nodes order by node_name;
 
-DROP TABLE hyper1;
-DROP TABLE hyper2;
-DROP TABLE hyper3;
-DROP TABLE hyper_1dim;
 DROP VIEW chunk_query_data_node;
 
 -- create new session to clear out connection cache
