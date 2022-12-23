@@ -17,6 +17,7 @@
 #include "jsonb_utils.h"
 #include <utils/builtins.h>
 #include "time_bucket.h"
+#include "guc.h"
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -709,7 +710,8 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 	if (jobstat->fd.consecutive_crashes > 0)
 	{
 		/* Update the errors table regarding the crash */
-		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
+		if (ts_guc_enable_job_error_logs &&
+			!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
 			/* add the proc_schema, proc_name to the jsonb */
 			NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };

@@ -100,6 +100,7 @@ TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
 TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
 TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
+TSDLLEXPORT bool ts_guc_enable_job_error_logs = true;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -577,6 +578,17 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+	DefineCustomBoolVariable("timescaledb.enable_job_error_logs",
+							 "Enable error logging for background jobs",
+							 "Enable logging of runtime errors thrown by background jobs to "
+							 "the _timescaledb_internal.job_errors table",
+							 &ts_guc_enable_job_error_logs,
+							 true, /* boot value */
+							 PGC_SIGHUP,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 }
 
 void

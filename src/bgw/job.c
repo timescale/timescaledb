@@ -1227,32 +1227,36 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * error
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
-
-		ErrorData *edata;
-		FormData_job_error jerr = { 0 };
-		// switch away from error context to not lose the data
-		MemoryContextSwitchTo(oldcontext);
-		edata = CopyErrorData();
-
-		BgwJobStat *job_stat = ts_bgw_job_stat_find(params.job_id);
-		if (job_stat != NULL)
+		if (!ts_guc_enable_job_error_logs)
+			PG_RE_THROW();
+		else
 		{
-			start_time = job_stat->fd.last_start;
-			finish_time = job_stat->fd.last_finish;
+			ErrorData *edata;
+			FormData_job_error jerr = { 0 };
+			// switch away from error context to not lose the data
+			MemoryContextSwitchTo(oldcontext);
+			edata = CopyErrorData();
+
+			BgwJobStat *job_stat = ts_bgw_job_stat_find(params.job_id);
+			if (job_stat != NULL)
+			{
+				start_time = job_stat->fd.last_start;
+				finish_time = job_stat->fd.last_finish;
+			}
+			/* We include the procname in the error data and expose it in the view
+			to avoid adding an extra field in the table */
+			jerr.error_data = ts_errdata_to_jsonb(edata, &proc_schema, &proc_name);
+			jerr.job_id = params.job_id;
+			jerr.start_time = start_time;
+			jerr.finish_time = finish_time;
+			jerr.pid = MyProcPid;
+
+			ts_job_errors_insert_tuple(&jerr);
+
+			CommitTransactionCommand();
+			FlushErrorState();
+			ReThrowError(edata);
 		}
-		/* We include the procname in the error data and expose it in the view
-		 to avoid adding an extra field in the table */
-		jerr.error_data = ts_errdata_to_jsonb(edata, &proc_schema, &proc_name);
-		jerr.job_id = params.job_id;
-		jerr.start_time = start_time;
-		jerr.finish_time = finish_time;
-		jerr.pid = MyProcPid;
-
-		ts_job_errors_insert_tuple(&jerr);
-
-		CommitTransactionCommand();
-		FlushErrorState();
-		ReThrowError(edata);
 	}
 	PG_END_TRY();
 
