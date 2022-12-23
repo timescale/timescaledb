@@ -48,7 +48,7 @@
 #define SIMPLE8B_RLE_SELECTOR SIMPLE8B_MAXCODE
 #define SIMPLE8B_RLE_MAX_VALUE_BITS 36
 #define SIMPLE8B_RLE_MAX_COUNT_BITS (SIMPLE8B_BITSIZE - SIMPLE8B_RLE_MAX_VALUE_BITS)
-#define SIMPLE8B_RLE_MAX_VALUE_MASK ((1ULL << SIMPLE8B_RLE_MAX_VALUE_BITS) - 1)
+#define SIMPLE8B_RLE_MAX_VALUE_MASK ((1ULL << SIMPLE8B_RLE_MAX_VALUE_BITS) - 1) // unsigned long long, shift the bits left 36, this is a bit mask as well.... mask every where
 #define SIMPLE8B_RLE_MAX_COUNT_MASK ((1ULL << SIMPLE8B_RLE_MAX_COUNT_BITS) - 1)
 
 #define SIMPLE8B_BITS_PER_SELECTOR 4
@@ -331,9 +331,14 @@ simple8brle_compressor_push_block(Simple8bRleCompressor *compressor, Simple8bRle
 {
 	if (compressor->last_block_set)
 	{
+		// here we append the data to the compressors stuff
+		// Here we add the selector
+		// We have one array for the selectors, 
 		bit_array_append(&compressor->selectors,
 						 SIMPLE8B_BITS_PER_SELECTOR,
 						 compressor->last_block.selector);
+		// HERE we add the actuall values which is a int64, and that is it ... 
+		// Here we append the data to the block
 		uint64_vec_append(&compressor->compressed_data, compressor->last_block.data);
 	}
 
@@ -456,20 +461,23 @@ simple8brle_compressor_flush(Simple8bRleCompressor *compressor)
 	compressor->num_uncompressed_elements = 0;
 }
 
+
+// This is where the magic happens, this is done on delta-delta encoded data ...
+// This function contains all the logic we need.
 static void
 simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 								  const Simple8bRlePartiallyCompressedData *new_data)
 {
 	uint32 idx = 0;
-	uint32 new_data_len = simple8brle_pcd_num_elements(new_data);
-	while (idx < new_data_len)
+	uint32 new_data_len = simple8brle_pcd_num_elements(new_data); // get the number of elements
+	while (idx < new_data_len) // loop over the input data 
 	{
 		Simple8bRleBlock block = {
-			.selector = SIMPLE8B_MINCODE,
+			.selector = SIMPLE8B_MINCODE, // default selector, 1 bit 
 		};
 		uint8 num_packed = 0;
 		uint8 i;
-		uint64 mask = simple8brle_selector_get_bitmask(block.selector);
+		uint64 mask = simple8brle_selector_get_bitmask(block.selector); // i think this is the bit mask used for bit hacks
 
 		if (simple8brle_pcd_get_element(new_data, idx) <= SIMPLE8B_RLE_MAX_VALUE_MASK)
 		{
@@ -477,21 +485,26 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 			uint64 bits_per_int;
 			uint32 rle_count = 1;
 			uint64 rle_val = simple8brle_pcd_get_element(new_data, idx);
-			while (idx + rle_count < new_data_len &&
-				   simple8brle_pcd_get_element(new_data, idx + rle_count) == rle_val)
+			while (idx + rle_count < new_data_len && simple8brle_pcd_get_element(new_data, idx + rle_count) == rle_val) // continue as long as the value is the same
 			{
 				rle_count += 1;
-				if (rle_count == SIMPLE8B_RLE_MAX_COUNT_MASK)
+				if (rle_count == SIMPLE8B_RLE_MAX_COUNT_MASK) // if the count reaches the max then we are out of line. 
 					break;
 			}
 			bits_per_int = rle_val == 0 ? 1 : simple8brle_bits_for_value(rle_val);
-			if (bits_per_int * rle_count >= SIMPLE8B_BITSIZE)
+			// rle_val is shifted right already ....
+			// the size we get out is based upon 
+			if (bits_per_int * rle_count >= SIMPLE8B_BITSIZE) // this checkes if we saved storage or not, if we did then we are goood
 			{
 				/* RLE would save space over slot-based encodings */
+				// Here we create a new block instead of reusing the one we have created before hand
+				// Why do we do that?
 				Simple8bRleBlock block = simple8brle_block_create_rle(rle_count, rle_val);
 				Assert(bits_per_int <= SIMPLE8B_RLE_MAX_VALUE_BITS);
 				Assert(simple8brle_rledata_repeatcount(block.data) == rle_count);
 				Assert(simple8brle_rledata_value(block.data) == rle_val);
+
+				// the delta delta is a type of compressor
 				simple8brle_compressor_push_block(compressor, block);
 				idx += rle_count;
 				continue;
@@ -500,11 +513,15 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 
 		for (i = 0; idx + i < new_data_len && i < SIMPLE8B_NUM_ELEMENTS[block.selector]; ++i)
 		{
+			// loop over, also check that we have less than for the type, loop over and add one value after the other
+			// Continuesly check what the selector should be as well
+			// We only check what the selector should be here ...
 			uint64 val = simple8brle_pcd_get_element(new_data, idx + i);
-			while (val > mask)
+			while (val > mask) // here we check the value, GOAL here is to update so that we have a selector that is big enough
 			{
-				block.selector += 1;
-				mask = simple8brle_selector_get_bitmask(block.selector);
+				// We update the select or here so that it is big enough 
+				block.selector += 1; // the number of values ...
+				mask = simple8brle_selector_get_bitmask(block.selector); 
 				/* subtle point: if we no longer have enough spaces left in the block for this
 				 * element, we should stop trying to fit it in. (even in that case, we still must
 				 * use the new selector to prevent gaps) */
@@ -516,12 +533,16 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 		Assert(block.selector < SIMPLE8B_MAXCODE);
 		Assert(mask == simple8brle_selector_get_bitmask(block.selector));
 
+		// Here we loop over so that we and add values?
+		// Here we add values, the need for this loop is not clear to me... 
 		while (num_packed < SIMPLE8B_NUM_ELEMENTS[block.selector] &&
 			   idx + num_packed < new_data_len)
 		{
 			uint64 new_val = simple8brle_pcd_get_element(new_data, idx + num_packed);
 
 			Assert(new_val <= mask);
+			// Add to the same block all the time
+			// This should be fine to day I guess 
 			simple8brle_block_append_element(&block, new_val);
 			num_packed += 1;
 		}
@@ -705,10 +726,15 @@ simple8brle_pcd_get_element(const Simple8bRlePartiallyCompressedData *pcd, uint3
 static inline Simple8bRleBlock
 simple8brle_block_create_rle(uint32 rle_count, uint64 rle_val)
 {
+	// this block handles the rle
 	uint64 data;
 	Assert(rle_val <= SIMPLE8B_RLE_MAX_VALUE_MASK);
 	Assert(rle_count <= SIMPLE8B_RLE_MAX_COUNT_MASK);
+	// Here we do some tricks that are keeeey
+	// Count is shifter right , 36 , then we do a OR 
 	data = ((uint64) rle_count << SIMPLE8B_RLE_MAX_VALUE_BITS) | rle_val;
+	// We encode all the data into one int, but it is seperate due to the bytes, we concat and know the seperator
+	// the count is stored so i guess we can use that to get the values back
 
 	return (Simple8bRleBlock){
 		.selector = SIMPLE8B_RLE_SELECTOR,
@@ -757,6 +783,8 @@ simple8brle_block_append_element(Simple8bRleBlock *block, uint64 val)
 {
 	Assert(val <= simple8brle_selector_get_bitmask(block->selector));
 	Assert(block->num_elements_compressed < SIMPLE8B_NUM_ELEMENTS[block->selector]);
+	// Here is some bitwise magic where we add it to the end ... 
+	// Need to understand these operations and then it should be good
 	block->data = block->data |
 				  val << (SIMPLE8B_BIT_LENGTH[block->selector] * block->num_elements_compressed);
 	block->num_elements_compressed += 1;
@@ -815,7 +843,8 @@ simple8brle_rledata_value(uint64 rledata)
 
 static inline uint64
 simple8brle_selector_get_bitmask(uint8 selector)
-{
+{	
+	// here we check hor many values we can have ???
 	uint8 bitLen = SIMPLE8B_BIT_LENGTH[selector];
 	/* note: left shift by 64 bits is UB */
 	return bitLen < 64 ? (1ULL << bitLen) - 1 : PG_UINT64_MAX;
@@ -833,10 +862,14 @@ static inline uint32
 simple8brle_bits_for_value(uint64 v)
 {
 	uint32 r = 0;
-	if (v >= (1U << 31))
+	if (v >= (1U << 31)) // unsigned shift right 31 2**2
 	{
-		v >>= 32;
-		r += 32;
+		v >>= 32; // https://stackoverflow.com/questions/17769948/what-does-this-operator-mean-in-c, means v = v >> 32
+		r += 32;  // r = r +32
+		// we reach the lowest possible case
+		// shift to the right to the lowest stuff
+		// we will fall through due to the change in the shifts to add
+		// after we shift we can see how much more we need to store the value ... 
 	}
 	if (v >= (1U << 15))
 	{
