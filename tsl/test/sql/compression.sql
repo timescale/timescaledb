@@ -101,9 +101,9 @@ delete from _timescaledb_internal._hyper_1_2_chunk;
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;
-select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a,b;
 delete from foo where a = 10;
-select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a,b;
 
 -- TEST3 check if compress data from views is accurate
 CREATE TABLE conditions (
@@ -540,7 +540,8 @@ ALTER TABLE stattest SET (timescaledb.compress);
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
 SELECT approximate_row_count('stattest');
-SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
@@ -557,10 +558,12 @@ ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
-SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
 
 -- verify that corresponding compressed chunk's stats is updated as well.
-SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
 
 -- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
 -- to hide WARNINGs for skipped tables

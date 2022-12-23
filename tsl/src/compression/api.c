@@ -240,47 +240,6 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	cxt->srcht_chunk = srcchunk;
 }
 
-static void
-disable_autovacuum_on_chunk(Oid chunk_relid)
-{
-	AlterTableCmd at_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_SetRelOptions,
-		.def = (Node *) list_make1(
-			makeDefElem("autovacuum_enabled", (Node *) makeString("false"), -1)),
-	};
-	ts_alter_table_with_event_trigger(chunk_relid, NULL, list_make1(&at_cmd), false);
-}
-
-/* This function is intended to undo the disabling of autovacuum done when we compressed a chunk.
- * Note that we do not cache the previous value for this (as we don't expect users to toggle this
- * for individual chunks), so we use the hypertable's setting to determine whether to enable this on
- * the decompressed chunk.
- */
-static void
-restore_autovacuum_on_decompress(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid)
-{
-	Relation tablerel = table_open(uncompressed_hypertable_relid, AccessShareLock);
-	bool ht_autovac_enabled =
-		tablerel->rd_options ? ((StdRdOptions *) (tablerel)->rd_options)->autovacuum.enabled : true;
-
-	table_close(tablerel, AccessShareLock);
-	if (ht_autovac_enabled)
-	{
-		AlterTableCmd at_cmd = {
-			.type = T_AlterTableCmd,
-			.subtype = AT_SetRelOptions,
-			.def = (Node *) list_make1(
-				makeDefElem("autovacuum_enabled", (Node *) makeString("true"), -1)),
-		};
-
-		ts_alter_table_with_event_trigger(uncompressed_chunk_relid,
-										  NULL,
-										  list_make1(&at_cmd),
-										  false);
-	}
-}
-
 static Chunk *
 find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 {
@@ -415,10 +374,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
-	LockRelationOid(cxt.srcht_chunk->table_id, ShareLock);
-
-	/* Disabling autovacuum on chunk which should be empty while in compressed state */
-	disable_autovacuum_on_chunk(chunk_relid);
+	LockRelationOid(cxt.srcht_chunk->table_id, ExclusiveLock);
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
@@ -516,7 +472,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 																	  colinfo_array,
 																	  htcols_listlen);
 
-		merge_chunk_relstats(mergable_chunk->table_id, cxt.srcht_chunk->table_id);
 		ts_chunk_merge_on_dimension(mergable_chunk, cxt.srcht_chunk, time_dim->fd.id);
 
 		if (chunk_unordered)
@@ -637,10 +592,6 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	 */
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
-
-	/* reenable autovacuum if necessary */
-	restore_autovacuum_on_decompress(uncompressed_hypertable_relid, uncompressed_chunk_relid);
-
 	ts_cache_release(hcache);
 	return true;
 }

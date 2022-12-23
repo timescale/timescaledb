@@ -1332,20 +1332,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 					 * IndexPaths at all
 					 */
 					rel->indexlist = NIL;
-
-					/* Relation size estimates are messed up on compressed chunks due to there
-					 * being no actual pages for the table in the storage manager.
-					 */
-					rel->pages = (BlockNumber) uncompressed_chunk->rd_rel->relpages;
-					rel->tuples = (double) uncompressed_chunk->rd_rel->reltuples;
-					if (rel->pages == 0)
-						rel->allvisfrac = 0.0;
-					else if (uncompressed_chunk->rd_rel->relallvisible >= (int32) rel->pages)
-						rel->allvisfrac = 1.0;
-					else
-						rel->allvisfrac =
-							(double) uncompressed_chunk->rd_rel->relallvisible / rel->pages;
-
 					table_close(uncompressed_chunk, NoLock);
 				}
 			}

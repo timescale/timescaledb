@@ -382,12 +382,6 @@ func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
 }
 
 static void
-update_compressed_chunk_relstats_default(Oid uncompressed_relid, Oid compressed_relid)
-{
-	error_no_default_fn_community();
-}
-
-static void
 dist_update_stale_chunk_metadata_default(Chunk *new_chunk, List *chunk_data_nodes)
 {
 	error_no_default_fn_community();
@@ -560,7 +554,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.chunk_create_replica_table = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
-	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
 	.health_check = error_no_default_fn_pg_community,
 	.mn_get_foreign_join_paths = mn_get_foreign_join_path_default_fn_pg_community,
 };

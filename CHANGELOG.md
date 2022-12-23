@@ -80,6 +80,9 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 * #5262 Extend enabling compression on a continuous aggregrate with 'compress_segmentby' and 'compress_orderby' parameters
 
 **Bugfixes**
+* #4926 Fix corruption when inserting into compressed chunks
+* #5118 Enable auto vacuum for uncompressed chunks
+* #5218 Add role-level security to job error log
 * #5214 Fix use of prepared statement in async module
 * #5218 Add role-level security to job error log
 * #5239 Fix next_start calculation for fixed schedules
