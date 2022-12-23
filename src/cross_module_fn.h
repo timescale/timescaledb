@@ -204,7 +204,6 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction chunks_drop_stale;
-	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
 	PGFunction health_check;
 	void (*mn_get_foreign_join_paths)(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
 									  RelOptInfo *innerrel, JoinType jointype,

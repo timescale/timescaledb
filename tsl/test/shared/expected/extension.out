@@ -74,6 +74,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.first_sfunc(internal,anyelement,"any")
  _timescaledb_internal.freeze_chunk(regclass)
  _timescaledb_internal.generate_uuid()
+ _timescaledb_internal.get_approx_row_count(regclass)
  _timescaledb_internal.get_chunk_colstats(regclass)
  _timescaledb_internal.get_chunk_relstats(regclass)
  _timescaledb_internal.get_create_command(name)

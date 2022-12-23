@@ -139,14 +139,35 @@ def macos_config(overrides):
 
 # common installcheck_args for all pg15 tests
 # partialize_finalize is ignored due to #4937
-pg15_installcheck_args = "IGNORES='partialize_finalize'"
+pg15_installcheck_args = "IGNORES='partialize_finalize transparent_decompress_chunk-15'"
+
+# transparent_decompress_chunk-[12,13,14] is ignored due to #5118
+pg14_installcheck_args = "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed partialize_finalize transparent_decompress_chunk-14'"
+
+pg13_installcheck_args = "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed partialize_finalize transparent_decompress_chunk-13'"
+
+pg12_installcheck_args = "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed partialize_finalize transparent_decompress_chunk-12'"
 
 # always test debug build on latest of all supported pg versions
-m["include"].append(build_debug_config({"pg": PG12_LATEST}))
 m["include"].append(
-    build_debug_config({"pg": PG13_LATEST, "cc": "clang-14", "cxx": "clang++-14"})
+    build_debug_config({"pg": PG12_LATEST, "installcheck_args": pg12_installcheck_args})
 )
-m["include"].append(build_debug_config({"pg": PG14_LATEST}))
+
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": PG13_LATEST,
+            "cc": "clang-14",
+            "cxx": "clang++-14",
+            "installcheck_args": pg13_installcheck_args,
+        }
+    )
+)
+
+m["include"].append(
+    build_debug_config({"pg": PG14_LATEST, "installcheck_args": pg14_installcheck_args})
+)
+
 m["include"].append(
     build_debug_config({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args})
 )
@@ -185,7 +206,7 @@ if event_type != "pull_request":
         "pg": PG13_EARLIEST,
         # The early releases don't build with llvm 14.
         "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-        "installcheck_args": "SKIPS='001_extension' IGNORES='dist_gapfill_pushdown-13'",
+        "installcheck_args": "SKIPS='001_extension' IGNORES='dist_gapfill_pushdown-13 transparent_decompress_chunk-13'",
         "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
     }
     m["include"].append(build_debug_config(pg13_debug_earliest))

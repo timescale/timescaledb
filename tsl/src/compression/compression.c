@@ -193,70 +193,6 @@ get_compressed_data_header(Datum data)
 	return header;
 }
 
-static void
-capture_pgclass_stats(Oid table_oid, int *out_pages, int *out_visible, float *out_tuples)
-{
-	Relation pg_class = table_open(RelationRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_oid));
-	Form_pg_class classform;
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "could not find tuple for relation %u", table_oid);
-
-	classform = (Form_pg_class) GETSTRUCT(tuple);
-
-	*out_pages = classform->relpages;
-	*out_visible = classform->relallvisible;
-	*out_tuples = classform->reltuples;
-
-	heap_freetuple(tuple);
-	table_close(pg_class, RowExclusiveLock);
-}
-
-static void
-restore_pgclass_stats(Oid table_oid, int pages, int visible, float tuples)
-{
-	Relation pg_class;
-	HeapTuple tuple;
-	Form_pg_class classform;
-
-	pg_class = table_open(RelationRelationId, RowExclusiveLock);
-	tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_oid));
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "could not find tuple for relation %u", table_oid);
-	classform = (Form_pg_class) GETSTRUCT(tuple);
-
-	classform->relpages = pages;
-	classform->relallvisible = visible;
-	classform->reltuples = tuples;
-
-	CatalogTupleUpdate(pg_class, &tuple->t_self, tuple);
-
-	heap_freetuple(tuple);
-	table_close(pg_class, RowExclusiveLock);
-}
-
-/* Merge the relstats when merging chunks while compressing them.
- * We need to do this in order to update the relstats of the chunk
- * that is merged into since the compressed one will be dropped by
- * the merge.
- */
-extern void
-merge_chunk_relstats(Oid merged_relid, Oid compressed_relid)
-{
-	int comp_pages, merged_pages, comp_visible, merged_visible;
-	float comp_tuples, merged_tuples;
-
-	capture_pgclass_stats(compressed_relid, &comp_pages, &comp_visible, &comp_tuples);
-	capture_pgclass_stats(merged_relid, &merged_pages, &merged_visible, &merged_tuples);
-
-	merged_pages += comp_pages;
-	merged_visible += comp_visible;
-	merged_tuples += comp_tuples;
-
-	restore_pgclass_stats(merged_relid, merged_pages, merged_visible, merged_tuples);
-}
-
 /* Truncate the relation WITHOUT applying triggers. This is the
  * main difference with ExecuteTruncate. Triggers aren't applied
  * because the data remains, just in compressed form. Also don't
@@ -270,8 +206,6 @@ truncate_relation(Oid table_oid)
 	 *  be a lock upgrade. */
 	Relation rel = table_open(table_oid, AccessExclusiveLock);
 	Oid toast_relid;
-	int pages, visible;
-	float tuples;
 
 	/* Chunks should never have fks into them, but double check */
 	if (fks != NIL)
@@ -279,7 +213,6 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
-	capture_pgclass_stats(table_oid, &pages, &visible, &tuples);
 	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
 
 	toast_relid = rel->rd_rel->reltoastrelid;
@@ -302,7 +235,6 @@ truncate_relation(Oid table_oid)
 #endif
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
 	rel = table_open(table_oid, AccessExclusiveLock);
-	restore_pgclass_stats(table_oid, pages, visible, tuples);
 	CommandCounterIncrement();
 	table_close(rel, NoLock);
 }
@@ -1999,48 +1931,6 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
 	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	return definitions[algorithm].compressed_data_storage;
-}
-
-/* Get relstats from compressed chunk and insert into relstats for the
- * corresponding chunk (that held the uncompressed data) from raw hypertable
- */
-extern void
-update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
-{
-	double rowcnt;
-	int comp_pages, uncomp_pages, comp_visible, uncomp_visible;
-	float comp_tuples, uncomp_tuples, out_tuples;
-	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
-	Chunk *compressed_chunk = ts_chunk_get_by_relid(compressed_relid, true);
-
-	if (uncompressed_chunk->table_id != uncompressed_relid ||
-		uncompressed_chunk->fd.compressed_chunk_id != compressed_chunk->fd.id ||
-		compressed_chunk->table_id != compressed_relid)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("mismatched chunks for relstats update on compressed chunk \"%s\"",
-						get_rel_name(uncompressed_relid))));
-	}
-
-	capture_pgclass_stats(uncompressed_relid, &uncomp_pages, &uncomp_visible, &uncomp_tuples);
-
-	/* Before compressing a chunk in 2.0, we save its stats. Prior
-	 * releases do not support this. So the stats on uncompressed relid
-	 * could be invalid. In this case, do the best that we can.
-	 */
-	if (uncomp_tuples == 0)
-	{
-		/* we need page info from compressed relid */
-		capture_pgclass_stats(compressed_relid, &comp_pages, &comp_visible, &comp_tuples);
-		rowcnt = (double) ts_compression_chunk_size_row_count(uncompressed_chunk->fd.id);
-		if (rowcnt > 0)
-			out_tuples = (float4) rowcnt;
-		else
-			out_tuples = (float4) comp_tuples;
-		restore_pgclass_stats(uncompressed_relid, comp_pages, comp_visible, out_tuples);
-		CommandCounterIncrement();
-	}
 }
 
 /*
