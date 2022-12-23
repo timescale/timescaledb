@@ -56,7 +56,7 @@ INSERT INTO _timescaledb_internal.saved_privs
       WHERE relkind IN ('r', 'v') AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
         OR nspname = '_timescaledb_internal'
         AND relname IN ('hypertable_chunk_local_size', 'compressed_chunk_stats',
-                        'bgw_job_stat', 'bgw_policy_chunk_stats')
+                        'bgw_job_stat', 'bgw_policy_chunk_stats', 'job_errors')
 ON CONFLICT DO NOTHING;
 
 -- The above is good enough for tables and views. However sequences need to
