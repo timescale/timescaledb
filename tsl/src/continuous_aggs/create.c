@@ -160,6 +160,7 @@ typedef struct CAggTimebucketInfo
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
 	int64 bucket_width;			  /* bucket_width of time_bucket, stores BUCKET_WIDTH_VARIABLE for
 									 variable-sized buckets */
+	Oid bucket_width_type;		  /* type of bucket_width */
 	Interval *interval;			  /* stores the interval, NULL if not specified */
 	const char *timezone;		  /* the name of the timezone, NULL if not specified */
 
@@ -698,10 +699,11 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
-	src->bucket_width = 0;			/* invalid value */
-	src->interval = NULL;			/* not specified by default */
-	src->timezone = NULL;			/* not specified by default */
-	TIMESTAMP_NOBEGIN(src->origin); /* origin is not specified by default */
+	src->bucket_width = 0;				 /* invalid value */
+	src->bucket_width_type = InvalidOid; /* invalid oid */
+	src->interval = NULL;				 /* not specified by default */
+	src->timezone = NULL;				 /* not specified by default */
+	TIMESTAMP_NOBEGIN(src->origin);		 /* origin is not specified by default */
 }
 
 static Const *
@@ -743,6 +745,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	{
 		SortGroupClause *sgc = (SortGroupClause *) lfirst(l);
 		TargetEntry *tle = get_sortgroupclause_tle(sgc, targetList);
+
 		if (IsA(tle->expr, FuncExpr))
 		{
 			FuncExpr *fe = ((FuncExpr *) tle->expr);
@@ -870,6 +873,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			if (IsA(width_arg, Const))
 			{
 				Const *width = castNode(Const, width_arg);
+				tbinfo->bucket_width_type = width->consttype;
+
 				if (width->consttype == INTERVALOID)
 				{
 					tbinfo->interval = DatumGetIntervalP(width->constvalue);
@@ -1089,6 +1094,29 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 	}
 
 	return true; /* Query was OK and is supported */
+}
+
+static inline int64
+get_bucket_width(CAggTimebucketInfo bucket_info)
+{
+	if (bucket_info.bucket_width == BUCKET_WIDTH_VARIABLE)
+	{
+		/* calculate the width */
+		return ts_interval_value_to_internal(IntervalPGetDatum(bucket_info.interval),
+											 bucket_info.bucket_width_type);
+	}
+
+	return bucket_info.bucket_width;
+}
+
+static inline Datum
+get_bucket_width_datum(CAggTimebucketInfo bucket_info)
+{
+	if (bucket_info.bucket_width == BUCKET_WIDTH_VARIABLE)
+		return IntervalPGetDatum(bucket_info.interval);
+
+	return ts_internal_to_interval_value(get_bucket_width(bucket_info),
+										 bucket_info.bucket_width_type);
 }
 
 static CAggTimebucketInfo
@@ -1315,16 +1343,16 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   "of the variable width one.")));
 		}
 
-		/* if variable bucket size then get the month part for the arithmetic */
-		bucket_width = (bucket_info.bucket_width == BUCKET_WIDTH_VARIABLE) ?
-						   bucket_info.interval->month :
-						   bucket_info.bucket_width;
-		bucket_width_parent = (bucket_info_parent.bucket_width == BUCKET_WIDTH_VARIABLE) ?
-								  bucket_info_parent.interval->month :
-								  bucket_info_parent.bucket_width;
+		/* get bucket widths for validation */
+		bucket_width = get_bucket_width(bucket_info);
+		bucket_width_parent = get_bucket_width(bucket_info_parent);
+
+		Assert(bucket_width != 0);
+		Assert(bucket_width_parent != 0);
 
 		/* check if the current bucket is greater or equal than the parent */
 		is_greater_or_equal_than_parent = (bucket_width >= bucket_width_parent);
+
 		/* check if buckets are multiple */
 		is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
 
@@ -1334,22 +1362,15 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			Datum width, width_parent;
 			Oid outfuncid = InvalidOid;
 			bool isvarlena;
-			Oid width_type = exprType(linitial(bucket_info.bucket_func->args));
 			char *width_out, *width_out_parent;
 			char *message = NULL;
 
-			getTypeOutputInfo(width_type, &outfuncid, &isvarlena);
-
-			width = (bucket_info.bucket_width == BUCKET_WIDTH_VARIABLE) ?
-						IntervalPGetDatum(bucket_info.interval) :
-						ts_internal_to_interval_value(bucket_width, width_type);
-
+			getTypeOutputInfo(bucket_info.bucket_width_type, &outfuncid, &isvarlena);
+			width = get_bucket_width_datum(bucket_info);
 			width_out = DatumGetCString(OidFunctionCall1(outfuncid, width));
 
-			width_parent = (bucket_info_parent.bucket_width == BUCKET_WIDTH_VARIABLE) ?
-							   IntervalPGetDatum(bucket_info_parent.interval) :
-							   ts_internal_to_interval_value(bucket_width_parent, width_type);
-
+			getTypeOutputInfo(bucket_info_parent.bucket_width_type, &outfuncid, &isvarlena);
+			width_parent = get_bucket_width_datum(bucket_info_parent);
 			width_out_parent = DatumGetCString(OidFunctionCall1(outfuncid, width_parent));
 
 			/* new bucket should be greater than the parent */
