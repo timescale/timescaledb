@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Global test variables
 \set IS_DISTRIBUTED FALSE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE FALSE
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -775,7 +776,11 @@ psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -790,12 +795,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [5] should be multiple of the time bucket width of "public.conditions_summary_1" [2].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
@@ -803,7 +812,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [5] should be multip
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -823,7 +832,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -838,7 +851,11 @@ SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
@@ -868,7 +885,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -883,12 +904,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be multiple of the time bucket width of "public.conditions_summary_1" [4].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
@@ -896,7 +921,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be multip
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- ########################################################
 -- ## TIMESTAMP data type tests
@@ -1662,7 +1687,11 @@ psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -1677,12 +1706,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
 DETAIL:  Continuous aggregate with a fixed time bucket width (e.g. 61 days) cannot be created on top of one using variable time bucket width (e.g. 1 month).
 The variance can lead to the fixed width one not being a multiple of the variable width one.
 \set ON_ERROR_STOP 0
@@ -1691,7 +1724,7 @@ The variance can lead to the fixed width one not being a multiple of the variabl
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
@@ -1711,7 +1744,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -1726,12 +1763,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
@@ -1739,7 +1780,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should b
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -1759,7 +1800,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -1774,7 +1819,11 @@ SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
@@ -1804,7 +1853,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -1819,12 +1872,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
@@ -1832,7 +1889,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- ########################################################
 -- ## TIMESTAMPTZ data type tests
@@ -2596,7 +2653,11 @@ psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -2611,12 +2672,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
 DETAIL:  Continuous aggregate with a fixed time bucket width (e.g. 61 days) cannot be created on top of one using variable time bucket width (e.g. 1 month).
 The variance can lead to the fixed width one not being a multiple of the variable width one.
 \set ON_ERROR_STOP 0
@@ -2625,7 +2690,7 @@ The variance can lead to the fixed width one not being a multiple of the variabl
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
@@ -2645,7 +2710,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -2660,12 +2729,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
@@ -2673,7 +2746,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should b
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -2693,7 +2766,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -2708,7 +2785,11 @@ SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
@@ -2738,7 +2819,11 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
@@ -2753,12 +2838,16 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \set ON_ERROR_STOP 0
 \set VERBOSITY terse
@@ -2766,5 +2855,117 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+--
+-- -- Validations using time bucket with timezone (ref issue #5126)
+--
+\set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
+\set IS_TIME_DIMENSION_WITH_TIMEZONE TRUE
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1_5m
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2_1h
+\set BUCKET_TZNAME 'US/Pacific'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'5 minutes\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\set ON_ERROR_STOP 0
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+\set BUCKET_TZNAME 'US/Pacific'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'5 minutes\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'16 minutes\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD ERROR because non-multiple bucket sizes
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:41: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 16 mins] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 5 mins].
+\set ON_ERROR_STOP 0
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+psql:include/cagg_on_cagg_validations.sql:48: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;

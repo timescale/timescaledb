@@ -22,6 +22,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 
 -- Global test variables
 \set IS_DISTRIBUTED TRUE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE FALSE
 
 -- ########################################################
 -- ## INTEGER data type tests
@@ -199,6 +200,25 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
+\ir include/cagg_on_cagg_validations.sql
+
+--
+-- Validations using time bucket with timezone (ref issue #5126)
+--
+\set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
+\set IS_TIME_DIMENSION_WITH_TIMEZONE TRUE
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1_5m
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2_1h
+\set BUCKET_TZNAME 'US/Pacific'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'5 minutes\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_TZNAME 'US/Pacific'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'5 minutes\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'16 minutes\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
 \ir include/cagg_on_cagg_validations.sql
 
 -- Cleanup
