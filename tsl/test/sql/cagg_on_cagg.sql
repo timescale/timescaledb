@@ -5,7 +5,6 @@
 -- Global test variables
 \set IS_DISTRIBUTED FALSE
 
-
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -23,6 +22,15 @@
 \set BUCKET_WIDTH_1ST 'INTEGER \'1\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'5\''
 \set BUCKET_WIDTH_3TH 'INTEGER \'10\''
+
+-- Different order of time dimension in raw ht
+\set IS_DEFAULT_COLUMN_ORDER FALSE
+\ir include/cagg_on_cagg_setup.sql
+\ir include/cagg_on_cagg_common.sql
+
+-- Default tests
+\set IS_DEFAULT_COLUMN_ORDER TRUE
+\ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
 
 --
@@ -49,9 +57,6 @@
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 
--- cleanup
-DROP TABLE conditions;
-
 -- ########################################################
 -- ## TIMESTAMP data type tests
 -- ########################################################
@@ -71,6 +76,15 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
 \set BUCKET_WIDTH_3TH 'INTERVAL \'1 week\''
+
+-- Different order of time dimension in raw ht
+\set IS_DEFAULT_COLUMN_ORDER FALSE
+\ir include/cagg_on_cagg_setup.sql
+\ir include/cagg_on_cagg_common.sql
+
+-- Default tests
+\set IS_DEFAULT_COLUMN_ORDER TRUE
+\ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
 
 --
@@ -105,9 +119,6 @@ SET timezone TO 'UTC';
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
 
--- cleanup
-DROP TABLE conditions;
-
 -- ########################################################
 -- ## TIMESTAMPTZ data type tests
 -- ########################################################
@@ -127,6 +138,15 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
 \set BUCKET_WIDTH_3TH 'INTERVAL \'1 week\''
+
+-- Different order of time dimension in raw ht
+\set IS_DEFAULT_COLUMN_ORDER FALSE
+\ir include/cagg_on_cagg_setup.sql
+\ir include/cagg_on_cagg_common.sql
+
+-- Default tests
+\set IS_DEFAULT_COLUMN_ORDER TRUE
+\ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
 
 --
