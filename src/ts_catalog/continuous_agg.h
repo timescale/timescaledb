@@ -122,6 +122,12 @@ ContinuousAggIsFinalized(const ContinuousAgg *cagg)
 	return (cagg->data.finalized == true);
 }
 
+static inline bool
+ContinuousAggIsNested(const ContinuousAgg *cagg)
+{
+	return (cagg->data.parent_mat_hypertable_id != INVALID_HYPERTABLE_ID);
+}
+
 typedef enum ContinuousAggHypertableStatus
 {
 	HypertableIsNotContinuousAgg = 0,

@@ -1097,7 +1097,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 {
 	CAggTimebucketInfo bucket_info, bucket_info_parent;
 	Cache *hcache;
-	Hypertable *ht = NULL;
+	Hypertable *ht = NULL, *ht_parent = NULL;
 	RangeTblRef *rtref = NULL;
 	RangeTblEntry *rte;
 	List *fromList;
@@ -1179,6 +1179,16 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			hcache = ts_hypertable_cache_pin();
 			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
 
+			/* if parent cagg is nested then we should get the matht otherwise the rawht*/
+			if (ContinuousAggIsNested(cagg_parent))
+				ht_parent =
+					ts_hypertable_cache_get_entry_by_id(hcache,
+														cagg_parent->data.mat_hypertable_id);
+			else
+				ht_parent =
+					ts_hypertable_cache_get_entry_by_id(hcache,
+														cagg_parent->data.raw_hypertable_id);
+
 			/* get the querydef for the source cagg */
 			is_nested = true;
 			prev_query = ts_continuous_agg_get_query(cagg_parent);
@@ -1251,13 +1261,16 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 		if (is_nested)
 		{
+			const Dimension *part_dimension_parent =
+				hyperspace_get_open_dimension(ht_parent->space, 0);
+
 			caggtimebucketinfo_init(&bucket_info_parent,
-									ht->fd.id,
-									ht->main_table_relid,
-									part_dimension->column_attno,
-									part_dimension->fd.column_type,
-									part_dimension->fd.interval_length,
-									cagg_parent->data.parent_mat_hypertable_id);
+									ht_parent->fd.id,
+									ht_parent->main_table_relid,
+									part_dimension_parent->column_attno,
+									part_dimension_parent->fd.column_type,
+									part_dimension_parent->fd.interval_length,
+									INVALID_HYPERTABLE_ID);
 		}
 
 		ts_cache_release(hcache);
