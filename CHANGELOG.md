@@ -8,10 +8,12 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4926 Fix corruption when inserting into compressed chunks
+* #5133 Fix CAgg on CAgg using different column order on the original hypertable
 * #5152 Fix adding column with NULL constraint to compressed hypertable
 
 **Thanks**
 * @ikkala for reporting error when adding column with NULL constraint to compressed hypertable
+* @salquier-appvizer for reporting error on CAgg on CAgg using different column order on the original hypertable
 
 ## 2.9.1 (2022-12-23)
 
