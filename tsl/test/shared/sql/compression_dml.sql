@@ -54,3 +54,35 @@ INSERT INTO metric_5m (time, series_id, value)
 -- clean up
 RESET work_mem;
 DROP TABLE metric_5m;
+
+-- github issue 5134
+CREATE TABLE mytab (time TIMESTAMPTZ NOT NULL, a INT, b INT, c INT);
+SELECT table_name FROM create_hypertable('mytab', 'time', chunk_time_interval => interval '1 day');
+
+INSERT INTO mytab
+    SELECT time,
+        CASE WHEN (:'start_date'::timestamptz - time < interval '1 days') THEN 1
+             WHEN (:'start_date'::timestamptz - time < interval '2 days') THEN 2
+             WHEN (:'start_date'::timestamptz - time < interval '3 days') THEN 3 ELSE 4 END as a
+    from generate_series(:'start_date'::timestamptz - interval '3 days', :'start_date'::timestamptz, interval '5 sec') as g1(time);
+
+-- enable compression
+ALTER TABLE mytab SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'a, c'
+);
+
+-- get first chunk name
+SELECT chunk_schema || '.' || chunk_name as "chunk_table"
+       FROM timescaledb_information.chunks
+       WHERE hypertable_name = 'mytab' ORDER BY range_start limit 1 \gset
+
+-- compress only the first chunk
+SELECT compress_chunk(:'chunk_table');
+
+-- insert a row into first compressed chunk
+INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 3, 3;
+-- should not crash
+EXPLAIN (costs off) SELECT * FROM :chunk_table;
+DROP TABLE mytab CASCADE;
+

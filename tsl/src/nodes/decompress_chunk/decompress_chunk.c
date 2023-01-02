@@ -589,7 +589,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * from compressed and uncompressed chunk.
 			 */
 			path = (Path *) decompress_chunk_path_create(root, info, parallel_workers, child_path);
-			if (ts_chunk_is_partial(chunk))
+			if (ts_chunk_is_partial(chunk) && uncompressed_partial_path)
 				path =
 					(Path *) create_append_path_compat(root,
 													   chunk_rel,
