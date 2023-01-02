@@ -244,13 +244,25 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *m
 											 CurrentMemoryContext,                                 \
 											 fail_if_not_found)
 
-#define IS_VALID_CHUNK(chunk)                                                                      \
-	((chunk) && !(chunk)->fd.dropped && (chunk)->fd.id > 0 && (chunk)->fd.hypertable_id > 0 &&     \
-	 OidIsValid((chunk)->table_id) && OidIsValid((chunk)->hypertable_relid) &&                     \
-	 (chunk)->constraints && (chunk)->cube &&                                                      \
-	 (chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints &&               \
-	 ((chunk)->relkind == RELKIND_RELATION || ((chunk)->relkind == RELKIND_FOREIGN_TABLE)))
-
-#define ASSERT_IS_VALID_CHUNK(chunk) Assert(IS_VALID_CHUNK(chunk))
+/*
+ * Sanity checks for chunk.
+ *
+ * The individual checks are split into separate Asserts so it's
+ * easier to tell from a stacktrace which one failed.
+ */
+#define ASSERT_IS_VALID_CHUNK(chunk)                                                               \
+	do                                                                                             \
+	{                                                                                              \
+		Assert(chunk);                                                                             \
+		Assert(!(chunk)->fd.dropped);                                                              \
+		Assert((chunk)->fd.id > 0);                                                                \
+		Assert((chunk)->fd.hypertable_id > 0);                                                     \
+		Assert(OidIsValid((chunk)->table_id));                                                     \
+		Assert(OidIsValid((chunk)->hypertable_relid));                                             \
+		Assert((chunk)->constraints);                                                              \
+		Assert((chunk)->cube);                                                                     \
+		Assert((chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints);      \
+		Assert((chunk)->relkind == RELKIND_RELATION || (chunk)->relkind == RELKIND_FOREIGN_TABLE); \
+	} while (0)
 
 #endif /* TIMESCALEDB_CHUNK_H */
