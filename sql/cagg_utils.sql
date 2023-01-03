@@ -120,3 +120,71 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
     OUT ret_window_start BIGINT,
     OUT ret_window_end BIGINT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_invalidation_process_cagg_log' LANGUAGE C STRICT VOLATILE;
+
+--Get the maximum value materialized for the given hypertable
+CREATE OR REPLACE FUNCTION timescaledb_experimental.get_materialization_threshold(
+   mat_ht varchar,
+   time_col varchar
+)  RETURNS varchar
+LANGUAGE 'plpgsql'
+ AS    $func$
+ DECLARE mat_thresh TIMESTAMP;
+         query_string text;
+BEGIN
+    query_string = format('SELECT max(%s) FROM %s', time_col, mat_ht);
+    EXECUTE query_string into mat_thresh;
+    RETURN mat_thresh;
+END;
+$func$;
+
+--Function to materialize the hypertable --mat_ht using join definition in join_view
+--using the target hypertable target_ht over the provided target_thresh
+CREATE OR REPLACE FUNCTION timescaledb_experimental.execute_materialization(
+    join_view varchar,
+    mat_ht varchar,
+    target_ht varchar,
+    time_col varchar,
+    prev_mat_thresh varchar,
+    target_mat_thresh varchar
+)  RETURNS VOID
+ LANGUAGE 'plpgsql'
+ AS    $func$
+BEGIN
+   EXECUTE format('LOCK TABLE ONLY %s IN SHARE ROW EXCLUSIVE MODE', target_ht);
+   EXECUTE format('REFRESH MATERIALIZED VIEW %s',join_view);
+   EXECUTE format('INSERT INTO %s SELECT * FROM %s WHERE %s > ''%s'' AND %s <= ''%s''', mat_ht, join_view, time_col, prev_mat_thresh, time_col, target_mat_thresh);
+END
+ $func$;
+
+/*
+ * Set a new invalidation threshold.
+ *
+ * The threshold is only updated if the new threshold is greater than the old
+ * one.
+ *
+ * On success, the new threshold is returned, otherwise the existing threshold
+ * is returned instead.
+ */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.get_set_inval_threshold(
+    target_ht REGCLASS,
+    target_mat_thresh TIMESTAMP
+)  RETURNS TIMESTAMP
+LANGUAGE 'plpgsql'
+ AS    $func$
+ DECLARE mat_thresh TIMESTAMP;
+        query_string text;
+        htid Oid;
+        ht_name varchar;
+BEGIN
+   query_string = format('select relname from pg_class where oid = %d', target_ht);
+   EXECUTE query_string into ht_name;
+   query_string = format('SELECT id from _timescaledb_catalog.hypertable where table_name ='%s'',ht_name);
+   EXECUTE query_string into htid;
+   query_string = format('SELECT watermark from _timescaledb_catalog.continuous_aggs_invalidation_threshold where hypertable_id = %d',htid);
+   EXECUTE query_string into mat_thresh
+   if target_mat_thresh >mat_thresh then
+        EXECUTE format('Update _timescaledb_catalog.continuous_aggs_invalidation_threshold set watermark = %d where hypertable_id = %d', target_mat_thresh, target_ht);
+        end if;
+   RETURN target_mat_thresh
+END
+ $func$;

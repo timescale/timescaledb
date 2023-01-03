@@ -1,0 +1,144 @@
+--Prerequisites
+CREATE TABLE conditions(
+  day DATE NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL,
+device_id int NOT NULL);
+SELECT create_hypertable(
+  'conditions', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+    create_hypertable    
+-------------------------
+ (1,public,conditions,t)
+(1 row)
+
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-06-14', 'Moscow', 26,1),
+  ('2021-06-15', 'Moscow', 22,2),
+  ('2021-06-16', 'Moscow', 24,3),
+  ('2021-06-17', 'Moscow', 24,4),
+  ('2021-06-18', 'Moscow', 27,4),
+  ('2021-06-19', 'Moscow', 28,4),
+  ('2021-06-20', 'Moscow', 30,1),
+  ('2021-06-21', 'Moscow', 31,1),
+  ('2021-06-22', 'Moscow', 34,1),
+  ('2021-06-23', 'Moscow', 34,2),
+  ('2021-06-24', 'Moscow', 34,2),
+  ('2021-06-25', 'Moscow', 32,3),
+  ('2021-06-26', 'Moscow', 32,3),
+  ('2021-06-27', 'Moscow', 31,3);
+CREATE TABLE devices ( device_id int not null, name text, location text);
+INSERT INTO devices VALUES (1, 'thermo_1', 'Moscow'),
+                           (2, 'thermo_2', 'Berlin'),
+                           (3, 'thermo_3', 'London'),
+                           (4, 'thermo_4', 'Stockholm');
+--Simple join view
+CREATE MATERIALIZED VIEW join_view AS
+SELECT time_bucket('1 day'::interval, conditions.day) AS day,
+    avg(conditions.temperature) AS avg,
+    max(conditions.temperature) AS max,
+    min(conditions.temperature) AS min,
+    devices.name
+  FROM conditions, devices
+  WHERE conditions.device_id = devices.device_id
+  GROUP BY devices.name, (time_bucket('1 day'::interval, conditions.day));
+CREATE TABLE join_mat_ht AS SELECT * FROM join_view WITH NO DATA;
+SELECT create_hypertable('join_mat_ht', 'day');
+NOTICE:  adding not-null constraint to column "day"
+    create_hypertable     
+--------------------------
+ (2,public,join_mat_ht,t)
+(1 row)
+
+SELECT timescaledb_experimental.execute_materialization('join_view',
+                                                        'join_mat_ht',
+                                                        'conditions',
+                                                        'day',
+                                                        '2021-05-15',
+                                                        '2022-12-31');
+ execute_materialization 
+-------------------------
+ 
+(1 row)
+
+SELECT * FROM join_mat_ht;
+    day     |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+(14 rows)
+
+INSERT INTO conditions VALUES ('2022-01-15', 'Stuttgart', 11,5),
+                              ('2022-01-31', 'Stuttgart', 18,5),
+                              ('2022-01-15', 'Barcelona', 21,6),
+                              ('2022-01-31', 'Barcelona', 24,6);
+INSERT INTO devices VALUES (5, 'thermo_5', 'Stuttgart'),
+                           (6, 'thermo_6', 'Barcelona');
+--Find the max materialized value and materialize from there
+SELECT timescaledb_experimental.get_materialization_threshold('join_mat_ht',
+                                                              'day') AS prev_mat_thresh;
+     prev_mat_thresh      
+--------------------------
+ Sun Jun 27 00:00:00 2021
+(1 row)
+
+\gset
+SELECT timescaledb_experimental.get_materialization_threshold('conditions',
+                                                              'day') AS target_mat_thresh;
+    target_mat_thresh     
+--------------------------
+ Mon Jan 31 00:00:00 2022
+(1 row)
+
+\gset
+SELECT timescaledb_experimental.execute_materialization('join_view',
+                                                        'join_mat_ht',
+                                                        'conditions',
+                                                        'day',
+                                                        :'prev_mat_thresh',
+                                                        :'target_mat_thresh');
+ execute_materialization 
+-------------------------
+ 
+(1 row)
+
+SELECT * FROM join_mat_ht;
+    day     |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 01-15-2022 | 11.0000000000000000 |  11 |  11 | thermo_5
+ 01-15-2022 | 21.0000000000000000 |  21 |  21 | thermo_6
+ 01-31-2022 | 18.0000000000000000 |  18 |  18 | thermo_5
+ 01-31-2022 | 24.0000000000000000 |  24 |  24 | thermo_6
+(18 rows)
+
+--Drop objects
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to materialized view join_view
+DROP TABLE devices CASCADE;
