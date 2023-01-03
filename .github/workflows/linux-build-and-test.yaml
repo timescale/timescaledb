@@ -9,6 +9,7 @@ on:
     - cron: '0 0 * * *'
   push:
     branches:
+      - main
       - prerelease_test
   pull_request:
 jobs:
