@@ -119,7 +119,7 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 TimescaleDB is available pre-packaged for several platforms:
 
 - Linux:
-    - [RedHat / CentOS](https://tsdb.co/GitHubTimescaleRedHatCentOS)
+    - [RedHat](https://tsdb.co/GitHubTimescaleRedHatCentOS)
     - [Ubuntu](https://tsdb.co/GitHubTimescaleUbuntu)
     - [Debian](https://tsdb.co/GitHubTimescaleDebian)
 - [Docker](https://tsdb.co/GitHubTimescaleDocker)
