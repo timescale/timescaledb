@@ -4,6 +4,18 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #4926 Fix corruption when inserting into compressed chunks
+* #5152 Fix adding column with NULL constraint to compressed hypertable
+
+**Thanks**
+* @ikkala for reporting error when adding column with NULL constraint to compressed hypertable
+
+## 2.9.2 (2023-12-26)
+#5152 Fix adding column with NULL constraint to compressed hypertable
+
 ## 2.9.1 (2022-12-23)
 
 This release contains bug fixes since the 2.9.0 release.
