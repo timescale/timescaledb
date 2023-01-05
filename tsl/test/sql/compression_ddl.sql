@@ -46,7 +46,10 @@ ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
 ALTER TABLE records SET (timescaledb.compress = true);
-ALTER TABLE records ADD COLUMN col boolean DEFAULT false NOT NULL;
+ALTER TABLE records ADD COLUMN col1 boolean DEFAULT false NOT NULL;
+-- NULL constraints are useless and it is safe allow adding this
+-- column with NULL constraint to a compressed hypertable (Issue #5151)
+ALTER TABLE records ADD COLUMN col2 BOOLEAN NULL;
 DROP table records CASCADE;
 
 -- TABLESPACES
