@@ -281,6 +281,14 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 			Constraint *constraint = lfirst_node(Constraint, lc);
 			switch (constraint->contype)
 			{
+				/*
+				 * We can safelly ignore NULL constraints because it does nothing
+				 * and according to Postgres docs is useless and exist just for
+				 * compatibility with other database systems
+				 * https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6
+				 */
+				case CONSTR_NULL:
+					continue;
 				case CONSTR_NOTNULL:
 					has_notnull = true;
 					continue;
