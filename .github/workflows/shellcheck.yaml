@@ -2,10 +2,16 @@
 name: Shellcheck
 on:
   pull_request:
+    paths:
+      - '**.sh'
+      - .github/workflows/shellcheck.yaml
   push:
     branches:
       - main
       - prerelease_test
+    paths:
+      - '**.sh'
+      - .github/workflows/shellcheck.yaml
 jobs:
   shellcheck:
     name: Shellcheck
