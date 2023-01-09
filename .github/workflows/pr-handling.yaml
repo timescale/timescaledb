@@ -12,7 +12,7 @@ name: Assign PR to author and reviewers
 
 on:
   pull_request_target:
-    types: [ opened, reopened ]
+    types: [ opened, reopened, ready_for_review ]
 
 jobs:
   assign-pr:
@@ -24,6 +24,7 @@ jobs:
   ask-review:
     name: Run pull-review
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@v3
       - name: Run pull-review with docker
