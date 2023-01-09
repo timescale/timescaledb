@@ -24,6 +24,7 @@ SELECT ht.schema_name AS hypertable_schema,
     ELSE
       FALSE
     END) AS is_distributed,
+  ht.reference as is_reference,
   ht.replication_factor,
   dn.node_list AS data_nodes,
   srchtbs.tablespace_list AS tablespaces

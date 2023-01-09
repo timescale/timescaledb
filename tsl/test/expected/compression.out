@@ -464,6 +464,7 @@ num_dimensions      | 1
 num_chunks          | 2
 compression_enabled | t
 is_distributed      | f
+is_reference        | f
 replication_factor  | 
 data_nodes          | 
 tablespaces         | 
@@ -475,6 +476,7 @@ num_dimensions      | 1
 num_chunks          | 4
 compression_enabled | t
 is_distributed      | f
+is_reference        | f
 replication_factor  | 
 data_nodes          | 
 tablespaces         | 

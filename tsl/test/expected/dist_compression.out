@@ -87,6 +87,7 @@ chunk_target_size        | 0
 compression_state        | 1
 compressed_hypertable_id | 
 replication_factor       | 2
+reference                | f
 
 \x
 SELECT test.remote_exec(NULL, $$
@@ -376,6 +377,7 @@ num_dimensions      | 2
 num_chunks          | 3
 compression_enabled | t
 is_distributed      | t
+is_reference        | f
 replication_factor  | 2
 data_nodes          | {db_dist_compression_1,db_dist_compression_2,db_dist_compression_3}
 tablespaces         | 

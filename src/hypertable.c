@@ -170,6 +170,8 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 		values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] =
 			Int16GetDatum(fd->replication_factor);
 
+	values[AttrNumberGetAttrOffset(Anum_hypertable_reference)] = BoolGetDatum(fd->reference);
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -234,6 +236,8 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	else
 		fd->replication_factor =
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)]);
+
+	fd->reference = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_reference)]);
 
 	if (should_free)
 		heap_freetuple(tuple);
@@ -936,6 +940,9 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	/* finally, set replication factor */
 	fd.replication_factor = replication_factor;
+
+	/* set reference field, false for now */
+	fd.reference = false;
 
 	rel = table_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel, &fd);

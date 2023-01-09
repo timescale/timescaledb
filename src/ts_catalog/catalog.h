@@ -117,6 +117,7 @@ enum Anum_hypertable
 	Anum_hypertable_compression_state,
 	Anum_hypertable_compressed_hypertable_id,
 	Anum_hypertable_replication_factor,
+	Anum_hypertable_reference,
 	_Anum_hypertable_max,
 };
 
@@ -136,6 +137,7 @@ typedef struct FormData_hypertable
 	int16 compression_state;
 	int32 compressed_hypertable_id;
 	int16 replication_factor;
+	bool reference;
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;

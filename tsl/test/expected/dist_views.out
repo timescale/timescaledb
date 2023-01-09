@@ -59,9 +59,9 @@ LIMIT 1;
 
 SELECT * FROM timescaledb_information.hypertables
 WHERE hypertable_name = 'dist_table';
- hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |                    data_nodes                     | tablespaces 
--------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------------------+-------------
- public            | dist_table      | test_role_1 |              3 |          3 | t                   | t              |                  2 | {db_dist_views_1,db_dist_views_2,db_dist_views_3} | 
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | is_reference | replication_factor |                    data_nodes                     | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------+--------------------+---------------------------------------------------+-------------
+ public            | dist_table      | test_role_1 |              3 |          3 | t                   | t              | f            |                  2 | {db_dist_views_1,db_dist_views_2,db_dist_views_3} | 
 (1 row)
 
 SELECT * from timescaledb_information.chunks

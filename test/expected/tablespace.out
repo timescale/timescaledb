@@ -148,6 +148,7 @@ num_dimensions      | 2
 num_chunks          | 2
 compression_enabled | f
 is_distributed      | f
+is_reference        | f
 replication_factor  | 
 data_nodes          | 
 tablespaces         | {tablespace1,tablespace2}

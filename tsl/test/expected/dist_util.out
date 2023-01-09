@@ -237,10 +237,10 @@ ORDER BY node_name;
 
 SELECT * FROM timescaledb_information.hypertables
 ORDER BY hypertable_schema, hypertable_name;
- hypertable_schema | hypertable_name |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |        data_nodes         | tablespaces 
--------------------+-----------------+--------------------+----------------+------------+---------------------+----------------+--------------------+---------------------------+-------------
- public            | disttable       | cluster_super_user |              1 |          0 | f                   | t              |                  1 | {data_node_1,data_node_2} | 
- public            | nondisttable    | cluster_super_user |              1 |          0 | f                   | f              |                    |                           | 
+ hypertable_schema | hypertable_name |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | is_reference | replication_factor |        data_nodes         | tablespaces 
+-------------------+-----------------+--------------------+----------------+------------+---------------------+----------------+--------------+--------------------+---------------------------+-------------
+ public            | disttable       | cluster_super_user |              1 |          0 | f                   | t              | f            |                  1 | {data_node_1,data_node_2} | 
+ public            | nondisttable    | cluster_super_user |              1 |          0 | f                   | f              | f            |                    |                           | 
 (2 rows)
 
 -- Test size functions on empty distributed hypertable.

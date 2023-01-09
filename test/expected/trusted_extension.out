@@ -37,9 +37,9 @@ SELECT * FROM t ORDER BY 1;
 (2 rows)
 
 SELECT * FROM timescaledb_information.hypertables;
- hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor | data_nodes | tablespaces 
--------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+------------+-------------
- public            | t               | test_role_1 |              1 |          2 | f                   | f              |                    |            | 
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | is_reference | replication_factor | data_nodes | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------+--------------------+------------+-------------
+ public            | t               | test_role_1 |              1 |          2 | f                   | f              | f            |                    |            | 
 (1 row)
 
 \dt+ _timescaledb_internal._hyper_*
