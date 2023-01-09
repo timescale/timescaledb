@@ -5,7 +5,17 @@ on:
     branches:
       - main
       - prerelease_test
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
+      - 'bootstrap*'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
+      - 'bootstrap*'
 jobs:
   config:
     runs-on: ubuntu-latest

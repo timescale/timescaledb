@@ -1,0 +1,23 @@
+# Ignoring version of the corresponding workflow. These files are
+# needed to run required workflows even when the real workflow is not
+# executed because some files were ignored.
+name: Regression
+on:
+  push:
+    branches:
+      - prerelease_test
+    paths:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
+  pull_request:
+    paths:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
+jobs:
+  regress:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "No build required"

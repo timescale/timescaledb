@@ -4,7 +4,15 @@ on:
     branches:
       - main
       - prerelease_test
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
 jobs:
   config:
     runs-on: ubuntu-latest
