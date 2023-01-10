@@ -1091,6 +1091,58 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 	return true; /* Query was OK and is supported */
 }
 
+static inline int64
+get_bucket_width(CAggTimebucketInfo bucket_info)
+{
+	int64 width = 0;
+
+	/* calculate the width */
+	switch (bucket_info.bucket_width_type)
+	{
+		case INT8OID:
+		case INT4OID:
+		case INT2OID:
+			width = bucket_info.bucket_width;
+			break;
+		case INTERVALOID:
+		{
+			Datum epoch = DirectFunctionCall2(interval_part,
+											  PointerGetDatum(cstring_to_text("epoch")),
+											  IntervalPGetDatum(bucket_info.interval));
+			/* cast float8 to int8 */
+			width = DatumGetInt64(DirectFunctionCall1(dtoi8, epoch));
+			break;
+		}
+		default:
+			Assert(false);
+	}
+
+	return width;
+}
+
+static inline Datum
+get_bucket_width_datum(CAggTimebucketInfo bucket_info)
+{
+	Datum width = (Datum) 0;
+
+	switch (bucket_info.bucket_width_type)
+	{
+		case INT8OID:
+		case INT4OID:
+		case INT2OID:
+			width = ts_internal_to_interval_value(bucket_info.bucket_width,
+												  bucket_info.bucket_width_type);
+			break;
+		case INTERVALOID:
+			width = IntervalPGetDatum(bucket_info.interval);
+			break;
+		default:
+			Assert(false);
+	}
+
+	return width;
+}
+
 static CAggTimebucketInfo
 cagg_validate_query(const Query *query, const bool finalized, const char *cagg_schema,
 					const char *cagg_name)
@@ -1292,8 +1344,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	/* nested cagg validations */
 	if (is_nested)
 	{
-		int64 bucket_width, bucket_width_parent;
-		bool is_greater_or_equal_than_parent, is_multiple_of_parent;
+		int64 bucket_width = 0, bucket_width_parent = 0;
+		bool is_greater_or_equal_than_parent = true, is_multiple_of_parent = true;
 
 		Assert(prev_query->groupClause);
 		caggtimebucket_validate(&bucket_info_parent,
@@ -1326,7 +1378,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		/* check if the current bucket is greater or equal than the parent */
 		is_greater_or_equal_than_parent = (bucket_width >= bucket_width_parent);
 		/* check if buckets are multiple */
-		is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
+		if (bucket_width_parent != 0)
+		{
+			if (bucket_width_parent > bucket_width && bucket_width != 0)
+				is_multiple_of_parent = ((bucket_width_parent % bucket_width) == 0);
+			else
+				is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
+		}
 
 		/* proceed with validation errors */
 		if (!is_greater_or_equal_than_parent || !is_multiple_of_parent)
@@ -1352,13 +1410,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 			width_out_parent = DatumGetCString(OidFunctionCall1(outfuncid, width_parent));
 
-			/* new bucket should be greater than the parent */
-			if (!is_greater_or_equal_than_parent)
-				message = "greater than";
-
 			/* new bucket should be multiple of the parent */
 			if (!is_multiple_of_parent)
 				message = "multiple of";
+
+			/* new bucket should be greater than the parent */
+			if (!is_greater_or_equal_than_parent)
+				message = "greater or equal than";
 
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

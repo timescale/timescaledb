@@ -37,6 +37,11 @@ GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC
 GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- Global test variables
 \set IS_DISTRIBUTED TRUE
+<<<<<<< HEAD
+=======
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
+>>>>>>> 73df496c... Fix CAgg on CAgg variable bucket size validation
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -809,11 +814,33 @@ psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                       View "public.conditions_summary_1"
+   Column    |  Type   | Collation | Nullable | Default | Storage | Description 
+-------------+---------+-----------+----------+---------+---------+-------------
+ bucket      | integer |           |          |         | plain   | 
+ temperature | numeric |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_9.bucket,
+    _materialized_hypertable_9.temperature
+   FROM _timescaledb_internal._materialized_hypertable_9
+  WHERE _materialized_hypertable_9.bucket < COALESCE(_timescaledb_internal.cagg_watermark(9)::integer, '-2147483648'::integer)
+UNION ALL
+ SELECT time_bucket(2, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.cagg_watermark(9)::integer, '-2147483648'::integer)
+  GROUP BY (time_bucket(2, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -824,20 +851,25 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [5] should be multiple of the time bucket width of "public.conditions_summary_1" [2].
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -857,11 +889,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                       View "public.conditions_summary_1"
+   Column    |  Type   | Collation | Nullable | Default | Storage | Description 
+-------------+---------+-----------+----------+---------+---------+-------------
+ bucket      | integer |           |          |         | plain   | 
+ temperature | numeric |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_10.bucket,
+    _materialized_hypertable_10.temperature
+   FROM _timescaledb_internal._materialized_hypertable_10
+  WHERE _materialized_hypertable_10.bucket < COALESCE(_timescaledb_internal.cagg_watermark(10)::integer, '-2147483648'::integer)
+UNION ALL
+ SELECT time_bucket(2, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.cagg_watermark(10)::integer, '-2147483648'::integer)
+  GROUP BY (time_bucket(2, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -872,12 +926,34 @@ SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+                       View "public.conditions_summary_2"
+   Column    |  Type   | Collation | Nullable | Default | Storage | Description 
+-------------+---------+-----------+----------+---------+---------+-------------
+ bucket      | integer |           |          |         | plain   | 
+ temperature | numeric |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_11.bucket,
+    _materialized_hypertable_11.temperature
+   FROM _timescaledb_internal._materialized_hypertable_11
+  WHERE _materialized_hypertable_11.bucket < COALESCE(_timescaledb_internal.cagg_watermark(11)::integer, '-2147483648'::integer)
+UNION ALL
+ SELECT time_bucket(2, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.cagg_watermark(11)::integer, '-2147483648'::integer)
+  GROUP BY (time_bucket(2, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
@@ -902,11 +978,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                       View "public.conditions_summary_1"
+   Column    |  Type   | Collation | Nullable | Default | Storage | Description 
+-------------+---------+-----------+----------+---------+---------+-------------
+ bucket      | integer |           |          |         | plain   | 
+ temperature | numeric |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_12.bucket,
+    _materialized_hypertable_12.temperature
+   FROM _timescaledb_internal._materialized_hypertable_12
+  WHERE _materialized_hypertable_12.bucket < COALESCE(_timescaledb_internal.cagg_watermark(12)::integer, '-2147483648'::integer)
+UNION ALL
+ SELECT time_bucket(4, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.cagg_watermark(12)::integer, '-2147483648'::integer)
+  GROUP BY (time_bucket(4, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -917,20 +1015,25 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be multiple of the time bucket width of "public.conditions_summary_1" [4].
-\set ON_ERROR_STOP 0
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be greater or equal than the time bucket width of "public.conditions_summary_1" [4].
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- cleanup
 DROP TABLE conditions;
@@ -1699,11 +1802,33 @@ psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                                 View "public.conditions_summary_1"
+   Column    |            Type             | Collation | Nullable | Default | Storage | Description 
+-------------+-----------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp without time zone |           |          |         | plain   | 
+ temperature | numeric                     |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_21.bucket,
+    _materialized_hypertable_21.temperature
+   FROM _timescaledb_internal._materialized_hypertable_21
+  WHERE _materialized_hypertable_21.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 mon'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+  GROUP BY (time_bucket('@ 1 mon'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -1714,21 +1839,26 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
 DETAIL:  Continuous aggregate with a fixed time bucket width (e.g. 61 days) cannot be created on top of one using variable time bucket width (e.g. 1 month).
 The variance can lead to the fixed width one not being a multiple of the variable width one.
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
@@ -1748,11 +1878,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                                 View "public.conditions_summary_1"
+   Column    |            Type             | Collation | Nullable | Default | Storage | Description 
+-------------+-----------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp without time zone |           |          |         | plain   | 
+ temperature | numeric                     |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_22.bucket,
+    _materialized_hypertable_22.temperature
+   FROM _timescaledb_internal._materialized_hypertable_22
+  WHERE _materialized_hypertable_22.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(22)), '-infinity'::timestamp without time zone)
+UNION ALL
+ SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(22)), '-infinity'::timestamp without time zone)
+  GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -1763,20 +1915,25 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -1796,11 +1953,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                                 View "public.conditions_summary_1"
+   Column    |            Type             | Collation | Nullable | Default | Storage | Description 
+-------------+-----------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp without time zone |           |          |         | plain   | 
+ temperature | numeric                     |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_23.bucket,
+    _materialized_hypertable_23.temperature
+   FROM _timescaledb_internal._materialized_hypertable_23
+  WHERE _materialized_hypertable_23.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 hour'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+  GROUP BY (time_bucket('@ 1 hour'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -1811,12 +1990,34 @@ SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+                                 View "public.conditions_summary_2"
+   Column    |            Type             | Collation | Nullable | Default | Storage | Description 
+-------------+-----------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp without time zone |           |          |         | plain   | 
+ temperature | numeric                     |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_24.bucket,
+    _materialized_hypertable_24.temperature
+   FROM _timescaledb_internal._materialized_hypertable_24
+  WHERE _materialized_hypertable_24.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(24)), '-infinity'::timestamp without time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(24)), '-infinity'::timestamp without time zone)
+  GROUP BY (time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
@@ -1841,11 +2042,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                                 View "public.conditions_summary_1"
+   Column    |            Type             | Collation | Nullable | Default | Storage | Description 
+-------------+-----------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp without time zone |           |          |         | plain   | 
+ temperature | numeric                     |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_25.bucket,
+    _materialized_hypertable_25.temperature
+   FROM _timescaledb_internal._materialized_hypertable_25
+  WHERE _materialized_hypertable_25.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(25)), '-infinity'::timestamp without time zone)
+UNION ALL
+ SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(25)), '-infinity'::timestamp without time zone)
+  GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -1856,20 +2079,25 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
-\set ON_ERROR_STOP 0
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be greater or equal than the time bucket width of "public.conditions_summary_1" [@ 2 hours].
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- ########################################################
 -- ## TIMESTAMPTZ data type tests
@@ -2633,11 +2861,33 @@ psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_34.bucket,
+    _materialized_hypertable_34.temperature
+   FROM _timescaledb_internal._materialized_hypertable_34
+  WHERE _materialized_hypertable_34.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 mon'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 mon'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -2648,21 +2898,26 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
 DETAIL:  Continuous aggregate with a fixed time bucket width (e.g. 61 days) cannot be created on top of one using variable time bucket width (e.g. 1 month).
 The variance can lead to the fixed width one not being a multiple of the variable width one.
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
@@ -2682,11 +2937,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_35.bucket,
+    _materialized_hypertable_35.temperature
+   FROM _timescaledb_internal._materialized_hypertable_35
+  WHERE _materialized_hypertable_35.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(35)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(35)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -2697,20 +2974,25 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -2730,11 +3012,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_36.bucket,
+    _materialized_hypertable_36.temperature
+   FROM _timescaledb_internal._materialized_hypertable_36
+  WHERE _materialized_hypertable_36.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 hour'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 hour'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -2745,12 +3049,34 @@ SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-\set ON_ERROR_STOP 0
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_37.bucket,
+    _materialized_hypertable_37.temperature
+   FROM _timescaledb_internal._materialized_hypertable_37
+  WHERE _materialized_hypertable_37.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(37)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(37)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
@@ -2775,11 +3101,33 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_38.bucket,
+    _materialized_hypertable_38.temperature
+   FROM _timescaledb_internal._materialized_hypertable_38
+  WHERE _materialized_hypertable_38.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(38)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(38)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
+
 --
 -- CAGG on CAGG (2th level)
 --
@@ -2790,20 +3138,559 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:33: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
-\set ON_ERROR_STOP 0
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be greater or equal than the time bucket width of "public.conditions_summary_1" [@ 2 hours].
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:40: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+--
+-- Validations using time bucket with timezone (ref issue #5126)
+--
+\set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST TRUE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH TRUE
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1_5m
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2_1h
+\set BUCKET_TZNAME_1ST 'US/Pacific'
+\set BUCKET_TZNAME_2TH 'US/Pacific'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'5 minutes\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_39.bucket,
+    _materialized_hypertable_39.temperature
+   FROM _timescaledb_internal._materialized_hypertable_39
+  WHERE _materialized_hypertable_39.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(39)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text) AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(39)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_40.bucket,
+    _materialized_hypertable_40.temperature
+   FROM _timescaledb_internal._materialized_hypertable_40
+  WHERE _materialized_hypertable_40.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(40)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket, 'US/Pacific'::text) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(40)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket, 'US/Pacific'::text));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+\set BUCKET_WIDTH_1ST 'INTERVAL \'5 minutes\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'16 minutes\''
+\set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_41.bucket,
+    _materialized_hypertable_41.temperature
+   FROM _timescaledb_internal._materialized_hypertable_41
+  WHERE _materialized_hypertable_41.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(41)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text) AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(41)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD ERROR because non-multiple bucket sizes
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 16 mins] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 5 mins].
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+--
+-- Variable bucket size with the same timezones
+--
+\set BUCKET_TZNAME_1ST 'UTC'
+\set BUCKET_TZNAME_2TH 'UTC'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_42.bucket,
+    _materialized_hypertable_42.temperature
+   FROM _timescaledb_internal._materialized_hypertable_42
+  WHERE _materialized_hypertable_42.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(42)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text) AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(42)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_43.bucket,
+    _materialized_hypertable_43.temperature
+   FROM _timescaledb_internal._materialized_hypertable_43
+  WHERE _materialized_hypertable_43.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(43)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(43)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+--
+-- Variable bucket size with different timezones
+--
+\set BUCKET_TZNAME_1ST 'US/Pacific'
+\set BUCKET_TZNAME_2TH 'UTC'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_44.bucket,
+    _materialized_hypertable_44.temperature
+   FROM _timescaledb_internal._materialized_hypertable_44
+  WHERE _materialized_hypertable_44.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(44)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, conditions."time", 'US/Pacific'::text) AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(44)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'US/Pacific'::text));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_45.bucket,
+    _materialized_hypertable_45.temperature
+   FROM _timescaledb_internal._materialized_hypertable_45
+  WHERE _materialized_hypertable_45.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(45)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(45)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+--
+-- TZ bucket on top of non-TZ bucket
+--
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH TRUE
+\set BUCKET_TZNAME_2TH 'UTC'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_46.bucket,
+    _materialized_hypertable_46.temperature
+   FROM _timescaledb_internal._materialized_hypertable_46
+  WHERE _materialized_hypertable_46.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(46)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(46)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_47.bucket,
+    _materialized_hypertable_47.temperature
+   FROM _timescaledb_internal._materialized_hypertable_47
+  WHERE _materialized_hypertable_47.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(47)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(47)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+--
+-- non-TZ bucket on top of TZ bucket
+--
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST TRUE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
+\set BUCKET_TZNAME_1ST 'UTC'
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
+\set WARNING_MESSAGE '-- SHOULD WORK'
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_48.bucket,
+    _materialized_hypertable_48.temperature
+   FROM _timescaledb_internal._materialized_hypertable_48
+  WHERE _materialized_hypertable_48.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(48)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text) AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(48)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_49.bucket,
+    _materialized_hypertable_49.temperature
+   FROM _timescaledb_internal._materialized_hypertable_49
+  WHERE _materialized_hypertable_49.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(49)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(49)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- Cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;

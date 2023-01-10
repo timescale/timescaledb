@@ -11,11 +11,17 @@
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM conditions
 GROUP BY 1
 WITH NO DATA;
+
+\d+ :CAGG_NAME_1ST_LEVEL
 
 --
 -- CAGG on CAGG (2th level)
@@ -26,12 +32,19 @@ WITH NO DATA;
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
   SUM(temperature) AS temperature
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-\set ON_ERROR_STOP 0
+
+\d+ :CAGG_NAME_2TH_LEVEL
+
+\set ON_ERROR_STOP 1
 \set VERBOSITY terse
 
 --

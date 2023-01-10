@@ -8,21 +8,21 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4926 Fix corruption when inserting into compressed chunks
-* #5170 Fix CAgg on CAgg variable bucket size validation
 
 ## 2.9.2 (2023-12-26)
 
 This release contains bug fixes since the 2.9.1 release.
 We recommend that you upgrade at the next available opportunity.
 
-#5114 Fix issue with deleting data node and dropping the database on multi-node
-#5133 Fix CAgg on CAgg using different column order on the original hypertable
-#5152 Fix adding column with NULL constraint to compressed hypertable
+* #5114 Fix issue with deleting data node and dropping the database on multi-node
+* #5133 Fix CAgg on CAgg using different column order on the original hypertable
+* #5152 Fix adding column with NULL constraint to compressed hypertable
+* #5170 Fix CAgg on CAgg variable bucket size validation
 
 **Thanks**
 * @ikkala for reporting error when adding column with NULL constraint to compressed hypertable
 * @salquier-appvizer for reporting error on CAgg on CAgg using different column order on the original hypertable
-
+* @ssmoss, @adbnexxtlab and @ivanzamanov for reporting error on CAgg on CAgg variable bucket size validation
 
 ## 2.9.1 (2022-12-23)
 
