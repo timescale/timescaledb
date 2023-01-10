@@ -22,7 +22,7 @@
 #include <remote/tuplefactory.h>
 #include "ts_catalog/chunk_data_node.h"
 
-#include <nodes/chunk_insert_state.h>
+#include <nodes/chunk_dispatch/chunk_insert_state.h>
 
 #include "scan_plan.h"
 #include "modify_exec.h"

@@ -26,11 +26,10 @@
 
 #include "compat/compat.h"
 #include "errors.h"
-#include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
+#include "chunk_insert_state.h"
 #include "ts_catalog/chunk_data_node.h"
 #include "ts_catalog/continuous_agg.h"
-#include "chunk_dispatch_state.h"
 #include "chunk_index.h"
 #include "indexing.h"
 
@@ -44,6 +43,59 @@ prepare_constr_expr(Expr *node)
 	result = ExecInitExpr(node, NULL);
 
 	return result;
+}
+
+static inline ModifyTableState *
+get_modifytable_state(const ChunkDispatch *dispatch)
+{
+	return dispatch->dispatch_state->mtstate;
+}
+
+static inline ModifyTable *
+get_modifytable(const ChunkDispatch *dispatch)
+{
+	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
+}
+
+static List *
+chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
+{
+	return dispatch->dispatch_state->arbiter_indexes;
+}
+
+static bool
+chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
+{
+	if (!dispatch->dispatch_state)
+		return false;
+	return get_modifytable(dispatch)->returningLists != NIL;
+}
+
+static List *
+chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
+{
+#if PG14_LT
+	ModifyTableState *mtstate = get_modifytable_state(dispatch);
+	return list_nth(get_modifytable(dispatch)->returningLists, mtstate->mt_whichplan);
+#else
+	Assert(list_length(get_modifytable(dispatch)->returningLists) == 1);
+	return linitial(get_modifytable(dispatch)->returningLists);
+#endif
+}
+
+static OnConflictAction
+chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
+{
+	if (!dispatch->dispatch_state)
+		return ONCONFLICT_NONE;
+	return get_modifytable(dispatch)->onConflictAction;
+}
+
+static CmdType
+chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
+{
+	return dispatch->dispatch_state == NULL ? CMD_INSERT :
+											  dispatch->dispatch_state->mtstate->operation;
 }
 
 /*
@@ -296,7 +348,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 	ModifyTableState *mtstate = castNode(ModifyTableState, dispatch->dispatch_state->mtstate);
 	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 
-	Assert(ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
+	Assert(chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
 
 	OnConflictSetState *onconfl = makeNode(OnConflictSetState);
 	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
@@ -439,7 +491,7 @@ destroy_on_conflict_state(ChunkInsertState *state)
 static void
 set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
 {
-	List *arbiter_indexes = ts_chunk_dispatch_get_arbiter_indexes(dispatch);
+	List *arbiter_indexes = chunk_dispatch_get_arbiter_indexes(dispatch);
 	ListCell *lc;
 
 	state->arbiter_indexes = NIL;
@@ -482,9 +534,9 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
 	Relation chunk_rel = cis->rel;
 	TupleConversionMap *chunk_map = NULL;
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
 
-	if (ts_chunk_dispatch_has_returning(dispatch))
+	if (chunk_dispatch_has_returning(dispatch))
 	{
 		/*
 		 * We need the opposite map from cis->hyper_to_chunk_map. The map needs
@@ -497,8 +549,7 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 
 		chunk_rri->ri_projectReturning =
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
-												   ts_chunk_dispatch_get_returning_clauses(
-													   dispatch),
+												   chunk_dispatch_get_returning_clauses(dispatch),
 												   chunk_map,
 												   dispatch->hypertable_result_rel_info
 													   ->ri_RangeTableIndex,
@@ -530,7 +581,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *relinfo;
 	bool has_compressed_chunk = (chunk->fd.compressed_chunk_id != 0);
 
@@ -546,7 +597,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 												 CHUNK_INSERT,
 												 true);
 	if (has_compressed_chunk &&
-		(onconflict_action != ONCONFLICT_NONE || ts_chunk_dispatch_has_returning(dispatch)))
+		(onconflict_action != ONCONFLICT_NONE || chunk_dispatch_has_returning(dispatch)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("insert with ON CONFLICT or RETURNING clause is not supported on "
@@ -564,7 +615,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
-	CheckValidResultRel(relinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
+	CheckValidResultRel(relinfo, chunk_dispatch_get_cmd_type(dispatch));
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;

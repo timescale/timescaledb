@@ -23,8 +23,7 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
-#include "chunk_dispatch_plan.h"
-#include "chunk_dispatch_state.h"
+#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "hypertable_cache.h"
