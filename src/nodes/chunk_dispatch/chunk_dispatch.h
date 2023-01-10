@@ -3,18 +3,20 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_DISPATCH_H
-#define TIMESCALEDB_CHUNK_DISPATCH_H
+#ifndef TIMESCALEDB_NODES_CHUNK_DISPATCH_H
+#define TIMESCALEDB_NODES_CHUNK_DISPATCH_H
 
 #include <postgres.h>
+#include <nodes/extensible.h>
 #include <nodes/parsenodes.h>
+#include <nodes/plannodes.h>
 #include <nodes/execnodes.h>
 #include <executor/tuptable.h>
 
 #include "hypertable_cache.h"
 #include "cache.h"
+#include "export.h"
 #include "subspace_store.h"
-#include "chunk_dispatch_state.h"
 #include "chunk_insert_state.h"
 
 /*
@@ -40,6 +42,41 @@ typedef struct ChunkDispatch
 	Oid prev_cis_oid;
 } ChunkDispatch;
 
+typedef struct ChunkDispatchPath
+{
+	CustomPath cpath;
+	ModifyTablePath *mtpath;
+	Index hypertable_rti;
+	Oid hypertable_relid;
+} ChunkDispatchPath;
+
+typedef struct Cache Cache;
+
+/* State used for every tuple in an insert statement */
+typedef struct ChunkDispatchState
+{
+	CustomScanState cscan_state;
+	Plan *subplan;
+	Cache *hypertable_cache;
+	Oid hypertable_relid;
+	List *arbiter_indexes;
+	/*
+	 * Keep a pointer to the parent ModifyTableState executor node since we need
+	 * to manipulate the current result relation on-the-fly for chunk routing
+	 * during inserts.
+	 */
+	ModifyTableState *mtstate;
+	/*
+	 * The chunk dispatch state. Keeps cached chunk insert states (with result
+	 * relations) for each chunk.
+	 */
+	ChunkDispatch *dispatch;
+	ResultRelInfo *rri;
+} ChunkDispatchState;
+
+extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
+extern void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state,
+											   ModifyTableState *mtstate);
 typedef struct Point Point;
 
 typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
@@ -49,11 +86,8 @@ extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 										 const on_chunk_changed_func on_chunk_changed, void *data);
-extern bool ts_chunk_dispatch_has_returning(const ChunkDispatch *dispatch);
-extern List *ts_chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch);
-extern List *ts_chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch);
-extern OnConflictAction ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
-extern List *ts_chunk_dispatch_get_on_conflict_set(const ChunkDispatch *dispatch);
-extern CmdType ts_chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch);
 
-#endif /* TIMESCALEDB_CHUNK_DISPATCH_H */
+extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
+													   Index hypertable_rti, int subpath_index);
+
+#endif /* TIMESCALEDB_NODES_CHUNK_DISPATCH_H */

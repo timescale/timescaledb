@@ -20,9 +20,8 @@
 #include <miscadmin.h>
 
 #include <hypertable_cache.h>
-#include <nodes/chunk_dispatch_state.h>
-#include <nodes/chunk_insert_state.h>
-#include <nodes/chunk_dispatch_plan.h>
+#include <nodes/chunk_dispatch/chunk_dispatch.h>
+#include <nodes/chunk_dispatch/chunk_insert_state.h>
 #include <compat/compat.h>
 #include <guc.h>
 
