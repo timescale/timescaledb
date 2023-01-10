@@ -39,7 +39,7 @@ jobs:
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
             skips_version: dist_move_chunk
-            ignores_version: telemetry_stats partialize_finalize
+            ignores_version: partialize_finalize
 
     steps:
 
