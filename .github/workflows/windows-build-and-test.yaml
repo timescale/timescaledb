@@ -59,7 +59,7 @@ jobs:
           - pg: 15
             pkg_version: 15.0.1 # hardcoded due to issues with PG15.1 on chocolatey
             tsl_skips_version: dist_partial_agg-15 dist_grant-15
-            tsl_ignores_version: telemetry_stats partialize_finalize
+            tsl_ignores_version: partialize_finalize
     env:
       # PostgreSQL configuration
       PGPORT: 55432
