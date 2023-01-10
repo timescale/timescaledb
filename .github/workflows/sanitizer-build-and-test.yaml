@@ -66,9 +66,8 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
-            # telemetry_stats is ignored in PG15 due to #5037
             # partialize_finalize is ignored in PG15 due to #4937
-            ignores_version: telemetry_stats partialize_finalize
+            ignores_version: partialize_finalize
             skips_version: 002_replication_telemetry 003_connections_privs 004_multinode_rdwr_1pc
     steps:
     - name: Install Linux Dependencies

@@ -94,9 +94,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql)
-  if(USE_TELEMETRY)
-    list(APPEND TEST_FILES telemetry_stats.sql)
-  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
@@ -152,6 +149,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in
     continuous_aggs.sql.in)
+  if(USE_TELEMETRY)
+    list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
+  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
