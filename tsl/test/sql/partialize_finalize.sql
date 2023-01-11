@@ -296,3 +296,73 @@ select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, a
 
 with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 1::bigint)) as part)
 select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'int8']], part, null::text) is null from cte;
+
+
+-- Issue 4922
+CREATE TABLE issue4922 (
+  time  TIMESTAMPTZ NOT NULL,
+  value INTEGER
+);
+
+SELECT create_hypertable('issue4922', 'time');
+
+-- helper function: integer -> pseudorandom integer [0..100].
+CREATE OR REPLACE FUNCTION mix(x INTEGER) RETURNS INTEGER AS $$ SELECT (((hashint4(x) / (pow(2, 31) - 1) + 1) / 2) * 100)::INTEGER $$ LANGUAGE SQL;
+
+INSERT INTO issue4922 (time, value)
+SELECT '2022-01-01 00:00:00-03'::timestamptz + interval '1 year' * mix(x), mix(x)
+FROM generate_series(1, 100000) x(x);
+
+SET force_parallel_mode = 'on';
+SET parallel_setup_cost = 0;
+
+SELECT
+  sum(value),
+  avg(value),
+  min(value),
+  max(value),
+  count(*)
+FROM issue4922;
+
+-- The results should be the EQUAL TO the previous query
+SELECT
+  _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_sum, NULL::bigint) AS sum,
+  _timescaledb_internal.finalize_agg('pg_catalog.avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_avg, NULL::numeric) AS avg,
+  _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
+  _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
+  _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
+FROM (
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922) AS a;
+
+-- Check for parallel planning
+EXPLAIN (COSTS OFF)
+SELECT
+  sum(value),
+  avg(value),
+  min(value),
+  max(value),
+  count(*)
+FROM issue4922;
+
+-- Make sure even forcing the parallel mode those functions are not safe for parallel
+EXPLAIN (COSTS OFF)
+SELECT
+  _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_sum, NULL::bigint) AS sum,
+  _timescaledb_internal.finalize_agg('pg_catalog.avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_avg, NULL::numeric) AS avg,
+  _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
+  _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
+  _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
+FROM (
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922) AS a;
