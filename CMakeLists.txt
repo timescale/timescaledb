@@ -468,15 +468,9 @@ else()
   message(STATUS "Regress checks and isolation checks disabled")
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang")
-  set(LINTER_DEFAULT ON)
-else()
-  set(LINTER_DEFAULT OFF)
-endif()
-
 # Linter support via clang-tidy. Enabled when using clang as compiler
 option(LINTER "Enable linter support using clang-tidy (ON when using clang)"
-       ${LINTER_DEFAULT})
+       OFF)
 
 set(LINTER_STRICT_DEFAULT OFF)
 option(LINTER_STRICT "Treat linter warnings as errors" ${LINTER_STRICT_DEFAULT})
