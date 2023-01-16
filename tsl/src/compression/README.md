@@ -33,7 +33,7 @@ The `simple8b rle` algorithm is a building block for many of the compression alg
 It compresses a series of `uint64` values. It compresses the data by packing the values into the least
 amount of bits necessary for the magnitude of the int values, using run-length-encoding for large numbers of repeated values,
 A complete description is in the header file. Note that this is a header-only implementation as performance
-is paramount here as it is used a primitive in all the other compression algorithms.
+is paramount here as it is used as a primitive in all the other compression algorithms.
 
 ## Compression Algorithms
 

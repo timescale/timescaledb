@@ -162,6 +162,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
+	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
 	.compressed_data_send = tsl_compressed_data_send,
@@ -181,10 +182,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
-	.compress_row_init = compress_row_init,
-	.compress_row_exec = compress_row_exec,
-	.compress_row_end = compress_row_end,
-	.compress_row_destroy = compress_row_destroy,
+
 	.data_node_add = data_node_add,
 	.data_node_delete = data_node_delete,
 	.data_node_attach = data_node_attach,
