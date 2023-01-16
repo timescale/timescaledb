@@ -16,6 +16,25 @@ on:
       - 'LICENSE*'
       - NOTICE
 jobs:
+  matrixbuilder:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+
+    - name: Build matrix
+      id: set-matrix
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+          git fetch origin ${{ github.base_ref }}:base
+          .github/gh_matrix_builder.py ${{ github.event_name }} base
+        else
+          .github/gh_matrix_builder.py ${{ github.event_name }}
+        fi
+
   regress:
     runs-on: ubuntu-latest
     steps:
