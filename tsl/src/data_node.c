@@ -1450,6 +1450,7 @@ create_alter_data_node_tuple(TupleDesc tupdesc, const char *node_name, List *opt
 	MemSet(nulls, false, sizeof(nulls));
 
 	values[AttrNumberGetAttrOffset(Anum_alter_data_node_node_name)] = CStringGetDatum(node_name);
+	values[AttrNumberGetAttrOffset(Anum_alter_data_node_available)] = BoolGetDatum(true);
 
 	foreach (lc, options)
 	{
