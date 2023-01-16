@@ -507,10 +507,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
-	.compress_row_init = NULL,
-	.compress_row_exec = NULL,
-	.compress_row_end = NULL,
-	.compress_row_destroy = NULL,
+
 	.data_node_add = error_no_default_fn_pg_community,
 	.data_node_delete = error_no_default_fn_pg_community,
 	.data_node_attach = error_no_default_fn_pg_community,

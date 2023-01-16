@@ -34,7 +34,6 @@ typedef struct JsonbParseState JsonbParseState;
 typedef struct Hypertable Hypertable;
 typedef struct Chunk Chunk;
 typedef struct CopyChunkState CopyChunkState;
-typedef struct CompressSingleRowState CompressSingleRowState;
 
 typedef struct CrossModuleFunctions
 {
@@ -203,10 +202,6 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction chunks_drop_stale;
 	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
-	CompressSingleRowState *(*compress_row_init)(int srcht_id, Relation in_rel, Relation out_rel);
-	TupleTableSlot *(*compress_row_exec)(CompressSingleRowState *cr, TupleTableSlot *slot);
-	void (*compress_row_end)(CompressSingleRowState *cr);
-	void (*compress_row_destroy)(CompressSingleRowState *cr);
 	PGFunction health_check;
 } CrossModuleFunctions;
 
