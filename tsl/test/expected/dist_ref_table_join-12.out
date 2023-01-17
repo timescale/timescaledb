@@ -1,0 +1,173 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set ECHO all
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+-- Add data nodes
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+        node_name         |         database         | node_created | database_created | extension_created 
+--------------------------+--------------------------+--------------+------------------+-------------------
+ db_dist_ref_table_join_1 | db_dist_ref_table_join_1 | t            | t                | t
+ db_dist_ref_table_join_2 | db_dist_ref_table_join_2 | t            | t                | t
+ db_dist_ref_table_join_3 | db_dist_ref_table_join_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+\des
+                       List of foreign servers
+           Name           |       Owner        | Foreign-data wrapper 
+--------------------------+--------------------+----------------------
+ db_dist_ref_table_join_1 | cluster_super_user | timescaledb_fdw
+ db_dist_ref_table_join_2 | cluster_super_user | timescaledb_fdw
+ db_dist_ref_table_join_3 | cluster_super_user | timescaledb_fdw
+(3 rows)
+
+drop table if exists metric;
+NOTICE:  table "metric" does not exist, skipping
+CREATE table metric(ts timestamptz, id int, value float);
+SELECT create_distributed_hypertable('metric', 'ts', 'id');
+NOTICE:  adding not-null constraint to column "ts"
+ create_distributed_hypertable 
+-------------------------------
+ (1,public,metric,t)
+(1 row)
+
+INSERT into metric values ('2022-02-02 02:02:02+03', 1, 50);
+INSERT into metric values ('2020-01-01 01:01:01+03', 1, 60);
+INSERT into metric values ('2000-03-03 03:03:03+03', 1, 70);
+INSERT into metric values ('2000-04-04 04:04:03+03', 2, 80);
+-- Reference table with generic replication
+CREATE table metric_name(id int primary key, name text);
+INSERT into metric_name values (1, 'cpu1');
+INSERT into metric_name values (2, 'cpu2');
+CALL distributed_exec($$CREATE table metric_name(id int primary key, name text);$$);
+CALL distributed_exec($$INSERT into metric_name values (1, 'cpu1');$$);
+CALL distributed_exec($$INSERT into metric_name values (2, 'cpu2');$$);
+-- The reference table as DHT
+CREATE TABLE metric_name_dht(id BIGSERIAL, name text);
+SELECT create_distributed_hypertable('metric_name_dht', 'id', chunk_time_interval => 9223372036854775807, replication_factor => 3);
+ create_distributed_hypertable 
+-------------------------------
+ (2,public,metric_name_dht,t)
+(1 row)
+
+INSERT into metric_name_dht (id, name) values (1, 'cpu1');
+INSERT into metric_name_dht (id, name) values (2, 'cpu2');
+-- A local version of the reference table
+CREATE table metric_name_local(id int primary key, name text);
+INSERT into metric_name_local values (1, 'cpu1');
+INSERT into metric_name_local values (2, 'cpu2');
+CREATE table reference_table2(id int primary key, name text);
+SELECT create_distributed_hypertable('reference_table2', 'id', chunk_time_interval => 2147483647, replication_factor => 3);
+ create_distributed_hypertable 
+-------------------------------
+ (3,public,reference_table2,t)
+(1 row)
+
+CREATE table local_table(id int primary key, name text);
+SET client_min_messages TO WARNING;
+-- Create a table in a different schema
+CREATE SCHEMA test1;
+GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
+CREATE table test1.table_in_schema(id int primary key, name text);
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+ fdwoptions 
+------------
+ 
+(1 row)
+
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD reference_tables 'metric_name, reference_table2');
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'metric_name, metric_name_dht');
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                    fdwoptions                     
+---------------------------------------------------
+ {"reference_tables=metric_name, metric_name_dht"}
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Try to declare a non existing table as reference table
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'metric_name, reference_table2, non_existing_table');
+ERROR:  table "non_existing_table" does not exist
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                    fdwoptions                     
+---------------------------------------------------
+ {"reference_tables=metric_name, metric_name_dht"}
+(1 row)
+
+-- Try to declare a hypertable as reference table
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'metric_name, reference_table2, metric');
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                         fdwoptions                         
+------------------------------------------------------------
+ {"reference_tables=metric_name, reference_table2, metric"}
+(1 row)
+
+-- Try to add an empty field
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'metric_name, , metric');
+ERROR:  parameter "reference_tables" must be a comma-separated list of reference table names
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                         fdwoptions                         
+------------------------------------------------------------
+ {"reference_tables=metric_name, reference_table2, metric"}
+(1 row)
+
+-- Try to declare a view as reference table
+CREATE VIEW metric_name_view AS SELECT * FROM metric_name;
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'metric_name, metric_name_view');
+ERROR:  relation "metric_name_view" is not an ordinary table. Only ordinary tables can be used as reference tables
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                         fdwoptions                         
+------------------------------------------------------------
+ {"reference_tables=metric_name, reference_table2, metric"}
+(1 row)
+
+-- Try to use a table in a schema
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'test1.table_in_schema');
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                fdwoptions                
+------------------------------------------
+ {reference_tables=test1.table_in_schema}
+(1 row)
+
+-- Try to use a non-existing table in a schema
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables 'test1.table_in_schema_non_existing');
+ERROR:  table "test1.table_in_schema_non_existing" does not exist
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                fdwoptions                
+------------------------------------------
+ {reference_tables=test1.table_in_schema}
+(1 row)
+
+\set ON_ERROR_STOP 1
+-- Set empty options
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET reference_tables '');
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+     fdwoptions      
+---------------------
+ {reference_tables=}
+(1 row)
+
+-- Remove options
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP reference_tables);
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+ fdwoptions 
+------------
+ 
+(1 row)
+
+-- Set options again
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD reference_tables 'metric_name, metric_name_dht, reference_table2');
+SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+                             fdwoptions                              
+---------------------------------------------------------------------
+ {"reference_tables=metric_name, metric_name_dht, reference_table2"}
+(1 row)
+
