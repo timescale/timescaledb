@@ -231,6 +231,101 @@ get_base_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	ce->run_cost += rel->reltarget->cost.per_tuple * ce->rows;
 }
 
+static void
+get_join_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
+{
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
+
+	TsFdwRelInfo *fpinfo_i;
+	TsFdwRelInfo *fpinfo_o;
+	QualCost join_cost;
+	QualCost remote_conds_cost;
+	int width;
+	double nrows;
+	double rows;
+	double retrieved_rows;
+	Cost startup_cost;
+	Cost run_cost;
+
+	/* Use rows/width estimates made by the core code. */
+	rows = rel->rows;
+	width = rel->reltarget->width;
+
+	/* For join we expect inner and outer relations set */
+	Assert(fpinfo->innerrel && fpinfo->outerrel);
+
+	fpinfo_i = fdw_relinfo_get(fpinfo->innerrel);
+	fpinfo_o = fdw_relinfo_get(fpinfo->outerrel);
+
+	/* Estimate of number of rows in cross product */
+	nrows = fpinfo_i->rows * fpinfo_o->rows;
+
+	/*
+	 * Back into an estimate of the number of retrieved rows.  Just in
+	 * case this is nuts, clamp to at most nrows.
+	 */
+	retrieved_rows = clamp_row_est(rows / fpinfo->local_conds_sel);
+	retrieved_rows = Min(retrieved_rows, nrows);
+
+	/*
+	 * The cost of foreign join is estimated as cost of generating
+	 * rows for the joining relations + cost for applying quals on the
+	 * rows.
+	 */
+
+	/*
+	 * Calculate the cost of clauses pushed down to the foreign server
+	 */
+	cost_qual_eval(&remote_conds_cost, fpinfo->remote_conds, root);
+	/* Calculate the cost of applying join clauses */
+	cost_qual_eval(&join_cost, fpinfo->joinclauses, root);
+
+	/*
+	 * Startup cost includes startup cost of joining relations and the
+	 * startup cost for join and other clauses. We do not include the
+	 * startup cost specific to join strategy (e.g. setting up hash
+	 * tables) since we do not know what strategy the foreign server
+	 * is going to use.
+	 */
+	startup_cost = fpinfo_i->rel_startup_cost + fpinfo_o->rel_startup_cost;
+	startup_cost += join_cost.startup;
+	startup_cost += remote_conds_cost.startup;
+	startup_cost += fpinfo->local_conds_cost.startup;
+
+	/*
+	 * Run time cost includes:
+	 *
+	 * 1. Run time cost (total_cost - startup_cost) of relations being
+	 * joined
+	 *
+	 * 2. Run time cost of applying join clauses on the cross product
+	 * of the joining relations.
+	 *
+	 * 3. Run time cost of applying pushed down other clauses on the
+	 * result of join
+	 *
+	 * 4. Run time cost of applying nonpushable other clauses locally
+	 * on the result fetched from the foreign server.
+	 */
+	run_cost = fpinfo_i->rel_total_cost - fpinfo_i->rel_startup_cost;
+	run_cost += fpinfo_o->rel_total_cost - fpinfo_o->rel_startup_cost;
+	run_cost += nrows * join_cost.per_tuple;
+	nrows = clamp_row_est(nrows * fpinfo->joinclause_sel);
+	run_cost += nrows * remote_conds_cost.per_tuple;
+	run_cost += fpinfo->local_conds_cost.per_tuple * retrieved_rows;
+
+	/* Add in tlist eval cost for each output row */
+	startup_cost += rel->reltarget->cost.startup;
+	run_cost += rel->reltarget->cost.per_tuple * rows;
+
+	/* Return results. */
+	ce->rows = rows;
+	ce->width = width;
+	ce->startup_cost = startup_cost;
+	ce->run_cost = run_cost;
+	ce->retrieved_rows = retrieved_rows;
+}
+
 #define REL_HAS_CACHED_COSTS(fpinfo)                                                               \
 	((fpinfo)->rel_startup_cost >= 0 && (fpinfo)->rel_total_cost >= 0 &&                           \
 	 (fpinfo)->rel_retrieved_rows >= 0)
@@ -309,11 +404,6 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys, 
 		.width = rel->reltarget->width,
 	};
 
-	if (IS_JOIN_REL(rel))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("foreign joins are not supported")));
-
 	/*
 	 * We will come here again and again with different set of pathkeys
 	 * that caller wants to cost. We don't need to calculate the cost of
@@ -328,6 +418,8 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys, 
 		ce.run_cost = fpinfo->rel_total_cost - fpinfo->rel_startup_cost;
 		ce.retrieved_rows = fpinfo->rel_retrieved_rows;
 	}
+	else if (IS_JOIN_REL(rel) && fpinfo->outerrel != NULL && fpinfo->innerrel != NULL)
+		get_join_rel_estimate(root, rel, &ce);
 	else if (IS_UPPER_REL(rel))
 		get_upper_rel_estimate(root, rel, &ce);
 	else
