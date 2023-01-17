@@ -24,17 +24,20 @@
 #include "scan_plan.h"
 
 #include <access/reloptions.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
 #include <catalog/pg_foreign_data_wrapper.h>
 #include <commands/defrem.h>
 #include <commands/extension.h>
 #include <utils/builtins.h>
+#include <utils/regproc.h>
 #include <utils/varlena.h>
 #include <libpq-fe.h>
 
 #include <remote/connection.h>
 #include "option.h"
+#include "chunk.h"
 
 /*
  * Describes the valid options for objects that this wrapper uses.
@@ -137,6 +140,11 @@ option_validate(List *options_list, Oid catalog)
 			/* This will throw an error if not a boolean */
 			defGetBoolean(def);
 		}
+		else if (strcmp(def->defname, "reference_tables") == 0)
+		{
+			/* check and store list, warn about non existing tables */
+			(void) option_extract_join_ref_table_list(defGetString(def));
+		}
 	}
 }
 
@@ -160,6 +168,8 @@ init_ts_fdw_options(void)
 		{ "fetch_size", ForeignDataWrapperRelationId },
 		{ "fetch_size", ForeignServerRelationId },
 		{ "available", ForeignServerRelationId },
+		/* join reference tables */
+		{ "reference_tables", ForeignDataWrapperRelationId },
 		{ NULL, InvalidOid }
 	};
 
@@ -272,4 +282,59 @@ option_get_from_options_list_int(List *options, const char *optionname, int *val
 	}
 
 	return found;
+}
+
+List *
+option_extract_join_ref_table_list(const char *join_tables)
+{
+	List *ref_table_oids = NIL;
+	List *ref_table_list;
+	ListCell *lc;
+
+	/* SplitIdentifierString scribbles on its input, so pstrdup first */
+	if (!SplitIdentifierString(pstrdup(join_tables), ',', &ref_table_list))
+	{
+		/* syntax error in name list */
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("parameter \"reference_tables\" must be a comma-separated list of "
+						"reference table names")));
+	}
+
+	foreach (lc, ref_table_list)
+	{
+		char *tablename = (char *) lfirst(lc);
+
+		RangeVar *rangevar = makeRangeVarFromNameList(stringToQualifiedNameList(tablename));
+
+		Oid relOid = RangeVarGetRelidExtended(rangevar,
+											  AccessShareLock,
+											  RVR_MISSING_OK,
+											  NULL /* callback */,
+											  NULL /* callback args*/);
+
+		if (!OidIsValid(relOid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("table \"%s\" does not exist", tablename)));
+		}
+
+		/* Validate the relation type */
+		Relation rel = table_open(relOid, NoLock);
+
+		if (rel->rd_rel->relkind != RELKIND_RELATION)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("relation \"%s\" is not an ordinary table. Only ordinary tables can be "
+							"used as reference tables",
+							tablename)));
+
+		ref_table_oids = lappend_oid(ref_table_oids, relOid);
+		table_close(rel, NoLock);
+	}
+
+	list_free(ref_table_list);
+
+	return ref_table_oids;
 }
