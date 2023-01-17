@@ -221,6 +221,32 @@ truncate_relation(Oid table_oid)
 	table_close(rel, NoLock);
 }
 
+
+void inspect_tuplesortstate(Tuplesortstate *tuplesort, TupleDesc desc, bool already_sorted)
+{
+	if (!already_sorted)
+		tuplesort_performsort(tuplesort);
+	bool got_tuple;
+	TupleTableSlot *slot = MakeTupleTableSlot(desc, &TTSOpsMinimalTuple);
+	for (got_tuple = tuplesort_gettupleslot(tuplesort,
+											true /*=forward*/,
+											false /*=copy*/,
+											slot,
+											NULL /*=abbrev*/);
+		 got_tuple;
+		 got_tuple = tuplesort_gettupleslot(tuplesort,
+											true /*=forward*/,
+											false /*=copy*/,
+											slot,
+											NULL /*=abbrev*/))
+	{
+		slot_getallattrs(slot);
+		// now you can inspect the slot if you like
+	}
+	ExecDropSingleTupleTableSlot(slot);
+}
+
+
 CompressionStats
 compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column_compression_info,
 			   int num_compression_infos)
@@ -574,6 +600,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 			 */
 			ExecStoreHeapTuple(tuple, heap_tuple_slot, false);
 
+			slot_getallattrs(heap_tuple_slot); // injection for debugging
 			tuplesort_puttupleslot(tuplesortstate, heap_tuple_slot);
 		}
 	}
@@ -1005,7 +1032,8 @@ void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
 								  TupleDesc sorted_desc)
 {
-	CommandId mycid = GetCurrentCommandId(true);
+	CommandId mycid;
+	// CommandId mycid = GetCurrentCommandId(true);
 	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, &TTSOpsMinimalTuple);
 	bool got_tuple;
 	bool first_iteration = true;
@@ -1025,6 +1053,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 		bool changed_groups, compressed_row_is_full;
 		MemoryContext old_ctx;
 		slot_getallattrs(slot);
+		elog(DEBUG1, "noop");
 		old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
 
 		/* first time through */
@@ -1037,6 +1066,9 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 		changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
 		compressed_row_is_full =
 			row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
+
+		mycid = GetCurrentCommandId(true);
+
 		if (compressed_row_is_full || changed_groups)
 		{
 			if (row_compressor->rows_compressed_into_current_value > 0)
@@ -1442,20 +1474,20 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 		HeapTuple compressed_tuple;
 		TableScanDesc heapScan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
-		MemoryContext per_compressed_row_ctx =
-			AllocSetContextCreate(CurrentMemoryContext,
-								  "decompress chunk per-compressed row",
-								  ALLOCSET_DEFAULT_SIZES);
+		// MemoryContext per_compressed_row_ctx =
+		// 	AllocSetContextCreate(CurrentMemoryContext,
+		// 						  "decompress chunk per-compressed row",
+		// 						  ALLOCSET_DEFAULT_SIZES);
 
 		for (compressed_tuple = heap_getnext(heapScan, ForwardScanDirection);
 			 compressed_tuple != NULL;
 			 compressed_tuple = heap_getnext(heapScan, ForwardScanDirection))
 		{
-			MemoryContext old_ctx;
+			// MemoryContext old_ctx;
 
 			Assert(HeapTupleIsValid(compressed_tuple));
 
-			old_ctx = MemoryContextSwitchTo(per_compressed_row_ctx);
+			// old_ctx = MemoryContextSwitchTo(per_compressed_row_ctx);
 
 			heap_deform_tuple(compressed_tuple, in_desc, compressed_datums, compressed_is_nulls);
 			populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
@@ -1464,8 +1496,8 @@ decompress_chunk(Oid in_table, Oid out_table)
 													  compressed_is_nulls);
 
 			row_decompressor_decompress_row(&decompressor, NULL);
-			MemoryContextSwitchTo(old_ctx);
-			MemoryContextReset(per_compressed_row_ctx);
+			// MemoryContextSwitchTo(old_ctx);
+			// MemoryContextReset(per_compressed_row_ctx);
 		}
 
 		heap_endscan(heapScan);
@@ -1614,6 +1646,10 @@ row_decompressor_decompress_row(RowDecompressor *row_decompressor, Tuplesortstat
 			HeapTuple decompressed_tuple = heap_form_tuple(row_decompressor->out_desc,
 														   row_decompressor->decompressed_datums,
 														   row_decompressor->decompressed_is_nulls);
+			// TupleTableSlot *heap_tuple_slot =
+			// 		MakeTupleTableSlot(row_decompressor->out_desc, &TTSOpsHeapTuple); // minimal tuple because it's the only one 
+			// 		// that initializes the tts_ops
+			// ExecStoreHeapTuple(decompressed_tuple, heap_tuple_slot, true);
 			// then we're doing just decompress and we must put the decompressed into the
 			// uncompressed chunk
 			if (tuplestorestate == NULL)
@@ -1626,14 +1662,26 @@ row_decompressor_decompress_row(RowDecompressor *row_decompressor, Tuplesortstat
 			}
 			else
 			{
-				// TupleTableSlot *heap_tuple_slot =
-				// 	MakeTupleTableSlot(row_decompressor->out_desc, &TTSOpsHeapTuple);
-				// slot_getallattrs(heap_tuple_slot);
-				// ExecStoreHeapTuple(decompressed_tuple, heap_tuple_slot, false);
+				TupleTableSlot *slot = MakeSingleTupleTableSlot(row_decompressor->out_desc, &TTSOpsVirtual);
+				
+				// create the virtual tuple slot
+				ExecClearTuple(slot); // might not need this
+				for (int i = 0; i < row_decompressor->out_desc->natts; i++)
+				{
+					slot->tts_isnull[i] = row_decompressor->decompressed_is_nulls[i];
+					slot->tts_values[i] = row_decompressor->decompressed_datums[i];
+				}
 
-				tuplesort_putheaptuple(tuplestorestate, decompressed_tuple);
+				ExecStoreVirtualTuple(slot);
+				// ExecStoreMinimalTuple(decompressed_tuple, heap_tuple_slot, false);
+				// ExecStoreHeapTuple(decompressed_tuple, heap_tuple_slot, true);
 
-				// tuplesort_puttupleslot(tuplestorestate, heap_tuple_slot);
+				slot_getallattrs(slot);
+
+				// tuplesort_putheaptuple(tuplestorestate, decompressed_tuple);
+
+				tuplesort_puttupleslot(tuplestorestate, slot);
+				ExecDropSingleTupleTableSlot(slot);
 			}
 
 			heap_freetuple(decompressed_tuple);

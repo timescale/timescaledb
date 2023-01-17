@@ -1232,6 +1232,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 		else
 		// changed segment
 		{
+			// inspect_tuplesortstate(segment_tuplesortstate, uncompressed_rel_tupdesc); // seemed ok with 1 segment
 			// fetch the tuples from the uncompressed chunk for the segment that just finished
 			TableScanDesc heapScan;
 			HeapTuple uncompressed_tuple;
@@ -1264,8 +1265,9 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			{
 				TupleTableSlot *heap_tuple_slot =
 					MakeTupleTableSlot(uncompressed_rel_tupdesc, &TTSOpsHeapTuple);
-				slot_getallattrs(heap_tuple_slot);
+				
 				ExecStoreHeapTuple(uncompressed_tuple, heap_tuple_slot, false);
+				slot_getallattrs(heap_tuple_slot); // if you make this call you'll notice the slot is empty. why??
 				tuplesort_puttupleslot(segment_tuplesortstate, heap_tuple_slot);
 				// simple_heap_delete since we don't expect concurrent updates,
 				// we have exclusive lock on the relation
@@ -1273,15 +1275,18 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			}
 			table_endscan(heapScan);
 			tuplesort_performsort(segment_tuplesortstate);
+			// inspect_tuplesortstate(segment_tuplesortstate, uncompressed_rel_tupdesc, true); // also checked here and also works ok
 			// and finally update the segment
-			decompress_segment_update_current_segment(current_segment,
-													  slot, // this is the slot from the compressed chunk
-													  decompressor.per_compressed_cols);
+
+			// inspect_tuplesortstate(segment_tuplesortstate, uncompressed_rel_tupdesc, true); // also here the values are good
 			// now let's recompress and write the recompressed segment into the compressed chunk
 			recompress_segment(segment_tuplesortstate,
 							   compressed_chunk_rel,
 							   &row_compressor); // row_compressor_append_sorted_rows
 			// now done with the row compressor? maybe call finish?
+			decompress_segment_update_current_segment(current_segment,
+													  slot, // this is the slot from the compressed chunk
+													  decompressor.per_compressed_cols);
 			tuplesort_end(segment_tuplesortstate); // now any pointers returned will be garbage
 			// reinit tuplesort and add the first tuple of the new segment to it
 			segment_tuplesortstate = tuplesort_begin_heap(uncompressed_rel_tupdesc,
@@ -1311,6 +1316,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			simple_table_tuple_delete(compressed_chunk_rel,
 										&(slot->tts_tid),
 										GetLatestSnapshot()); 
+			changed_segment = false; // because this is the first tuple of the new segment
 
 			if (should_free)
 				heap_freetuple(compressed_tuple);

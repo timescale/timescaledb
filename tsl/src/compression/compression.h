@@ -315,4 +315,5 @@ extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
+extern void inspect_tuplesortstate(Tuplesortstate *tuplesort, TupleDesc desc, bool already_sorted);
 #endif
