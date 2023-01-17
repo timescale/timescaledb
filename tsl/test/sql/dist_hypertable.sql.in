@@ -105,7 +105,7 @@ CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 -- can't create an under-replicated hypertable
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 \set ON_ERROR_STOP 1
--- can create under-replicated hypertable byf force detaching a data node
+
 RESET ROLE;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
@@ -114,10 +114,21 @@ GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
+-- test that attaching a data node to an existing hypertable with
+-- repartition=>false does not change the number of partitions when
+-- number of partitions is greater than number of data nodes.
+SELECT * FROM set_number_partitions('disttable', 8, 'device');
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+SELECT attach_data_node(:'DATA_NODE_4', 'disttable', repartition => false);
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+
 --create new session to clear out connections
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM delete_data_node(:'DATA_NODE_4', force => true, drop_database => true);
+SELECT * FROM delete_data_node(:'DATA_NODE_4', force => true, drop_database => true, repartition => false);
 SET ROLE :ROLE_1;
+-- Deleting a data node should also not change the number of
+-- partitions with repartition=>false
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 
 CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS

@@ -959,12 +959,14 @@ data_node_attach(PG_FUNCTION_ARGS)
 	if (NULL != space_dim)
 	{
 		List *data_node_names = NIL;
+		int num_partitions = space_dim->fd.num_slices;
 
 		if (num_nodes > space_dim->fd.num_slices)
 		{
 			if (repartition)
 			{
 				ts_dimension_set_number_of_slices(space_dim, num_nodes & 0xFFFF);
+				num_partitions = num_nodes;
 
 				ereport(NOTICE,
 						(errmsg("the number of partitions in dimension \"%s\" was increased to %u",
@@ -986,7 +988,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 		data_node_names = ts_hypertable_get_available_data_node_names(ht, true);
 		ts_dimension_partition_info_recreate(space_dim->fd.id,
-											 num_nodes,
+											 num_partitions,
 											 data_node_names,
 											 ht->fd.replication_factor);
 	}
