@@ -600,3 +600,27 @@ insert into timescale values (now(), 111,2);
 -- cleanup
 DROP TABLE regular cascade;
 DROP TABLE timescale cascade;
+
+-- github issue 4872
+-- If subplan of ChunkAppend is TidRangeScan, then SELECT on
+-- hypertable fails with error "invalid child of chunk append: Node (26)"
+create table tidrangescan_test (
+  time timestamp with time zone,
+  some_column bigint
+);
+
+select create_hypertable('tidrangescan_test', 'time');
+
+insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:00+02:40', 1);
+insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:10+02:40', 2);
+insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:20+02:40', 3);
+
+-- Below query will generate plan as
+-- Custom Scan (ChunkAppend)
+--   ->  Tid Range Scan
+-- However when traversing ChunkAppend node, Tid Range Scan node is not
+-- recognised as a valid child node of ChunkAppend which causes error
+-- "invalid child of chunk append: Node (26)" when below query is executed
+select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timestamp with time zone - interval '5 years' and ctid < '(1,1)'::tid ORDER BY time;
+
+drop table tidrangescan_test;

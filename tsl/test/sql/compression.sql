@@ -711,3 +711,31 @@ WHERE ht.table_name = 'local_seq' \gset
 
 SELECT device, _ts_meta_sequence_num, _ts_meta_count FROM :COMP_CHUNK ORDER BY 1,2;
 
+-- github issue 4872
+-- If subplan of ConstraintAwareAppend is TidRangeScan, then SELECT on
+-- hypertable fails with error "invalid child of chunk append: Node (26)"
+CREATE TABLE tidrangescan_test(time timestamptz, device_id int, v1 float, v2 float);
+SELECT create_hypertable('tidrangescan_test','time');
+INSERT INTO tidrangescan_test SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
+
+CREATE MATERIALIZED VIEW tidrangescan_expr WITH (timescaledb.continuous)
+ AS
+ SELECT
+   time_bucket('1d', time) AS time,
+   'Const'::text AS Const,
+   4.3::numeric AS "numeric",
+   first(tidrangescan_test,time),
+   CASE WHEN true THEN 'foo' ELSE 'bar' END,
+   COALESCE(NULL,'coalesce'),
+   avg(v1) + avg(v2) AS avg1,
+   avg(v1+v2) AS avg2,
+   count(*) AS cnt
+ FROM tidrangescan_test
+ WHERE ctid < '(1,1)'::tid GROUP BY 1 WITH NO DATA;
+
+CALL refresh_continuous_aggregate('tidrangescan_expr', NULL, NULL);
+SET timescaledb.enable_chunk_append to off;
+SET enable_indexscan to off;
+SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;
+RESET timescaledb.enable_chunk_append;
+RESET enable_indexscan;

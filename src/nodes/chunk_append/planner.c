@@ -368,6 +368,9 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 		case T_TidScan:
 		case T_ValuesScan:
 		case T_WorkTableScan:
+#if PG14_GE
+		case T_TidRangeScan:
+#endif
 			return (Scan *) plan;
 			break;
 		case T_CustomScan:
