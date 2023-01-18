@@ -1161,7 +1161,9 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 	bool first_iteration = true;
 	// ScanKeyData *scankey_compressed = NULL, *scankey_uncompressed = NULL;
 
-	index_scan = index_beginscan(compressed_chunk_rel, index_rel, GetTransactionSnapshot(), 0, 0);
+	/************** snapshot ****************************/
+	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
+	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot =
 		table_slot_create(compressed_chunk_rel, NULL); // need slot so I can put it in the tuplesort (function )
 	index_rescan(index_scan, NULL, 0, NULL, 0);
@@ -1171,11 +1173,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 		i = 0;
 		int col = 0;
 		slot_getallattrs(slot);
-
-		// populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
-		// 										  compressed_rel_tupdesc->natts,
-		// 										  slot->tts_values/*compressed_datums*/,
-		// 										  slot->tts_isnull/*compressed_is_nulls*/);
 
 		if (first_iteration)
 		{
@@ -1210,10 +1207,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 
 			compressed_tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
 			// decompress column and put it into tuplestore
-			// heap_deform_tuple(compressed_tuple,
-			// 								compressed_rel_tupdesc,
-			// 								compressed_datums,
-			// 								compressed_is_nulls);
 			populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
 												  compressed_rel_tupdesc->natts,
 												  slot->tts_values/*compressed_datums*/,
@@ -1223,7 +1216,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			// now that it's decompressed into tuplestore, drop row
 			simple_table_tuple_delete(compressed_chunk_rel,
 										&(slot->tts_tid),
-										GetLatestSnapshot()); // should be using transaction snapshot but that 
+										snapshot); // should be using transaction snapshot but that 
 										// will be figured out after the basic loop is made to work
 			if (should_free)
 				heap_freetuple(compressed_tuple);
@@ -1232,7 +1225,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 		else
 		// changed segment
 		{
-			// inspect_tuplesortstate(segment_tuplesortstate, uncompressed_rel_tupdesc); // seemed ok with 1 segment
 			// fetch the tuples from the uncompressed chunk for the segment that just finished
 			TableScanDesc heapScan;
 			HeapTuple uncompressed_tuple;
@@ -1334,6 +1326,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
+	UnregisterSnapshot(snapshot);
 	index_close(index_rel, AccessShareLock);
 	table_close(compressed_chunk_rel, ExclusiveLock);
 	table_close(uncompressed_chunk_rel, ExclusiveLock);
