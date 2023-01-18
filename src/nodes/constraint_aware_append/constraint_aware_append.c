@@ -222,6 +222,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			case T_WorkTableScan:
 			case T_ForeignScan:
 			case T_CustomScan:
+#if PG14_GE
+			case T_TidRangeScan:
+#endif
 			{
 				/*
 				 * If this is a base rel (chunk), check if it can be
@@ -441,6 +444,9 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 			case T_WorkTableScan:
 			case T_ForeignScan:
 			case T_CustomScan:
+#if PG14_GE
+			case T_TidRangeScan:
+#endif
 			{
 				List *chunk_clauses = NIL;
 				ListCell *lc;
