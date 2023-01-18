@@ -48,6 +48,11 @@ CREATE OR REPLACE FUNCTION @extschema@.recompress_chunk_experimental(
     if_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_experimental' LANGUAGE C STRICT VOLATILE;
 
+-- find the index on the compressed chunk that can be used to recompress efficiently 
+-- this index must contain all the segmentby columns and the meta_sequence_number column last
+CREATE OR REPLACE FUNCTION @extschema@.get_compressed_chunk_index_for_recompression(
+    uncompressed_chunk REGCLASS
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_get_compressed_chunk_index_for_recompression' LANGUAGE C STRICT VOLATILE;
 -- Recompress a chunk
 --
 -- Will give an error if the chunk was not already compressed. In this
@@ -64,6 +69,7 @@ AS $$
 DECLARE
   status INT;
   chunk_name TEXT[];
+  compressed_chunk_index REGCLASS;
 BEGIN
 
     -- procedures with SET clause cannot execute transaction
@@ -92,16 +98,23 @@ BEGIN
             RAISE EXCEPTION 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
         END IF;
     WHEN status = 3 OR status = 9 OR status = 11 THEN
-        PERFORM @extschema@.decompress_chunk(chunk);
-        COMMIT;
-        -- SET LOCAL is only active until end of transaction.
-        -- While we could use SET at the start of the function we do not
-        -- want to bleed out search_path to caller, so we do SET LOCAL
-        -- again after COMMIT
-        SET LOCAL search_path TO pg_catalog, pg_temp;
+        -- first check if there's an index. Might have to use a heuristic to determine if index usage would be efficient, 
+        -- or if we'd better fall back to decompressing & recompressing entire chunk
+        SELECT @extschema@.get_compressed_chunk_index_for_recompression(chunk) INTO compressed_chunk_index;
+        IF FOUND THEN
+            PERFORM @extschema@.recompress_chunk_experimental(chunk);
+        ELSE
+            PERFORM @extschema@.decompress_chunk(chunk);
+            COMMIT;
+            -- SET LOCAL is only active until end of transaction.
+            -- While we could use SET at the start of the function we do not
+            -- want to bleed out search_path to caller, so we do SET LOCAL
+            -- again after COMMIT
+            SET LOCAL search_path TO pg_catalog, pg_temp;
+            PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
+        END IF; 
     ELSE
         RAISE EXCEPTION 'unexpected chunk status % in chunk "%"', status, chunk_name[array_upper(chunk_name,1)];
     END CASE;
-    PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
 END
 $$ LANGUAGE plpgsql;

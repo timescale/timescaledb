@@ -240,6 +240,8 @@ typedef struct RowCompressor
 	bool *compressed_is_null;
 	int64 rowcnt_pre_compression;
 	int64 num_compressed_rows;
+	/* if recompressing, we must know this so we can reset the sequence number */
+	bool recompressing;
 } RowCompressor;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
@@ -308,6 +310,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompr
 								const ColumnCompressionInfo **column_compression_info,
 								int16 *column_offsets, int16 num_columns_in_compressed_table,
 								bool need_bistate);
+extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
 													  int16 num_cols, Datum *compressed_datums,
 													  bool *compressed_is_nulls);
@@ -316,4 +319,9 @@ extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern void inspect_tuplesortstate(Tuplesortstate *tuplesort, TupleDesc desc, bool already_sorted);
+
+extern Oid get_compressed_chunk_index(Relation compressed_chunk,
+									  int16 *uncompressed_col_to_compressed_col,
+									  PerColumn *per_column, int n_input_columns);
+
 #endif

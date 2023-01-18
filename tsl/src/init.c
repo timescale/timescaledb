@@ -236,6 +236,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats,
 	.health_check = ts_dist_health_check,
 	.recompress_chunk_experimental = tsl_recompress_chunk_experimental,
+	.get_compressed_chunk_index_for_recompression =
+		tsl_get_compressed_chunk_index_for_recompression,
 };
 
 static void

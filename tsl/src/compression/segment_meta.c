@@ -14,7 +14,6 @@
 #include "segment_meta.h"
 #include "datum_serialize.h"
 
-
 SegmentMetaMinMaxBuilder *
 segment_meta_min_max_builder_create(Oid type_oid, Oid collation)
 {

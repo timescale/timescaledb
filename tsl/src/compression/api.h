@@ -17,4 +17,7 @@ extern Oid tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed);
 extern bool tsl_recompress_chunk_wrapper(Chunk *chunk);
 extern Datum tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS);
 
+extern Datum tsl_get_compressed_chunk_index_for_recompression(
+	PG_FUNCTION_ARGS); // arg is oid of uncompressed chunk
+
 #endif /* TIMESCALEDB_TSL_COMPRESSION_API_H */
