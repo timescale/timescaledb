@@ -1281,7 +1281,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			// inspect_tuplesortstate(segment_tuplesortstate, uncompressed_rel_tupdesc, true); // also here the values are good
 			// now let's recompress and write the recompressed segment into the compressed chunk
 			recompress_segment(segment_tuplesortstate,
-							   compressed_chunk_rel,
+							   uncompressed_chunk_rel,
 							   &row_compressor); // row_compressor_append_sorted_rows
 			// now done with the row compressor? maybe call finish?
 			decompress_segment_update_current_segment(current_segment,
@@ -1328,7 +1328,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 	{
 		tuplesort_performsort(segment_tuplesortstate);
 		recompress_segment(segment_tuplesortstate,
-							   compressed_chunk_rel,
+							   uncompressed_chunk_rel,
 							   &row_compressor);
 		tuplesort_end(segment_tuplesortstate);
 	}
