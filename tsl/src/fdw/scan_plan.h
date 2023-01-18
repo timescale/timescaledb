@@ -40,7 +40,7 @@ typedef Path *(*CreateUpperPathFunc)(PlannerInfo *root, RelOptInfo *rel, PathTar
 									 List *pathkeys, Path *fdw_outerpath, List *fdw_private);
 
 extern void fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel,
-							   Path *best_path, List *scan_clauses);
+							   Path *best_path, List *scan_clauses, Plan *outer_plan);
 
 extern void fdw_add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_path,
 												CreatePathFunc create_scan_path);

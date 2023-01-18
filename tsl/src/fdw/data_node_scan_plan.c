@@ -836,7 +836,7 @@ data_node_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_
 
 	memset(&scaninfo, 0, sizeof(ScanInfo));
 
-	fdw_scan_info_init(&scaninfo, root, rel, &best_path->path, clauses);
+	fdw_scan_info_init(&scaninfo, root, rel, &best_path->path, clauses, NULL);
 
 	cscan->methods = &data_node_scan_plan_methods;
 	cscan->custom_plans = custom_plans;
