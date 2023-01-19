@@ -8,10 +8,20 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4926 Fix corruption when inserting into compressed chunks
-* #5114 Fix issue with deleting data node and dropping database
-* #5133 Fix CAgg on CAgg using different column order on the original hypertable
-* #5152 Fix adding column with NULL constraint to compressed hypertable
+
+## 2.9.2 (2023-01-18)
+
+This release contains bug fixes since the 2.9.1 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #5180 Fix dist_cagg flaky test
 * #5170 Fix CAgg on CAgg variable bucket size validation
+* #5114 Fix issue with deleting data node and dropping database
+* #5133 Fix CAgg on CAgg different column order on the original hypertable
+* #5152 Fix adding column with NULL constraint to compressed hypertable
+* #5181 Fix ChunkAppend, ConstraintAwareAppend child subplan
+* #5193 Fix repartition behavior when attaching data node
 
 **Thanks**
 * @ikkala for reporting error when adding column with NULL constraint to compressed hypertable
