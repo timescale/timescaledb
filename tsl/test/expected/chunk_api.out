@@ -37,32 +37,32 @@ FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
  chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                                            slices                                            
 ----------+---------------+-----------------------+------------------+---------+----------------------------------------------------------------------------------------------
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}
+        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}
 (1 row)
 
 -- Creating a chunk with the constraints of an existing chunk should
 -- return the existing chunk
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}');
  chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                                            slices                                            | created 
 ----------+---------------+-----------------------+------------------+---------+----------------------------------------------------------------------------------------------+---------
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]} | f
+        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]} | f
 (1 row)
 
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}');
 ERROR:  chunk creation failed due to collision
 -- Missing dimension
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Extra dimension
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741824], "time2": [1514419600000000, 1515024000000000]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad dimension name
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741824]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  dimension "dev" does not exist in hypertable
 -- Same dimension twice
@@ -70,7 +70,7 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [15144196
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad bounds format
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741824]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  constraint for dimension "time" is not numeric
 -- Bad slices format
@@ -78,7 +78,7 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [15150240
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  unexpected number of dimensional bounds for dimension "time"
 -- Bad slices json
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741824]}');
 ERROR:  invalid input syntax for type json
 LINE 1: ...ROM _timescaledb_internal.create_chunk('chunkapi',' {"time: ...
                                                              ^
@@ -89,27 +89,27 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Test create_chunk_table for errors
 \set ON_ERROR_STOP 0
 -- Test create_chunk_table for NULL input
-SELECT * FROM _timescaledb_internal.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  hypertable cannot be NULL
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  slices cannot be NULL
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', NULL,'_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', NULL,'_hyper_1_1_chunk');
 ERROR:  chunk schema name cannot be NULL
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal',NULL);
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal',NULL);
 ERROR:  chunk table name cannot be NULL
 -- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  chunk table creation failed due to dimension slice collision
 -- Missing dimension
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Extra dimension
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741824], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad dimension name
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  dimension "dev" does not exist in hypertable
 -- Same dimension twice
@@ -117,15 +117,15 @@ SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [15
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad bounds format
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  constraint for dimension "time" is not numeric
 -- Bad slices format
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  unexpected number of dimensional bounds for dimension "time"
 -- Bad slices json
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid input syntax for type json
 LINE 1: ...imescaledb_internal.create_chunk_table('chunkapi',' {"time: ...
                                                              ^
@@ -138,10 +138,10 @@ CONTEXT:  JSON data, line 1:  {"time: [1515024000000000] "device...
 SET ROLE :ROLE_SUPERUSER;
 GRANT INSERT ON chunkapi TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', 'ChunkSchema', 'My_chunk_Table_name');
  chunk_id | hypertable_id | schema_name |     table_name      | relkind |                                            slices                                            | created 
 ----------+---------------+-------------+---------------------+---------+----------------------------------------------------------------------------------------------+---------
-        2 |             1 | ChunkSchema | My_chunk_Table_name | r       | {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]} | t
+        2 |             1 | ChunkSchema | My_chunk_Table_name | r       | {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]} | t
 (1 row)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -151,8 +151,8 @@ FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
  chunk_id | hypertable_id |      schema_name      |     table_name      | relkind |                                            slices                                            
 ----------+---------------+-----------------------+---------------------+---------+----------------------------------------------------------------------------------------------
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk    | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}
-        2 |             1 | ChunkSchema           | My_chunk_Table_name | r       | {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}
+        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk    | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}
+        2 |             1 | ChunkSchema           | My_chunk_Table_name | r       | {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}
 (2 rows)
 
 -- Show the new chunks
@@ -591,7 +591,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |    range_end     
 ----+--------------+----------------------+------------------
   1 |            1 |     1514419200000000 | 1515024000000000
-  2 |            2 | -9223372036854775808 |       1073741823
+  2 |            2 | -9223372036854775808 |       1073741824
   3 |            1 |     1515024000000000 | 1519024000000000
 (3 rows)
 
@@ -599,7 +599,7 @@ DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |    range_end     
 ----+--------------+----------------------+------------------
-  2 |            2 | -9223372036854775808 |       1073741823
+  2 |            2 | -9223372036854775808 |       1073741824
   3 |            1 |     1515024000000000 | 1519024000000000
 (2 rows)
 
@@ -613,7 +613,7 @@ SELECT count(*) FROM
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |    range_end     
 ----+--------------+----------------------+------------------
-  2 |            2 | -9223372036854775808 |       1073741823
+  2 |            2 | -9223372036854775808 |       1073741824
   3 |            1 |     1515024000000000 | 1519024000000000
 (2 rows)
 

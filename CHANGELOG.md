@@ -119,6 +119,7 @@ We recommend that you upgrade at the next available opportunity.
 * #5180 Fix default data node availability status on multi-node
 * #5181 Fix ChunkAppend and ConstraintAwareAppend with TidRangeScan child subplan
 * #5193 Fix repartition behavior when attaching data node on multi-node
+* #5201 Fix rounding in space partition creation
 
 **Thanks**
 * @salquier-appvizer for reporting error on CAgg on CAgg using different column order on the original hypertable

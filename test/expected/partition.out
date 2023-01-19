@@ -25,9 +25,9 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
                  Table                  |  Constraint  | Type | Columns  | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 ----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  _timescaledb_internal._hyper_1_1_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_1_1_chunk | constraint_2 | c    | {device} | -     | (_timescaledb_internal.get_partition_for_key(device) >= 1073741823)                                                                            | f          | f        | t
+ _timescaledb_internal._hyper_1_1_chunk | constraint_2 | c    | {device} | -     | (_timescaledb_internal.get_partition_for_key(device) >= 1073741824)                                                                            | f          | f        | t
  _timescaledb_internal._hyper_1_2_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {device} | -     | (_timescaledb_internal.get_partition_for_key(device) < 1073741823)                                                                             | f          | f        | t
+ _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {device} | -     | (_timescaledb_internal.get_partition_for_key(device) < 1073741824)                                                                             | f          | f        | t
 (4 rows)
 
 -- Make sure constraint exclusion works on device column
@@ -70,9 +70,9 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
                  Table                  |  Constraint  | Type | Columns  | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 ----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  _timescaledb_internal._hyper_2_3_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {device} | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741823)                                                                                | f          | f        | t
+ _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {device} | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741824)                                                                                | f          | f        | t
  _timescaledb_internal._hyper_2_4_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_2_4_chunk | constraint_6 | c    | {device} | -     | (_timescaledb_internal.get_partition_hash(device) >= 1073741823)                                                                               | f          | f        | t
+ _timescaledb_internal._hyper_2_4_chunk | constraint_6 | c    | {device} | -     | (_timescaledb_internal.get_partition_hash(device) >= 1073741824)                                                                               | f          | f        | t
 (4 rows)
 
 -- Make sure constraint exclusion works on device column

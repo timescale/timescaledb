@@ -278,7 +278,7 @@ SELECT * FROM hypertable_partitions;
  table_name | dimension_id |     range_start      |  data_nodes   
 ------------+--------------+----------------------+---------------
  disttable  |            2 | -9223372036854775808 | {data_node_1}
- disttable  |            2 |           1073741823 | {data_node_2}
+ disttable  |            2 |           1073741824 | {data_node_2}
 (2 rows)
 
 -- All data nodes with USAGE should be added.
@@ -957,7 +957,7 @@ SELECT * FROM hypertable_partitions;
  table_name | dimension_id |     range_start      |        data_nodes         
 ------------+--------------+----------------------+---------------------------
  disttable  |            9 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable  |            9 |           1073741823 | {data_node_2,data_node_3}
+ disttable  |            9 |           1073741824 | {data_node_2,data_node_3}
 (2 rows)
 
 -- Add additional hypertable
@@ -1058,9 +1058,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |        data_nodes         
 -------------+--------------+----------------------+---------------------------
  disttable   |            9 | -9223372036854775808 | {data_node_2,data_node_3}
- disttable   |            9 |           1073741823 | {data_node_3,data_node_2}
+ disttable   |            9 |           1073741824 | {data_node_3,data_node_2}
  disttable_2 |           11 | -9223372036854775808 | {data_node_2,data_node_3}
- disttable_2 |           11 |           1073741823 | {data_node_3,data_node_2}
+ disttable_2 |           11 |           1073741824 | {data_node_3,data_node_2}
 (4 rows)
 
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_2', force => true);
@@ -1075,9 +1075,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |  data_nodes   
 -------------+--------------+----------------------+---------------
  disttable   |            9 | -9223372036854775808 | {data_node_3}
- disttable   |            9 |           1073741823 | {data_node_3}
+ disttable   |            9 |           1073741824 | {data_node_3}
  disttable_2 |           11 | -9223372036854775808 | {data_node_3}
- disttable_2 |           11 |           1073741823 | {data_node_3}
+ disttable_2 |           11 |           1073741824 | {data_node_3}
 (4 rows)
 
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1', force => true);
@@ -1092,9 +1092,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |  data_nodes   
 -------------+--------------+----------------------+---------------
  disttable   |            9 | -9223372036854775808 | {data_node_3}
- disttable   |            9 |           1073741823 | {data_node_3}
+ disttable   |            9 |           1073741824 | {data_node_3}
  disttable_2 |           11 | -9223372036854775808 | {data_node_3}
- disttable_2 |           11 |           1073741823 | {data_node_3}
+ disttable_2 |           11 |           1073741824 | {data_node_3}
 (4 rows)
 
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_3', force => true);
@@ -1109,9 +1109,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      | data_nodes 
 -------------+--------------+----------------------+------------
  disttable   |            9 | -9223372036854775808 | 
- disttable   |            9 |           1073741823 | 
+ disttable   |            9 |           1073741824 | 
  disttable_2 |           11 | -9223372036854775808 | 
- disttable_2 |           11 |           1073741823 | 
+ disttable_2 |           11 |           1073741824 | 
 (4 rows)
 
 -- All data nodes are blocked
@@ -1142,9 +1142,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |  data_nodes   
 -------------+--------------+----------------------+---------------
  disttable   |            9 | -9223372036854775808 | {data_node_1}
- disttable   |            9 |           1073741823 | {data_node_1}
+ disttable   |            9 |           1073741824 | {data_node_1}
  disttable_2 |           11 | -9223372036854775808 | {data_node_1}
- disttable_2 |           11 |           1073741823 | {data_node_1}
+ disttable_2 |           11 |           1073741824 | {data_node_1}
 (4 rows)
 
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_2');
@@ -1157,9 +1157,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |        data_nodes         
 -------------+--------------+----------------------+---------------------------
  disttable   |            9 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable   |            9 |           1073741823 | {data_node_2,data_node_1}
+ disttable   |            9 |           1073741824 | {data_node_2,data_node_1}
  disttable_2 |           11 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable_2 |           11 |           1073741823 | {data_node_2,data_node_1}
+ disttable_2 |           11 |           1073741824 | {data_node_2,data_node_1}
 (4 rows)
 
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_3');
@@ -1172,9 +1172,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |        data_nodes         
 -------------+--------------+----------------------+---------------------------
  disttable   |            9 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable   |            9 |           1073741823 | {data_node_2,data_node_3}
+ disttable   |            9 |           1073741824 | {data_node_2,data_node_3}
  disttable_2 |           11 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable_2 |           11 |           1073741823 | {data_node_2,data_node_3}
+ disttable_2 |           11 |           1073741824 | {data_node_2,data_node_3}
 (4 rows)
 
 SELECT table_name, node_name, block_chunks
@@ -1235,9 +1235,9 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |        data_nodes         
 -------------+--------------+----------------------+---------------------------
  disttable   |            9 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable   |            9 |           1073741823 | {data_node_2,data_node_3}
+ disttable   |            9 |           1073741824 | {data_node_2,data_node_3}
  disttable_2 |           11 | -9223372036854775808 | {data_node_1,data_node_3}
- disttable_2 |           11 |           1073741823 | {data_node_3,data_node_1}
+ disttable_2 |           11 |           1073741824 | {data_node_3,data_node_1}
 (4 rows)
 
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
@@ -1254,7 +1254,7 @@ SELECT * FROM hypertable_partitions;
  table_name  | dimension_id |     range_start      |        data_nodes         
 -------------+--------------+----------------------+---------------------------
  disttable   |            9 | -9223372036854775808 | {data_node_1,data_node_2}
- disttable   |            9 |           1073741823 | {data_node_2,data_node_3}
+ disttable   |            9 |           1073741824 | {data_node_2,data_node_3}
  disttable_2 |           11 | -9223372036854775808 | {data_node_1}
 (3 rows)
 

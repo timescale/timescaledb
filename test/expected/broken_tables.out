@@ -40,8 +40,8 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |      range_end      
 ----+--------------+----------------------+---------------------
   1 |            1 |                    3 |                   6
-  2 |            2 | -9223372036854775808 |          1073741823
-  3 |            2 |           1073741823 | 9223372036854775807
+  2 |            2 | -9223372036854775808 |          1073741824
+  3 |            2 |           1073741824 | 9223372036854775807
   4 |            1 |                    9 |                  12
 (4 rows)
 
@@ -60,10 +60,10 @@ ORDER BY chunk_id, dimension_slice_id;
  chunk_id | dimension_slice_id | constraint_name |                        constraint_expr                        
 ----------+--------------------+-----------------+---------------------------------------------------------------
         1 |                  1 | constraint_1    | (("time" >= 3) AND ("time" < 6))
-        1 |                  2 | constraint_2    | (_timescaledb_internal.get_partition_hash(tag) < 1073741823)
+        1 |                  2 | constraint_2    | (_timescaledb_internal.get_partition_hash(tag) < 1073741824)
         2 |                  1 | constraint_1    | (("time" >= 3) AND ("time" < 6))
-        2 |                  3 | constraint_3    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
-        3 |                  3 | constraint_3    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+        2 |                  3 | constraint_3    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741824)
+        3 |                  3 | constraint_3    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741824)
         3 |                  4 | constraint_4    | (("time" >= 9) AND ("time" < 12))
 (6 rows)
 
@@ -107,10 +107,10 @@ ORDER BY chunk_id, dimension_slice_id;
  chunk_id | dimension_slice_id | constraint_name |                        constraint_expr                        
 ----------+--------------------+-----------------+---------------------------------------------------------------
         4 |                  5 | constraint_5    | (("time" >= 3) AND ("time" < 6))
-        4 |                  6 | constraint_6    | (_timescaledb_internal.get_partition_hash(tag) < 1073741823)
+        4 |                  6 | constraint_6    | (_timescaledb_internal.get_partition_hash(tag) < 1073741824)
         5 |                  5 | constraint_5    | (("time" >= 3) AND ("time" < 6))
-        5 |                  7 | constraint_7    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
-        6 |                  7 | constraint_7    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+        5 |                  7 | constraint_7    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741824)
+        6 |                  7 | constraint_7    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741824)
         6 |                  8 | constraint_8    | (("time" >= 9) AND ("time" < 12))
 (6 rows)
 

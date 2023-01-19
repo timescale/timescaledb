@@ -85,9 +85,15 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 SELECT * FROM set_number_partitions('disttable', 2);
 SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 
+-- Doubling the number of partitions to 4 should just split the
+-- previous 2 partitions by half. Thus, the start of the third
+-- partition should be the same as the start of the second one before
+-- the change.
+SELECT * FROM set_number_partitions('disttable', 4);
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+
 -- Set number of partitions equal to the number of servers should not
 -- raise a warning.
-SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 SELECT * FROM set_number_partitions('disttable', 3, 'device');
 SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 

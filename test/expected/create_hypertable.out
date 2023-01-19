@@ -350,9 +350,9 @@ SELECT * FROM dim_test_slices;
  chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
 ----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
         5 |             6 |           14 |                  8 | _timescaledb_internal | _hyper_6_5_chunk |     1097366400000000 |    1097452800000000
-        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741823
+        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741824
         6 |             6 |           14 |                 10 | _timescaledb_internal | _hyper_6_6_chunk |     1098230400000000 |    1098316800000000
-        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741823 | 9223372036854775807
+        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741824 | 9223372036854775807
 (4 rows)
 
 -- new dimension slice will cover full range on existing chunks
@@ -366,10 +366,10 @@ SELECT * FROM dim_test_slices;
  chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
 ----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
         5 |             6 |           14 |                  8 | _timescaledb_internal | _hyper_6_5_chunk |     1097366400000000 |    1097452800000000
-        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741823
+        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741824
         5 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 | 9223372036854775807
         6 |             6 |           14 |                 10 | _timescaledb_internal | _hyper_6_6_chunk |     1098230400000000 |    1098316800000000
-        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741823 | 9223372036854775807
+        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741824 | 9223372036854775807
         6 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_6_chunk | -9223372036854775808 | 9223372036854775807
 (6 rows)
 
@@ -378,13 +378,13 @@ SELECT * FROM dim_test_slices;
  chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
 ----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
         5 |             6 |           14 |                  8 | _timescaledb_internal | _hyper_6_5_chunk |     1097366400000000 |    1097452800000000
-        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741823
+        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741824
         5 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 | 9223372036854775807
         6 |             6 |           14 |                 10 | _timescaledb_internal | _hyper_6_6_chunk |     1098230400000000 |    1098316800000000
-        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741823 | 9223372036854775807
+        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741824 | 9223372036854775807
         6 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_6_chunk | -9223372036854775808 | 9223372036854775807
         7 |             6 |           14 |                 13 | _timescaledb_internal | _hyper_6_7_chunk |     1099094400000000 |    1099180800000000
-        7 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_7_chunk |           1073741823 | 9223372036854775807
+        7 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_7_chunk |           1073741824 | 9223372036854775807
         7 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_7_chunk | -9223372036854775808 | 9223372036854775807
 (9 rows)
 

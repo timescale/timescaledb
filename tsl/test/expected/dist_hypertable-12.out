@@ -88,18 +88,30 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
  table_name | dimension_id |     range_start      |       data_nodes       
 ------------+--------------+----------------------+------------------------
  disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
- disttable  |            2 |           1073741823 | {db_dist_hypertable_2}
+ disttable  |            2 |           1073741824 | {db_dist_hypertable_2}
 (2 rows)
 
--- Set number of partitions equal to the number of servers should not
--- raise a warning.
+-- Doubling the number of partitions to 4 should just split the
+-- previous 2 partitions by half. Thus, the start of the third
+-- partition should be the same as the start of the second one before
+-- the change.
+SELECT * FROM set_number_partitions('disttable', 4);
+ set_number_partitions 
+-----------------------
+ 
+(1 row)
+
 SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
  table_name | dimension_id |     range_start      |       data_nodes       
 ------------+--------------+----------------------+------------------------
  disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
- disttable  |            2 |           1073741823 | {db_dist_hypertable_2}
-(2 rows)
+ disttable  |            2 |            536870912 | {db_dist_hypertable_2}
+ disttable  |            2 |           1073741824 | {db_dist_hypertable_3}
+ disttable  |            2 |           1610612736 | {db_dist_hypertable_1}
+(4 rows)
 
+-- Set number of partitions equal to the number of servers should not
+-- raise a warning.
 SELECT * FROM set_number_partitions('disttable', 3, 'device');
  set_number_partitions 
 -----------------------
@@ -164,13 +176,13 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
  table_name | dimension_id |     range_start      |       data_nodes       
 ------------+--------------+----------------------+------------------------
  disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
- disttable  |            2 |            268435455 | {db_dist_hypertable_2}
- disttable  |            2 |            536870910 | {db_dist_hypertable_3}
- disttable  |            2 |            805306365 | {db_dist_hypertable_1}
- disttable  |            2 |           1073741820 | {db_dist_hypertable_2}
- disttable  |            2 |           1342177275 | {db_dist_hypertable_3}
- disttable  |            2 |           1610612730 | {db_dist_hypertable_1}
- disttable  |            2 |           1879048185 | {db_dist_hypertable_2}
+ disttable  |            2 |            268435456 | {db_dist_hypertable_2}
+ disttable  |            2 |            536870912 | {db_dist_hypertable_3}
+ disttable  |            2 |            805306368 | {db_dist_hypertable_1}
+ disttable  |            2 |           1073741824 | {db_dist_hypertable_2}
+ disttable  |            2 |           1342177280 | {db_dist_hypertable_3}
+ disttable  |            2 |           1610612736 | {db_dist_hypertable_1}
+ disttable  |            2 |           1879048192 | {db_dist_hypertable_2}
 (8 rows)
 
 SELECT attach_data_node(:'DATA_NODE_4', 'disttable', repartition => false);
@@ -183,13 +195,13 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
  table_name | dimension_id |     range_start      |       data_nodes       
 ------------+--------------+----------------------+------------------------
  disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
- disttable  |            2 |            268435455 | {db_dist_hypertable_2}
- disttable  |            2 |            536870910 | {db_dist_hypertable_3}
- disttable  |            2 |            805306365 | {db_dist_hypertable_4}
- disttable  |            2 |           1073741820 | {db_dist_hypertable_1}
- disttable  |            2 |           1342177275 | {db_dist_hypertable_2}
- disttable  |            2 |           1610612730 | {db_dist_hypertable_3}
- disttable  |            2 |           1879048185 | {db_dist_hypertable_4}
+ disttable  |            2 |            268435456 | {db_dist_hypertable_2}
+ disttable  |            2 |            536870912 | {db_dist_hypertable_3}
+ disttable  |            2 |            805306368 | {db_dist_hypertable_4}
+ disttable  |            2 |           1073741824 | {db_dist_hypertable_1}
+ disttable  |            2 |           1342177280 | {db_dist_hypertable_2}
+ disttable  |            2 |           1610612736 | {db_dist_hypertable_3}
+ disttable  |            2 |           1879048192 | {db_dist_hypertable_4}
 (8 rows)
 
 --create new session to clear out connections
@@ -208,13 +220,13 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
  table_name | dimension_id |     range_start      |       data_nodes       
 ------------+--------------+----------------------+------------------------
  disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
- disttable  |            2 |            268435455 | {db_dist_hypertable_2}
- disttable  |            2 |            536870910 | {db_dist_hypertable_3}
- disttable  |            2 |            805306365 | {db_dist_hypertable_1}
- disttable  |            2 |           1073741820 | {db_dist_hypertable_2}
- disttable  |            2 |           1342177275 | {db_dist_hypertable_3}
- disttable  |            2 |           1610612730 | {db_dist_hypertable_1}
- disttable  |            2 |           1879048185 | {db_dist_hypertable_2}
+ disttable  |            2 |            268435456 | {db_dist_hypertable_2}
+ disttable  |            2 |            536870912 | {db_dist_hypertable_3}
+ disttable  |            2 |            805306368 | {db_dist_hypertable_1}
+ disttable  |            2 |           1073741824 | {db_dist_hypertable_2}
+ disttable  |            2 |           1342177280 | {db_dist_hypertable_3}
+ disttable  |            2 |           1610612736 | {db_dist_hypertable_1}
+ disttable  |            2 |           1879048192 | {db_dist_hypertable_2}
 (8 rows)
 
 -- reset to 3 partitions
@@ -2400,7 +2412,7 @@ SELECT * FROM dimented_table_slices;
  chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |      chunk_table       |     range_start      |    range_end     
 ----------+---------------+--------------+--------------------+-----------------------+------------------------+----------------------+------------------
        11 |             5 |            7 |                  8 | _timescaledb_internal | _dist_hyper_5_11_chunk |     1482969600000000 | 1483574400000000
-       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |        536870911
+       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |        536870912
 (2 rows)
 
 -- add_dimension() with existing data
@@ -2415,7 +2427,7 @@ SELECT * FROM dimented_table_slices;
  chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |      chunk_table       |     range_start      |      range_end      
 ----------+---------------+--------------+--------------------+-----------------------+------------------------+----------------------+---------------------
        11 |             5 |            7 |                  8 | _timescaledb_internal | _dist_hyper_5_11_chunk |     1482969600000000 |    1483574400000000
-       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |           536870911
+       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |           536870912
        11 |             5 |            9 |                 10 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 | 9223372036854775807
 (3 rows)
 
@@ -2429,7 +2441,7 @@ SELECT * FROM dimented_table_slices;
  chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |      chunk_table       |     range_start      |      range_end      
 ----------+---------------+--------------+--------------------+-----------------------+------------------------+----------------------+---------------------
        11 |             5 |            7 |                  8 | _timescaledb_internal | _dist_hyper_5_11_chunk |     1482969600000000 |    1483574400000000
-       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |           536870911
+       11 |             5 |            8 |                  9 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 |           536870912
        11 |             5 |            9 |                 10 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 | 9223372036854775807
        11 |             5 |           10 |                 11 | _timescaledb_internal | _dist_hyper_5_11_chunk | -9223372036854775808 | 9223372036854775807
 (4 rows)

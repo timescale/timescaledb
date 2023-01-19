@@ -307,8 +307,8 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_16_chunk');
   Constraint   | Type |  Columns   | Index |                                                                     Expr                                                                     | Deferrable | Deferred | Validated 
 ---------------+------+------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  constraint_16 | c    | {time}     | -     | (("time" >= 'Thu Jan 19 00:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Jan 26 00:00:00 2017'::timestamp without time zone)) | f          | f        | t
- constraint_17 | c    | {device}   | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741823)                                                                              | f          | f        | t
- constraint_18 | c    | {location} | -     | (_timescaledb_internal.get_partition_hash(location) >= 1073741823)                                                                           | f          | f        | t
+ constraint_17 | c    | {device}   | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741824)                                                                              | f          | f        | t
+ constraint_18 | c    | {location} | -     | (_timescaledb_internal.get_partition_hash(location) >= 1073741824)                                                                           | f          | f        | t
 (3 rows)
 
 --queries should work in three dimensions

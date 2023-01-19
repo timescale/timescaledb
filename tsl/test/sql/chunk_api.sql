@@ -24,52 +24,52 @@ ORDER BY chunk_id;
 
 -- Creating a chunk with the constraints of an existing chunk should
 -- return the existing chunk
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}');
 
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}');
 -- Missing dimension
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000]}');
 -- Extra dimension
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741824], "time2": [1514419600000000, 1515024000000000]}');
 -- Bad dimension name
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741824]}');
 -- Same dimension twice
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
 -- Bad bounds format
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741824]}');
 -- Bad slices format
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices json
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741824]}');
 \set ON_ERROR_STOP 1
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Test create_chunk_table for errors
 \set ON_ERROR_STOP 0
 -- Test create_chunk_table for NULL input
-SELECT * FROM _timescaledb_internal.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', NULL,'_hyper_1_1_chunk');
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal',NULL);
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', NULL,'_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal',NULL);
 -- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Missing dimension
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Extra dimension
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741824], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Bad dimension name
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Same dimension twice
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Bad bounds format
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Bad slices format
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 -- Bad slices json
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741824]}', '_timescaledb_internal','_hyper_1_1_chunk');
 \set ON_ERROR_STOP 1
 
 -- Test that granting insert on tables allow create_chunk to be
@@ -78,7 +78,7 @@ SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [151
 SET ROLE :ROLE_SUPERUSER;
 GRANT INSERT ON chunkapi TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741824]}', 'ChunkSchema', 'My_chunk_Table_name');
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 

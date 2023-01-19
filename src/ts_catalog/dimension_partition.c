@@ -14,6 +14,7 @@
 #include <utils/rel.h>
 #include <utils/builtins.h>
 #include <utils/snapmgr.h>
+#include <math.h>
 
 #include "ts_catalog/catalog.h"
 #include "dimension.h"
@@ -329,7 +330,7 @@ DimensionPartitionInfo *
 ts_dimension_partition_info_recreate(int32 dimension_id, unsigned int num_partitions,
 									 List *data_nodes, int replication_factor)
 {
-	int64 partition_size = DIMENSION_SLICE_CLOSED_MAX / ((int64) num_partitions);
+	int64 partition_size = rint((double) DIMENSION_SLICE_CLOSED_MAX / num_partitions);
 	int64 range_start = DIMENSION_SLICE_MINVALUE;
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = catalog_get_table_id(catalog, DIMENSION_PARTITION);
