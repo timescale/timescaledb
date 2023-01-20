@@ -9,6 +9,8 @@ on:
       - sqlsmith
 jobs:
   sqlsmith:
+    # Change the JOB_NAME variable below when changing the name.
+    # Don't use the env variable here because the env context is not accessible.
     name: SQLsmith PG${{ matrix.pg }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -20,6 +22,7 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
+      JOB_NAME: SQLsmith PG${{ matrix.pg }}
 
     steps:
     - name: Install Linux Dependencies
@@ -70,8 +73,14 @@ jobs:
     # 10 times 10000 queries seems to take roughly 40 minutes in CI
     - name: Run SQLsmith
       run: |
+        set -o pipefail
         cd sqlsmith
-        for i in `seq 1 10`; do ./sqlsmith --seed=$((16#$(openssl rand -hex 3))) --exclude-catalog --target="host=/tmp dbname=smith" --max-queries=10000; done
+        for _ in {1..10}
+        do
+            ./sqlsmith --seed=$((16#$(openssl rand -hex 3))) --exclude-catalog \
+                --target="host=/tmp dbname=smith" --max-queries=10000 \
+            2>&1 | tee sqlsmith.log # We only keep the last log.
+        done
 
     - name: Check for coredumps
       if: always()
@@ -87,10 +96,19 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        sudo coredumpctl gdb <<EOT
-          printf "%s\n\n", debug_query_string
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", conditionName
+          up 1
+          l
+          info args
+          info locals
           bt full
-        EOT
+        " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
         false
 
@@ -100,3 +118,24 @@ jobs:
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
+
+    - name: Upload test results to the database
+      if: always()
+      env:
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh
