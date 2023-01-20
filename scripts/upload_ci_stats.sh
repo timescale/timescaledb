@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -xue
 
-if ! [ -e 'installcheck.log' ]
-then
-    # Probably the previous steps have failed and we have nothing to upload.
-    echo "installcheck.log does not exist"
-    exit 0
-fi
-
 if [ -z "${CI_STATS_DB:-}" ]
 then
     # The secret with the stats db connection string is not accessible in forks.
@@ -17,8 +10,10 @@ fi
 
 PSQL=(psql "${CI_STATS_DB}" -qtAX "--set=ON_ERROR_STOP=1")
 
-# The tables we are going to use.
-DESIRED_SCHEMA="
+# The tables we are going to use. This schema is here just as a reminder, you'll
+# have to create them manually. After you manually change the actual DB schema,
+# don't forget to append the needed migration code below.
+: "
 create extension if not exists timescaledb;
 
 create table job(
@@ -60,40 +55,7 @@ create table log(
 create unique index on log(job_date, test_name);
 
 select create_hypertable('log', 'job_date');
-
--- don't add a trailing newline because bash command substitution removes it"
-
-DROP_QUERY="
-drop table if exists test cascade;
-drop table if exists job cascade;
-drop table if exists log cascade;
 "
-
-# Recreate the tables if the schema changed.
-EXISTING_SCHEMA=$("${PSQL[@]}" -c "
-    create table if not exists _schema(create_query text, drop_query text);
-    select create_query from _schema;
-")
-
-if ! [ "${EXISTING_SCHEMA}" == "${DESIRED_SCHEMA}" ];
-then
-    "${PSQL[@]}" -v new_create="$DESIRED_SCHEMA" -v new_drop="$DROP_QUERY" <<<"
--- Run both the old and the new drop queries and ignore errors, to try to
--- bring the database into a predictable state even if it's current state is
--- incorrect (e.g. _schema doesn't actually match the existing tables).
-\set ON_ERROR_STOP 0
-select drop_query from _schema \gexec
-:new_drop
-\set ON_ERROR_STOP 1
-
--- Create new tables.
-begin;
-:new_create
-truncate table _schema;
-insert into _schema values (:'new_create', :'new_drop');
-commit;
-"
-fi
 
 # Create the job record.
 COMMIT_SHA=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse @)
@@ -113,20 +75,35 @@ returning job_date;
 ")
 export JOB_DATE
 
-# Split the regression.diffs into per-test files.
-gawk '
-    match($0, /^(diff|\+\+\+|\-\-\-) .*\/(.*)[.]out/, a) {
-        file = a[2] ".diff";
-        next;
+# Parse the installcheck.log to find the individual test results. Note that this
+# file might not exist for failed checks or non-regression checks like SQLSmith.
+# We still want to save the other logs.
+if [ -f 'installcheck.log' ]
+then
+    gawk -v OFS='\t' '
+    match($0, /^(test|    ) ([^ ]+)[ ]+\.\.\.[ ]+([^ ]+) (|\(.*\))[ ]+([0-9]+) ms$/, a) {
+        print ENVIRON["JOB_DATE"], a[2], tolower(a[3] (a[4] ? (" " a[4]) : "")), a[5];
     }
+    ' installcheck.log > tests.tsv
 
-    { if (file) print $0 > file; }
-' regression.log
+    # Save the test results into the database.
+    "${PSQL[@]}" -c "\copy test from tests.tsv"
+
+    # Split the regression.diffs into per-test files.
+    gawk '
+        match($0, /^(diff|\+\+\+|\-\-\-) .*\/(.*)[.]out/, a) {
+            file = a[2] ".diff";
+            next;
+        }
+
+        { if (file) print $0 > file; }
+    ' regression.log
+fi
 
 # Snip the long sequences of "+" or "-" changes in the diffs.
 for x in *.diff;
 do
-    if ! [ -e "$x" ] ; then continue ; fi
+    if ! [ -f "$x" ] ; then continue ; fi
     gawk -v max_context_lines=10 -v min_context_lines=2 '
         /^-/ { new_sign = "-" }
         /^+/ { new_sign = "+" }
@@ -171,18 +148,8 @@ do
     mv "$x.tmp" "$x"
 done
 
-# Parse the installcheck.log to find the individual test results.
-gawk -v OFS='\t' '
-match($0, /^(test|    ) ([^ ]+)[ ]+\.\.\.[ ]+([^ ]+) (|\(.*\))[ ]+([0-9]+) ms$/, a) {
-    print ENVIRON["JOB_DATE"], a[2], tolower(a[3] (a[4] ? (" " a[4]) : "")), a[5];
-}
-' installcheck.log > tests.tsv
-
-# Save the test results into the database.
-"${PSQL[@]}" -c "\copy test from tests.tsv"
-
 # Upload the logs.
-for x in sanitizer/* {sanitizer,stacktrace,postgres-failure}.log *.diff
+for x in sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff
 do
     if ! [ -e "$x" ]; then continue ; fi
     "${PSQL[@]}" <<<"
