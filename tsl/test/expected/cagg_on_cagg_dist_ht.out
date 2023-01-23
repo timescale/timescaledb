@@ -37,11 +37,8 @@ GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC
 GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- Global test variables
 \set IS_DISTRIBUTED TRUE
-<<<<<<< HEAD
-=======
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
->>>>>>> 73df496c... Fix CAgg on CAgg variable bucket size validation
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
