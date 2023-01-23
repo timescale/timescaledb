@@ -1085,6 +1085,7 @@ fetch_uncompressed_chunk_into_tuplestore(Tuplesortstate *segment_tuplesortstate,
 		// simple_heap_delete since we don't expect concurrent updates,
 		// we have exclusive lock on the relation
 		simple_heap_delete(uncompressed_chunk_rel, &uncompressed_tuple->t_self);
+		ExecDropSingleTupleTableSlot(heap_tuple_slot);
 	}
 	table_endscan(heapScan);
 	pfree(scankey);
@@ -1180,10 +1181,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 															&n_keys,
 															&keys);
 
-	// find an index that contains all the segmentby cols in order
-	/* TODO: process index list properly
-	 TODO: fallback case when there is no index. Another idea is to require an index. This is up for
-	 discussion */
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
 
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
@@ -1275,7 +1272,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 		current_segment[i] = palloc(sizeof(CompressedSegmentInfo));
 	}
 	bool first_iteration = true;
-	// ScanKeyData *scankey_compressed = NULL, *scankey_uncompressed = NULL;
 
 	/************** snapshot ****************************/
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
@@ -1285,9 +1281,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 
 	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot =
-		table_slot_create(compressed_chunk_rel,
-						  NULL); // need slot so I can put it in the tuplesort (function )
-	// index_scan->xs_want_itup = true;
+		table_slot_create(compressed_chunk_rel, NULL); 
 	index_rescan(index_scan, NULL, 0, NULL, 0);
 
 	MemoryContext per_compressed_row_ctx =
@@ -1350,11 +1344,8 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			// now that it's decompressed into tuplestore, drop row
 			simple_table_tuple_delete(compressed_chunk_rel,
 									  &(slot->tts_tid),
-									  snapshot); // should be using transaction snapshot but that
-			// will be figured out after the basic loop is made to work
-			/* also delete from the index */
-			// simple_heap_delete(index_rel, &index_scan->xs_itup->t_tid);
-			/* simple_table_tuple_delete(index_rel, &index_scan->xs_itup->t_tid, snapshot); */
+									  snapshot); // TODO: what function to use, is this OK wrt snapshots?
+
 			if (should_free)
 				heap_freetuple(compressed_tuple);
 			ExecClearTuple(slot);
