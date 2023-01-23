@@ -1243,9 +1243,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 	bool *compressed_is_nulls =
 		palloc(sizeof(*compressed_is_nulls) * compressed_rel_tupdesc->natts);
 
-	/************** additional helper stuff for debugging ******************/
-	int compressed_tuples = 0;
-
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
 	row_compressor_init(&row_compressor,
@@ -1291,7 +1288,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 
 	while (index_getnext_slot(index_scan, ForwardScanDirection, slot))
 	{
-		compressed_tuples++;
 		i = 0;
 		int col = 0;
 		slot_getallattrs(slot);
@@ -1351,8 +1347,6 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 			ExecClearTuple(slot);
 		}
 		else if (changed_segment)
-		// changed segment or ran out of index tuples, so time to process the uncompressed chunk
-		// tuples
 		{
 			fetch_uncompressed_chunk_into_tuplestore(segment_tuplesortstate,
 													 nsegmentby_cols,
@@ -1427,6 +1421,9 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
 	index_close(index_rel, AccessShareLock);
+	/* what's the right order here? */
+	/* new status after recompress should simply be compressed (1) */
+	ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL);
 	table_close(compressed_chunk_rel, ExclusiveLock);
 	table_close(uncompressed_chunk_rel, ExclusiveLock);
 	PG_RETURN_OID(uncompressed_chunk_id);

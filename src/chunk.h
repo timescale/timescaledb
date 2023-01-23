@@ -306,4 +306,7 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *m
  */
 #define CHUNK_STATUS_COMPRESSED_PARTIAL 8
 
+extern TSDLLEXPORT bool
+ts_chunk_clear_status(Chunk *chunk, int32 status);
+
 #endif /* TIMESCALEDB_CHUNK_H */

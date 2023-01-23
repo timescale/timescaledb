@@ -3546,11 +3546,10 @@ ts_chunk_is_frozen(Chunk *chunk)
 #endif
 }
 
-#if PG14_GE
-/* only caller is ts_chunk_unset_frozen. This code is in PG14 block as we run into
- * defined but unsed error in CI/CD builds for PG < 14.
+/* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
+ * defined but unsed error in CI/CD builds for PG < 14. But now called from recompress as well
  */
-static bool
+bool
 ts_chunk_clear_status(Chunk *chunk, int32 status)
 {
 	/* only frozen status can be cleared for a frozen chunk */
@@ -3569,7 +3568,6 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 	chunk->fd.status = mstatus;
 	return chunk_update_status(&chunk->fd);
 }
-#endif
 
 static bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
