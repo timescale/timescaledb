@@ -9,7 +9,7 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #4926 Fix corruption when inserting into compressed chunks
 
-## 2.9.2 (2023-12-26)
+## 2.9.2 (2023-01-27)
 
 This release contains bug fixes since the 2.9.1 release.
 We recommend that you upgrade at the next available opportunity.
