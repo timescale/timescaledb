@@ -220,31 +220,6 @@ truncate_relation(Oid table_oid)
 	table_close(rel, NoLock);
 }
 
-void
-inspect_tuplesortstate(Tuplesortstate *tuplesort, TupleDesc desc, bool already_sorted)
-{
-	if (!already_sorted)
-		tuplesort_performsort(tuplesort);
-	bool got_tuple;
-	TupleTableSlot *slot = MakeTupleTableSlot(desc, &TTSOpsMinimalTuple);
-	for (got_tuple = tuplesort_gettupleslot(tuplesort,
-											true /*=forward*/,
-											false /*=copy*/,
-											slot,
-											NULL /*=abbrev*/);
-		 got_tuple;
-		 got_tuple = tuplesort_gettupleslot(tuplesort,
-											true /*=forward*/,
-											false /*=copy*/,
-											slot,
-											NULL /*=abbrev*/))
-	{
-		slot_getallattrs(slot);
-		// now you can inspect the slot if you like
-	}
-	ExecDropSingleTupleTableSlot(slot);
-}
-
 CompressionStats
 compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column_compression_info,
 			   int num_compression_infos)
@@ -1641,13 +1616,7 @@ row_decompressor_decompress_row(RowDecompressor *row_decompressor, Tuplesortstat
 			HeapTuple decompressed_tuple = heap_form_tuple(row_decompressor->out_desc,
 														   row_decompressor->decompressed_datums,
 														   row_decompressor->decompressed_is_nulls);
-			// TupleTableSlot *heap_tuple_slot =
-			// 		MakeTupleTableSlot(row_decompressor->out_desc, &TTSOpsHeapTuple); // minimal tuple
-			// because it's the only one
-			// 		// that initializes the tts_ops
-			// ExecStoreHeapTuple(decompressed_tuple, heap_tuple_slot, true);
-			// then we're doing just decompress and we must put the decompressed into the
-			// uncompressed chunk
+
 			if (tuplestorestate == NULL)
 			{
 				heap_insert(row_decompressor->out_rel,
