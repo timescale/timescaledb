@@ -1030,7 +1030,8 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 						colinfo_array,
 						in_column_offsets,
 						compressed_rel_tupdesc->natts,
-						true /*need_bistate*/);
+						true /*need_bistate*/,
+						true /*recompressing*/);
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(uncompressed_chunk_rel, NoLock); // reelase locks
 
@@ -1169,8 +1170,8 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 
 	/* lock both chunks, compresssed and uncompressed */
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */
-	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
-	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
+	LockRelationOid(compressed_chunk->table_id, RowExclusiveLock);
+	LockRelationOid(uncompressed_chunk->table_id, RowExclusiveLock);
 
 	/************* need this for sorting my tuples *****************/
 	const ColumnCompressionInfo **keys;
@@ -1181,9 +1182,9 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 															&n_keys,
 															&keys);
 
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, RowExclusiveLock);
 
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, RowExclusiveLock);
 	Tuplesortstate *segment_tuplesortstate;
 
 	/*************** tuplesort state *************************/
@@ -1252,7 +1253,8 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 						colinfo_array,
 						in_column_offsets,
 						compressed_rel_tupdesc->natts,
-						true /*need_bistate*/);
+						true /*need_bistate*/,
+						true /*recompressing*/);
 
 	HeapTuple compressed_tuple;
 
@@ -1424,7 +1426,7 @@ tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
 	/* what's the right order here? */
 	/* new status after recompress should simply be compressed (1) */
 	ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL);
-	table_close(compressed_chunk_rel, ExclusiveLock);
-	table_close(uncompressed_chunk_rel, ExclusiveLock);
+	table_close(compressed_chunk_rel, RowExclusiveLock);
+	table_close(uncompressed_chunk_rel, RowExclusiveLock);
 	PG_RETURN_OID(uncompressed_chunk_id);
 }

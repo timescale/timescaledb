@@ -309,7 +309,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompr
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
 								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate);
+								bool need_bistate, bool recompressing);
 extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
 													  int16 num_cols, Datum *compressed_datums,

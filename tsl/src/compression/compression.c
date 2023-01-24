@@ -400,7 +400,8 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 						column_compression_info,
 						in_column_offsets,
 						out_desc->natts,
-						true /*need_bistate*/);
+						true /*need_bistate*/,
+						false/*recompressing*/);
 
 	if (matched_index_rel != NULL)
 	{
@@ -880,7 +881,7 @@ void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_columns_in_compressed_table, bool need_bistate)
+					int16 num_columns_in_compressed_table, bool need_bistate, bool recompressing)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
@@ -924,6 +925,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
 		.sequence_num = SEQUENCE_NUM_GAP,
+		.recompressing = recompressing,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
@@ -1094,15 +1096,18 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 	 * many segmentby columns.
 	 *
 	 */
-	row_compressor->sequence_num =
-		get_sequence_number_for_current_group(row_compressor->compressed_table,
-											  row_compressor->index_oid,
-											  row_compressor->uncompressed_col_to_compressed_col,
-											  row_compressor->per_column,
-											  row_compressor->n_input_columns,
-											  AttrOffsetGetAttrNumber(
-												  row_compressor
-													  ->sequence_num_metadata_column_offset));
+	if (!row_compressor->recompressing)
+		row_compressor->sequence_num =
+			get_sequence_number_for_current_group(row_compressor->compressed_table,
+												row_compressor->index_oid,
+												row_compressor->uncompressed_col_to_compressed_col,
+												row_compressor->per_column,
+												row_compressor->n_input_columns,
+												AttrOffsetGetAttrNumber(
+													row_compressor
+														->sequence_num_metadata_column_offset));
+	else
+		row_compressor->sequence_num = SEQUENCE_NUM_GAP;
 }
 
 static bool
