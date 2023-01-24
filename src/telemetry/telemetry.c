@@ -715,6 +715,7 @@ add_function_call_telemetry(JsonbParseState *state)
 {
 	fn_telemetry_entry_vec *functions;
 	const char *visible_extensions[(sizeof(related_extensions) / sizeof(char *)) + 1];
+	size_t num_visible_extensions = sizeof(visible_extensions) / sizeof(char *);
 
 	if (!ts_function_telemetry_on())
 	{
@@ -727,21 +728,39 @@ add_function_call_telemetry(JsonbParseState *state)
 	}
 
 	visible_extensions[0] = "timescaledb";
-	for (size_t i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
+	for (size_t i = 1; i < num_visible_extensions; i++)
 		visible_extensions[i] = related_extensions[i - 1];
 
-	functions =
-		ts_function_telemetry_read(visible_extensions, sizeof(visible_extensions) / sizeof(char *));
+	functions = ts_function_telemetry_read(visible_extensions, num_visible_extensions);
 
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 
 	if (functions)
 	{
-		for (uint32 i = 0; i < functions->num_elements; i++)
+		for (size_t e = 0; e < (num_visible_extensions + 1); e++)
 		{
-			FnTelemetryEntry *entry = fn_telemetry_entry_vec_at(functions, i);
-			char *proc_sig = format_procedure_qualified(entry->fn);
-			ts_jsonb_add_int64(state, proc_sig, entry->count);
+			fn_telemetry_entry_vec *extension_functions = &functions[e];
+			/* add the "extension_name" key */
+			const char *extension_name =
+				e < num_visible_extensions ? visible_extensions[e] : "postgres";
+			JsonbValue key = {
+				.type = jbvString,
+				.val.string.val = (char *) extension_name,
+				.val.string.len = strlen(extension_name),
+			};
+			pushJsonbValue(&state, WJB_KEY, &key);
+
+			/* add the object containing the `"function_signature()": count` */
+			pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+
+			for (uint32 i = 0; i < extension_functions->num_elements; i++)
+			{
+				FnTelemetryEntry *entry = fn_telemetry_entry_vec_at(extension_functions, i);
+				char *proc_sig = format_procedure_qualified(entry->fn);
+				ts_jsonb_add_int64(state, proc_sig, entry->count);
+			}
+
+			pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 		}
 	}
 

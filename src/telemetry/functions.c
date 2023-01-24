@@ -39,6 +39,7 @@ static HTAB *function_counts;
 typedef struct AllowedFnHashEntry
 {
 	Oid fn;
+	int extension_idx;
 } AllowedFnHashEntry;
 
 // Get a HTAB of AllowedFnHashEntrys containing all and only those functions
@@ -109,6 +110,7 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 				AllowedFnHashEntry *entry =
 					hash_search(allowed_fns, &deprec->objid, HASH_ENTER, NULL);
 				entry->fn = deprec->objid;
+				entry->extension_idx = i;
 			}
 		}
 
@@ -165,7 +167,8 @@ read_shared_map()
  * Read the function telemetry shared-memory hashmap for telemetry send.
  *
  * This function gathers (function_id, count) pairs from the shared hashmap,
- * and filters the set for the functions we're allowed to send back.
+ * and filters the set for the functions we're allowed to send back, and groups
+ * those functions by the extension which created them.
  *
  * In general, we should never send telemetry information about any functions
  * except for core functions and those is a specified list of extensions
@@ -176,8 +179,13 @@ read_shared_map()
  * @param visible_extensions list of extensions whose functions should be
  *                           returned
  * @param num_visible_extensions length of visible_extensions
- * @return vector of FnTelemetryEntry containing (function_id, count)s for the
- *         functions in visible_extensions.
+ * @return NULL if function telemetry is diabled, otherwise
+ *         an array of vectors of FnTelemetryEntry containing
+ *         (function_id, count)s for the functions in visible_extensions.
+ *         The array is laid out in the same order as `visible_extensions`, so
+ *         the n'th visible extension's functions are in the n'th vector,
+ *         and the builtin functions are in the vector at
+ *         `num_visible_extensions`.
  *
  */
 fn_telemetry_entry_vec *
@@ -200,17 +208,26 @@ ts_function_telemetry_read(const char **visible_extensions, int num_visible_exte
 	}
 
 	all_entries = read_shared_map();
-	entries_to_send =
-		fn_telemetry_entry_vec_create(CurrentMemoryContext, all_entries->num_elements);
+	entries_to_send = palloc(sizeof(*entries_to_send) * (num_visible_extensions + 1));
+	for (int i = 0; i < (num_visible_extensions + 1); i++)
+		fn_telemetry_entry_vec_init(&entries_to_send[i],
+									CurrentMemoryContext,
+									all_entries->num_elements);
+
 	allowed_ext_fns = allowed_extension_functions(visible_extensions, num_visible_extensions);
 
 	for (uint32 i = 0; i < all_entries->num_elements; i++)
 	{
+		AllowedFnHashEntry *fn_info;
 		FnTelemetryEntry *entry = fn_telemetry_entry_vec_at(all_entries, i);
 		bool is_builtin = entry->fn >= 1 && entry->fn <= 9999;
-		bool is_visible = is_builtin || hash_search(allowed_ext_fns, &entry->fn, HASH_FIND, NULL);
-		if (is_visible)
-			fn_telemetry_entry_vec_append(entries_to_send, *entry);
+
+		if (is_builtin)
+			fn_telemetry_entry_vec_append(&entries_to_send[num_visible_extensions], *entry);
+
+		fn_info = hash_search(allowed_ext_fns, &entry->fn, HASH_FIND, NULL);
+		if (fn_info != NULL)
+			fn_telemetry_entry_vec_append(&entries_to_send[fn_info->extension_idx], *entry);
 	}
 
 	return entries_to_send;
