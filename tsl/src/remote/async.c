@@ -152,6 +152,8 @@ async_request_set_state(AsyncRequest *req, AsyncRequestState new_state)
 static AsyncRequest *
 async_request_send_internal(AsyncRequest *req, int elevel)
 {
+	int ret;
+
 	if (req->state != DEFERRED)
 		elog(elevel, "can't send async request in state \"%d\"", req->state);
 
@@ -159,9 +161,20 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 		return req;
 
 	/* Send configuration parameters if necessary */
-	remote_connection_configure_if_changed(req->conn);
+	if (!remote_connection_configure_if_changed(req->conn))
+		elog(elevel, "could not configure connection when preparing statement");
 
 	if (req->stmt_name)
+	{
+		ret = PQsendQueryPrepared(remote_connection_get_pg_conn(req->conn),
+								  req->stmt_name,
+								  stmt_params_total_values(req->params),
+								  stmt_params_values(req->params),
+								  stmt_params_lengths(req->params),
+								  stmt_params_formats(req->params),
+								  req->res_format);
+	}
+	else
 	{
 		/*
 		 * We intentionally do not specify parameter types here, but leave the
@@ -170,39 +183,26 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 		 * the prepared statements we use in this module are simple enough that
 		 * the data node will make the right choices.
 		 */
-		if (0 == PQsendPrepare(remote_connection_get_pg_conn(req->conn),
-							   req->stmt_name,
-							   req->sql,
-							   req->prep_stmt_params,
-							   NULL))
-		{
-			/*
-			 * null is fine to pass down as the res, the connection error message
-			 * will get through
-			 */
-			remote_connection_elog(req->conn, elevel);
-			return NULL;
-		}
+		ret = PQsendQueryParams(remote_connection_get_pg_conn(req->conn),
+								req->sql,
+								stmt_params_total_values(req->params),
+								/* param types - see note above */ NULL,
+								stmt_params_values(req->params),
+								stmt_params_lengths(req->params),
+								stmt_params_formats(req->params),
+								req->res_format);
 	}
-	else
+
+	if (ret == 0)
 	{
-		if (0 == PQsendQueryParams(remote_connection_get_pg_conn(req->conn),
-								   req->sql,
-								   stmt_params_total_values(req->params),
-								   /* param types - see note above */ NULL,
-								   stmt_params_values(req->params),
-								   stmt_params_lengths(req->params),
-								   stmt_params_formats(req->params),
-								   req->res_format))
-		{
-			/*
-			 * null is fine to pass down as the res, the connection error message
-			 * will get through
-			 */
-			remote_connection_elog(req->conn, elevel);
-			return NULL;
-		}
+		/*
+		 * null is fine to pass down as the res, the connection error message
+		 * will get through
+		 */
+		remote_connection_elog(req->conn, elevel);
+		return NULL;
 	}
+
 	async_request_set_state(req, EXECUTING);
 	remote_connection_set_status(req->conn, CONN_PROCESSING);
 	return req;
@@ -222,19 +222,37 @@ AsyncRequest *
 async_request_send_prepare(TSConnection *conn, const char *sql, int n_params)
 {
 	AsyncRequest *req;
-	size_t stmt_name_len = NAMEDATALEN;
-	char *stmt_name = palloc(sizeof(char) * stmt_name_len);
-	int written;
+	char *stmt_name;
+	int ret;
+
+	Assert(!remote_connection_is_processing(conn));
 
 	/* Construct name we'll use for the prepared statement. */
-	written =
-		snprintf(stmt_name, stmt_name_len, "ts_prep_%u", remote_connection_get_prep_stmt_number());
+	stmt_name = psprintf("ts_prep_%u", remote_connection_get_prep_stmt_number());
 
-	if (written < 0 || (size_t) written >= stmt_name_len)
-		elog(ERROR, "cannot create prepared statement name");
+	/* Send configuration parameters if necessary */
+	if (!remote_connection_configure_if_changed(conn))
+		elog(ERROR, "could not configure connection when preparing statement");
 
 	req = async_request_create(conn, sql, stmt_name, n_params, NULL, FORMAT_TEXT);
-	req = async_request_send_internal(req, ERROR);
+
+	/* Do not specify parameter types, see note above in
+	 * async_request_send_internal */
+	ret = PQsendPrepare(remote_connection_get_pg_conn(req->conn),
+						req->stmt_name,
+						req->sql,
+						req->prep_stmt_params,
+						NULL);
+
+	if (ret == 0)
+	{
+		pfree(req);
+		remote_connection_elog(req->conn, ERROR);
+		return NULL;
+	}
+
+	async_request_set_state(req, EXECUTING);
+	remote_connection_set_status(req->conn, CONN_PROCESSING);
 
 	return req;
 }
@@ -245,7 +263,7 @@ async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *param_va
 	AsyncRequest *req =
 		async_request_create(stmt->conn,
 							 stmt->sql,
-							 NULL,
+							 stmt->stmt_name,
 							 stmt->n_params,
 							 stmt_params_create_from_values((const char **) param_values,
 															stmt->n_params),
@@ -256,8 +274,12 @@ async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *param_va
 AsyncRequest *
 async_request_send_prepared_stmt_with_params(PreparedStmt *stmt, StmtParams *params, int res_format)
 {
-	AsyncRequest *req =
-		async_request_create(stmt->conn, stmt->sql, NULL, stmt->n_params, params, res_format);
+	AsyncRequest *req = async_request_create(stmt->conn,
+											 stmt->sql,
+											 stmt->stmt_name,
+											 stmt->n_params,
+											 params,
+											 res_format);
 	return async_request_send_internal(req, ERROR);
 }
 
