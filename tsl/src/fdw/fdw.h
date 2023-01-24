@@ -10,6 +10,10 @@
 #include <fmgr.h>
 #include <extension_constants.h>
 
+extern void tsl_mn_get_foreign_join_paths(PlannerInfo *root, RelOptInfo *joinrel,
+										  RelOptInfo *outerrel, RelOptInfo *innerrel,
+										  JoinType jointype, JoinPathExtraData *extra);
+
 extern Datum timescaledb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum timescaledb_fdw_validator(PG_FUNCTION_ARGS);
 

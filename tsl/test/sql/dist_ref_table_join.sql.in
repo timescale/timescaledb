@@ -106,3 +106,346 @@ SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw'
 -- Set options again
 ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD reference_tables 'metric_name, metric_name_dht, reference_table2');
 SELECT fdwoptions FROM pg_foreign_data_wrapper WHERE fdwname = 'timescaledb_fdw';
+
+SET client_min_messages TO DEBUG1;
+
+\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+
+-- Analyze tables
+ANALYZE metric;
+ANALYZE metric_name;
+ANALYZE metric_name_dht;
+
+-------
+-- Tests based on results
+-------
+
+-- Simple join
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id);
+
+-- Filter
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu1' AND name LIKE 'cpu2';
+
+-- Ordering
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id) order by metric_name.name ASC;
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id) order by metric_name.name DESC;
+
+-- Aggregations
+
+SELECT SUM(metric.value) FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
+
+SELECT MAX(metric.value), MIN(metric.value) FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
+
+SELECT COUNT(*) FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
+
+-- Aggregations and Renaming
+
+SELECT SUM(m1.value) FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name = 'cpu1';
+
+SELECT MAX(m1.value), MIN(m1.value) FROM metric AS m1 LEFT JOIN metric_name AS m2 USING (id) WHERE name = 'cpu1';
+
+SELECT COUNT(*) FROM metric AS ma LEFT JOIN metric_name as m2 USING (id) WHERE name = 'cpu1';
+
+-- Grouping
+
+SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name;
+
+SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name ORDER BY name DESC;
+
+SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name HAVING min(value) > 60 ORDER BY name DESC;
+
+-------
+-- Tests based on query plans
+-------
+
+-- Tests without filter (vanilla PostgreSQL reftable)
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id);
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name ON metric.id = metric_name.id;
+
+-- Tests without filter (DHT reftable)
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name_dht USING (id);
+
+-- Tests with filter pushdown
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE value > 10;
+
+PREPARE prepared_join_pushdown_value (int) AS
+   SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE value > $1;
+
+:PREFIX
+EXECUTE prepared_join_pushdown_value(10);
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE ts > '2022-02-02 02:02:02+03';
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu2';
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name_dht USING (id) WHERE name LIKE 'cpu%';
+
+-- Tests with an expression that evaluates to false
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu1' AND name LIKE 'cpu2';
+
+-- Tests with aliases
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric_name m2 USING (id);
+
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id;
+
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id WHERE m1.value > 10;
+
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id WHERE m1.value > 10 AND m2.name LIKE 'cpu%';
+
+-- Tests with projections
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT m1.ts, m1.value FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT m1.id, m1.id FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT m1.id, m2.id FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT m1.*, m2.* FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
+
+-- Ordering
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name ASC;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DESC;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name ASC NULLS first;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name ASC NULLS last;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DESC NULLS first;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DESC NULLS last;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name, value DESC;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, name DESC;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value ASC, name DESC;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value ASC NULLS last, name DESC NULLS first;
+
+-- Ordering with explicit table qualification
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, name, metric_name.id;
+
+:PREFIX
+SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, name, metric_name.id, metric.id;
+
+-- Ordering with explicit table qualification and aliases
+:PREFIX
+SELECT name, value FROM metric m1 LEFT JOIN metric_name m2 USING (id) ORDER BY value, name, m1.id, m2.id;
+
+-- Grouping
+:PREFIX
+SELECT name FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name;
+
+:PREFIX
+SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name;
+
+:PREFIX
+SELECT name, max(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03' GROUP BY name;
+
+-- Grouping and sorting
+:PREFIX
+SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' and ts BETWEEN '2000-02-02 02:02:02+03' and '2022-02-02 02:12:02+03' GROUP BY name ORDER BY name DESC;
+
+-- Having
+:PREFIX
+SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' and ts BETWEEN '2000-02-02 02:02:02+03' and '2022-02-02 02:12:02+03' GROUP BY name having min(value) > 0 ORDER BY name DESC;
+
+-- Rank
+:PREFIX
+SELECT name, value, RANK () OVER (ORDER by value) from metric join metric_name_local USING (id);
+
+-- Check returned types
+SELECT pg_typeof("name"), pg_typeof("id"), pg_typeof("value"), name, id, value FROM metric
+LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' LIMIT 1;
+
+-- Left join and reference table on the left hypertable on the right (no pushdown)
+:PREFIX
+SELECT * FROM metric_name LEFT JOIN metric USING (id) WHERE name LIKE 'cpu%';
+
+-- Right join reference table on the left, hypertable on the right (can be converted into a left join by PostgreSQL, pushdown)
+:PREFIX
+SELECT * FROM metric_name RIGHT JOIN metric USING (id) WHERE name LIKE 'cpu%';
+
+-- Right join hypertable on the left, reference table on the right (no pushdown)
+:PREFIX
+SELECT * FROM metric RIGHT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
+
+-- Inner join and reference table left, hypertable on the right (pushdown)
+:PREFIX
+SELECT * FROM metric_name INNER JOIN metric USING (id) WHERE name LIKE 'cpu%';
+
+-- Implicit join on two tables, hypertable left, reference table right (pushdown)
+:PREFIX
+SELECT * FROM metric m1, metric_name m2 WHERE m1.id=m2.id AND name LIKE 'cpu%';
+
+-- Implicit join on two tables, reference table left, hypertable right (pushdown)
+:PREFIX
+SELECT * FROM metric m2, metric_name m1 WHERE m1.id=m2.id AND name LIKE 'cpu%';
+
+-- Implicit join on three tables (no pushdown)
+:PREFIX
+SELECT * FROM metric m1, metric_name m2, metric_name m3 WHERE m1.id=m2.id AND m2.id = m3.id AND m3.name LIKE 'cpu%';
+
+-- Left join on a DHT and a subselect on a reference table (subselect can be removed, pushdown)
+:PREFIX
+SELECT * FROM metric LEFT JOIN (SELECT * FROM metric_name) AS sub ON metric.id=sub.id;
+
+-- Left join on a DHT and a subselect with filter on a reference table (subselect can be removed, pushdown)
+:PREFIX
+SELECT * FROM metric LEFT JOIN (SELECT * FROM metric_name WHERE name LIKE 'cpu%') AS sub ON metric.id=sub.id;
+
+-- Left join on a subselect on a DHT and a reference table (subselect can be removed, pushdown)
+:PREFIX
+SELECT * FROM (SELECT * FROM metric) as sub LEFT JOIN metric_name ON sub.id=metric_name.id WHERE name LIKE 'cpu%';
+
+-- Left join and hypertable on left and right (no pushdown)
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) WHERE m1.id = 2;
+
+-- Left join and reference table on left and right
+:PREFIX
+SELECT * FROM metric_name m1 LEFT JOIN metric_name m2 USING (id) WHERE m1.name LIKE 'cpu%';
+
+-- Only aggregation no values needs to be transferred
+:PREFIX
+SELECT count(*) FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE m2.name LIKE 'cpu%';
+
+-- Lateral joins that can be converted into regular joins
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id = m2.id) t ON TRUE;
+
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id > m2.id) t ON TRUE;
+
+-- Lateral join that can not be converted and pushed down
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id > m2.id ORDER BY m2.name LIMIT 1) t ON TRUE;
+
+-- Two left joins (no pushdown)
+:PREFIX
+SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) LEFT JOIN metric_name mn USING(id);
+
+-------
+-- Tests with shippable and non-shippable joins / EquivalenceClass
+-- See 'dist_param.sql' for an explanation of the used textin / int4out
+-- functions.
+-------
+
+-- Shippable non-EquivalenceClass join
+:PREFIX
+SELECT name, max(value), count(*)
+FROM metric JOIN metric_name ON texteq('cpu' || textin(int4out(metric.id)), name)
+GROUP BY name
+ORDER BY name;
+
+-- Non-shippable equality class join
+:PREFIX
+SELECT name, max(value), count(*)
+FROM metric JOIN metric_name ON name = concat('cpu', metric.id)
+GROUP BY name
+ORDER BY name;
+
+-- Non-shippable non-EquivalenceClass join
+:PREFIX
+SELECT name, max(value), count(*)
+FROM metric JOIN metric_name ON texteq(concat('cpu', textin(int4out(metric.id))), name)
+GROUP BY name
+ORDER BY name;
+
+-------
+-- Tests without enable_per_data_node_queries (no pushdown supported)
+-------
+SET timescaledb.enable_per_data_node_queries = false;
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id);
+
+SET timescaledb.enable_per_data_node_queries = true;
+
+-------
+-- Tests with empty reftable
+-------
+RESET client_min_messages;
+TRUNCATE metric_name;
+CALL distributed_exec($$TRUNCATE metric_name;$$);
+
+-- Left join
+SELECT * FROM metric LEFT JOIN metric_name USING (id);
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id);
+
+-- Inner join
+SELECT * FROM metric JOIN metric_name USING (id);
+
+:PREFIX
+SELECT * FROM metric JOIN metric_name USING (id);
+
+-- Filter on the NULL column
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name IS NOT NULL;
+
+:PREFIX
+SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
+
+-------
+-- Drop reftable on DNs and check proper error reporting
+-------
+\set ON_ERROR_STOP 0
+CALL distributed_exec($$DROP table metric_name;$$);
+
+SELECT * FROM metric LEFT JOIN metric_name USING (id);

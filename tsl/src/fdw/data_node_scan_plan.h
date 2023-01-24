@@ -17,6 +17,10 @@ extern void data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKi
 											  RelOptInfo *input_rel, RelOptInfo *output_rel,
 											  void *extra);
 
+extern void data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel,
+												   RelOptInfo *outerrel, RelOptInfo *innerrel,
+												   JoinType jointype, JoinPathExtraData *extra);
+
 /* Indexes of fields in ForeignScan->custom_private */
 typedef enum
 {

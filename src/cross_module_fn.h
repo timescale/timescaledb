@@ -203,6 +203,9 @@ typedef struct CrossModuleFunctions
 	PGFunction chunks_drop_stale;
 	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
 	PGFunction health_check;
+	void (*mn_get_foreign_join_paths)(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
+									  RelOptInfo *innerrel, JoinType jointype,
+									  JoinPathExtraData *extra);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
