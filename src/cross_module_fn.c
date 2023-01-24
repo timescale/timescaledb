@@ -128,7 +128,7 @@ CROSSMODULE_WRAPPER(distributed_exec);
 CROSSMODULE_WRAPPER(create_distributed_restore_point);
 CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
 CROSSMODULE_WRAPPER(health_check);
-CROSSMODULE_WRAPPER(recompress_chunk_experimental);
+CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
@@ -557,7 +557,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
 	.health_check = error_no_default_fn_pg_community,
-	.recompress_chunk_experimental = error_no_default_fn_pg_community,
+	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 };
 

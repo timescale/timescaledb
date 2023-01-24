@@ -42,15 +42,14 @@ CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
     if_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
 
--- experimental at first
-CREATE OR REPLACE FUNCTION @extschema@.recompress_chunk_experimental(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = false
-) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_experimental' LANGUAGE C STRICT VOLATILE;
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 
 -- find the index on the compressed chunk that can be used to recompress efficiently 
 -- this index must contain all the segmentby columns and the meta_sequence_number column last
-CREATE OR REPLACE FUNCTION @extschema@.get_compressed_chunk_index_for_recompression(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_compressed_chunk_index_for_recompression(
     uncompressed_chunk REGCLASS
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_get_compressed_chunk_index_for_recompression' LANGUAGE C STRICT VOLATILE;
 -- Recompress a chunk
@@ -100,9 +99,9 @@ BEGIN
     WHEN status = 3 OR status = 9 OR status = 11 THEN
         -- first check if there's an index. Might have to use a heuristic to determine if index usage would be efficient, 
         -- or if we'd better fall back to decompressing & recompressing entire chunk
-        SELECT @extschema@.get_compressed_chunk_index_for_recompression(chunk) INTO compressed_chunk_index;
+        SELECT _timescaledb_internal.get_compressed_chunk_index_for_recompression(chunk) INTO compressed_chunk_index;
         IF FOUND THEN
-            PERFORM @extschema@.recompress_chunk_experimental(chunk);
+            PERFORM _timescaledb_internal.recompress_chunk_segmentwise(chunk);
         ELSE
             PERFORM @extschema@.decompress_chunk(chunk);
             COMMIT;

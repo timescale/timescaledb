@@ -1102,7 +1102,7 @@ fetch_uncompressed_chunk_into_tuplestore(Tuplesortstate *segment_tuplesortstate,
  * 1 if_not_compressed BOOL = false
  */
 Datum
-tsl_recompress_chunk_experimental(PG_FUNCTION_ARGS)
+tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed =

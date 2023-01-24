@@ -45,7 +45,7 @@ from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 
 select * from :compressed_chunk_name;
 
-select recompress_chunk_experimental(:'chunk_to_compress');
+select recompress_chunk_segmentwise(:'chunk_to_compress');
 
 -- verify that metadata count looks good
 select * from :compressed_chunk_name;
@@ -75,4 +75,4 @@ select * from :chunk_to_compress;
 
 -- select * from _timescaledb_internal._hyper_1_1_chunk;
 
--- select recompress_chunk_experimental('_timescaledb_internal._hyper_1_1_chunk');
+-- select recompress_chunk_segmentwise('_timescaledb_internal._hyper_1_1_chunk');

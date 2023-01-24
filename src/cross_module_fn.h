@@ -203,7 +203,7 @@ typedef struct CrossModuleFunctions
 	PGFunction chunks_drop_stale;
 	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
 	PGFunction health_check;
-	PGFunction recompress_chunk_experimental;
+	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
 } CrossModuleFunctions;
 
