@@ -55,7 +55,7 @@
  *
  * New options might also require tweaking merge_fdw_options().
  */
-static void
+void
 apply_fdw_and_server_options(TsFdwRelInfo *fpinfo)
 {
 	ListCell *lc;
@@ -93,6 +93,7 @@ TsFdwRelInfo *
 fdw_relinfo_get(RelOptInfo *rel)
 {
 	TimescaleDBPrivate *rel_private = rel->fdw_private;
+	Assert(rel_private);
 	TsFdwRelInfo *fdw_relation_info = rel_private->fdw_relation_info;
 
 	/*
@@ -393,8 +394,12 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * planning.
 	 */
 	fpinfo = fdw_relinfo_alloc_or_get(rel);
-	Assert(fpinfo->type == TS_FDW_RELINFO_UNINITIALIZED || fpinfo->type == type);
+	Assert(fpinfo->type == TS_FDW_RELINFO_UNINITIALIZED || fpinfo->type == TS_FDW_RELINFO_JOIN ||
+		   fpinfo->type == type);
 	fpinfo->type = type;
+
+	if (type == TS_FDW_RELINFO_UNINITIALIZED || type == TS_FDW_RELINFO_JOIN)
+		return fpinfo;
 
 	/*
 	 * Set the name of relation in fpinfo, while we are constructing it here.
@@ -404,26 +409,24 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 */
 
 	fpinfo->relation_name = makeStringInfo();
-	refname = rte->eref->aliasname;
-	appendStringInfo(fpinfo->relation_name,
-					 "%s.%s",
-					 quote_identifier(get_namespace_name(get_rel_namespace(rte->relid))),
-					 quote_identifier(get_rel_name(rte->relid)));
-	if (*refname && strcmp(refname, get_rel_name(rte->relid)) != 0)
-		appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
 
-	if (type == TS_FDW_RELINFO_HYPERTABLE)
+	if (rte != NULL)
 	{
-		/* nothing more to do for hypertables */
-		Assert(!OidIsValid(server_oid));
-
-		return fpinfo;
+		refname = rte->eref->aliasname;
+		appendStringInfo(fpinfo->relation_name,
+						 "%s.%s",
+						 quote_identifier(get_namespace_name(get_rel_namespace(rte->relid))),
+						 quote_identifier(get_rel_name(rte->relid)));
+		if (*refname && strcmp(refname, get_rel_name(rte->relid)) != 0)
+			appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
 	}
-	/* Base foreign tables need to be pushed down always. */
-	fpinfo->pushdown_safe = true;
 
 	/* Look up foreign-table catalog info. */
-	fpinfo->server = GetForeignServer(server_oid);
+	if (OidIsValid(server_oid))
+	{
+		fpinfo->server = GetForeignServer(server_oid);
+		apply_fdw_and_server_options(fpinfo);
+	}
 
 	/*
 	 * Extract user-settable option values.  Note that per-table setting
@@ -434,8 +437,6 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fpinfo->shippable_extensions = list_make1_oid(ts_extension_get_oid());
 	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
-	apply_fdw_and_server_options(fpinfo);
-
 	/*
 	 * Identify which baserestrictinfo clauses can be sent to the data
 	 * node and which can't.
@@ -445,6 +446,16 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 						rel->baserestrictinfo,
 						&fpinfo->remote_conds,
 						&fpinfo->local_conds);
+
+	if (type == TS_FDW_RELINFO_HYPERTABLE)
+	{
+		/* nothing more to do for hypertables */
+		Assert(!OidIsValid(server_oid));
+
+		return fpinfo;
+	}
+	/* Base foreign tables need to be pushed down always. */
+	fpinfo->pushdown_safe = true;
 
 	/*
 	 * Identify which attributes will need to be retrieved from the data
@@ -502,7 +513,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * rels (there's no corresponding table in the system to associate
 	 * stats with). Instead, data node rels already have basic stats set
 	 * at creation time based on data-node-chunk assignment. */
-	if (fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
+	if (fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE && OidIsValid(rel->relid))
 		set_baserel_size_estimates(root, rel);
 
 	/* Fill in basically-bogus cost estimates for use later. */

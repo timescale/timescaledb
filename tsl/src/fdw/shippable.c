@@ -193,6 +193,10 @@ is_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)
 	if (fpinfo->shippable_extensions == NIL)
 		return false;
 
+	/* Give up if we don't have a remote server. */
+	if (fpinfo->server == NULL)
+		return false;
+
 	/* Initialize cache if first time through. */
 	if (!ShippableCacheHash)
 		InitializeShippableCache();

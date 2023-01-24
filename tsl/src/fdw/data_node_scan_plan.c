@@ -43,6 +43,10 @@
 #include "fdw_utils.h"
 #include "relinfo.h"
 #include "scan_plan.h"
+#include "estimate.h"
+#include "planner/planner.h"
+#include "chunk.h"
+#include "debug_assert.h"
 
 /*
  * DataNodeScan is a custom scan implementation for scanning hypertables on
@@ -70,10 +74,20 @@ static Path *data_node_scan_path_create(PlannerInfo *root, RelOptInfo *rel, Path
 										double rows, Cost startup_cost, Cost total_cost,
 										List *pathkeys, Relids required_outer, Path *fdw_outerpath,
 										List *private);
+
+static Path *data_node_join_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target,
+										double rows, Cost startup_cost, Cost total_cost,
+										List *pathkeys, Relids required_outer, Path *fdw_outerpath,
+										List *private);
+
 static Path *data_node_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel,
 											  PathTarget *target, double rows, Cost startup_cost,
 											  Cost total_cost, List *pathkeys, Path *fdw_outerpath,
 											  List *private);
+
+static bool fdw_pushdown_foreign_join(PlannerInfo *root, RelOptInfo *joinrel, JoinType jointype,
+									  RelOptInfo *outerrel, RelOptInfo *innerrel,
+									  JoinPathExtraData *extra);
 
 static AppendRelInfo *
 create_append_rel_info(PlannerInfo *root, Index childrelid, Index parentrelid)
@@ -742,6 +756,658 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 }
 
 /*
+ * Check if the query performs a join between a hypertable (outer) and a reference
+ * table (inner) and the join type is a LEFT JOIN, an INNER JOIN, or an implicit
+ * join.
+ */
+static bool
+is_safe_to_pushdown_reftable_join(PlannerInfo *root, List *join_reference_tables,
+								  RangeTblEntry *innertableref, JoinType jointype)
+{
+	Assert(root != NULL);
+	Assert(innertableref != NULL);
+
+	/*
+	 * We support pushing down of INNER and LEFT joins only.
+	 *
+	 * Constructing queries representing partitioned FULL, SEMI, and ANTI
+	 * joins is hard, hence not considered right now.
+	 */
+	if (jointype != JOIN_INNER && jointype != JOIN_LEFT)
+		return false;
+
+	/* Check that at least one reference table is defined. */
+	if (join_reference_tables == NIL)
+		return false;
+
+	/* Only queries with two tables are supported. */
+	if (bms_num_members(root->all_baserels) != 2)
+		return false;
+
+	/* Right table has to be a distributed hypertable */
+	if (!list_member_oid(join_reference_tables, innertableref->relid))
+		return false;
+
+	/* Join can be pushed down */
+	return true;
+}
+
+/*
+ * Assess whether the join between inner and outer relations can be pushed down
+ * to the foreign server. As a side effect, save information we obtain in this
+ * function to TsFdwRelInfo passed in.
+ *
+ * The code is based on PostgreSQL's foreign_join_ok function (version 15.1).
+ */
+static bool
+fdw_pushdown_foreign_join(PlannerInfo *root, RelOptInfo *joinrel, JoinType jointype,
+						  RelOptInfo *outerrel, RelOptInfo *innerrel, JoinPathExtraData *extra)
+{
+	TsFdwRelInfo *fpinfo;
+	TsFdwRelInfo *fpinfo_o;
+	TsFdwRelInfo *fpinfo_i;
+	ListCell *lc;
+	List *joinclauses;
+
+	/*
+	 * If either of the joining relations is marked as unsafe to pushdown, the
+	 * join can not be pushed down.
+	 */
+	fpinfo = fdw_relinfo_get(joinrel);
+	fpinfo_o = fdw_relinfo_get(outerrel);
+	fpinfo_i = fdw_relinfo_get(innerrel);
+
+	Assert(fpinfo_o != NULL);
+	Assert(fpinfo_o->pushdown_safe);
+	Assert(fpinfo_i != NULL);
+	Assert(fpinfo_i->pushdown_safe);
+
+	/*
+	 * If joining relations have local conditions, those conditions are
+	 * required to be applied before joining the relations. Hence the join can
+	 * not be pushed down (shouldn't happen in the current implementation).
+	 */
+	Assert(fpinfo_o->local_conds == NULL);
+	Assert(fpinfo_i->local_conds == NULL);
+
+	fpinfo->server = fpinfo_o->server;
+
+	/*
+	 * Separate restrict list into join quals and pushed-down (other) quals.
+	 *
+	 * Join quals belonging to an outer join must all be shippable, else we
+	 * cannot execute the join remotely.  Add such quals to 'joinclauses'.
+	 *
+	 * Add other quals to fpinfo->remote_conds if they are shippable, else to
+	 * fpinfo->local_conds.  In an inner join it's okay to execute conditions
+	 * either locally or remotely; the same is true for pushed-down conditions
+	 * at an outer join.
+	 *
+	 * Note we might return failure after having already scribbled on
+	 * fpinfo->remote_conds and fpinfo->local_conds.  That's okay because we
+	 * won't consult those lists again if we deem the join unshippable.
+	 */
+	joinclauses = NIL;
+	foreach (lc, extra->restrictlist)
+	{
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+		bool is_remote_clause = ts_is_foreign_expr(root, joinrel, rinfo->clause);
+
+		if (IS_OUTER_JOIN(jointype) && !RINFO_IS_PUSHED_DOWN(rinfo, joinrel->relids))
+		{
+			if (!is_remote_clause)
+				return false;
+			joinclauses = lappend(joinclauses, rinfo);
+		}
+		else
+		{
+			if (is_remote_clause)
+				fpinfo->remote_conds = lappend(fpinfo->remote_conds, rinfo);
+			else
+				fpinfo->local_conds = lappend(fpinfo->local_conds, rinfo);
+		}
+	}
+
+	if (fpinfo->local_conds != NIL)
+		return false;
+
+	/* Save the join clauses, for later use. */
+	fpinfo->joinclauses = joinclauses;
+
+	/*
+	 * deparseExplicitTargetList() isn't smart enough to handle anything other
+	 * than a Var.  In particular, if there's some PlaceHolderVar that would
+	 * need to be evaluated within this join tree (because there's an upper
+	 * reference to a quantity that may go to NULL as a result of an outer
+	 * join), then we can't try to push the join down because we'll fail when
+	 * we get to deparseExplicitTargetList().  However, a PlaceHolderVar that
+	 * needs to be evaluated *at the top* of this join tree is OK, because we
+	 * can do that locally after fetching the results from the remote side.
+	 *
+	 * Note: At the moment, the placeholder code is not used in our current join
+	 * pushdown implementation.
+	 */
+#ifdef ENABLE_DEAD_CODE
+	foreach (lc, root->placeholder_list)
+	{
+		PlaceHolderInfo *phinfo = lfirst(lc);
+		Relids relids;
+
+		/* PlaceHolderInfo refers to parent relids, not child relids. */
+		relids = IS_OTHER_REL(joinrel) ? joinrel->top_parent_relids : joinrel->relids;
+
+		if (bms_is_subset(phinfo->ph_eval_at, relids) &&
+			bms_nonempty_difference(relids, phinfo->ph_eval_at))
+			return false;
+	}
+#endif
+
+	fpinfo->outerrel = outerrel;
+	fpinfo->innerrel = innerrel;
+	fpinfo->jointype = jointype;
+
+	/*
+	 * By default, both the input relations are not required to be deparsed as
+	 * subqueries, but there might be some relations covered by the input
+	 * relations that are required to be deparsed as subqueries, so save the
+	 * relids of those relations for later use by the deparser.
+	 */
+	fpinfo->make_outerrel_subquery = false;
+	fpinfo->make_innerrel_subquery = false;
+	Assert(bms_is_subset(fpinfo_o->lower_subquery_rels, outerrel->relids));
+	Assert(bms_is_subset(fpinfo_i->lower_subquery_rels, innerrel->relids));
+	fpinfo->lower_subquery_rels =
+		bms_union(fpinfo_o->lower_subquery_rels, fpinfo_i->lower_subquery_rels);
+
+	/*
+	 * Pull the other remote conditions from the joining relations into join
+	 * clauses or other remote clauses (remote_conds) of this relation
+	 * wherever possible. This avoids building subqueries at every join step.
+	 *
+	 * For an inner join, clauses from both the relations are added to the
+	 * other remote clauses. For LEFT and RIGHT OUTER join, the clauses from
+	 * the outer side are added to remote_conds since those can be evaluated
+	 * after the join is evaluated. The clauses from inner side are added to
+	 * the joinclauses, since they need to be evaluated while constructing the
+	 * join.
+	 *
+	 * For a FULL OUTER JOIN, the other clauses from either relation can not
+	 * be added to the joinclauses or remote_conds, since each relation acts
+	 * as an outer relation for the other.
+	 *
+	 * The joining sides can not have local conditions, thus no need to test
+	 * shippability of the clauses being pulled up.
+	 */
+	switch (jointype)
+	{
+		case JOIN_INNER:
+#if PG14_GE
+			fpinfo->remote_conds = list_concat(fpinfo->remote_conds, fpinfo_i->remote_conds);
+			fpinfo->remote_conds = list_concat(fpinfo->remote_conds, fpinfo_o->remote_conds);
+#else
+			fpinfo->remote_conds =
+				list_concat(fpinfo->remote_conds, list_copy(fpinfo_i->remote_conds));
+			fpinfo->remote_conds =
+				list_concat(fpinfo->remote_conds, list_copy(fpinfo_o->remote_conds));
+#endif
+			break;
+
+		case JOIN_LEFT:
+#if PG14_GE
+			fpinfo->joinclauses = list_concat(fpinfo->joinclauses, fpinfo_i->remote_conds);
+			fpinfo->remote_conds = list_concat(fpinfo->remote_conds, fpinfo_o->remote_conds);
+#else
+			fpinfo->joinclauses =
+				list_concat(fpinfo->joinclauses, list_copy(fpinfo_i->remote_conds));
+			fpinfo->remote_conds =
+				list_concat(fpinfo->remote_conds, list_copy(fpinfo_o->remote_conds));
+#endif
+			break;
+
+/* Right and full joins are not supported at the moment */
+#ifdef ENABLE_DEAD_CODE
+		case JOIN_RIGHT:
+#if PG14_GE
+			fpinfo->joinclauses = list_concat(fpinfo->joinclauses, fpinfo_o->remote_conds);
+			fpinfo->remote_conds = list_concat(fpinfo->remote_conds, fpinfo_i->remote_conds);
+#else
+			fpinfo->joinclauses =
+				list_concat(fpinfo->joinclauses, list_copy(fpinfo_o->remote_conds));
+			fpinfo->remote_conds =
+				list_concat(fpinfo->remote_conds, list_copy(fpinfo_i->remote_conds));
+#endif
+			break;
+
+		case JOIN_FULL:
+
+			/*
+			 * In this case, if any of the input relations has conditions, we
+			 * need to deparse that relation as a subquery so that the
+			 * conditions can be evaluated before the join.  Remember it in
+			 * the fpinfo of this relation so that the deparser can take
+			 * appropriate action.  Also, save the relids of base relations
+			 * covered by that relation for later use by the deparser.
+			 */
+			if (fpinfo_o->remote_conds)
+			{
+				fpinfo->make_outerrel_subquery = true;
+				fpinfo->lower_subquery_rels =
+					bms_add_members(fpinfo->lower_subquery_rels, outerrel->relids);
+			}
+			if (fpinfo_i->remote_conds)
+			{
+				fpinfo->make_innerrel_subquery = true;
+				fpinfo->lower_subquery_rels =
+					bms_add_members(fpinfo->lower_subquery_rels, innerrel->relids);
+			}
+			break;
+#endif
+
+		default:
+			/* Should not happen, we have just checked this above */
+			elog(ERROR, "unsupported join type %d", jointype);
+	}
+
+	/*
+	 * For an inner join, all restrictions can be treated alike. Treating the
+	 * pushed down conditions as join conditions allows a top level full outer
+	 * join to be deparsed without requiring subqueries.
+	 */
+	if (jointype == JOIN_INNER)
+	{
+		Assert(!fpinfo->joinclauses);
+		fpinfo->joinclauses = fpinfo->remote_conds;
+		fpinfo->remote_conds = NIL;
+	}
+	/* Mark that this join can be pushed down safely */
+	fpinfo->pushdown_safe = true;
+
+	/*
+	 * Set the string describing this join relation to be used in EXPLAIN
+	 * output of corresponding ForeignScan.  Note that the decoration we add
+	 * to the base relation names mustn't include any digits, or it'll confuse
+	 * postgresExplainForeignScan.
+	 */
+	fpinfo->relation_name = makeStringInfo();
+	appendStringInfo(fpinfo->relation_name,
+					 "(%s) %s JOIN (%s)",
+					 fpinfo_o->relation_name->data,
+					 get_jointype_name(fpinfo->jointype),
+					 fpinfo_i->relation_name->data);
+
+	/*
+	 * Set the relation index.  This is defined as the position of this
+	 * joinrel in the join_rel_list list plus the length of the rtable list.
+	 * Note that since this joinrel is at the end of the join_rel_list list
+	 * when we are called, we can get the position by list_length.
+	 */
+	fpinfo->relation_index = list_length(root->parse->rtable) + list_length(root->join_rel_list);
+
+	return true;
+}
+
+/*
+ * Check if the given hypertable is a distributed hypertable.
+ */
+static bool
+is_distributed_hypertable(Oid hypertable_reloid)
+{
+	Cache *hcache;
+
+	Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(hypertable_reloid, CACHE_FLAG_MISSING_OK, &hcache);
+
+	/* perform check before cache is released */
+	bool ht_is_distributed = (ht != NULL && hypertable_is_distributed(ht));
+	ts_cache_release(hcache);
+
+	return ht_is_distributed;
+}
+
+/*
+ * Create a new join partition RelOptInfo data structure for a partition. The data
+ * structure is based on the parameter joinrel. The paramater is taken as template
+ * and adjusted for the partition provided by the parameter data_node_rel.
+ */
+static RelOptInfo *
+create_data_node_joinrel(PlannerInfo *root, RelOptInfo *innerrel, RelOptInfo *joinrel,
+						 RelOptInfo *data_node_rel, AppendRelInfo *appinfo)
+{
+	RelOptInfo *join_partition = palloc(sizeof(RelOptInfo));
+	memcpy(join_partition, joinrel, sizeof(RelOptInfo));
+
+	/* Create a new relinfo for the join partition */
+	join_partition->fdw_private = NULL;
+	TsFdwRelInfo *join_part_fpinfo = fdw_relinfo_create(root,
+														join_partition,
+														data_node_rel->serverid,
+														InvalidOid,
+														TS_FDW_RELINFO_REFERENCE_JOIN_PARTITION);
+
+	Assert(join_part_fpinfo != NULL);
+
+	TsFdwRelInfo *data_node_rel_fpinfo = fdw_relinfo_get(data_node_rel);
+	Assert(data_node_rel_fpinfo != NULL);
+
+	/* Copy chunk assignment from hypertable */
+	join_part_fpinfo->sca = data_node_rel_fpinfo->sca;
+
+	/* Set parameters of the join partition */
+	join_partition->relid = data_node_rel->relid;
+	join_partition->relids = bms_copy(data_node_rel->relids);
+	join_partition->relids = bms_add_members(join_partition->relids, innerrel->relids);
+	join_partition->pathlist = NIL;
+	join_partition->partial_pathlist = NIL;
+
+	/* Set the reltarget expressions of the partition based on the reltarget expressions
+	 * of the join and adjust them for the partition */
+	join_partition->reltarget = create_empty_pathtarget();
+	join_partition->reltarget->sortgrouprefs = joinrel->reltarget->sortgrouprefs;
+	join_partition->reltarget->cost = joinrel->reltarget->cost;
+	join_partition->reltarget->width = joinrel->reltarget->width;
+#if PG14_GE
+	join_partition->reltarget->has_volatile_expr = joinrel->reltarget->has_volatile_expr;
+#endif
+	join_partition->reltarget->exprs =
+		castNode(List,
+				 adjust_appendrel_attrs(root, (Node *) joinrel->reltarget->exprs, 1, &appinfo));
+
+	return join_partition;
+}
+
+/*
+ * Create a JoinPathExtraData data structure for a partition. The new struct is based on the
+ * original JoinPathExtraData of the join and the AppendRelInfo of the partition.
+ */
+static JoinPathExtraData *
+create_data_node_joinrel_extra(PlannerInfo *root, JoinPathExtraData *extra, AppendRelInfo *appinfo)
+{
+	JoinPathExtraData *partition_extra = palloc(sizeof(JoinPathExtraData));
+	partition_extra->inner_unique = extra->inner_unique;
+	partition_extra->sjinfo = extra->sjinfo;
+	partition_extra->semifactors = extra->semifactors;
+	partition_extra->param_source_rels = extra->param_source_rels;
+	partition_extra->mergeclause_list =
+		castNode(List, adjust_appendrel_attrs(root, (Node *) extra->mergeclause_list, 1, &appinfo));
+	partition_extra->restrictlist =
+		castNode(List, adjust_appendrel_attrs(root, (Node *) extra->restrictlist, 1, &appinfo));
+
+	return partition_extra;
+}
+
+/*
+ * Generate the paths for a pushed down join. Each data node will be considered as a partition
+ * of the join. The join can be pushed down if:
+ *
+ * (1) The setting "ts_guc_enable_per_data_node_queries" is enabled
+ * (2) The outer relation is a distributed hypertable
+ * (3) The inner relation is marked as a reference table
+ * (4) The join is a left join or an inner join
+ *
+ * The join will be performed between the multiple DataNodeRels (see function
+ * build_data_node_part_rels) and the original innerrel of the join (the reftable).
+ *
+ * The code is based on PostgreSQL's postgresGetForeignJoinPaths function
+ * (version 15.1).
+ */
+void
+data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
+									   RelOptInfo *innerrel, JoinType jointype,
+									   JoinPathExtraData *extra)
+{
+	TsFdwRelInfo *fpinfo;
+	Path *joinpath;
+	double rows = 0;
+	int width = 0;
+	Cost startup_cost = 0;
+	Cost total_cost = 0;
+	Path *epq_path = NULL;
+	RelOptInfo **hyper_table_rels;
+	RelOptInfo **join_partition_rels;
+	int nhyper_table_rels;
+	List *join_part_rels_list = NIL;
+#if PG15_GE
+	Bitmapset *data_node_live_rels = NULL;
+#endif
+
+	/*
+	 * Skip check if the join result has been considered already.
+	 */
+	if (joinrel->fdw_private)
+		return;
+
+#ifdef ENABLE_DEAD_CODE
+	/*
+	 * This code does not work for joins with lateral references, since those
+	 * must have parameterized paths, which we don't generate yet.
+	 */
+	if (!bms_is_empty(joinrel->lateral_relids))
+		return;
+#endif
+
+	/* Get the hypertable from the outer relation. */
+	RangeTblEntry *rte_outer = planner_rt_fetch(outerrel->relid, root);
+
+	/* Test that the fetched outer relation is an actual RTE and a
+	 * distributed hypertable. */
+	if (rte_outer == NULL || !is_distributed_hypertable(rte_outer->relid))
+		return;
+
+#ifdef USE_ASSERT_CHECKING
+	/* The outerrel has to be distributed. This condition should be always hold
+	 * because otherwise we should not start the planning for distributed tables
+	 * (see timescaledb_set_join_pathlist_hook).
+	 */
+	TimescaleDBPrivate *outerrel_private = outerrel->fdw_private;
+	Assert(outerrel_private != NULL);
+	Assert(outerrel_private->fdw_relation_info != NULL);
+#endif
+
+	/* We know at this point that outerrel is a distributed hypertable.
+	 * So, outerrel has to be partitioned. */
+	Assert(outerrel->nparts > 0);
+
+	/* Test if inner table has a range table. */
+	RangeTblEntry *rte_inner = planner_rt_fetch(innerrel->relid, root);
+	if (rte_inner == NULL)
+		return;
+
+	/* Get current partitioning of the outerrel. */
+	hyper_table_rels = outerrel->part_rels;
+	nhyper_table_rels = outerrel->nparts;
+
+	Assert(nhyper_table_rels > 0);
+	Assert(hyper_table_rels != NULL);
+
+	/*
+	 * Create an PgFdwRelationInfo entry that is used to indicate
+	 * that the join relation is already considered, so that we won't waste
+	 * time in judging safety of join pushdown and adding the same paths again
+	 * if found safe. Once we know that this join can be pushed down, we fill
+	 * the entry.
+	 */
+	fpinfo = fdw_relinfo_create(root, joinrel, InvalidOid, InvalidOid, TS_FDW_RELINFO_JOIN);
+	Assert(fpinfo->type == TS_FDW_RELINFO_JOIN);
+
+	/* attrs_used is only for base relations. */
+	fpinfo->attrs_used = NULL;
+	fpinfo->pushdown_safe = false;
+
+	/*
+	 * We need the FDW information to get retrieve the information about the
+	 * configured reference join tables. So, create the data structure for
+	 * the first server. The reference tables are the same for all servers.
+	 */
+	Oid server_oid = hyper_table_rels[0]->serverid;
+	fpinfo->server = GetForeignServer(server_oid);
+	apply_fdw_and_server_options(fpinfo);
+
+	if (!is_safe_to_pushdown_reftable_join(root,
+										   fpinfo->join_reference_tables,
+										   rte_inner,
+										   jointype))
+	{
+		/*
+		 * Reset fdw_private to allow further planner calls with different arguments
+		 * (e.g., swapped inner and outer relation) to replan the pushdown.
+		 */
+		pfree(joinrel->fdw_private);
+		joinrel->fdw_private = NULL;
+		return;
+	}
+
+	/*
+	 * Join pushdown only works if the data node rels are created in
+	 * data_node_scan_add_node_paths during scan planning.
+	 */
+	if (!ts_guc_enable_per_data_node_queries)
+	{
+		ereport(DEBUG1,
+				(errmsg("join on reference table is not considered to be pushed down because "
+						"'enable_per_data_node_queries' GUC is disabled")));
+
+		return;
+	}
+
+	/* The inner table can be a distributed hypertable or a plain table. Plain tables don't have
+	 * a TsFdwRelInfo at this point. So, it needs to be created.
+	 */
+	if (innerrel->fdw_private == NULL)
+		fdw_relinfo_create(root, innerrel, InvalidOid, InvalidOid, TS_FDW_RELINFO_REFERENCE_TABLE);
+
+	/* Allow pushdown of the inner rel (the reference table) */
+	TsFdwRelInfo *fpinfo_i = fdw_relinfo_get(innerrel);
+	fpinfo_i->pushdown_safe = true;
+
+	ereport(DEBUG1, (errmsg("try to push down a join on a reference table")));
+
+	join_partition_rels = palloc(sizeof(RelOptInfo *) * nhyper_table_rels);
+
+	/* Create join paths and cost estimations per data node / join relation. */
+	for (int i = 0; i < nhyper_table_rels; i++)
+	{
+		RelOptInfo *data_node_rel = hyper_table_rels[i];
+		Assert(data_node_rel);
+
+		/* Adjust join target expression list */
+		AppendRelInfo *appinfo = root->append_rel_array[data_node_rel->relid];
+		Assert(appinfo != NULL);
+
+		RelOptInfo *join_partition =
+			create_data_node_joinrel(root, innerrel, joinrel, data_node_rel, appinfo);
+		join_partition_rels[i] = join_partition;
+		fpinfo = fdw_relinfo_get(join_partition);
+
+		/* Create a new join path extra for this join partition */
+		JoinPathExtraData *partition_extra = create_data_node_joinrel_extra(root, extra, appinfo);
+
+		/* Pushdown the join expressions */
+		bool join_pushdown_ok = fdw_pushdown_foreign_join(root,
+														  join_partition,
+														  jointype,
+														  data_node_rel,
+														  innerrel,
+														  partition_extra);
+
+		/* Join cannot be pushed down */
+		if (!join_pushdown_ok)
+		{
+			ereport(DEBUG1,
+					(errmsg(
+						"join pushdown on reference table is not supported for the used query")));
+			return;
+		}
+
+		/*
+		 * Compute the selectivity and cost of the local_conds, so we don't have
+		 * to do it over again for each path. The best we can do for these
+		 * conditions is to estimate selectivity on the basis of local statistics.
+		 * The local conditions are applied after the join has been computed on
+		 * the remote side like quals in WHERE clause, so pass jointype as
+		 * JOIN_INNER.
+		 */
+		fpinfo->local_conds_sel =
+			clauselist_selectivity(root, fpinfo->local_conds, 0, JOIN_INNER, NULL);
+		cost_qual_eval(&fpinfo->local_conds_cost, fpinfo->local_conds, root);
+
+		/*
+		 * If we are going to estimate costs locally, estimate the join clause
+		 * selectivity here while we have special join info.
+		 */
+		fpinfo->joinclause_sel =
+			clauselist_selectivity(root, fpinfo->joinclauses, 0, fpinfo->jointype, extra->sjinfo);
+
+		/* Estimate costs for bare join relation */
+		fdw_estimate_path_cost_size(root,
+									join_partition,
+									NIL,
+									&rows,
+									&width,
+									&startup_cost,
+									&total_cost);
+
+		/* Now update this information in the joinrel */
+		join_partition->rows = rows;
+		join_partition->reltarget->width = width;
+		fpinfo->rows = rows;
+		fpinfo->width = width;
+		fpinfo->startup_cost = startup_cost;
+		fpinfo->total_cost = total_cost;
+
+		/*
+		 * Create a new join path and add it to the joinrel which represents a
+		 * join between foreign tables.
+		 */
+		joinpath = data_node_join_path_create(root,
+											  join_partition,
+											  NULL, /* default pathtarget */
+											  rows,
+											  startup_cost,
+											  total_cost,
+											  NIL, /* no pathkeys */
+											  join_partition->lateral_relids,
+											  epq_path,
+											  NIL); /* no fdw_private */
+
+		Assert(joinpath != NULL);
+
+		if (!bms_is_empty(fpinfo->sca->chunk_relids))
+		{
+			/* Add generated path into joinrel by add_path(). */
+			fdw_utils_add_path(join_partition, (Path *) joinpath);
+			join_part_rels_list = lappend(join_part_rels_list, join_partition);
+
+#if PG15_GE
+			data_node_live_rels = bms_add_member(data_node_live_rels, i);
+#endif
+
+			/* Consider pathkeys for the join relation */
+			fdw_add_paths_with_pathkeys_for_rel(root,
+												join_partition,
+												epq_path,
+												data_node_join_path_create);
+		}
+		else
+			ts_set_dummy_rel_pathlist(join_partition);
+
+		set_cheapest(join_partition);
+	}
+
+	Assert(list_length(join_part_rels_list) > 0);
+
+	/* Must keep partitioning info consistent with the join partition paths we have created */
+	joinrel->part_rels = join_partition_rels;
+	joinrel->nparts = nhyper_table_rels;
+#if PG15_GE
+	joinrel->live_parts = data_node_live_rels;
+#endif
+
+	add_paths_to_append_rel(root, joinrel, join_part_rels_list);
+
+	/* XXX Consider parameterized paths for the join relation */
+}
+
+/*
  * Turn chunk append paths into data node append paths.
  *
  * By default, a hypertable produces append plans where each child is a chunk
@@ -1031,6 +1697,57 @@ data_node_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *targe
 	scanpath->cpath.path.parent = rel;
 	scanpath->cpath.path.pathtarget = target ? target : rel->reltarget;
 	scanpath->cpath.path.param_info = get_baserel_parampathinfo(root, rel, required_outer);
+	scanpath->cpath.path.parallel_aware = false;
+	scanpath->cpath.path.parallel_safe = rel->consider_parallel;
+	scanpath->cpath.path.parallel_workers = 0;
+	scanpath->cpath.path.rows = rows;
+	scanpath->cpath.path.startup_cost = startup_cost;
+	scanpath->cpath.path.total_cost = total_cost;
+	scanpath->cpath.path.pathkeys = pathkeys;
+
+	return &scanpath->cpath.path;
+}
+
+/*
+ * data_node_join_path_create
+ *	  Creates a path corresponding to a scan of a foreign join,
+ *	  returning the pathnode.
+ *
+ * There is a usually-sane default for the pathtarget (rel->reltarget),
+ * so we let a NULL for "target" select that.
+ *
+ * The code is based on PostgreSQL's create_foreign_join_path function
+ * (version 15.1).
+ */
+static Path *
+data_node_join_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, double rows,
+						   Cost startup_cost, Cost total_cost, List *pathkeys,
+						   Relids required_outer, Path *fdw_outerpath, List *private)
+{
+	DataNodeScanPath *scanpath = palloc0(sizeof(DataNodeScanPath));
+
+#ifdef ENABLE_DEAD_CODE
+	if (rel->lateral_relids && !bms_is_subset(rel->lateral_relids, required_outer))
+		required_outer = bms_union(required_outer, rel->lateral_relids);
+
+	/*
+	 * We should use get_joinrel_parampathinfo to handle parameterized paths,
+	 * but the API of this function doesn't support it, and existing
+	 * extensions aren't yet trying to build such paths anyway.  For the
+	 * moment just throw an error if someone tries it; eventually we should
+	 * revisit this.
+	 */
+	if (!bms_is_empty(required_outer) || !bms_is_empty(rel->lateral_relids))
+		elog(ERROR, "parameterized foreign joins are not supported yet");
+#endif
+
+	scanpath->cpath.path.type = T_CustomPath;
+	scanpath->cpath.path.pathtype = T_CustomScan;
+	scanpath->cpath.custom_paths = fdw_outerpath == NULL ? NIL : list_make1(fdw_outerpath);
+	scanpath->cpath.methods = &data_node_scan_path_methods;
+	scanpath->cpath.path.parent = rel;
+	scanpath->cpath.path.pathtarget = target ? target : rel->reltarget;
+	scanpath->cpath.path.param_info = NULL; /* XXX see above */
 	scanpath->cpath.path.parallel_aware = false;
 	scanpath->cpath.path.parallel_safe = rel->consider_parallel;
 	scanpath->cpath.path.parallel_workers = 0;
