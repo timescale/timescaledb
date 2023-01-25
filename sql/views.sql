@@ -301,24 +301,33 @@ ORDER BY table_name,
   segmentby_column_index,
   orderby_column_index;
 
--- troubleshooting job errors view
-CREATE OR REPLACE VIEW timescaledb_information.job_errors AS
+-- Job errors view that adds a security barrier on the job_errors
+-- table in _timescaledb_internal. The view only allows users to view
+-- log entries belonging to jobs that are owned by any of the users
+-- role. A special case is added so that the superuser or the database
+-- owner can see all job log entries, even those that do not have an
+-- associated job.
+--
+-- Note that we have to use a sub-select here since pg_database_owner
+-- does not exist before PostgreSQL 14.
+CREATE OR REPLACE VIEW timescaledb_information.job_errors
+WITH (security_barrier = true) AS
 SELECT
     job_id,
-    error_data ->> 'proc_schema' as proc_schema,
-    error_data ->> 'proc_name' as proc_name,
+    error_data->>'proc_schema' as proc_schema,
+    error_data->>'proc_name' as proc_name,
     pid,
     start_time,
     finish_time,
-    error_data ->> 'sqlerrcode' AS sqlerrcode,
-    CASE WHEN error_data ->>'message' IS NOT NULL THEN
-      CASE WHEN error_data ->>'detail' IS NOT NULL THEN
-        CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data ->>'detail', '. ', error_data->>'hint')
-        ELSE concat(error_data ->>'message', ' ', error_data ->>'detail')
+    error_data->>'sqlerrcode' AS sqlerrcode,
+    CASE WHEN error_data->>'message' IS NOT NULL THEN
+      CASE WHEN error_data->>'detail' IS NOT NULL THEN
+        CASE WHEN error_data->>'hint' IS NOT NULL THEN concat(error_data->>'message', '. ', error_data->>'detail', '. ', error_data->>'hint')
+        ELSE concat(error_data->>'message', ' ', error_data ->>'detail')
         END
       ELSE
-        CASE WHEN error_data ->>'hint' IS NOT NULL THEN concat(error_data ->>'message', '. ', error_data->>'hint')
-        ELSE error_data ->>'message'
+        CASE WHEN error_data->>'hint' IS NOT NULL THEN concat(error_data->>'message', '. ', error_data->>'hint')
+        ELSE error_data->>'message'
         END
       END
     ELSE
@@ -326,6 +335,15 @@ SELECT
     END
     AS err_message
 FROM
-    _timescaledb_internal.job_errors;
+    _timescaledb_internal.job_errors
+LEFT JOIN
+    _timescaledb_config.bgw_job ON (bgw_job.id = job_errors.job_id)
+WHERE
+    pg_catalog.pg_has_role(current_user,
+			   (SELECT pg_catalog.pg_get_userbyid(datdba)
+			      FROM pg_catalog.pg_database
+			     WHERE datname = current_database()),
+			   'MEMBER') IS TRUE
+    OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
