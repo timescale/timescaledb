@@ -58,6 +58,12 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
 };
 
+// static void
+// print_timestamptz_datum(Datum tstz_datum, const char *name)
+// {
+// 	elog(NOTICE, "%s is %s", name, DatumGetCString(DirectFunctionCall1(timestamptz_out, tstz_datum)));
+// }
+
 /* this is copied from the job_stat/get_next_scheduled_execution_slot */
 extern Datum
 ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
@@ -70,22 +76,40 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 	Datum timebucket_fini, result, offset;
 	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
 
+	// print_timestamptz_datum(initial_start, "initial_start");
+	// print_timestamptz_datum(finish_time, "finish_time is");
+
 	if (timezone == NULL)
 	{
 		offset = DirectFunctionCall2(ts_timestamptz_bucket,
 									 schedint_datum,
 									 TimestampTzGetDatum(initial_start));
 
-		timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
-											  schedint_datum,
-											  TimestampTzGetDatum(finish_time),
-											  TimestampTzGetDatum(initial_start));
-		/* always the next time_bucket */
-		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+		/* offset: initial_start - bucket_start */
+		offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+
+		timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(finish_time));
+		timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval,
+											  timebucket_fini,
+											  offset);
+
+		/* two cases now: either this time bucket is less than the next multiple, or it is the next multiple */
+		result = timebucket_fini;
+
+		// print_timestamptz_datum(result, "result is before loop");
+
+		while (result <= TimestampTzGetDatum(finish_time))
+		{
+			result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+		}
+		// print_timestamptz_datum(result, "result is after loop");
 	}
 	else
 	{
 		char *tz = text_to_cstring(timezone);
+
 		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
 											  schedint_datum,
 											  TimestampTzGetDatum(finish_time),
@@ -98,25 +122,14 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 									 schedint_datum,
 									 TimestampTzGetDatum(initial_start),
 									 CStringGetTextDatum(tz));
+
+		while (result <= TimestampTzGetDatum(finish_time))
+		{
+			result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+		}
 	}
 
-	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
-	/* if we have a month component, the origin doesn't work so we must manually
-	 include the offset */
-	if (schedule_interval->month)
-	{
-		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
-	}
-	/*
-	 * adding the schedule interval above to get the next bucket might still not hit
-	 * the next bucket if we are crossing DST. So we can end up with a next_start value
-	 * that is actually less than the finish time of the job. Hence, we have to make sure
-	 * the next scheduled slot we compute is in the future and not in the past
-	 */
-	while (DatumGetTimestampTz(result) <= finish_time)
-		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
-
-	return result;
+	return DatumGetTimestampTz(result);
 }
 
 extern Datum
