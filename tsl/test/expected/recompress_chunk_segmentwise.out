@@ -46,7 +46,6 @@ SELECT ctid, * FROM :compressed_chunk_name_1;
 
 insert into mytab_oneseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
 select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_1');
-WARNING:  buffer refcount leak: [943] (rel=base/16394/17145, blockNum=0, flags=0x93800000, refcount=1 1)
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -100,7 +99,6 @@ select ctid, * from :compressed_chunk_name_2;
 (2 rows)
 
 select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_2');
-WARNING:  buffer refcount leak: [961] (rel=base/16394/17173, blockNum=0, flags=0x93800000, refcount=1 1)
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk
@@ -162,7 +160,6 @@ select ctid, * from :compressed_chunk_name_2;
 (9 rows)
 
 select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_2');
-WARNING:  buffer refcount leak: [1048] (rel=base/16394/17201, blockNum=0, flags=0x93800000, refcount=1 1)
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_5_5_chunk

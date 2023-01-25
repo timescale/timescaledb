@@ -1419,6 +1419,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		recompress_segment(segment_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
 		tuplesort_end(segment_tuplesortstate);
 	}
+	row_compressor_finish(&row_compressor);
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
