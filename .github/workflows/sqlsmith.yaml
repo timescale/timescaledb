@@ -1,5 +1,5 @@
 name: SQLsmith
-on:
+"on":
   schedule:
     # run daily 2:00 on main branch
     - cron: '0 2 * * *'
@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - sqlsmith
+      - main
 jobs:
   sqlsmith:
     # Change the JOB_NAME variable below when changing the name.
