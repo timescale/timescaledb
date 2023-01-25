@@ -570,6 +570,7 @@ CREATE TABLE _timescaledb_internal.job_errors (
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
+
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
@@ -586,3 +587,7 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
+
+-- We want to restrict access to the job errors to only work through
+-- the job_errors view.
+REVOKE ALL ON _timescaledb_internal.job_errors FROM PUBLIC;

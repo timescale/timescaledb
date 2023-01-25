@@ -31,6 +31,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_db_scheduler.sql
+    job_errors_permissions.sql
     troubleshooting_job_errors.sql
     bgw_db_scheduler_fixed.sql
     bgw_reorder_drop_chunks.sql
@@ -107,6 +108,7 @@ set(SOLO_TESTS
     # dist_hypertable needs a lot of memory when the Sanitizer is active
     dist_hypertable-${PG_VERSION_MAJOR}
     bgw_db_scheduler
+    job_errors_permissions
     troubleshooting_job_errors
     bgw_db_scheduler_fixed
     bgw_reorder_drop_chunks
