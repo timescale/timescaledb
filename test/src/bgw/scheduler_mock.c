@@ -110,11 +110,16 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 	{
 		char *tz = text_to_cstring(timezone);
 
-		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+		// Datum timebucket_init = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+		// 									  schedint_datum,
+		// 									  TimestampTzGetDatum(initial_start),
+		// 									  CStringGetTextDatum(tz));
+
+		timebucket_fini = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
 											  schedint_datum,
 											  TimestampTzGetDatum(finish_time),
-											  CStringGetTextDatum(tz),
-											  TimestampTzGetDatum(initial_start));
+											  CStringGetTextDatum(tz));
+
 		/* always the next time_bucket */
 		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
 
@@ -122,6 +127,16 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 									 schedint_datum,
 									 TimestampTzGetDatum(initial_start),
 									 CStringGetTextDatum(tz));
+		/* offset: initial_start - time_bucket_init */
+		offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+		
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, offset);
+		// offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), timebucket_init);
+		// /* always the next time_bucket */
+		// result = DirectFunctionCall5(ts_timestamptz_timezone_bucket, schedint_datum,
+		// 									  timebucket_fini,
+		// 									  CStringGetTextDatum(tz),
+		// 									  TimestampTzGetDatum(initial_start), offset);
 
 		while (result <= TimestampTzGetDatum(finish_time))
 		{

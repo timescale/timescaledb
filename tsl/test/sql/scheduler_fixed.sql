@@ -139,3 +139,4 @@ select ts_test_next_scheduled_execution_slot('2 week', :'finish_time'::timestamp
 select ts_test_next_scheduled_execution_slot('10 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
 select ts_test_next_scheduled_execution_slot('10 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec', 'Europe/Athens');
 select ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec', 'Europe/Athens');
