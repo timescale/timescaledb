@@ -212,23 +212,22 @@ get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 	{
 		char *tz = text_to_cstring(job->fd.timezone);
 
-		offset = DirectFunctionCall3(ts_timestamptz_bucket,
-									 schedint_datum,
-									 TimestampTzGetDatum(job->fd.initial_start),
-									 CStringGetTextDatum(tz));
-
-		/* offset: initial_start - bucket_start */
-		offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
-
 		timebucket_fini = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
 											  schedint_datum,
 											  TimestampTzGetDatum(finish_time),
 											  CStringGetTextDatum(tz));
-		timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval,
-											  timebucket_fini,
-											  offset);
+
 		/* always the next time_bucket */
-		result = timebucket_fini;
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(job->fd.initial_start),
+									 CStringGetTextDatum(tz));
+		/* offset: initial_start - time_bucket_init */
+		offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(job->fd.initial_start), offset);
+		
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, offset);
 
 		while (result <= TimestampTzGetDatum(finish_time))
 		{

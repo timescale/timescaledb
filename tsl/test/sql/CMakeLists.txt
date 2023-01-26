@@ -94,7 +94,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     remote_txn.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
-    license_tsl.sql)
+    license_tsl.sql
+    fixed_schedules.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
@@ -126,7 +127,8 @@ set(SOLO_TESTS
     remote_txn
     remote_txn_resolve
     reorder
-    telemetry_stats)
+    telemetry_stats
+    fixed_schedules)
 
 set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
