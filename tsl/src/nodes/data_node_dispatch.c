@@ -528,17 +528,25 @@ send_batch_to_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 		case SD_FLUSH:
 			/* Lazy initialize the prepared statement */
 			if (NULL == ss->pstmt)
+			{
+				elog(LOG,
+					 "Setting up prepared statement on %s",
+					 remote_connection_node_name(ss->conn));
+
 				ss->pstmt =
 					prepare_data_node_insert_stmt(sds,
 												  ss->conn,
 												  stmt_params_total_values(sds->stmt_params));
+			}
 
+			elog(LOG, "Using prepared statement on %s", remote_connection_node_name(ss->conn));
 			Assert(ss->num_tuples_sent == sds->flush_threshold);
 			req = async_request_send_prepared_stmt_with_params(ss->pstmt,
 															   sds->stmt_params,
 															   response_type);
 			break;
 		case SD_LAST_FLUSH:
+			elog(LOG, "Using insert statement on %s", remote_connection_node_name(ss->conn));
 			sql_stmt = deparsed_insert_stmt_get_sql(&sds->stmt,
 													stmt_params_converted_tuples(sds->stmt_params));
 			Assert(sql_stmt != NULL);

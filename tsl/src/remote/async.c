@@ -165,6 +165,8 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 
 	if (req->stmt_name)
 	{
+		elog(LOG, "calling PQsendQueryPrepared() to %s", remote_connection_node_name(req->conn));
+
 		ret = PQsendQueryPrepared(remote_connection_get_pg_conn(req->conn),
 								  req->stmt_name,
 								  stmt_params_total_values(req->params),
@@ -175,6 +177,8 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 	}
 	else
 	{
+		elog(LOG, "calling PQsendQueryParams() to %s", remote_connection_node_name(req->conn));
+
 		/*
 		 * We intentionally do not specify parameter types here, but leave the
 		 * data node to derive them by default.  This avoids possible problems
@@ -192,7 +196,20 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 								req->res_format);
 	}
 
-	if (ret == 0 || !remote_connection_flush(req->conn, NULL))
+	if (ret == 1)
+	{
+		/* Success */
+		elog(LOG,
+			 "flushing after %s to %s",
+			 req->stmt_name ? "PQsendQueryPrepared()" : "PQsendQueryParams()",
+			 remote_connection_node_name(req->conn));
+
+		if (!remote_connection_flush(req->conn, NULL))
+			ret = 0;
+	}
+	elog(LOG, "done flushing to %s with ret=%d", remote_connection_node_name(req->conn), ret);
+
+	if (ret == 0)
 	{
 		remote_connection_elog(req->conn, elevel);
 		return NULL;
