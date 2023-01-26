@@ -4,7 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-/* This file contains the code for processing continuous aggregate
+/*
+ * This file contains the code for processing continuous aggregate
  * DDL statements which are of the form:
  *
  * CREATE MATERIALIZED VIEW <name> WITH (ts_continuous = [option] )
@@ -13,7 +14,6 @@
  * tsl_process_continuous_agg_viewstmt
  * The bulk of the code that creates the underlying tables/views etc. is in
  * cagg_create.
- *
  */
 #include <postgres.h>
 #include <access/reloptions.h>
@@ -115,7 +115,7 @@
 		}                                                                                          \
 	} while (0);
 
-/* Note that we set rowsecurity to false here */
+/* Note that we set rowsecurity to false here. */
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
 	{                                                                                              \
@@ -179,8 +179,11 @@ typedef struct AggPartCxt
 {
 	struct MatTableColumnInfo *mattblinfo;
 	bool added_aggref_col;
-	bool var_outside_of_aggref; /* Set to true when you come across a Var that is not inside an
-								   Aggref node */
+	/*
+	 * Set to true when you come across a Var
+	 * that is not inside an Aggref node.
+	 */
+	bool var_outside_of_aggref;
 	Oid ignore_aggoid;
 	int original_query_resno;
 	/*
@@ -194,7 +197,7 @@ typedef struct AggPartCxt
 					   /* orig_vars and mapped_vars lists are mapped 1 to 1 */
 } AggPartCxt;
 
-/* STATIC functions defined on the structs above */
+/* STATIC functions defined on the structs above. */
 static void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
 static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
 										int original_query_resno, bool finalized,
@@ -227,7 +230,9 @@ static Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Qu
 								int materialize_htid);
 static Query *destroy_union_query(Query *q);
 
-/* create a entry for the materialization table in table CONTINUOUS_AGGS */
+/*
+ * Create a entry for the materialization table in table CONTINUOUS_AGGS.
+ */
 static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
@@ -287,7 +292,10 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	table_close(rel, RowExclusiveLock);
 }
 
-/* create a entry for the materialization table in table CONTINUOUS_AGGS_BUCKET_FUNCTION */
+/*
+ * Create a entry for the materialization table in table
+ * CONTINUOUS_AGGS_BUCKET_FUNCTION.
+ */
 static void
 create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const char *name,
 									 const char *bucket_width, const char *origin,
@@ -323,7 +331,8 @@ create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const ch
 	table_close(rel, RowExclusiveLock);
 }
 
-/* create hypertable for the table referred by mat_tbloid
+/*
+ * Create hypertable for the table referred by mat_tbloid
  * matpartcolname - partition column for hypertable
  * timecol_interval - is the partitioning column's interval for hypertable partition
  */
@@ -342,8 +351,10 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 												  Int64GetDatum(mat_tbltimecol_interval),
 												  INT8OID,
 												  InvalidOid);
-	/* Ideally would like to change/expand the API so setting the column name manually is
-	 * unnecessary, but not high priority */
+	/*
+	 * Ideally would like to change/expand the API so setting the column name manually is
+	 * unnecessary, but not high priority.
+	 */
 	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(mat_tbloid);
 	chunk_sizing_info->colname = matpartcolname;
 	created = ts_hypertable_create_from_info(mat_tbloid,
@@ -394,9 +405,11 @@ check_trigger_exists_hypertable(Oid relid, char *trigname)
 	return trg_found;
 }
 
-/* add continuous agg invalidation trigger to hypertable
+/*
+ * Add continuous agg invalidation trigger to hypertable
  * relid - oid of hypertable
- * hypertableid - argument to pass to trigger (the hypertable id from timescaledb catalog)
+ * hypertableid - argument to pass to trigger
+ * (the hypertable id from timescaledb catalog)
  */
 static void
 cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
@@ -471,9 +484,10 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 	ts_cache_release(hcache);
 }
 
-/* add additional indexes to materialization table for the columns derived from
- * the group-by column list of the partial select query
- * if partial select query has:
+/*
+ * Add additional indexes to materialization table for the columns derived from
+ * the group-by column list of the partial select query.
+ * If partial select query has:
  * GROUP BY timebucket_expr, <grpcol1, grpcol2, grpcol3 ...>
  * index on mattable is <grpcol1, timebucketcol>, <grpcol2, timebucketcol> ... and so on.
  * i.e. #indexes =(  #grp-cols - 1)
@@ -582,37 +596,40 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	CommandCounterIncrement();
 	mat_relid = mataddress->objectId;
 
-	/* NewRelationCreateToastTable calls CommandCounterIncrement */
+	/* NewRelationCreateToastTable calls CommandCounterIncrement. */
 	toast_options =
 		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 
-	/*convert the mat. table to a hypertable */
+	/* Convert the materialization table to a hypertable. */
 	matpartcol_interval = MATPARTCOL_INTERVAL_FACTOR * (origquery_tblinfo->htpartcol_interval_len);
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
-	/* retrieve the hypertable id from the cache */
+	/* Retrieve the hypertable id from the cache. */
 	mat_ht = ts_hypertable_cache_get_cache_and_entry(mat_relid, CACHE_FLAG_NONE, &hcache);
 	mat_htid = mat_ht->fd.id;
 
-	/* create additional index on the group-by columns for the materialization table */
+	/* Create additional index on the group-by columns for the materialization table. */
 	if (create_addl_index)
 		mattablecolumninfo_add_mattable_index(matcolinfo, mat_ht);
 
-	/* Initialize the invalidation log for the cagg. Initially, everything is
+	/*
+	 * Initialize the invalidation log for the cagg. Initially, everything is
 	 * invalid. Add an infinite invalidation for the continuous
 	 * aggregate. This is the initial state of the aggregate before any
-	 * refreshes. */
+	 * refreshes.
+	 */
 	orig_ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
 	continuous_agg_invalidate_mat_ht(orig_ht, mat_ht, TS_TIME_NOBEGIN, TS_TIME_NOEND);
 	ts_cache_release(hcache);
 	return mat_htid;
 }
 
-/* Use the userview query to create the partial query to populate
- * the materialization columns and remove HAVING clause and ORDER BY
+/*
+ * Use the userview query to create the partial query to populate
+ * the materialization columns and remove HAVING clause and ORDER BY.
  */
 static Query *
 mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query,
@@ -641,8 +658,9 @@ mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Quer
 	return partial_selquery;
 }
 
-/* create a view for the query using the SELECt stmt sqlquery
- * and view name from RangeVar viewrel
+/*
+ * Create a view for the query using the SELECt stmt sqlquery
+ * and view name from RangeVar viewrel.
  */
 static ObjectAddress
 create_view_for_query(Query *selquery, RangeVar *viewrel)
@@ -678,7 +696,8 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	create->tablespacename = NULL;
 	create->if_not_exists = false;
 
-	/*  Create the view. viewname is in viewrel.
+	/*
+	 * Create the view. Viewname is in viewrel.
 	 */
 	SWITCH_TO_TS_USER(viewrel->schemaname, uid, saved_uid, sec_ctx);
 	address = DefineRelation(create, RELKIND_VIEW, owner, NULL, NULL);
@@ -689,7 +708,9 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	return address;
 }
 
-/* initialize caggtimebucket */
+/*
+ * Initialize caggtimebucket.
+ */
 static void
 caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
 						AttrNumber hypertable_partition_colno, Oid hypertable_partition_coltype,
@@ -758,7 +779,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				continue;
 
 			/*
-			 * offset variants of time_bucket functions are not
+			 * Offset variants of time_bucket functions are not
 			 * supported at the moment.
 			 */
 			if (list_length(fe->args) >= 5 ||
@@ -775,7 +796,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 			tbinfo->bucket_func = fe;
 
-			/* only column allowed : time_bucket('1day', <column> ) */
+			/* Only column allowed : time_bucket('1day', <column> ) */
 			col_arg = lsecond(fe->args);
 
 			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
@@ -820,11 +841,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				}
 			}
 
-			/* check for custom origin */
+			/* Check for custom origin. */
 			switch (exprType(col_arg))
 			{
 				case DATEOID:
-					/* origin is always 3rd arg for date variants */
+					/* Origin is always 3rd arg for date variants. */
 					if (list_length(fe->args) == 3)
 					{
 						custom_origin = true;
@@ -834,7 +855,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					}
 					break;
 				case TIMESTAMPOID:
-					/* origin is always 3rd arg for timestamp variants */
+					/* Origin is always 3rd arg for timestamp variants. */
 					if (list_length(fe->args) == 3)
 					{
 						custom_origin = true;
@@ -843,7 +864,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					}
 					break;
 				case TIMESTAMPTZOID:
-					/* origin can be 3rd or 4th arg for timestamptz variants */
+					/* Origin can be 3rd or 4th arg for timestamptz variants. */
 					if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
 					{
 						custom_origin = true;
@@ -866,8 +887,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			}
 
 			/*
-			 * We constify width expression here so any immutable expression will be allowed
-			 * otherwise it would make it harder to create caggs for hypertables with e.g. int8
+			 * We constify width expression here so any immutable expression will be allowed.
+			 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
 			 * partitioning column as int constants default to int4 and so expression would
 			 * have a cast and not be a Const.
 			 */
@@ -886,7 +907,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 				if (tbinfo->bucket_width != BUCKET_WIDTH_VARIABLE)
 				{
-					/* The bucket size is fixed */
+					/* The bucket size is fixed. */
 					tbinfo->bucket_width =
 						ts_interval_value_to_internal(width->constvalue, width->consttype);
 				}
@@ -907,7 +928,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 	if (tbinfo->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		/* variable-sized buckets can be used only with intervals */
+		/* Variable-sized buckets can be used only with intervals. */
 		Assert(tbinfo->interval != NULL);
 
 		if ((tbinfo->interval->month != 0) &&
@@ -942,7 +963,7 @@ cagg_agg_validate(Node *node, void *context)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("aggregates with FILTER / DISTINCT / ORDER BY are not supported")));
 		}
-		/* Fetch the pg_aggregate row */
+		/* Fetch the pg_aggregate row. */
 		aggtuple = SearchSysCache1(AGGFNOID, agg->aggfnoid);
 		if (!HeapTupleIsValid(aggtuple))
 			elog(ERROR, "cache lookup failed for aggregate %u", agg->aggfnoid);
@@ -1087,15 +1108,17 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 
 	if (!query->groupClause)
 	{
-		/*query can have aggregate without group by , so look
-		 * for groupClause*/
+		/*
+		 * Query can have aggregate without group by , so look
+		 * for groupClause.
+		 */
 		appendStringInfoString(hint,
 							   "Include at least one aggregate function"
 							   " and a GROUP BY clause with time bucket.");
 		return false;
 	}
 
-	return true; /* Query was OK and is supported */
+	return true; /* Query was OK and is supported. */
 }
 
 static inline int64
@@ -1103,7 +1126,7 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 {
 	int64 width = 0;
 
-	/* calculate the width */
+	/* Calculate the width. */
 	switch (bucket_info.bucket_width_type)
 	{
 		case INT8OID:
@@ -1127,7 +1150,7 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 			Datum epoch = DirectFunctionCall2(interval_part,
 											  PointerGetDatum(cstring_to_text("epoch")),
 											  IntervalPGetDatum(bucket_info.interval));
-			/* cast float8 to int8 */
+			/* Cast float8 to int8. */
 			width = DatumGetInt64(DirectFunctionCall1(dtoi8, epoch));
 			break;
 		}
@@ -1189,14 +1212,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
 
-	/* finalized cagg doesn't have those restrictions anymore */
+	/* Finalized cagg doesn't have those restrictions anymore. */
 	if (!finalized)
 	{
-		/* validate aggregates allowed */
+		/* Validate aggregates allowed. */
 		cagg_agg_validate((Node *) query->targetList, NULL);
 		cagg_agg_validate((Node *) query->havingQual, NULL);
 	}
-	/* Check if there are only two tables in the from list */
+	/* Check if there are only two tables in the from list. */
 	fromList = query->jointree->fromlist;
 	if (list_length(fromList) > CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
 	{
@@ -1205,7 +1228,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				 errmsg("only two tables with one hypertable and one normal table"
 						"are  allowed in continuous aggregate view")));
 	}
-	/* Extra checks for joins in Caggs */
+	/* Extra checks for joins in Caggs. */
 	if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
 		!IsA(linitial(query->jointree->fromlist), RangeTblRef))
 	{
@@ -1271,7 +1294,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 		/*
 		 * Error out if there is aynthing else than one normal table and one hypertable
-		 * in the from clause, e.g. sub-query
+		 * in the from clause, e.g. sub-query.
 		 */
 		if (((rte->relkind != RELKIND_RELATION && rte->relkind != RELKIND_VIEW) ||
 			 rte->tablesample || rte->inh == false) ||
@@ -1283,13 +1306,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 					 errmsg("invalid continuous aggregate view"),
 					 errdetail("from clause can only have one hypertable and one normal table")));
 
-		/* Only inner joins are allowed */
+		/* Only inner joins are allowed. */
 		if (jointype != JOIN_INNER)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("only inner joins are supported in continuous aggregates")));
 
-		/* Only equality conditions are permitted on joins */
+		/* Only equality conditions are permitted on joins. */
 		if (op && IsA(op, OpExpr) &&
 			list_length(castNode(OpExpr, op)->args) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
 		{
@@ -1309,7 +1332,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 					 errdetail("unsupported expression in join clause"),
 					 errhint("only equality condition is supported")));
 		/*
-		 * Record the table oid of the normal table, this is required so
+		 * Record the table oid of the normal table. This is required so
 		 * that we know which one is hypertable to carry out the related
 		 * processing in later parts of code.
 		 */
@@ -1319,11 +1342,11 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	}
 	else
 	{
-		/* check if we have a hypertable in the FROM clause */
+		/* Check if we have a hypertable in the FROM clause. */
 		rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
 		rte = list_nth(query->rtable, rtref->rtindex - 1);
 	}
-	/* FROM only <tablename> sets rte->inh to false */
+	/* FROM only <tablename> sets rte->inh to false. */
 	if (rte->rtekind != RTE_JOIN)
 	{
 		if ((rte->relkind != RELKIND_RELATION && rte->relkind != RELKIND_VIEW) ||
@@ -1368,7 +1391,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			hcache = ts_hypertable_cache_pin();
 			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
 
-			/* if parent cagg is nested then we should get the matht otherwise the rawht*/
+			/* If parent cagg is nested then we should get the matht otherwise the rawht. */
 			if (ContinuousAggIsNested(cagg_parent))
 				ht_parent =
 					ts_hypertable_cache_get_entry_by_id(hcache,
@@ -1378,7 +1401,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 					ts_hypertable_cache_get_entry_by_id(hcache,
 														cagg_parent->data.raw_hypertable_id);
 
-			/* get the querydef for the source cagg */
+			/* Get the querydef for the source cagg. */
 			is_nested = true;
 			prev_query = ts_continuous_agg_get_query(cagg_parent);
 		}
@@ -1392,7 +1415,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		{
 			ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-			/* prevent create a CAGG over an existing materialization hypertable */
+			/* Prevent create a CAGG over an existing materialization hypertable. */
 			if (status == HypertableIsMaterialization ||
 				status == HypertableIsMaterializationAndRaw)
 			{
@@ -1411,12 +1434,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			}
 		}
 
-		/* get primary partitioning column information */
+		/* Get primary partitioning column information. */
 		part_dimension = hyperspace_get_open_dimension(ht->space, 0);
 
-		/* NOTE: if we ever allow custom partitioning functions we'll need to
+		/*
+		 * NOTE: if we ever allow custom partitioning functions we'll need to
 		 *       change part_dimension->fd.column_type to partitioning_type
-		 *       below, along with any other fallout
+		 *       below, along with any other fallout.
 		 */
 		if (part_dimension->partitioning != NULL)
 			ereport(ERROR,
@@ -1465,7 +1489,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		ts_cache_release(hcache);
 	}
 
-	/* check row security settings for the table */
+	/* Check row security settings for the table. */
 	if (ts_has_row_security(rte->relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1473,12 +1497,12 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 	/*
 	 * We need a GROUP By clause with time_bucket on the partitioning
-	 * column of the hypertable
+	 * column of the hypertable.
 	 */
 	Assert(query->groupClause);
 	caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList);
 
-	/* nested cagg validations */
+	/* Nested cagg validations. */
 	if (is_nested)
 	{
 		int64 bucket_width = 0, bucket_width_parent = 0;
@@ -1489,7 +1513,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								prev_query->groupClause,
 								prev_query->targetList);
 
-		/* cannot create cagg with fixed bucket on top of variable bucket */
+		/* Cannot create cagg with fixed bucket on top of variable bucket. */
 		if ((bucket_info_parent.bucket_width == BUCKET_WIDTH_VARIABLE &&
 			 bucket_info.bucket_width != BUCKET_WIDTH_VARIABLE))
 		{
@@ -1504,17 +1528,17 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   "of the variable width one.")));
 		}
 
-		/* get bucket widths for validation */
+		/* Get bucket widths for validation. */
 		bucket_width = get_bucket_width(bucket_info);
 		bucket_width_parent = get_bucket_width(bucket_info_parent);
 
 		Assert(bucket_width != 0);
 		Assert(bucket_width_parent != 0);
 
-		/* check if the current bucket is greater or equal than the parent */
+		/* Check if the current bucket is greater or equal than the parent. */
 		is_greater_or_equal_than_parent = (bucket_width >= bucket_width_parent);
 
-		/* check if buckets are multiple */
+		/* Check if buckets are multiple. */
 		if (bucket_width_parent != 0)
 		{
 			if (bucket_width_parent > bucket_width && bucket_width != 0)
@@ -1523,7 +1547,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
 		}
 
-		/* proceed with validation errors */
+		/* Proceed with validation errors. */
 		if (!is_greater_or_equal_than_parent || !is_multiple_of_parent)
 		{
 			Datum width, width_parent;
@@ -1540,11 +1564,11 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			width_parent = get_bucket_width_datum(bucket_info_parent);
 			width_out_parent = DatumGetCString(OidFunctionCall1(outfuncid, width_parent));
 
-			/* new bucket should be multiple of the parent */
+			/* New bucket should be multiple of the parent. */
 			if (!is_multiple_of_parent)
 				message = "multiple of";
 
-			/* new bucket should be greater than the parent */
+			/* New bucket should be greater than the parent. */
 			if (!is_greater_or_equal_than_parent)
 				message = "greater or equal than";
 
@@ -1566,12 +1590,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	return bucket_info;
 }
 
-/* add ts_internal_cagg_final to bytea column.
- * bytea column is the internal state for an agg. Pass info for the agg as "inp".
+/*
+ * Add ts_internal_cagg_final to bytea column.
+ * Bytea column is the internal state for an agg.
+ * Pass info for the agg as "inp".
  * inpcol = bytea column.
  * This function returns an aggref
  * ts_internal_cagg_final( Oid, Oid, bytea, NULL::output_typeid)
- * the arguments are a list of targetentry
+ * the arguments are a list of targetentry.
  */
 static Oid
 get_finalizefnoid()
@@ -1585,8 +1611,10 @@ get_finalizefnoid()
 	return finalfnoid;
 }
 
-/* Build a [N][2] array where N is number of arguments and the inner array is of [schema_name,
- * type_name] */
+/*
+ * Build a [N][2] array where N is number of arguments
+ * and the inner array is of [schema_name,type_name].
+ */
 static Datum
 get_input_types_array_datum(Aggref *original_aggregate)
 {
@@ -1621,7 +1649,7 @@ get_input_types_array_datum(Aggref *original_aggregate)
 		ReleaseSysCache(tp);
 
 		type_name_datum = NameGetDatum(type_name);
-		/* using name in because creating from a char * (that may be null or too long) */
+		/* Using name in because creating from a char * (that may be null or too long). */
 		schema_datum = DirectFunctionCall1(namein, CStringGetDatum(schema_name));
 
 		accumArrayResult(schema_name_builder, schema_datum, false, NAMEOID, builder_context);
@@ -1641,7 +1669,8 @@ get_input_types_array_datum(Aggref *original_aggregate)
 	return result;
 }
 
-/* creates an aggref of the form:
+/*
+ * Creates an aggref of the form:
  * finalize-agg(
  *                "sum(int)" TEXT,
  *                collation_schema_name NAME, collation_name NAME,
@@ -1649,7 +1678,7 @@ get_input_types_array_datum(Aggref *original_aggregate)
  *                <partial-column-name> BYTEA,
  *                null::<return-type of sum(int)>
  *             )
- * here sum(int) is the input aggregate "inp" in the parameter-list
+ * here sum(int) is the input aggregate "inp" in the parameter-list.
  */
 static Aggref *
 get_finalize_aggref(Aggref *inp, Var *partial_state_var)
@@ -1688,7 +1717,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 	aggref->aggkind = AGGKIND_NORMAL;
 	aggref->aggsplit = AGGSPLIT_SIMPLE;
 	aggref->location = -1;
-	/* construct the arguments */
+	/* Construct the arguments. */
 	aggregate_signature = format_procedure_qualified(inp->aggfnoid);
 	aggregate_signature_const = makeConst(TEXTOID,
 										  -1,
@@ -1703,7 +1732,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 
 	if (OidIsValid(inp->inputcollid))
 	{
-		/* similar to generate_collation_name */
+		/* Similar to generate_collation_name. */
 		HeapTuple tp;
 		Form_pg_collation colltup;
 		tp = SearchSysCache1(COLLOID, ObjectIdGetDatum(inp->inputcollid));
@@ -1765,8 +1794,9 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 	return aggref;
 }
 
-/* creates a partialize expr for the passed in agg:
- * partialize_agg( agg)
+/*
+ * Creates a partialize expr for the passed in agg:
+ * partialize_agg(agg).
  */
 static FuncExpr *
 get_partialize_funcexpr(Aggref *agg)
@@ -1802,7 +1832,7 @@ function_allowed_in_cagg_definition(Oid funcid)
 }
 
 /*
- * Initialize MatTableColumnInfo
+ * Initialize MatTableColumnInfo.
  */
 static void
 mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
@@ -1892,7 +1922,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 					PRINT_MATCOLNAME(colbuf, "grp", original_query_resno, matcolno);
 					colname = colbuf;
 
-					/* for finalized form we skip adding extra group by columns */
+					/* For finalized form we skip adding extra group by columns. */
 					*skip_adding = finalized;
 				}
 			}
@@ -1907,8 +1937,9 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			{
 				/*
 				 * Add indexes only for columns that are part of the GROUP BY clause
-				 * and for finals form we skip adding it because we'll not add the
-				 * extra group by columns to the materialization hypertable anymore
+				 * and for finals form.
+				 * We skip adding it because we'll not add the extra group by columns
+				 * to the materialization hypertable anymore.
 				 */
 				if (!*skip_adding && tle->ressortgroupref > 0)
 					out->mat_groupcolname_list =
@@ -1921,12 +1952,12 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
 			part_te = (TargetEntry *) copyObject(input);
 
-			/* keep original resjunk if finalized or not time bucket */
+			/* Keep original resjunk if finalized or not time bucket. */
 			if (!finalized || timebkt_chk)
 			{
 				/*
 				 * Need to project all the partial entries so that
-				 * materialization table is filled
+				 * materialization table is filled.
 				 */
 				part_te->resjunk = false;
 			}
@@ -1956,7 +1987,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
 			part_te = makeTargetEntry((Expr *) input, matcolno, pstrdup(colname), false);
 
-			/* need to project all the partial entries so that materialization table is filled */
+			/* Need to project all the partial entries so that materialization table is filled. */
 			part_te->resjunk = false;
 			part_te->resno = matcolno;
 		}
@@ -1982,7 +2013,9 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	return var;
 }
 
-/* add internal columns for the materialization table */
+/*
+ * Add internal columns for the materialization table.
+ */
 static void
 mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
 {
@@ -2000,7 +2033,7 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
 	ListCell *lc;
 	SortGroupClause *grpcl;
 
-	/* add a chunk_id column for materialization table */
+	/* Add a chunk_id column for materialization table */
 	Node *vexpr = (Node *) makeVar(1, colno, INT4OID, -1, InvalidOid, 0);
 	col = makeColumnDef(CONTINUOUS_AGG_CHUNK_ID_COL_NAME,
 						exprType(vexpr),
@@ -2008,9 +2041,10 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
 						exprCollation(vexpr));
 	matcolinfo->matcollist = lappend(matcolinfo->matcollist, col);
 
-	/* need to add an entry to the target list for computing chunk_id column
-	: chunk_for_tuple( htid, table.*)
-	*/
+	/*
+	 * Need to add an entry to the target list for computing chunk_id column
+	 * : chunk_for_tuple( htid, table.*).
+	 */
 	chunkfnoid =
 		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
 					   sizeof(argtype) / sizeof(argtype[0]),
@@ -2029,7 +2063,7 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
 							   pstrdup(CONTINUOUS_AGG_CHUNK_ID_COL_NAME),
 							   false);
 	matcolinfo->partial_seltlist = lappend(matcolinfo->partial_seltlist, chunk_te);
-	/*any internal column needs to be added to the group-by clause as well */
+	/* Any internal column needs to be added to the group-by clause as well. */
 	maxRef = 0;
 	foreach (lc, matcolinfo->partial_seltlist)
 	{
@@ -2065,18 +2099,22 @@ add_partialize_column(Aggref *agg_to_partialize, AggPartCxt *cxt)
 	Var *var;
 	bool skip_adding;
 
-	/* step 1: create partialize( aggref) column
-	 * for materialization table */
+	/*
+	 * Step 1: create partialize( aggref) column
+	 * for materialization table.
+	 */
 	var = mattablecolumninfo_addentry(cxt->mattblinfo,
 									  (Node *) agg_to_partialize,
 									  cxt->original_query_resno,
 									  false,
 									  &skip_adding);
 	cxt->added_aggref_col = true;
-	/* step 2: create finalize_agg expr using var
-	 * for the column added to the materialization table
+	/*
+	 * Step 2: create finalize_agg expr using var
+	 * for the column added to the materialization table.
 	 */
-	/* This is a var for the column we created */
+
+	/* This is a var for the column we created. */
 	newagg = get_finalize_aggref(agg_to_partialize, var);
 	return newagg;
 }
@@ -2088,8 +2126,10 @@ set_var_mapping(Var *orig_var, Var *mapped_var, AggPartCxt *cxt)
 	cxt->mapped_vars = lappend(cxt->mapped_vars, mapped_var);
 }
 
-/* Checks whether var has already been mapped and returns the corresponding column of the
- * materialization table */
+/*
+ * Checks whether var has already been mapped and returns the
+ * corresponding column of the materialization table.
+ */
 static Var *
 var_already_mapped(Var *var, AggPartCxt *cxt)
 {
@@ -2100,7 +2140,7 @@ var_already_mapped(Var *var, AggPartCxt *cxt)
 		Var *orig_var = (Var *) lfirst_node(Var, lc_old);
 		Var *mapped_var = (Var *) lfirst_node(Var, lc_new);
 
-		/* there should be no subqueries so varlevelsup should not be a problem here */
+		/* There should be no subqueries so varlevelsup should not be a problem here. */
 		if (var->varno == orig_var->varno && var->varattno == orig_var->varattno)
 			return mapped_var;
 	}
@@ -2114,7 +2154,7 @@ add_var_mutator(Node *node, AggPartCxt *cxt)
 		return NULL;
 	if (IsA(node, Aggref))
 	{
-		return node; /*don't process this further */
+		return node; /* don't process this further */
 	}
 	if (IsA(node, Var))
 	{
@@ -2122,9 +2162,11 @@ add_var_mutator(Node *node, AggPartCxt *cxt)
 		bool skip_adding = false;
 
 		mapped_var = var_already_mapped((Var *) node, cxt);
-		/* Avoid duplicating columns in the materialization table */
+		/* Avoid duplicating columns in the materialization table. */
 		if (mapped_var)
-			/* there should be no subquery so mapped_var->varlevelsup should not be a problem here
+			/*
+			 * There should be no subquery so mapped_var->varlevelsup
+			 * should not be a problem here.
 			 */
 			return (Node *) copyObject(mapped_var);
 
@@ -2145,17 +2187,18 @@ add_aggregate_partialize_mutator(Node *node, AggPartCxt *cxt)
 {
 	if (node == NULL)
 		return NULL;
-	/* modify the aggref and create a partialize(aggref) expr
+	/*
+	 * Modify the aggref and create a partialize(aggref) expr
 	 * for the materialization.
 	 * Add a corresponding  columndef for the mat table.
 	 * Replace the aggref with the ts_internal_cagg_final fn.
 	 * using a Var for the corresponding column in the mat table.
-	 * All new Vars have varno = 1 (for RTE 1)
+	 * All new Vars have varno = 1 (for RTE 1).
 	 */
 	if (IsA(node, Aggref))
 	{
 		if (cxt->ignore_aggoid == ((Aggref *) node)->aggfnoid)
-			return node; /*don't process this further */
+			return node; /* don't process this further */
 
 		Aggref *newagg = add_partialize_column((Aggref *) node, cxt);
 		return (Node *) newagg;
@@ -2174,7 +2217,8 @@ typedef struct Cagg_havingcxt
 	AggPartCxt agg_cxt;
 } cagg_havingcxt;
 
-/* This function modifies the passed in havingQual by mapping exprs to
+/*
+ * This function modifies the passed in havingQual by mapping exprs to
  * columns in materialization table or finalized aggregate form.
  * Note that HAVING clause can contain only exprs from group-by or aggregates
  * and GROUP BY clauses cannot be aggregates.
@@ -2201,7 +2245,8 @@ create_replace_having_qual_mutator(Node *node, cagg_havingcxt *cxt)
 {
 	if (node == NULL)
 		return NULL;
-	/* See if we already have a column in materialization hypertable for this
+	/*
+	 * See if we already have a column in materialization hypertable for this
 	 * expr. We do this by checking the existing targetlist
 	 * entries for the query.
 	 */
@@ -2217,9 +2262,10 @@ create_replace_having_qual_mutator(Node *node, cagg_havingcxt *cxt)
 			return (Node *) modte->expr;
 		}
 	}
-	/* didn't find a match in targetlist. If it is an aggregate, create a partialize column for
-	 * it in materialization hypertable and return corresponding finalize
-	 * expr.
+	/*
+	 * Didn't find a match in targetlist. If it is an aggregate,
+	 * create a partialize column for it in materialization hypertable
+	 * and return corresponding finalize expr.
 	 */
 	if (IsA(node, Aggref))
 	{
@@ -2253,16 +2299,16 @@ finalizequery_create_havingqual(FinalizeQueryInfo *inp, MatTableColumnInfo *matt
 }
 
 /*
-Init the finalize query data structure.
-Parameters:
-orig_query - the original query from user view that is being used as template for the finalize query
-tlist_aliases - aliases for the view select list
-materialization table columns are created . This will be returned in  the mattblinfo
-
-DO NOT modify orig_query. Make a copy if needed.
-SIDE_EFFECT: the data structure in mattblinfo is modified as a side effect by adding new materialize
-table columns and partialize exprs.
-*/
+ * Init the finalize query data structure.
+ * Parameters:
+ * orig_query - the original query from user view that is being used as template for the finalize
+ * query tlist_aliases - aliases for the view select list materialization table columns are created
+ * . This will be returned in  the mattblinfo
+ *
+ * DO NOT modify orig_query. Make a copy if needed.
+ * SIDE_EFFECT: the data structure in mattblinfo is modified as a side effect by adding new
+ * materialize table columns and partialize exprs.
+ */
 static void
 finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo *mattblinfo)
 {
@@ -2282,11 +2328,14 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 	cxt.orig_vars = NIL;
 	cxt.mapped_vars = NIL;
 
-	/* We want all the entries in the targetlist (resjunk or not)
+	/*
+	 * We want all the entries in the targetlist (resjunk or not)
 	 * in the materialization  table definition so we include group-by/having clause etc.
-	 * We have to do 3 things here: 1) create a column for mat table , 2) partialize_expr to
-	 * populate it and 3) modify the target entry to be a finalize_expr that selects from the
-	 * materialization table
+	 * We have to do 3 things here:
+	 * 1) create a column for mat table
+	 * 2) partialize_expr to populate it, and
+	 * 3) modify the target entry to be a finalize_expr
+	 *    that selects from the materialization table.
 	 */
 	foreach (lc, orig_query->targetList)
 	{
@@ -2300,8 +2349,8 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		{
 			/*
 			 * If tle has aggrefs, get the corresponding
-			 * finalize_agg expression and save it in modte
-			 * also add correspong materialization table column info
+			 * finalize_agg expression and save it in modte.
+			 * Also add correspong materialization table column info
 			 * for the aggrefs in tle.
 			 */
 			modte = (TargetEntry *) expression_tree_mutator((Node *) modte,
@@ -2309,8 +2358,9 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 															&cxt);
 		}
 
-		/* We need columns for non-aggregate targets
-		 * if it is not a resjunk OR appears in the grouping clause
+		/*
+		 * We need columns for non-aggregate targets.
+		 * If it is not a resjunk OR appears in the grouping clause.
 		 */
 		if (cxt.added_aggref_col == false && (tle->resjunk == false || tle->ressortgroupref > 0))
 		{
@@ -2322,23 +2372,23 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 											  inp->finalized,
 											  &skip_adding);
 
-			/* skipp adding this column for finalized form */
+			/* Skip adding this column for finalized form. */
 			if (skip_adding)
 			{
 				continue;
 			}
 
-			/* fix the expression for the target entry */
+			/* Fix the expression for the target entry. */
 			modte->expr = (Expr *) var;
 		}
-		/* Check for left over variables (Var) of targets that contain Aggref */
+		/* Check for left over variables (Var) of targets that contain Aggref. */
 		if (cxt.added_aggref_col && cxt.var_outside_of_aggref && !inp->finalized)
 		{
 			modte = (TargetEntry *) expression_tree_mutator((Node *) modte, add_var_mutator, &cxt);
 		}
-		/* Construct the targetlist for the query on the
-		 * materialization table. The TL maps 1-1 with the original
-		 * query:
+		/*
+		 * Construct the targetlist for the query on the
+		 * materialization table. The TL maps 1-1 with the original query:
 		 * e.g select a, min(b)+max(d) from foo group by a,timebucket(a);
 		 * becomes
 		 * select <a-col>,
@@ -2346,9 +2396,11 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		 * from mattbl
 		 * group by a-col, timebucket(a-col)
 		 */
-		/*we copy the modte target entries , resnos should be the same for final_selquery and
-		 * origquery . so tleSortGroupReffor the targetentry can be reused, only table info needs to
-		 * be modified
+
+		/*
+		 * We copy the modte target entries, resnos should be the same for
+		 * final_selquery and origquery. So tleSortGroupReffor the targetentry
+		 * can be reused, only table info needs to be modified.
 		 */
 		Assert((!inp->finalized && modte->resno == resno) ||
 			   (inp->finalized && modte->resno >= resno));
@@ -2359,14 +2411,17 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		}
 		inp->final_seltlist = lappend(inp->final_seltlist, modte);
 	}
-	/* all grouping clause elements are in targetlist already.
-	   so let's check the having clause */
+	/*
+	 * All grouping clause elements are in targetlist already.
+	 * So let's check the having clause.
+	 */
 	if (!inp->finalized)
 		inp->final_havingqual = finalizequery_create_havingqual(inp, mattblinfo);
 }
 
-/* Create select query with the finalize aggregates
- * for the materialization table
+/*
+ * Create select query with the finalize aggregates
+ * for the materialization table.
  * matcollist - column list for mat table
  * mattbladdress - materialization table ObjectAddress
  * This is the function responsible for creating the final
@@ -2384,7 +2439,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	RangeTblEntry *rte;
 
 	/*
-	 * for initial cagg creation rtable will have only 1 entry,
+	 * For initial cagg creation rtable will have only 1 entry,
 	 * for alter table rtable will have multiple entries with our
 	 * RangeTblEntry as last member.
 	 * For cagg with joins, we need to create a new RTE and jointree
@@ -2408,7 +2463,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->tablesample = NULL;
 	rte->eref->colnames = NIL;
 	rte->selectedCols = NULL;
-	/* aliases for column names for the materialization table*/
+	/* Aliases for column names for the materialization table. */
 	foreach (lc, matcollist)
 	{
 		ColumnDef *cdef = (ColumnDef *) lfirst(lc);
@@ -2421,7 +2476,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
 
-	/* 2. Fixup targetlist with the correct rel information */
+	/* 2. Fixup targetlist with the correct rel information. */
 	foreach (lc, inp->final_seltlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
@@ -2450,7 +2505,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	}
 
 	/*
-	 * fixup from list. No quals on original table should be
+	 * Fixup from list. No quals on original table should be
 	 * present here - they should be on the query that populates
 	 * the mattable (partial_selquery). For the Cagg with join,
 	 * we can not copy the fromlist from inp->final_userquery as
@@ -2466,15 +2521,16 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	if (!inp->finalized)
 	{
 		final_selquery->groupClause = inp->final_userquery->groupClause;
-		/* copy the having clause too */
+		/* Copy the having clause too */
 		final_selquery->havingQual = inp->final_havingqual;
 	}
 
 	return final_selquery;
 }
 
-/* Assign aliases to the targetlist in the query according to the column_names provided
- * in the CREATE VIEW statement.
+/*
+ * Assign aliases to the targetlist in the query according to the
+ * column_names provided in the CREATE VIEW statement.
  */
 static void
 fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
@@ -2487,7 +2543,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(lc);
 
-			/* junk columns don't get aliases */
+			/* Junk columns don't get aliases. */
 			if (tle->resjunk)
 				continue;
 			tle->resname = pstrdup(strVal(lfirst(alist_item)));
@@ -2502,7 +2558,8 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 	}
 }
 
-/* Modifies the passed in ViewStmt to do the following
+/*
+ * Modifies the passed in ViewStmt to do the following
  * a) Create a hypertable for the continuous agg materialization.
  * b) create a view that references the underlying
  * materialization table instead of the original table used in
@@ -2588,8 +2645,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	}
 
 	/*
-	 * Assign the column_name aliases in CREATE VIEW to the query. No other modifications to
-	 * panquery
+	 * Assign the column_name aliases in CREATE VIEW to the query.
+	 * No other modifications to panquery.
 	 */
 	fixup_userview_query_tlist(panquery, stmt->aliases);
 	mattablecolumninfo_init(&mattblinfo, copyObject(panquery->groupClause));
@@ -2597,18 +2654,18 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	/*
 	 * Invalidate all options on the stmt before using it
-	 * The options are valid only for internal use (ts_continuous)
+	 * The options are valid only for internal use (ts_continuous).
 	 */
 	stmt->options = NULL;
 
 	/*
-	 * Step 0: add any internal columns needed for materialization based
-	 *         on the user query's table
+	 * Step 0: Add any internal columns needed for materialization based
+	 *         on the user query's table.
 	 */
 	if (!finalized)
 		mattablecolumninfo_addinternal(&mattblinfo);
 
-	/* Step 1: create the materialization table */
+	/* Step 1: create the materialization table. */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
 	ts_catalog_restore_user(&sec_ctx);
@@ -2624,8 +2681,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													create_stmt->into->tableSpaceName,
 													create_stmt->into->accessMethod,
 													&mataddress);
-	/* Step 2: create view with select finalize from materialization
-	 * table
+	/*
+	 * Step 2: Create view with select finalize from materialization table.
 	 */
 	final_selquery = finalizequery_get_select_query(&finalqinfo,
 													mattblinfo.matcollist,
@@ -2639,11 +2696,12 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										   panquery,
 										   materialize_hypertable_id);
 
-	/* copy view acl to materialization hypertable */
+	/* Copy view acl to materialization hypertable. */
 	ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
 	ts_copy_relation_acl(view_address.objectId, mataddress.objectId, GetUserId());
 
-	/* Step 3: create the internal view with select partialize(..)
+	/*
+	 * Step 3: create the internal view with select partialize(..).
 	 */
 	partial_selquery =
 		mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery, finalqinfo.finalized);
@@ -2652,15 +2710,20 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(partial_selquery, part_rel);
 
-	/* Additional miscellaneous steps */
-	/* create a dummy view to store the user supplied view query. This is to get PG
-	 * to display the view correctly without having to replicate the PG source code for make_viewdef
+	/*
+	 * Additional miscellaneous steps.
+	 */
+
+	/*
+	 * Create a dummy view to store the user supplied view query.
+	 * This is to get PG to display the view correctly without
+	 * having to replicate the PG source code for make_viewdef.
 	 */
 	orig_userview_query = copyObject(panquery);
 	PRINT_MATINTERNAL_NAME(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);
-	/* Step 4 add catalog table entry for the objects we just created */
+	/* Step 4: Add catalog table entry for the objects we just created. */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
 
 	create_cagg_catalog_entry(materialize_hypertable_id,
@@ -2695,11 +2758,11 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		}
 
 		/*
-		 * These values are not used for
-		 * anything except Assert's yet for the same reasons. Once the design
-		 * of variable-sized buckets is finalized we will have a better idea
-		 * of what schema is needed exactly. Until then the choice was made
-		 * in favor of the most generic schema that can be optimized later.
+		 * These values are not used for anything except Assert's yet
+		 * for the same reasons. Once the design of variable-sized buckets
+		 * is finalized we will have a better idea of what schema is needed exactly.
+		 * Until then the choice was made in favor of the most generic schema
+		 * that can be optimized later.
 		 */
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
 											 get_func_namespace(
@@ -2711,7 +2774,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 											 origquery_ht->timezone);
 	}
 
-	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
+	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
 	cagg_add_trigger_hypertable(origquery_ht->htoid, origquery_ht->htid);
 }
 
@@ -2775,11 +2838,13 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 		CommandCounterIncrement();
 
-		/* We are creating a refresh window here in a similar way to how it's
+		/*
+		 * We are creating a refresh window here in a similar way to how it's
 		 * done in continuous_agg_refresh. We do not call the PG function
 		 * directly since we want to be able to suppress the output in that
 		 * function and adding a 'verbose' parameter to is not useful for a
-		 * user. */
+		 * user.
+		 */
 		relid = get_relname_relid(stmt->into->rel->relname, nspid);
 		cagg = ts_continuous_agg_find_by_relid(relid);
 		Assert(cagg != NULL);
@@ -2807,7 +2872,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	return DDL_DONE;
 }
 
-/* When a view is created (StoreViewQuery), 2 dummy rtable entries corresponding to "old" and
+/*
+ * When a view is created (StoreViewQuery), 2 dummy rtable entries corresponding to "old" and
  * "new" are prepended to the rtable list. We remove these and adjust the varnos to recreate
  * the user or direct view query.
  */
@@ -2823,8 +2889,8 @@ remove_old_and_new_rte_from_query(Query *query)
 }
 
 /*
- * Test the view definition of an existing continuous aggregate for errors and attempt to rebuild
- * it if required.
+ * Test the view definition of an existing continuous aggregate
+ * for errors and attempt to rebuild it if required.
  */
 static void
 cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
@@ -2835,7 +2901,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	ListCell *lc1, *lc2;
 	int sec_ctx;
 	Oid uid, saved_uid;
-	/* cagg view created by the user */
+	/* Cagg view created by the user. */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
@@ -2890,10 +2956,12 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 									   mat_ht->fd.id);
 
 	if (list_length(mattblinfo.matcollist) != ts_get_relnatts(mat_ht->main_table_relid))
-		/* There is a mismatch of columns between the current version's finalization view building
-		   logic and the existing schema of the materialization table. As of version 2.7.0 this
-		   only happens due to buggy view generation in previous versions. Do not rebuild those
-		   views since the materialization table can not be queried correctly. */
+		/*
+		 * There is a mismatch of columns between the current version's finalization view
+		 * building logic and the existing schema of the materialization table. As of version
+		 * 2.7.0 this only happens due to buggy view generation in previous versions. Do not
+		 * rebuild those views since the materialization table can not be queried correctly.
+		 */
 		test_failed = true;
 
 	/*
@@ -2917,8 +2985,10 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 			break;
 		else if (view_tle->resjunk || user_tle->resjunk)
 		{
-			/* This should never happen but if it ever does it's safer to
-			 * error here instead of creating broken view definitions. */
+			/*
+			 * This should never happen but if it ever does it's safer to
+			 * error here instead of creating broken view definitions.
+			 */
 			test_failed = true;
 			break;
 		}
@@ -2944,9 +3014,11 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		CommandCounterIncrement();
 		RESTORE_USER(uid, saved_uid, sec_ctx);
 	}
-	/* Keep locks until end of transaction and do not close the relation
+	/*
+	 * Keep locks until end of transaction and do not close the relation
 	 * before the call to StoreViewQuery since it can otherwise release the
-	 * memory for attr->attname, causing a segfault. */
+	 * memory for attr->attname, causing a segfault.
+	 */
 	relation_close(direct_view_rel, NoLock);
 	relation_close(user_view_rel, NoLock);
 }
@@ -2982,8 +3054,8 @@ tsl_cagg_try_repair(PG_FUNCTION_ARGS)
 }
 
 /*
- * Flip the view definition of an existing continuous aggregate from real-time to materialized-only
- * or vice versa depending on the current state.
+ * Flip the view definition of an existing continuous aggregate from
+ * real-time to materialized-only or vice versa depending on the current state.
  */
 void
 cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
@@ -2992,19 +3064,19 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	Oid uid, saved_uid;
 	Query *result_view_query;
 
-	/* user view query of the user defined CAGG */
+	/* User view query of the user defined CAGG. */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = copyObject(get_view_query(user_view_rel));
-	/* keep lock until end of transaction */
+	/* Keep lock until end of transaction. */
 	relation_close(user_view_rel, NoLock);
 	remove_old_and_new_rte_from_query(user_query);
 
-	/* direct view query of the original user view definition at CAGG creation */
+	/* Direct view query of the original user view definition at CAGG creation. */
 	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
-	/* keep lock until end of transaction */
+	/* Keep lock until end of transaction. */
 	relation_close(direct_view_rel, NoLock);
 	remove_old_and_new_rte_from_query(direct_query);
 
@@ -3014,7 +3086,7 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name));
 
-	/* flip */
+	/* Flip */
 	agg->data.materialized_only = !agg->data.materialized_only;
 	if (agg->data.materialized_only)
 	{
@@ -3022,7 +3094,7 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	}
 	else
 	{
-		/* get primary partitioning column information of time bucketing */
+		/* Get primary partitioning column information of time bucketing. */
 		const Dimension *mat_part_dimension = hyperspace_get_open_dimension(mat_ht->space, 0);
 		result_view_query = build_union_query(&timebucket_exprinfo,
 											  mat_part_dimension->column_attno,
@@ -3043,7 +3115,7 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 	int sec_ctx;
 	Oid uid, saved_uid;
 
-	/* user view query of the user defined CAGG */
+	/* User view query of the user defined CAGG. */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = copyObject(get_view_query(user_view_rel));
@@ -3051,12 +3123,11 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 
 	/*
 	 * When calling StoreViewQuery the target list names of the query have to
-	 * match the view's tuple descriptor attribute names. But if a column of the continuous
-	 * aggregate has been renamed, the query tree will not have the correct
-	 * names in the target list, which will error out when calling
-	 * StoreViewQuery. For that reason, we fetch the name from the user view
-	 * relation and update the resource name in the query target list to match
-	 * the name in the user view.
+	 * match the view's tuple descriptor attribute names. But if a column of the
+	 * continuous aggregate has been renamed, the query tree will not have the correct
+	 * names in the target list, which will error out when calling StoreViewQuery.
+	 * For that reason, we fetch the name from the user view relation and update the
+	 * resource name in the query target list to match the name in the user view.
 	 */
 	TupleDesc desc = RelationGetDescr(user_view_rel);
 	int i = 0;
@@ -3077,15 +3148,17 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 	CommandCounterIncrement();
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 
-	/* Keep locks until end of transaction and do not close the relation
+	/*
+	 * Keep locks until end of transaction and do not close the relation
 	 * before the call to StoreViewQuery since it can otherwise release the
-	 * memory for attr->attname, causing a segfault. */
+	 * memory for attr->attname, causing a segfault.
+	 */
 	relation_close(user_view_rel, NoLock);
 }
 
 /*
- * create Const of proper type for lower bound of watermark when
- * watermark has not been set yet
+ * Create Const of proper type for lower bound of watermark when
+ * watermark has not been set yet.
  */
 static Const *
 cagg_boundary_make_lower_bound(Oid type)
@@ -3101,7 +3174,8 @@ cagg_boundary_make_lower_bound(Oid type)
 }
 
 /*
- * get oid of function to convert from our internal representation to postgres representation
+ * Get oid of function to convert from our internal representation
+ * to postgres representation.
  */
 static Oid
 cagg_get_boundary_converter_funcoid(Oid typoid)
@@ -3122,8 +3196,8 @@ cagg_get_boundary_converter_funcoid(Oid typoid)
 			break;
 		default:
 			/*
-			 * this should never be reached and unsupported datatypes
-			 * should be caught at much earlier stages
+			 * This should never be reached and unsupported datatypes
+			 * should be caught at much earlier stages.
 			 */
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_INTERNAL_ERROR),
@@ -3144,14 +3218,15 @@ static FuncExpr *
 build_conversion_call(Oid type, FuncExpr *boundary)
 {
 	/*
-	 * if the partitioning column type is not integer we need to convert to proper representation
+	 * If the partitioning column type is not integer we need to convert
+	 * to proper representation.
 	 */
 	switch (type)
 	{
 		case INT2OID:
 		case INT4OID:
 		{
-			/* since the boundary function returns int8 we need to cast to proper type here */
+			/* Since the boundary function returns int8 we need to cast to proper type here. */
 			Oid cast_oid = ts_get_cast_func(INT8OID, type);
 
 			return makeFuncExpr(cast_oid,
@@ -3162,14 +3237,16 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 								COERCE_IMPLICIT_CAST);
 		}
 		case INT8OID:
-			/* nothing to do for int8 */
+			/* Nothing to do for int8. */
 			return boundary;
 		case DATEOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 		{
-			/* date/timestamp/timestamptz need to be converted since we store them differently from
-			 * postgres format */
+			/*
+			 * date/timestamp/timestamptz need to be converted since
+			 * we store them differently from postgres format.
+			 */
 			Oid converter_oid = cagg_get_boundary_converter_funcoid(type);
 			return makeFuncExpr(converter_oid,
 								type,
@@ -3180,8 +3257,11 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 		}
 
 		default:
-			/* all valid types should be handled above, this should never be reached and error
-			 * handling at earlier stages should catch this */
+			/*
+			 * All valid types should be handled above, this should
+			 * never be reached and error handling at earlier stages
+			 * should catch this.
+			 */
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_INTERNAL_ERROR),
 					 errmsg("unsupported datatype for continuous aggregates: %s",
@@ -3191,8 +3271,8 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 }
 
 /*
- * build function call that returns boundary for a hypertable
- * wrapped in type conversion calls when required
+ * Build function call that returns boundary for a hypertable
+ * wrapped in type conversion calls when required.
  */
 static FuncExpr *
 build_boundary_call(int32 ht_id, Oid type)
@@ -3265,7 +3345,7 @@ make_subquery_rte(Query *subquery, const char *aliasname)
 }
 
 /*
- * build union query combining the materialized data with data from the raw data hypertable
+ * Build union query combining the materialized data with data from the raw data hypertable.
  *
  * q1 is the query on the materialization hypertable with the finalize call
  * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
@@ -3276,7 +3356,7 @@ make_subquery_rte(Query *subquery, const char *aliasname)
  * where coale_qual is: time < ----> (or >= )
  * COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark( <htid>)),
  * '-infinity'::timestamp with time zone)
- * see build_union_quals for COALESCE clause
+ * See build_union_quals for COALESCE clauses.
  */
 static Query *
 build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
@@ -3348,8 +3428,8 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 
 			expr = makeVarFromTargetEntry(1, tle);
 			/*
-			 * we need to use resname from q2 because that is the query from the
-			 * initial CREATE VIEW statement so the VIEW can be updated in place
+			 * We need to use resname from q2 because that is the query from the
+			 * initial CREATE VIEW statement so the VIEW can be updated in place.
 			 */
 			tle_union = makeTargetEntry((Expr *) copyObject(expr),
 										list_length(tlist) + 1,
@@ -3379,7 +3459,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 }
 
 /*
- * Extract the final view from the UNION ALL query
+ * Extract the final view from the UNION ALL query.
  *
  * q1 is the query on the materialization hypertable with the finalize call
  * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
@@ -3399,20 +3479,20 @@ destroy_union_query(Query *q)
 		   ((SetOperationStmt *) q->setOperations)->op == SETOP_UNION &&
 		   ((SetOperationStmt *) q->setOperations)->all == true);
 
-	/* Get RTE of the left-hand side of UNION ALL */
+	/* Get RTE of the left-hand side of UNION ALL. */
 	RangeTblEntry *rte = linitial(q->rtable);
 	Assert(rte->rtekind == RTE_SUBQUERY);
 
 	Query *query = copyObject(rte->subquery);
 
-	/* Delete the WHERE clause from the final view */
+	/* Delete the WHERE clause from the final view. */
 	query->jointree->quals = NULL;
 
 	return query;
 }
 
 /*
- * return Oid for a schema-qualified relation
+ * Return Oid for a schema-qualified relation.
  */
 static Oid
 relation_oid(NameData schema, NameData name)
