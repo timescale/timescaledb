@@ -57,10 +57,13 @@ reviewers:
 review_blacklist:
   - horzsolt
 
-# ignore changes to the test output files. 
+# ignore changes to the test output files.
 # 1. because they usually will have equivalent .sql files
 # 2. because people that modify a test, don't necessarily change the same c-functionality at all
 # so tests should be less important than C files
 file_blacklist:
   - tsl/test/expected/*.out
   - test/expected/*.out
+
+label_blacklist:
+  - pr-backport

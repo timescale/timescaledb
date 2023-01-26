@@ -1,0 +1,38 @@
+name: Backport Bug Fixes
+on:
+  schedule:
+    # Run weekdays 12:00 on main branch, so that it doesn't wreak havoc on
+    # weekends.
+    - cron: '0 12 * * 1-5'
+  workflow_dispatch:
+  push:
+    branches:
+      # You can run and debug new versions of the backport script by pushing it
+      # to this branch. workflow_dispatch can only be run through github cli for
+      # branches that are not main, so it's inconvenient.
+      - backport/trigger
+
+jobs:
+  backport:
+    name: Backport Bug Fixes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub requests
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v3
+
+      - name: Run the Backport Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          scripts/backport.py
