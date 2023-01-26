@@ -734,7 +734,7 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 	/* always wait for my latch */
 	AddWaitEventToSet(we_set, WL_LATCH_SET, PGINVALID_SOCKET, (Latch *) MyLatch, NULL);
 	AddWaitEventToSet(we_set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET, NULL, NULL);
-	
+
 	foreach (lc, set->requests)
 	{
 		AsyncRequest *req = lfirst(lc);
