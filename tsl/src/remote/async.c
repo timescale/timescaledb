@@ -729,11 +729,12 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 		timeout_ms = secs * 1000 + (microsecs / 1000);
 	}
 
-	we_set = CreateWaitEventSet(CurrentMemoryContext, list_length(set->requests) + 1);
+	we_set = CreateWaitEventSet(CurrentMemoryContext, list_length(set->requests) + 2);
 
 	/* always wait for my latch */
 	AddWaitEventToSet(we_set, WL_LATCH_SET, PGINVALID_SOCKET, (Latch *) MyLatch, NULL);
-
+	AddWaitEventToSet(we_set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET, NULL, NULL);
+	
 	foreach (lc, set->requests)
 	{
 		AsyncRequest *req = lfirst(lc);
@@ -748,6 +749,9 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 	while (true)
 	{
 		wait_req = NULL;
+
+		CHECK_FOR_INTERRUPTS();
+
 		rc = WaitEventSetWait(we_set, timeout_ms, &event, 1, PG_WAIT_EXTENSION);
 
 		if (rc == 0)
@@ -771,7 +775,6 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 		if (event.events & WL_LATCH_SET)
 		{
 			ResetLatch(MyLatch);
-			CHECK_FOR_INTERRUPTS();
 		}
 
 		if (event.events & WL_SOCKET_READABLE)

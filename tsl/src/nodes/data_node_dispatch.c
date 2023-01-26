@@ -641,9 +641,12 @@ await_all_responses(DataNodeDispatchState *sds, AsyncRequestSet *reqset)
 {
 	AsyncResponseResult *rsp;
 	List *results = NIL;
-
+	unsigned num_responses = 0;
+	
 	sds->next_tuple = 0;
 
+	elog(LOG, "awaiting all responses from data nodes");
+	
 	while ((rsp = async_request_set_wait_any_result(reqset)))
 	{
 		DataNodeState *ss = async_response_result_get_user_data(rsp);
@@ -651,6 +654,13 @@ await_all_responses(DataNodeDispatchState *sds, AsyncRequestSet *reqset)
 		ExecStatusType status = PQresultStatus(res);
 		bool report_error = true;
 
+		if (num_responses == 0)
+		{
+			elog(LOG, "got first response from %s", remote_connection_node_name(ss->conn));		   
+		}
+
+		num_responses++;
+		
 		switch (status)
 		{
 			case PGRES_TUPLES_OK:
@@ -685,6 +695,9 @@ await_all_responses(DataNodeDispatchState *sds, AsyncRequestSet *reqset)
 		ss->next_tuple = 0;
 	}
 
+	
+	elog(LOG, "got %u responses from data nodes", num_responses);
+	
 	return results;
 }
 
