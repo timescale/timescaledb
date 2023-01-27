@@ -1281,7 +1281,12 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
 	addRTEtoQuery(pstate, rte, false, true, true);
 #endif
+
+#if PG16_GE
+	nsitem->p_perminfo->requiredPerms = ACL_INSERT;
+#else
 	rte->requiredPerms = ACL_INSERT;
+#endif
 
 	foreach (cur, attnums)
 	{
@@ -1289,7 +1294,11 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
 	}
 
+#if PG16_GE
+	ExecCheckPermissions(pstate->p_rtable, list_make1(nsitem->p_perminfo), true);
+#else
 	ExecCheckRTPerms(pstate->p_rtable, true);
+#endif
 
 	/*
 	 * Permission check for row security policies.
