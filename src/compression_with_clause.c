@@ -25,7 +25,7 @@ static const WithClauseDefinition compress_hypertable_with_clause_def[] = {
 		[CompressEnabled] = {
 			.arg_name = "compress",
 			.type_id = BOOLOID,
-			.default_val = BoolGetDatum(false),
+			.default_val = 0,
 		},
 		[CompressSegmentBy] = {
 			 .arg_name = "compress_segmentby",
