@@ -659,7 +659,7 @@ await_all_responses(DataNodeDispatchState *sds, AsyncRequestSet *reqset)
 
 	elog(LOG, "awaiting all responses from data nodes");
 
-	while ((rsp = async_request_set_wait_any_result(reqset)))
+	while ((rsp = async_request_set_wait_any_result2(reqset)))
 	{
 		DataNodeState *ss = async_response_result_get_user_data(rsp);
 		PGresult *res = async_response_result_get_pg_result(rsp);

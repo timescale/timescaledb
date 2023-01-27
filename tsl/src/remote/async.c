@@ -711,6 +711,71 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 	return NULL;
 }
 
+static AsyncResponse *
+get_single_response_nonblocking2(AsyncRequestSet *set)
+{
+	ListCell *lc;
+
+	foreach (lc, set->requests)
+	{
+		AsyncRequest *req = lfirst(lc);
+		PGconn *pg_conn = remote_connection_get_pg_conn(req->conn);
+
+		switch (req->state)
+		{
+			case DEFERRED:
+				elog(LOG, "sending deffered request to %s", remote_connection_node_name(req->conn));
+
+				if (remote_connection_is_processing(req->conn))
+				{
+					return async_response_error_create(
+						psprintf("request already in progress on port %d", PostPortNumber));
+				}
+
+				req = async_request_send_internal(req, WARNING);
+
+				if (req == NULL)
+					return async_response_error_create("failed to send deferred request");
+				elog(LOG, "DONE: sending deffered request");
+				Assert(req->state == EXECUTING);
+				TS_FALLTHROUGH;
+			case EXECUTING:
+				elog(LOG, "checking busy on %s", remote_connection_node_name(req->conn));
+
+				if (0 == PQisBusy(pg_conn))
+				{
+					elog(LOG, "gettint request on %s", remote_connection_node_name(req->conn));
+
+					PGresult *res = PQgetResult(pg_conn);
+
+					elog(LOG,
+						 "got response from %s res=%p",
+						 remote_connection_node_name(req->conn),
+						 res);
+
+					if (NULL == res)
+					{
+						/*
+						 * NULL return means query is complete
+						 */
+						set->requests = list_delete_ptr(set->requests, req);
+						remote_connection_set_status(req->conn, CONN_IDLE);
+						async_request_set_state(req, COMPLETED);
+
+						/* set changed so rerun function */
+						return get_single_response_nonblocking(set);
+					}
+					return &async_response_result_create(req, res)->base;
+				}
+				break;
+			case COMPLETED:
+				return async_response_error_create("request already completed");
+		}
+	}
+
+	return NULL;
+}
+
 /*
  * wait_to_consume_data waits until data is recieved and put into buffers
  * so that it can be recieved without blocking by `get_single_response_nonblocking`
@@ -794,6 +859,7 @@ wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 		if (event.events & WL_LATCH_SET)
 		{
 			ResetLatch(MyLatch);
+			CHECK_FOR_INTERRUPTS();
 		}
 
 		if (event.events & WL_SOCKET_READABLE)
@@ -885,6 +951,81 @@ async_request_set_wait_any_response_deadline(AsyncRequestSet *set, TimestampTz e
 	}
 
 	return response;
+}
+
+static AsyncResponse *
+async_request_set_wait_any_response_deadline2(AsyncRequestSet *set, TimestampTz endtime)
+{
+	AsyncResponse *response;
+
+	while (true)
+	{
+		elog(LOG, "getting single response");
+		response = get_single_response_nonblocking2(set);
+		elog(LOG, "DONE: getting single response=%p", response);
+
+		if (response != NULL)
+			break;
+
+		if (list_length(set->requests) == 0)
+			/* nothing to wait on anymore */
+			return NULL;
+
+		elog(LOG, "Waiting to consume data");
+		response = wait_to_consume_data(set, endtime);
+		elog(LOG, "DONE: Waiting to consume data");
+
+		if (response != NULL)
+			break;
+	}
+
+	/* Make sure callbacks are run when a response is received. For a timeout,
+	 * we run the callbacks on all the requests the user has been waiting
+	 * on. */
+	if (NULL != response)
+	{
+		List *requests = NIL;
+		ListCell *lc;
+
+		switch (response->type)
+		{
+			case RESPONSE_RESULT:
+			case RESPONSE_ROW:
+				requests = list_make1(((AsyncResponseResult *) response)->request);
+				break;
+			case RESPONSE_COMMUNICATION_ERROR:
+				requests = list_make1(((AsyncResponseCommunicationError *) response)->request);
+				break;
+			case RESPONSE_ERROR:
+			case RESPONSE_TIMEOUT:
+				requests = set->requests;
+				break;
+		}
+
+		foreach (lc, requests)
+		{
+			AsyncRequest *req = lfirst(lc);
+
+			if (NULL != req->response_cb)
+				req->response_cb(req, response, req->user_data);
+		}
+	}
+
+	return response;
+}
+
+AsyncResponseResult *
+async_request_set_wait_any_result2(AsyncRequestSet *set)
+{
+	AsyncResponse *res = async_request_set_wait_any_response_deadline2(set, TS_NO_TIMEOUT);
+
+	if (res == NULL)
+		return NULL;
+
+	if (!(RESPONSE_RESULT == res->type || RESPONSE_ROW == res->type))
+		async_response_report_error(res, ERROR);
+
+	return (AsyncResponseResult *) res;
 }
 
 AsyncResponseResult *

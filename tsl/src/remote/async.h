@@ -143,6 +143,7 @@ extern void async_request_set_wait_all_ok_commands(AsyncRequestSet *set);
 /* Return any results (success or failure), but throw errors on communication failures and timeouts
  */
 extern AsyncResponseResult *async_request_set_wait_any_result(AsyncRequestSet *set);
+extern AsyncResponseResult *async_request_set_wait_any_result2(AsyncRequestSet *set);
 
 /* Consume any pending response and throw it away */
 extern void async_request_discard_response(AsyncRequest *req);
