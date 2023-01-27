@@ -199,15 +199,17 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 	if (ret == 1)
 	{
 		/* Success */
+		/*
 		elog(LOG,
 			 "flushing after %s to %s",
 			 req->stmt_name ? "PQsendQueryPrepared()" : "PQsendQueryParams()",
 			 remote_connection_node_name(req->conn));
 
-		if (!remote_connection_flush(req->conn, NULL))
+		if (!remote_connection_flush2(req->conn, NULL))
 			ret = 0;
+		*/
 	}
-	elog(LOG, "done flushing to %s with ret=%d", remote_connection_node_name(req->conn), ret);
+	elog(LOG, "done PQsendQuery to %s with ret=%d", remote_connection_node_name(req->conn), ret);
 
 	if (ret == 0)
 	{

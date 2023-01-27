@@ -1015,6 +1015,46 @@ remote_connection_flush(const TSConnection *conn, TSConnectionError *err)
 }
 
 /*
+ * Flush a connection after writing data on a non-blocking socket.
+ *
+ * Implements non-blocking flush according to the documentation for PQflush(),
+ * but also observes PostgreSQL interrupts.
+ */
+bool
+remote_connection_flush2(const TSConnection *conn, TSConnectionError *err)
+{
+	int ret = 1;
+
+	do
+	{
+		ret = PQflush(conn->pg_conn);
+
+		if (ret == 1)
+		{
+			elog(LOG, "waiting to be able to flush to %s", remote_connection_node_name(conn));
+
+			if (!wait_and_consume_input(conn, -1, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE))
+			{
+				fill_connection_error(err,
+									  ERRCODE_CONNECTION_EXCEPTION,
+									  "could not consume data on connection",
+									  conn);
+				return false;
+			}
+			elog(LOG, "waiting to flush to %s DONE", remote_connection_node_name(conn));
+		}
+		else if (ret == -1)
+		{
+			fill_connection_error(err,
+								  ERRCODE_CONNECTION_EXCEPTION,
+								  "could not flush data on connection",
+								  conn);
+		}
+	} while (ret == 1);
+
+	return ret == 0;
+}
+/*
  * Execute a remote command.
  *
  * The execution blocks until a result is received or a failure occurs. Unlike

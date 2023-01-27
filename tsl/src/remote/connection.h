@@ -78,6 +78,7 @@ extern void remote_connection_cmd_ok(TSConnection *conn, const char *cmd);
 extern void remote_connection_cmdf_ok(TSConnection *conn, const char *fmt, ...)
 	pg_attribute_printf(2, 3);
 extern bool remote_connection_flush(const TSConnection *conn, TSConnectionError *err);
+extern bool remote_connection_flush2(const TSConnection *conn, TSConnectionError *err);
 extern PGresult *remote_connection_get_result(const TSConnection *conn);
 extern ConnOptionType remote_connection_option_type(const char *keyword);
 extern bool remote_connection_valid_user_option(const char *keyword);
