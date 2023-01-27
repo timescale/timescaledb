@@ -1290,8 +1290,16 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 
 	foreach (cur, attnums)
 	{
+		Bitmapset **insertedCols;
 		int attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
-		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
+
+#if PG16_GE
+		insertedCols = &nsitem->p_perminfo->insertedCols;
+#else
+		insertedCols = &rte->insertedCols;
+#endif
+
+		*insertedCols = bms_add_member(*insertedCols, attno);
 	}
 
 #if PG16_GE
