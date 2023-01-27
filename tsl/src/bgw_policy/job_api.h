@@ -15,4 +15,6 @@ extern Datum job_delete(PG_FUNCTION_ARGS);
 extern Datum job_run(PG_FUNCTION_ARGS);
 extern Datum job_alter_set_hypertable_id(PG_FUNCTION_ARGS);
 
+extern Datum get_next_scheduled_slot(PG_FUNCTION_ARGS);
+
 #endif /* TSL_BGW_POLICY_JOB_API_H */

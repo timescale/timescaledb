@@ -39,3 +39,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.alter_job_set_hypertable_id(
     hypertable REGCLASS )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_alter_set_hypertable_id'
 LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION @extschema@.get_next_scheduled_slot(schedint INTERVAL, finish_time TIMESTAMPTZ, start_time TIMESTAMPTZ, timezone TEXT = NULL)
+RETURNS TIMESTAMPTZ AS '@MODULE_PATHNAME@', 'ts_get_next_scheduled_slot' LANGUAGE C VOLATILE;

@@ -64,6 +64,12 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 // 	elog(NOTICE, "%s is %s", name, DatumGetCString(DirectFunctionCall1(timestamptz_out, tstz_datum)));
 // }
 
+/*  
+ * logic is the following
+ * when there is no month component, the origin works as expected
+ * but when there is a month component, then the origin does not work
+ * for those cases, we only have month components 
+ */ 
 /* this is copied from the job_stat/get_next_scheduled_execution_slot */
 extern Datum
 ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
@@ -75,34 +81,70 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 
 	Datum timebucket_fini, result, offset;
 	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
+	Interval one_month = { .day = 0, .time = 0, .month = 1, };
 
 	// print_timestamptz_datum(initial_start, "initial_start");
 	// print_timestamptz_datum(finish_time, "finish_time is");
 
 	if (timezone == NULL)
 	{
-		offset = DirectFunctionCall2(ts_timestamptz_bucket,
-									 schedint_datum,
-									 TimestampTzGetDatum(initial_start));
-
-		/* offset: initial_start - bucket_start */
-		offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
-
-		timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
-									 schedint_datum,
-									 TimestampTzGetDatum(finish_time));
-		timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval,
-											  timebucket_fini,
-											  offset);
-
-		/* two cases now: either this time bucket is less than the next multiple, or it is the next multiple */
-		result = timebucket_fini;
-
-		// print_timestamptz_datum(result, "result is before loop");
-
-		while (result <= TimestampTzGetDatum(finish_time))
+		// then we have months or multiples of months, no days or less
+		if (schedule_interval->month > 0)
 		{
-			result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+			Datum timebucket_init = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(initial_start));
+			timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(finish_time));
+			// TimestampTz timestamp_bucket_fini = DatumGetTimestampTz(timebucket_fini);
+			// TimestampTz timestamp_bucket_init = DatumGetTimestampTz(timebucket_init);
+			// get the number of months between them
+			Datum year_init = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("year"), timebucket_init);
+			Datum year_fini = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("year"), timebucket_fini);
+
+			Datum month_init = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_init);
+			Datum month_fini = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_fini);
+
+			// convert everything to months
+			float8 month_diff = DatumGetFloat8(year_fini)*12 + DatumGetFloat8(month_fini) - ( DatumGetFloat8(year_init)*12 + DatumGetFloat8(month_init) );
+
+			Datum months_to_add = DirectFunctionCall2(interval_mul, IntervalPGetDatum(&one_month), Float8GetDatum(month_diff));
+			// good, add the months now
+			result = DirectFunctionCall2(timestamptz_pl_interval, initial_start, months_to_add);
+			while (result <= TimestampTzGetDatum(finish_time))
+			{
+				result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+			}
+
+		}
+		else 
+		{
+			offset = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(initial_start));
+
+			/* offset: initial_start - bucket_start */
+			offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+
+			timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(finish_time));
+			/* always the next bucket */
+			timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+			timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval,
+												timebucket_fini,
+												offset);
+
+			/* two cases now: either this time bucket is less than the next multiple, or it is the next multiple */
+			result = timebucket_fini;
+
+			// print_timestamptz_datum(result, "result is before loop");
+
+			while (result <= TimestampTzGetDatum(finish_time))
+			{
+				result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+			}
 		}
 		// print_timestamptz_datum(result, "result is after loop");
 	}

@@ -70,3 +70,5 @@ ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'
 -- 1. issue with year: both tz, non-tz return two executions in one year??
 -- 2. with timezone, and interval 2 months at end of month. 
 -- some edge cases: leap years, end of month and February, 
+
+-------- edge case: end of month, schedule every month

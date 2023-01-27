@@ -21,6 +21,7 @@
 #include "hypertable_cache.h"
 #include "bgw/timer.h"
 #include "debug_assert.h"
+#include "time_bucket.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -480,4 +481,127 @@ job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
 	if (hcache)
 		ts_cache_release(hcache);
 	PG_RETURN_INT32(job_id);
+}
+
+static void
+print_timestamptz_datum(Datum tstz_datum, const char *name)
+{
+	elog(NOTICE, "%s is %s", name, DatumGetCString(DirectFunctionCall1(timestamptz_out, tstz_datum)));
+}
+
+Datum
+get_next_scheduled_slot(PG_FUNCTION_ARGS)
+{
+	Interval *schedule_interval = PG_GETARG_INTERVAL_P(0);
+	TimestampTz finish_time = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(2);
+	text *timezone = PG_ARGISNULL(3) ? NULL : PG_GETARG_TEXT_PP(3);
+
+	Datum timebucket_fini, result, offset;
+	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
+
+	print_timestamptz_datum(initial_start, "initial_start");
+	print_timestamptz_datum(finish_time, "finish_time is");
+
+	if (timezone == NULL)
+	{
+		// then we have months or multiples of months, no days or less
+		if (schedule_interval->month > 0)
+		{
+			Datum timebucket_init = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(initial_start));
+			timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(finish_time));
+			// TimestampTz timestamp_bucket_fini = DatumGetTimestampTz(timebucket_fini);
+			// TimestampTz timestamp_bucket_init = DatumGetTimestampTz(timebucket_init);
+			// get the number of months between them
+			Datum year_init = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("year"), timebucket_init);
+			Datum year_fini = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("year"), timebucket_fini);
+
+			Datum month_init = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_init);
+			Datum month_fini = DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_fini);
+
+			// convert everything to months
+			float8 month_diff = DatumGetFloat8(year_fini)*12 + DatumGetFloat8(month_fini) - ( DatumGetFloat8(year_init)*12 + DatumGetFloat8(month_init) );
+
+			Datum months_to_add = DirectFunctionCall2(interval_mul, schedint_datum, Float8GetDatum(month_diff));
+			// good, add the months now
+			result = DirectFunctionCall2(timestamptz_pl_interval, initial_start, months_to_add);
+			while (result <= TimestampTzGetDatum(finish_time))
+			{
+				result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+			}
+
+		}
+		else 
+		{
+			offset = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(initial_start));
+
+			/* offset: initial_start - bucket_start */
+			offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+
+			timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
+										schedint_datum,
+										TimestampTzGetDatum(finish_time));
+			/* always the next bucket */
+			timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+			timebucket_fini = DirectFunctionCall2(timestamptz_pl_interval,
+												timebucket_fini,
+												offset);
+
+			/* two cases now: either this time bucket is less than the next multiple, or it is the next multiple */
+			result = timebucket_fini;
+
+			// print_timestamptz_datum(result, "result is before loop");
+
+			while (result <= TimestampTzGetDatum(finish_time))
+			{
+				result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+			}
+		}
+		// print_timestamptz_datum(result, "result is after loop");
+	}
+	else
+	{
+		char *tz = text_to_cstring(timezone);
+
+		// Datum timebucket_init = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+		// 									  schedint_datum,
+		// 									  TimestampTzGetDatum(initial_start),
+		// 									  CStringGetTextDatum(tz));
+
+		timebucket_fini = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+											  schedint_datum,
+											  TimestampTzGetDatum(finish_time),
+											  CStringGetTextDatum(tz));
+
+		/* always the next time_bucket */
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+
+		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+									 schedint_datum,
+									 TimestampTzGetDatum(initial_start),
+									 CStringGetTextDatum(tz));
+		/* offset: initial_start - time_bucket_init */
+		offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
+		
+		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, offset);
+		// offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), timebucket_init);
+		// /* always the next time_bucket */
+		// result = DirectFunctionCall5(ts_timestamptz_timezone_bucket, schedint_datum,
+		// 									  timebucket_fini,
+		// 									  CStringGetTextDatum(tz),
+		// 									  TimestampTzGetDatum(initial_start), offset);
+
+		while (result <= TimestampTzGetDatum(finish_time))
+		{
+			result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
+		}
+	}
+
+	return DatumGetTimestampTz(result);
 }
