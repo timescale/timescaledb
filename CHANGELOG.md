@@ -17,6 +17,7 @@ accidentally triggering the load of a previous DB version.**
 * #5218 Add role-level security to job error log
 * #5214 Fix use of prepared statement in async module
 * #5290 Compression can't be enabled on continuous aggregates when segmentby/orderby columns need quotation
+* #5239 Fix next_start calculation for fixed schedules
 
 ## 2.9.3 (2023-02-03)
 
@@ -34,6 +35,7 @@ upgrade as soon as possible.
 **Thanks**
 * @ssmoss for reporting issues on continuous aggregates
 * @jaskij for reporting the compliation issue that occurred with clang
+
 
 ## 2.9.2 (2023-01-26)
 
