@@ -794,4 +794,16 @@ RelationGetSmgr(Relation rel)
 #endif
 #endif
 
+/*
+ * PG16 consolidates (almost) all _aclcheck functions into one:
+ *   https://github.com/postgres/postgres/commit/c727f511bd
+ */
+#if PG16_GE
+#define pg_database_aclcheck(...) object_aclcheck(DatabaseRelationId, __VA_ARGS__)
+#define pg_foreign_server_aclcheck(...) object_aclcheck(ForeignServerRelationId, __VA_ARGS__)
+#define pg_namespace_aclcheck(...) object_aclcheck(NamespaceRelationId, __VA_ARGS__)
+#define pg_proc_aclcheck(...) object_aclcheck(ProcedureRelationId, __VA_ARGS__)
+#define pg_tablespace_aclcheck(...) object_aclcheck(TableSpaceRelationId, __VA_ARGS__)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
