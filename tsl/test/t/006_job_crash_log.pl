@@ -5,7 +5,7 @@
 use strict;
 use warnings;
 use TimescaleNode;
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 # This test checks that a job crash is reported in the job errors table
 # (that is, a record gets inserted into the table _timescaledb_internal.job_errors).
@@ -40,14 +40,20 @@ my $query_add =
 my $jobid = $node->safe_psql('postgres', "$query_add");
 is($jobid, '1000', 'job was added');
 
-# sleep 10 to make sure job has started running
-$node->safe_psql('postgres', "select pg_sleep(10)");
+my $query_pid_exists = <<"END_OF_QUERY";
+select count(*) from pg_stat_activity
+where application_name like 'User-Defined Action%'
+   and query like '%custom_proc_sleep60%'
+END_OF_QUERY
 # select the pid of this job in order to kill it
 my $query_pid = <<"END_OF_QUERY";
 select pid from pg_stat_activity
 where application_name like 'User-Defined Action%'
    and query like '%custom_proc_sleep60%'
 END_OF_QUERY
+
+ok($node->poll_query_until('postgres', "$query_pid_exists", '1'));
+
 my $pid = $node->safe_psql('postgres', "$query_pid");
 isnt($pid, "", "check the pid is not null");
 # now kill the one backend
