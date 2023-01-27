@@ -666,10 +666,7 @@ await_all_responses(DataNodeDispatchState *sds, AsyncRequestSet *reqset)
 		ExecStatusType status = PQresultStatus(res);
 		bool report_error = true;
 
-		if (num_responses == 0)
-		{
-			elog(LOG, "got first response from %s", remote_connection_node_name(ss->conn));
-		}
+		elog(LOG, "got response from %s", remote_connection_node_name(ss->conn));
 
 		num_responses++;
 

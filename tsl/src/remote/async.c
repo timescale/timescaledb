@@ -165,8 +165,10 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 
 	if (req->stmt_name)
 	{
-		elog(LOG, "calling PQsendQueryPrepared() to %s stmt: %s",
-			 remote_connection_node_name(req->conn), req->stmt_name);
+		elog(LOG,
+			 "calling PQsendQueryPrepared() to %s stmt: %s",
+			 remote_connection_node_name(req->conn),
+			 req->stmt_name);
 
 		ret = PQsendQueryPrepared(remote_connection_get_pg_conn(req->conn),
 								  req->stmt_name,
@@ -178,8 +180,10 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 	}
 	else
 	{
-		elog(LOG, "calling PQsendQueryParams() to %s SQL: %s",
-			 remote_connection_node_name(req->conn), req->sql);
+		elog(LOG,
+			 "calling PQsendQueryParams() to %s SQL: %s",
+			 remote_connection_node_name(req->conn),
+			 req->sql);
 
 		/*
 		 * We intentionally do not specify parameter types here, but leave the
@@ -723,7 +727,7 @@ get_single_response_nonblocking2(AsyncRequestSet *set)
 		AsyncRequest *req = lfirst(lc);
 		PGconn *pg_conn = remote_connection_get_pg_conn(req->conn);
 		int ret = 0;
-		
+
 		switch (req->state)
 		{
 			case DEFERRED:
@@ -747,19 +751,18 @@ get_single_response_nonblocking2(AsyncRequestSet *set)
 
 				ret = PQisBusy(pg_conn);
 
-				elog(LOG, "PQisBusy() on %s returned %d",
-					 remote_connection_node_name(req->conn), ret);
-				
+				elog(LOG,
+					 "PQisBusy() on %s returned %d",
+					 remote_connection_node_name(req->conn),
+					 ret);
+
 				if (0 == ret)
 				{
-					elog(LOG, "getting request on %s", remote_connection_node_name(req->conn));
+					elog(LOG, "getting result on %s", remote_connection_node_name(req->conn));
 
 					PGresult *res = PQgetResult(pg_conn);
 
-					elog(LOG,
-						 "got response from %s res=%p",
-						 remote_connection_node_name(req->conn),
-						 res);
+					elog(LOG, "result from %s res=%p", remote_connection_node_name(req->conn), res);
 
 					if (NULL == res)
 					{
@@ -949,14 +952,27 @@ wait_to_consume_data2(AsyncRequestSet *set, TimestampTz end_time)
 	foreach (lc, set->requests)
 	{
 		AsyncRequest *req = lfirst(lc);
+		PGconn *pgconn = remote_connection_get_pg_conn(req->conn);
+		int events = WL_SOCKET_READABLE;
+		int ret;
 
 		elog(LOG, "adding %s to wait set", remote_connection_node_name(req->conn));
 
-		AddWaitEventToSet(we_set,
-						  WL_SOCKET_READABLE,
-						  PQsocket(remote_connection_get_pg_conn(req->conn)),
-						  NULL,
-						  req);
+		ret = PQflush(pgconn);
+
+		if (ret == -1)
+			return &async_response_communication_error_create(req)->base;
+		else if (ret == 1)
+		{
+			events |= WL_SOCKET_WRITEABLE;
+		}
+		else
+		{
+			Assert(ret == 0);
+			/* Nothing to flush or everything flushed */
+		}
+
+		AddWaitEventToSet(we_set, events, PQsocket(pgconn), NULL, req);
 	}
 
 	while (true)
@@ -989,6 +1005,27 @@ wait_to_consume_data2(AsyncRequestSet *set, TimestampTz end_time)
 		{
 			ResetLatch(MyLatch);
 			CHECK_FOR_INTERRUPTS();
+		}
+
+		if (event.events & WL_SOCKET_WRITEABLE)
+		{
+			PGconn *pgconn = remote_connection_get_pg_conn(wait_req->conn);
+			int ret;
+
+			ret = PQflush(pgconn);
+
+			if (ret == -1)
+				return &async_response_communication_error_create(wait_req)->base;
+			else if (ret == 0)
+			{
+				/* No longer need to wait for write */
+				ModifyWaitEvent(we_set, event.pos, WL_SOCKET_READABLE, NULL);
+			}
+			else
+			{
+				Assert(ret == 1);
+				/* Still busy, keep waiting */
+			}
 		}
 
 		if (event.events & WL_SOCKET_READABLE)
@@ -1103,7 +1140,7 @@ async_request_set_wait_any_response_deadline2(AsyncRequestSet *set, TimestampTz 
 			/* nothing to wait on anymore */
 			return NULL;
 
-		elog(LOG, "Waiting to consume data");
+		elog(LOG, "Waiting to consume data from %d nodes", list_length(set->requests));
 		response = wait_to_consume_data2(set, endtime);
 		elog(LOG, "DONE: Waiting to consume data");
 
