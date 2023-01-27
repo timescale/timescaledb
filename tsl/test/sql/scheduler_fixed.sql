@@ -122,3 +122,21 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
 \set ON_ERROR_STOP 0
 -- test some unacceptable values for schedule interval
 select add_job('job_5', schedule_interval => interval '1 month 1week', initial_start => :'initial_start'::timestamptz);
+
+\set client_min_messages = DEBUG;
+
+select '2023-01-02 11:53:19.059771+02'::timestamptz as finish_time \gset
+
+-- years
+select ts_test_next_scheduled_execution_slot('1 year', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('2 year', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('10 year', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+-- weeks
+select ts_test_next_scheduled_execution_slot('1 week', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('2 week', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('2 week', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+-- months
+select ts_test_next_scheduled_execution_slot('10 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('10 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec', 'Europe/Athens');
+select ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
+select ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec', 'Europe/Athens');
