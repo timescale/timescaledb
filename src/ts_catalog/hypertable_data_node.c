@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_foreign_server.h>
 #include <utils/fmgroids.h>
 #include <utils/builtins.h>
 #include <utils/array.h>

@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_tablespace.h>
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 #include <utils/spccache.h>

@@ -30,6 +30,7 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_tablespace.h>
 #include <catalog/toasting.h>
 #include <commands/cluster.h>
 #include <commands/tablecmds.h>
