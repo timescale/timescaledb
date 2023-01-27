@@ -1,5 +1,5 @@
 name: Code style
-on:
+"on":
   push:
     branches:
       - main
@@ -62,6 +62,20 @@ jobs:
         sudo update-alternatives --set clang-format /usr/bin/clang-format-14
         ./scripts/clang_format_all.sh
         git diff --exit-code
+
+  python_checks:
+    name: Check Python code in tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install black prospector psutil
+      - name: Checkout source
+        uses: actions/checkout@v3
+      - name: Run prospector
+        run: |
+          find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +
+          git diff --exit-code
 
   misc_checks:
     name: Check license, update scripts, and git hooks
