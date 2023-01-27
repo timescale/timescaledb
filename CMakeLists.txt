@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 include(CheckCCompilerFlag)
+include(CheckCSourceRuns)
 include(CheckSymbolExists)
 include(GitCommands)
 include(GenerateScripts)
@@ -381,6 +382,34 @@ find_path(
 if(PG_SOURCE_DIR)
   message(STATUS "Found PostgreSQL source in ${PG_SOURCE_DIR}")
 endif(PG_SOURCE_DIR)
+
+# Beginning in 16, Postgres supplies a PGDLLEXPORT that provides default
+# visibility, if the compiler supports it. Check that here so we don't try to
+# duplicate the work.
+#
+# NOTE that this check must stay consistent with src/export.h.
+set(CMAKE_REQUIRED_INCLUDES ${PG_INCLUDEDIR_SERVER})
+check_c_source_runs([[
+  #include <stdio.h>
+  #include <string.h>
+
+  #include <c.h>
+  #undef printf
+
+  #define xstr(s) #s
+  #define str(s) xstr(s)
+
+  #define CORRECT_PGDLLEXPORT __attribute__((visibility("default")))
+
+  int main(void)
+  {
+    printf("PGDLLEXPORT value: '%s'\\n", str(PGDLLEXPORT));
+    return strcmp(str(PGDLLEXPORT), str(CORRECT_PGDLLEXPORT)) != 0;
+  }
+]] SKIP_PGDLLEXPORT_DEFINE)
+if(${SKIP_PGDLLEXPORT_DEFINE})
+  add_definitions(-DSKIP_PGDLLEXPORT_DEFINE)
+endif()
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
 if(${PG_VERSION_MAJOR} GREATER "12")

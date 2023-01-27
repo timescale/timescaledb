@@ -22,7 +22,7 @@
 
 #if !defined(WIN32) && !defined(__CYGWIN__)
 #if __GNUC__ >= 4
-#if defined(PGDLLEXPORT)
+#if defined(PGDLLEXPORT) && !defined(SKIP_PGDLLEXPORT_DEFINE)
 #if TS_EMPTY(PGDLLEXPORT)
 /* PGDLLEXPORT is defined but empty. We can safely undef it. */
 #undef PGDLLEXPORT
