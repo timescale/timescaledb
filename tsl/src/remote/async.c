@@ -731,7 +731,7 @@ get_single_response_nonblocking2(AsyncRequestSet *set)
 		switch (req->state)
 		{
 			case DEFERRED:
-				elog(LOG, "sending deffered request to %s", remote_connection_node_name(req->conn));
+				elog(LOG, "sending deferred request to %s", remote_connection_node_name(req->conn));
 
 				if (remote_connection_is_processing(req->conn))
 				{
@@ -743,7 +743,7 @@ get_single_response_nonblocking2(AsyncRequestSet *set)
 
 				if (req == NULL)
 					return async_response_error_create("failed to send deferred request");
-				elog(LOG, "DONE: sending deffered request");
+				elog(LOG, "sent deferred request");
 				Assert(req->state == EXECUTING);
 				TS_FALLTHROUGH;
 			case EXECUTING:
@@ -789,7 +789,7 @@ get_single_response_nonblocking2(AsyncRequestSet *set)
 				return async_response_error_create("request already completed");
 		}
 	}
-	elog(LOG, "get_single_response return NULL with num_requests=%d", list_length(set->requests));
+	elog(LOG, "get_single_response returns NULL with num_requests=%d", list_length(set->requests));
 
 	return NULL;
 }
@@ -988,7 +988,7 @@ wait_to_consume_data2(AsyncRequestSet *set, TimestampTz end_time)
 			result = async_response_timeout_create();
 			break;
 		}
-
+#if 0
 		if (event.events & ~(WL_SOCKET_READABLE | WL_LATCH_SET))
 		{
 			/*
@@ -1000,7 +1000,7 @@ wait_to_consume_data2(AsyncRequestSet *set, TimestampTz end_time)
 						 event.events));
 			break;
 		}
-
+#endif
 		if (event.events & WL_LATCH_SET)
 		{
 			ResetLatch(MyLatch);
@@ -1128,10 +1128,7 @@ async_request_set_wait_any_response_deadline2(AsyncRequestSet *set, TimestampTz 
 	{
 		elog(LOG, "getting single response");
 		response = get_single_response_nonblocking2(set);
-		elog(LOG,
-			 "DONE: getting single response=%p num_requests=%d",
-			 response,
-			 list_length(set->requests));
+		elog(LOG, "got single response=%p num_requests=%d", response, list_length(set->requests));
 
 		if (response != NULL)
 			break;
@@ -1142,7 +1139,7 @@ async_request_set_wait_any_response_deadline2(AsyncRequestSet *set, TimestampTz 
 
 		elog(LOG, "Waiting to consume data from %d nodes", list_length(set->requests));
 		response = wait_to_consume_data2(set, endtime);
-		elog(LOG, "DONE: Waiting to consume data");
+		elog(LOG, "returned from waiting to consume data");
 
 		if (response != NULL)
 			break;
