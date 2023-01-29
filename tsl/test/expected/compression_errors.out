@@ -212,10 +212,6 @@ ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
 ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 ERROR:  operation not supported on hypertables that have compression enabled
---can add index , but not unique index
-CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
-ERROR:  operation not supported on hypertables that have compression enabled
-CREATE INDEX foo_idx ON foo ( a, c );
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -317,13 +313,15 @@ select table_name from create_hypertable('table_constr', 'timec', chunk_time_int
  table_constr
 (1 row)
 
+BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
-ERROR:  column "device_id" must be used for segmenting or ordering
-DETAIL:  The constraint "table_constr_pkey" cannot be enforced with the given compression configuration.
+WARNING:  column "device_id" should be used for segmenting or ordering
+ROLLBACK;
 alter table table_constr add constraint table_constr_uk unique (location, timec, device_id);
+BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id');
-ERROR:  column "location" must be used for segmenting or ordering
-DETAIL:  The constraint "table_constr_uk" cannot be enforced with the given compression configuration.
+WARNING:  column "location" should be used for segmenting or ordering
+ROLLBACK;
 alter table table_constr add constraint table_constr_fk FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location');
 ERROR:  column "d" must be used for segmenting
@@ -372,7 +370,7 @@ CREATE TABLE table_fk (
 SELECT create_hypertable('table_fk', 'time');
    create_hypertable    
 ------------------------
- (21,public,table_fk,t)
+ (23,public,table_fk,t)
 (1 row)
 
 ALTER TABLE table_fk DROP COLUMN id1;
@@ -428,7 +426,7 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
 SELECT compress_chunk(:'CHUNK_NAME');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_23_10_chunk
+ _timescaledb_internal._hyper_25_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
@@ -438,7 +436,7 @@ DETAIL:  There are compressed chunks that prevent changing the existing compress
 SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_23_10_chunk
+ _timescaledb_internal._hyper_25_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
@@ -450,7 +448,7 @@ NOTICE:  adding not-null constraint to column "time"
 DETAIL:  Time dimensions cannot have NULL values.
       create_hypertable       
 ------------------------------
- (25,public,test_table_int,t)
+ (27,public,test_table_int,t)
 (1 row)
 
 CREATE OR REPLACE function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
@@ -471,7 +469,7 @@ WHERE id = :compressjob_id;
 SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
         config         
 -----------------------
- {"hypertable_id": 25}
+ {"hypertable_id": 27}
 (1 row)
 
 --should fail
@@ -518,7 +516,7 @@ CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4
 SELECT create_hypertable('metric', 'time', 'dev_id', 10);
   create_hypertable   
 ----------------------
- (27,public,metric,t)
+ (29,public,metric,t)
 (1 row)
 
 ALTER TABLE metric SET (
@@ -533,7 +531,7 @@ FROM generate_series('2021-08-17 00:00:00'::timestamp,
 SELECT compress_chunk(show_chunks('metric'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_27_17_chunk
+ _timescaledb_internal._hyper_29_17_chunk
 (1 row)
 
 -- column does not exist the first time
@@ -559,7 +557,7 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 HINT:  Use datatype TIMESTAMPTZ instead.
  create_hypertable  
 --------------------
- (29,public,test,t)
+ (31,public,test,t)
 (1 row)
 
 INSERT INTO test VALUES ('2001-01-01 00:00', 'home'),
@@ -584,14 +582,14 @@ EXPLAIN SELECT DISTINCT 1 FROM test;
 ----------------------------------------------------------------------------------
  Unique  (cost=0.00..50.80 rows=1 width=4)
    ->  Result  (cost=0.00..50.80 rows=2040 width=4)
-         ->  Seq Scan on _hyper_29_19_chunk  (cost=0.00..30.40 rows=2040 width=0)
+         ->  Seq Scan on _hyper_31_19_chunk  (cost=0.00..30.40 rows=2040 width=0)
 (3 rows)
 
 --compress chunks
 SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_19_chunk
+ _timescaledb_internal._hyper_31_19_chunk
 (1 row)
 
 --below query should pass after chunks are compressed
@@ -607,8 +605,8 @@ EXPLAIN SELECT DISTINCT 1 FROM test;
 ------------------------------------------------------------------------------------------------------
  Unique  (cost=0.51..21.02 rows=1 width=4)
    ->  Result  (cost=0.51..21.02 rows=2000 width=4)
-         ->  Custom Scan (DecompressChunk) on _hyper_29_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
-               ->  Seq Scan on compress_hyper_30_20_chunk  (cost=0.00..1.02 rows=2 width=4)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
+               ->  Seq Scan on compress_hyper_32_20_chunk  (cost=0.00..1.02 rows=2 width=4)
 (4 rows)
 
 --github issue 4398
@@ -620,7 +618,7 @@ NOTICE:  adding not-null constraint to column "tm"
 DETAIL:  Time dimensions cannot have NULL values.
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            31 | public      | ts_table   | t
+            33 | public      | ts_table   | t
 (1 row)
 
 --should report a warning

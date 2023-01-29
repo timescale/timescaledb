@@ -84,7 +84,7 @@ typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
 extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
-ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
+ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, TupleTableSlot *slot,
 										 const on_chunk_changed_func on_chunk_changed, void *data);
 
 extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,

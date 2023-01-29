@@ -270,7 +270,7 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 	table_close(tblrel, AccessShareLock);
 }
 
-bool
+bool TSDLLEXPORT
 ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 {
 	Bitmapset *key_attrs = RelationGetIndexAttrBitmap(htrel, INDEX_ATTR_BITMAP_KEY);

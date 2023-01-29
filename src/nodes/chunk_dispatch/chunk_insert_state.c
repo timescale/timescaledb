@@ -597,21 +597,13 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 												 CHUNK_INSERT,
 												 true);
 
-	if (has_compressed_chunk && onconflict_action != ONCONFLICT_NONE)
+	if (has_compressed_chunk && onconflict_action == ONCONFLICT_UPDATE)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("insert with ON CONFLICT clause is not supported on "
-						"compressed chunks")));
+				 errmsg(
+					 "INSERT with ON CONFLICT DO UPDATE is not supported on compressed chunks")));
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
-	if (has_compressed_chunk && ts_indexing_relation_has_primary_or_unique_index(rel))
-	{
-		table_close(rel, RowExclusiveLock);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("insert into a compressed chunk that has primary or unique constraint is "
-						"not supported")));
-	}
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);

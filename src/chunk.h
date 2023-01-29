@@ -206,6 +206,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chun
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_partial(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_distributed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
 																	 int32 chunk_status,
 																	 ChunkOperation cmd,
