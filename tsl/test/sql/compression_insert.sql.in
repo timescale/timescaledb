@@ -541,10 +541,9 @@ INSERT INTO test_ordering VALUES (105),(104),(103);
 INSERT INTO test_ordering VALUES (21), (22),(113);
 SELECT count(*) FROM test_ordering;
 INSERT INTO test_ordering VALUES (106) RETURNING *;
--- insert into compressed chunk does not support RETURNING
-\set ON_ERROR_STOP 0
-INSERT INTO test_ordering VALUES (23), (24),(115) RETURNING *;
-\set ON_ERROR_STOP 1
+-- insert into compressed chunk does support RETURNING
+INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING *;
+INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass, *;
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
 

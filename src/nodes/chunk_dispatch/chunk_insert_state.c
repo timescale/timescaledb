@@ -596,11 +596,11 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 												 chunk->fd.status,
 												 CHUNK_INSERT,
 												 true);
-	if (has_compressed_chunk &&
-		(onconflict_action != ONCONFLICT_NONE || chunk_dispatch_has_returning(dispatch)))
+
+	if (has_compressed_chunk && onconflict_action != ONCONFLICT_NONE)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("insert with ON CONFLICT or RETURNING clause is not supported on "
+				 errmsg("insert with ON CONFLICT clause is not supported on "
 						"compressed chunks")));
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);

@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #5241 Allow RETURNING clause when inserting into compressed chunks
+
 **Bugfixes**
 * #4804 Skip bucketing when start or end of refresh job is null
 * #4926 Fix corruption when inserting into compressed chunks
