@@ -2679,7 +2679,7 @@ process_index_start(ProcessUtilityArgs *args)
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
-	if (NULL == ht)
+	if (!ht)
 	{
 		/* Check if the relation is a Continuous Aggregate */
 		cagg = ts_continuous_agg_find_by_rv(stmt->relation);
@@ -2702,7 +2702,7 @@ process_index_start(ProcessUtilityArgs *args)
 			}
 		}
 
-		if (NULL == ht)
+		if (!ht)
 		{
 			ts_cache_release(hcache);
 			return DDL_CONTINUE;
@@ -2715,18 +2715,6 @@ process_index_start(ProcessUtilityArgs *args)
 
 		/* Make the RangeVar for the underlying materialization hypertable */
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
-	}
-	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-	{
-		/* unique indexes are not allowed on compressed hypertables*/
-		if (stmt->unique || stmt->primary || stmt->isconstraint)
-		{
-			ts_cache_release(hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on hypertables that have compression "
-							"enabled")));
-		}
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);

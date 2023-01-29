@@ -324,6 +324,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	ChunkInsertState *cis =
 		ts_chunk_dispatch_get_chunk_insert_state(miinfo->ccstate->dispatch,
 												 buffer->point,
+												 buffer->slots[0],
 												 NULL /* on chunk changed function */,
 												 NULL /* payload for on chunk changed function */);
 
@@ -948,6 +949,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 		/* Find or create the insert state matching the point */
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 													   point,
+													   myslot,
 													   on_chunk_insert_state_changed,
 													   bistate);
 

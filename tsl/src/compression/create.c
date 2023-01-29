@@ -851,13 +851,9 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 				}
 				/* is colno a segment-by or order_by column */
 				else if (col_def->segmentby_column_index < 1 && col_def->orderby_column_index < 1)
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("column \"%s\" must be used for segmenting or ordering",
-									NameStr(col_def->attname)),
-							 errdetail("The constraint \"%s\" cannot be enforced with"
-									   " the given compression configuration.",
-									   NameStr(form->conname))));
+					ereport(WARNING,
+							(errmsg("column \"%s\" should be used for segmenting or ordering",
+									NameStr(col_def->attname))));
 			}
 
 			if (form->contype == CONSTRAINT_FOREIGN)

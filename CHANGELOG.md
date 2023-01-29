@@ -10,6 +10,8 @@ accidentally triggering the load of a previous DB version.**
 * #5212 Allow pushdown of reference table joins
 * #5312 Add timeout support to the ping_data_node()
 * #5361 Add parallel support for partialize_agg()
+* #5252 Improve unique constraint support on compressed hypertables
+* #5312 Add timeout support to ping_data_node()
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down

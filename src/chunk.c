@@ -4378,6 +4378,12 @@ ts_chunk_is_compressed(const Chunk *chunk)
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
 }
 
+bool
+ts_chunk_is_distributed(const Chunk *chunk)
+{
+	return chunk->data_nodes != NIL;
+}
+
 /* Note that only a compressed chunk can have partial flag set */
 bool
 ts_chunk_is_partial(const Chunk *chunk)

@@ -55,7 +55,9 @@ where ch1.compressed_chunk_id = ch2.id;
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
 --TEST2a try DML on a compressed chunk
+BEGIN;
 insert into foo values( 11 , 10 , 20, 120);
+ROLLBACK;
 update foo set b =20 where a = 10;
 delete from foo where a = 10;
 
