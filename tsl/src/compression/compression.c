@@ -10,11 +10,12 @@
 #include <access/htup_details.h>
 #include <access/multixact.h>
 #include <access/xact.h>
+#include <catalog/heap.h>
+#include <catalog/index.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_attribute.h>
 #include <catalog/pg_type.h>
-#include <catalog/index.h>
-#include <catalog/heap.h>
 #include <common/base64.h>
 #include <executor/tuptable.h>
 #include <funcapi.h>
@@ -32,8 +33,6 @@
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
-#include <catalog/pg_am.h>
-#include <utils.h>
 
 #include "compat/compat.h"
 
@@ -50,7 +49,6 @@
 #include "ts_catalog/hypertable_compression.h"
 #include "ts_catalog/catalog.h"
 #include "guc.h"
-#include <nodes/print.h>
 
 #define MAX_ROWS_PER_COMPRESSION 1000
 /* gap in sequence id between rows, potential for adding rows in gap later */
@@ -1501,6 +1499,8 @@ typedef struct RowDecompressor
 	PerCompressedColumn *per_compressed_cols;
 	int16 num_compressed_columns;
 
+	TupleDesc in_desc;
+
 	TupleDesc out_desc;
 	Relation out_rel;
 
@@ -1522,6 +1522,45 @@ static void row_decompressor_decompress_row(RowDecompressor *row_decompressor);
 static bool per_compressed_col_get_data(PerCompressedColumn *per_compressed_col,
 										Datum *decompressed_datums, bool *decompressed_is_nulls);
 
+static RowDecompressor
+build_decompressor(Relation in_rel, Relation out_rel)
+{
+	TupleDesc in_desc = RelationGetDescr(in_rel);
+	TupleDesc out_desc = RelationGetDescr(out_rel);
+
+	Oid compressed_typeid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+
+	Assert(OidIsValid(compressed_typeid));
+
+	RowDecompressor decompressor = {
+		.per_compressed_cols =
+			create_per_compressed_column(in_desc, out_desc, out_rel->rd_id, compressed_typeid),
+		.num_compressed_columns = in_desc->natts,
+
+		.in_desc = in_desc,
+
+		.out_desc = out_desc,
+		.out_rel = out_rel,
+
+		.mycid = GetCurrentCommandId(true),
+		.bistate = GetBulkInsertState(),
+
+		/* cache memory used to store the decompressed datums/is_null for form_tuple */
+		.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
+		.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
+	};
+
+	/*
+	 * We need to make sure decompressed_is_nulls is in a defined state. While this
+	 * will get written for normal columns it will not get written for dropped columns
+	 * since dropped columns don't exist in the compressed chunk so we initiallize
+	 * with true here.
+	 */
+	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
+
+	return decompressor;
+}
+
 void
 decompress_chunk(Oid in_table, Oid out_table)
 {
@@ -1541,73 +1580,43 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 */
 	Relation in_rel = relation_open(in_table, ExclusiveLock);
 
-	TupleDesc in_desc = RelationGetDescr(in_rel);
-	TupleDesc out_desc = RelationGetDescr(out_rel);
+	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
 
-	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	Datum *compressed_datums = palloc(sizeof(*compressed_datums) * decompressor.in_desc->natts);
+	bool *compressed_is_nulls = palloc(sizeof(*compressed_is_nulls) * decompressor.in_desc->natts);
 
-	Assert(OidIsValid(compressed_data_type_oid));
+	HeapTuple compressed_tuple;
+	TableScanDesc heapScan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+	MemoryContext per_compressed_row_ctx =
+		AllocSetContextCreate(CurrentMemoryContext,
+							  "decompress chunk per-compressed row",
+							  ALLOCSET_DEFAULT_SIZES);
 
+	for (compressed_tuple = heap_getnext(heapScan, ForwardScanDirection); compressed_tuple != NULL;
+		 compressed_tuple = heap_getnext(heapScan, ForwardScanDirection))
 	{
-		RowDecompressor decompressor = {
-			.per_compressed_cols = create_per_compressed_column(in_desc,
-																out_desc,
-																out_table,
-																compressed_data_type_oid),
-			.num_compressed_columns = in_desc->natts,
+		MemoryContext old_ctx;
 
-			.out_desc = out_desc,
-			.out_rel = out_rel,
+		Assert(HeapTupleIsValid(compressed_tuple));
 
-			.mycid = GetCurrentCommandId(true),
-			.bistate = GetBulkInsertState(),
+		old_ctx = MemoryContextSwitchTo(per_compressed_row_ctx);
 
-			/* cache memory used to store the decompressed datums/is_null for form_tuple */
-			.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
-			.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
-		};
-		/*
-		 * We need to make sure decompressed_is_nulls is in a defined state. While this
-		 * will get written for normal columns it will not get written for dropped columns
-		 * since dropped columns don't exist in the compressed chunk so we initiallize
-		 * with true here.
-		 */
-		memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
+		heap_deform_tuple(compressed_tuple,
+						  decompressor.in_desc,
+						  compressed_datums,
+						  compressed_is_nulls);
+		populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
+												  decompressor.in_desc->natts,
+												  compressed_datums,
+												  compressed_is_nulls);
 
-		Datum *compressed_datums = palloc(sizeof(*compressed_datums) * in_desc->natts);
-		bool *compressed_is_nulls = palloc(sizeof(*compressed_is_nulls) * in_desc->natts);
-
-		HeapTuple compressed_tuple;
-		TableScanDesc heapScan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
-		MemoryContext per_compressed_row_ctx =
-			AllocSetContextCreate(CurrentMemoryContext,
-								  "decompress chunk per-compressed row",
-								  ALLOCSET_DEFAULT_SIZES);
-
-		for (compressed_tuple = heap_getnext(heapScan, ForwardScanDirection);
-			 compressed_tuple != NULL;
-			 compressed_tuple = heap_getnext(heapScan, ForwardScanDirection))
-		{
-			MemoryContext old_ctx;
-
-			Assert(HeapTupleIsValid(compressed_tuple));
-
-			old_ctx = MemoryContextSwitchTo(per_compressed_row_ctx);
-
-			heap_deform_tuple(compressed_tuple, in_desc, compressed_datums, compressed_is_nulls);
-			populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
-													  in_desc->natts,
-													  compressed_datums,
-													  compressed_is_nulls);
-
-			row_decompressor_decompress_row(&decompressor);
-			MemoryContextSwitchTo(old_ctx);
-			MemoryContextReset(per_compressed_row_ctx);
-		}
-
-		heap_endscan(heapScan);
-		FreeBulkInsertState(decompressor.bistate);
+		row_decompressor_decompress_row(&decompressor);
+		MemoryContextSwitchTo(old_ctx);
+		MemoryContextReset(per_compressed_row_ctx);
 	}
+
+	heap_endscan(heapScan);
+	FreeBulkInsertState(decompressor.bistate);
 
 	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
 	 * so the strong locks taken by reindex_relation shouldn't matter. */
