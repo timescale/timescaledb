@@ -73,7 +73,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
-	if (NULL == cis)
+	if (!cis)
 	{
 		/*
 		 * The chunk search functions may leak memory, so switch to a temporary
@@ -91,21 +91,19 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * where the chunk already exists.
 		 */
 		bool found;
-		Chunk *new_chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
+		Chunk *chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
 
 #if PG14_GE
 		/*
 		 * Frozen chunks require at least PG14.
 		 */
-		if (new_chunk && ts_chunk_is_frozen(new_chunk))
-			elog(ERROR,
-				 "cannot INSERT into frozen chunk \"%s\"",
-				 get_rel_name(new_chunk->table_id));
+		if (chunk && ts_chunk_is_frozen(chunk))
+			elog(ERROR, "cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id));
 #endif
 
-		if (new_chunk == NULL)
+		if (!chunk)
 		{
-			new_chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
+			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
 		}
 		else
 			found = true;
@@ -114,7 +112,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (found && dispatch->hypertable->fd.replication_factor > 1)
 		{
 			List *chunk_data_nodes =
-				ts_chunk_data_node_scan_by_chunk_id_filter(new_chunk->fd.id, CurrentMemoryContext);
+				ts_chunk_data_node_scan_by_chunk_id_filter(chunk->fd.id, CurrentMemoryContext);
 
 			/*
 			 * If the chunk was not created as part of this insert, we need to check whether any
@@ -123,16 +121,16 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 			 * mapping for the unavailable data nodes.
 			 */
 			if (dispatch->hypertable->fd.replication_factor > list_length(chunk_data_nodes))
-				ts_cm_functions->dist_update_stale_chunk_metadata(new_chunk, chunk_data_nodes);
+				ts_cm_functions->dist_update_stale_chunk_metadata(chunk, chunk_data_nodes);
 
 			list_free(chunk_data_nodes);
 		}
 
-		if (NULL == new_chunk)
+		if (!chunk)
 			elog(ERROR, "no chunk found or created");
 
-		cis = ts_chunk_insert_state_create(new_chunk, dispatch);
-		ts_subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
+		cis = ts_chunk_insert_state_create(chunk, dispatch);
+		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 
 		MemoryContextSwitchTo(old_context);
 	}
