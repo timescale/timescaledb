@@ -138,9 +138,8 @@ def macos_config(overrides):
 
 
 # common installcheck_args for all pg15 tests
-# dist_move_chunk is skipped due to #4972
 # partialize_finalize is ignored due to #4937
-pg15_installcheck_args = "SKIPS='dist_move_chunk' IGNORES='partialize_finalize'"
+pg15_installcheck_args = "IGNORES='partialize_finalize'"
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(build_debug_config({"pg": PG12_LATEST}))

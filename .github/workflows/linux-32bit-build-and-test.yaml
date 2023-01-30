@@ -44,7 +44,6 @@ jobs:
         build_type: [ Debug ]
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
-            skips_version: dist_move_chunk
             ignores_version: partialize_finalize
 
     steps:
@@ -89,7 +88,7 @@ jobs:
       run: |
         set -o pipefail
         export LANG=C.UTF-8
-        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES} ${{ matrix.ignores_version }}" SKIPS="${SKIPS} ${{ matrix.skips_version }}" | tee installcheck.log
+        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES} ${{ matrix.ignores_version }}" SKIPS="${SKIPS}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

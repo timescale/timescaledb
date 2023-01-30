@@ -130,6 +130,12 @@ set(SOLO_TESTS
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})
 
+# In PG15.0 and PG15.1, dist_move_chunk can get stuck when run in parallel with
+# other tests as mentioned in #4972.
+if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "2")
+  list(APPEND SOLO_TESTS dist_move_chunk)
+endif()
+
 set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
     transparent_decompression.sql.in
