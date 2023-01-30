@@ -126,7 +126,7 @@ set(SOLO_TESTS
     remote_txn
     remote_txn_resolve
     reorder
-    telemetry_stats)
+    telemetry_stats-${PG_VERSION_MAJOR})
 
 set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
