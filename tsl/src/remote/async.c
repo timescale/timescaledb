@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <access/xact.h>
 #include <nodes/pg_list.h>
 #include <libpq-fe.h>
 #include <storage/latch.h>
@@ -165,10 +166,13 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 
 	if (req->stmt_name)
 	{
-		elog(LOG,
-			 "calling PQsendQueryPrepared() to %s stmt: %s",
-			 remote_connection_node_name(req->conn),
-			 req->stmt_name);
+		if (IsTransactionState())
+		{
+			elog(LOG,
+				 "calling PQsendQueryPrepared() to %s stmt: %s",
+				 remote_connection_node_name(req->conn),
+				 req->stmt_name);
+		}
 
 		ret = PQsendQueryPrepared(remote_connection_get_pg_conn(req->conn),
 								  req->stmt_name,
@@ -180,10 +184,13 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 	}
 	else
 	{
-		elog(LOG,
-			 "calling PQsendQueryParams() to %s SQL: %s",
-			 remote_connection_node_name(req->conn),
-			 req->sql);
+		if (IsTransactionState())
+		{
+			elog(LOG,
+				 "calling PQsendQueryParams() to %s SQL: %s",
+				 remote_connection_node_name(req->conn),
+				 req->sql);
+		}
 
 		/*
 		 * We intentionally do not specify parameter types here, but leave the
@@ -215,7 +222,13 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 			ret = 0;
 		*/
 	}
-	elog(LOG, "done PQsendQuery to %s with ret=%d", remote_connection_node_name(req->conn), ret);
+	if (IsTransactionState())
+	{
+		elog(LOG,
+			 "done PQsendQuery to %s with ret=%d",
+			 remote_connection_node_name(req->conn),
+			 ret);
+	}
 
 	if (ret == 0)
 	{

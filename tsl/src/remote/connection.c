@@ -750,6 +750,7 @@ remote_connection_configure(TSConnection *conn)
 	result = remote_connection_exec(conn, sql.data);
 	success = PQresultStatus(result) == PGRES_COMMAND_OK;
 	PQclear(result);
+	pfree(sql.data);
 
 	return success;
 }
