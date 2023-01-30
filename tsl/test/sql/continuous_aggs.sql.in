@@ -1516,3 +1516,32 @@ SELECT *
 FROM conditions_summary_new
 NATURAL JOIN conditions_summary_old
 ORDER BY timec;
+
+-- Parallel planning test for realtime Continuous Aggregate
+DROP TABLE conditions CASCADE;
+
+CREATE TABLE conditions (
+  timec       TIMESTAMPTZ       NOT NULL,
+  temperature DOUBLE PRECISION  NULL
+);
+
+SELECT table_name FROM create_hypertable('conditions', 'timec');
+
+INSERT INTO conditions
+SELECT t, 10 FROM generate_series('2023-01-01 00:00-03'::timestamptz, '2023-12-31 23:59-03'::timestamptz, '1 hour'::interval) AS t;
+
+CREATE MATERIALIZED VIEW conditions_daily WITH (timescaledb.continuous)
+AS
+SELECT
+  time_bucket('1 day', timec),
+  SUM(temperature)
+FROM conditions
+GROUP BY 1
+ORDER BY 2 DESC;
+
+SET force_parallel_mode = 'on';
+SET max_parallel_workers_per_gather = 4;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+-- Parallel planning
+EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';

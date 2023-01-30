@@ -1609,11 +1609,6 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	ContinuousAgg *cagg;
 	AclResult aclresult;
 
-	if (PG_ARGISNULL(0))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("materialized hypertable cannot be NULL")));
-
 	if (watermark != NULL)
 	{
 		if (watermark_valid(watermark, hyper_id))
