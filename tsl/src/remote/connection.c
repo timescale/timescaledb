@@ -1365,27 +1365,35 @@ setup_full_connection_options(List *connection_options, const char ***all_keywor
 }
 
 /*
- * This will only open a connection to a specific node, but not do anything
- * else. In particular, it will not perform any validation nor configure the
- * connection since it cannot know that it connects to a data node database or
- * not. For that, please use the `remote_connection_open_with_options`
- * function.
+ * Open a connection and assign it the given node name.
+ *
+ * This will only open a connection to a specific node, but not do any other
+ * session initialization. In particular, it will not perform any validation
+ * nor configure the connection since it cannot know that it connects to a
+ * data node database or not. For that, please use the
+ * `remote_connection_open_session` function.
+ *
+ * The connection's life-cycle is tied to the current memory context via its
+ * delete callback. As a result, the connection will be automatically closed
+ * and freed when the memory context is deleted.
+ *
+ * This function does not (and should not) throw (PostgreSQL) errors. Instead,
+ * an error message is optionally returned via the "errmsg" parameter.
  */
 TSConnection *
-remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options,
-											char **errmsg)
+remote_connection_open(const char *node_name, List *connection_options, char **errmsg)
 {
-	PGconn *volatile pg_conn = NULL;
-	TSConnection *ts_conn;
+	PGconn *pg_conn = NULL;
+	TSConnection *ts_conn = NULL;
 	const char **keywords;
 	const char **values;
+	PostgresPollingStatusType status;
 
 	if (NULL != errmsg)
 		*errmsg = NULL;
 
 	setup_full_connection_options(connection_options, &keywords, &values);
-
-	pg_conn = PQconnectdbParams(keywords, values, 0 /* Do not expand dbname param */);
+	pg_conn = PQconnectStartParams(keywords, values, 0 /* Do not expand dbname param */);
 
 	/* Cast to (char **) to silence warning with MSVC compiler */
 	pfree((char **) keywords);
@@ -1393,6 +1401,63 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 
 	if (NULL == pg_conn)
 		return NULL;
+
+	if (PQstatus(pg_conn) == CONNECTION_BAD)
+	{
+		finish_connection(pg_conn, errmsg);
+		return NULL;
+	}
+
+	status = PGRES_POLLING_WRITING;
+
+	do
+	{
+		int io_flag;
+		int rc;
+
+		if (status == PGRES_POLLING_READING)
+			io_flag = WL_SOCKET_READABLE;
+#ifdef WIN32
+		/* Windows needs a different test while waiting for connection-made */
+		else if (PQstatus(pg_conn) == CONNECTION_STARTED)
+			io_flag = WL_SOCKET_CONNECTED;
+#endif
+		else
+			io_flag = WL_SOCKET_WRITEABLE;
+		/*
+		 * Wait for latch or socket event. Note that it is not possible to
+		 * reuse a WaitEventSet using the same socket file descriptor in each
+		 * iteration of the loop since PQconnectPoll() might change the file
+		 * descriptor across calls. Therefore, it is important to create a new
+		 * WaitEventSet in every iteration of the loop and retreiving the
+		 * correct file descriptor (socket) with PQsocket().
+		 */
+		rc = WaitLatchOrSocket(MyLatch,
+							   WL_EXIT_ON_PM_DEATH | WL_LATCH_SET | io_flag,
+							   PQsocket(pg_conn),
+							   0,
+							   PG_WAIT_EXTENSION);
+		if (rc & WL_LATCH_SET)
+		{
+			ResetLatch(MyLatch);
+			CHECK_FOR_INTERRUPTS();
+		}
+
+		if (rc & io_flag)
+		{
+			/*
+			 * PQconnectPoll() is supposed to be non-blocking, but it
+			 * isn't. PQconnectPoll() will internally try to send a startup
+			 * packet and do DNS lookups (if necessary) and can therefore
+			 * block. So, if there is a network issue (e.g., black hole
+			 * routing) the connection attempt will hang on
+			 * PQconnectPoll(). There's nothing that can be done about it,
+			 * unless the blocking operations are moved out of PQconnectPoll()
+			 * and integrated with the wait loop.
+			 */
+			status = PQconnectPoll(pg_conn);
+		}
+	} while (status != PGRES_POLLING_OK && status != PGRES_POLLING_FAILED);
 
 	if (PQstatus(pg_conn) != CONNECTION_OK)
 	{
@@ -1409,22 +1474,15 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 }
 
 /*
- * Opens a connection.
+ * Open a connection to a data node and perform basic session initialization.
  *
- * Raw connections are not part of the transaction and do not have transactions
- * auto-started. They must be explicitly closed by
- * remote_connection_close. Note that connections are allocated using malloc
- * and so if you do not call remote_connection_close, you'll have a memory
- * leak. Note that the connection cache handles all of this for you so use
- * that if you can.
+ * This function will raise errors on failures.
  */
 TSConnection *
-remote_connection_open_with_options(const char *node_name, List *connection_options,
-									bool set_dist_id)
+remote_connection_open_session(const char *node_name, List *connection_options, bool set_dist_id)
 {
 	char *err = NULL;
-	TSConnection *conn =
-		remote_connection_open_with_options_nothrow(node_name, connection_options, &err);
+	TSConnection *conn = remote_connection_open(node_name, connection_options, &err);
 
 	if (NULL == conn)
 		ereport(ERROR,
@@ -1475,6 +1533,15 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 	PG_END_TRY();
 
 	return conn;
+}
+
+TSConnection *
+remote_connection_open_session_by_id(TSConnectionId id)
+{
+	ForeignServer *server = GetForeignServer(id.server_id);
+	List *connection_options = remote_connection_prepare_auth_options(server, id.user_id);
+
+	return remote_connection_open_session(server->servername, connection_options, true);
 }
 
 /*
@@ -1647,86 +1714,34 @@ remote_connection_get_connstr(const char *node_name)
 	return connstr_escape.data;
 }
 
-TSConnection *
-remote_connection_open_by_id(TSConnectionId id)
-{
-	ForeignServer *server = GetForeignServer(id.server_id);
-	List *connection_options = remote_connection_prepare_auth_options(server, id.user_id);
-
-	return remote_connection_open_with_options(server->servername, connection_options, true);
-}
-
-TSConnection *
-remote_connection_open(Oid server_id, Oid user_id)
-{
-	TSConnectionId id = remote_connection_id(server_id, user_id);
-
-	return remote_connection_open_by_id(id);
-}
-
-/*
- * Open a connection without throwing and error.
- *
- * Returns the connection pointer on success. On failure NULL is returned and
- * the errmsg (if given) is used to return an error message.
- */
-TSConnection *
-remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg)
-{
-	ForeignServer *server = GetForeignServer(server_id);
-	Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
-	List *connection_options;
-	TSConnection *conn;
-
-	if (server->fdwid != fdwid)
-	{
-		elog(WARNING, "invalid node type for \"%s\"", server->servername);
-		return NULL;
-	}
-
-	connection_options = remote_connection_prepare_auth_options(server, user_id);
-	conn =
-		remote_connection_open_with_options_nothrow(server->servername, connection_options, errmsg);
-
-	if (NULL == conn)
-	{
-		if (NULL != errmsg && NULL == *errmsg)
-			*errmsg = "internal connection error";
-		return NULL;
-	}
-
-	if (PQstatus(conn->pg_conn) != CONNECTION_OK || !remote_connection_set_peer_dist_id(conn))
-	{
-		if (NULL != errmsg)
-			*errmsg = pchomp(PQerrorMessage(conn->pg_conn));
-		remote_connection_close(conn);
-		return NULL;
-	}
-
-	return conn;
-}
-
 #define PING_QUERY "SELECT 1"
 
 bool
 remote_connection_ping(const char *node_name)
 {
 	Oid server_id = get_foreign_server_oid(node_name, false);
-	TSConnection *conn = remote_connection_open_nothrow(server_id, GetUserId(), NULL);
+	ForeignServer *server = GetForeignServer(server_id);
+	Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
+	List *connection_options;
+	TSConnection *conn;
 	bool success = false;
+
+	if (server->fdwid != fdwid)
+	{
+		elog(WARNING, "invalid node type for \"%s\"", server->servername);
+		return false;
+	}
+
+	connection_options = remote_connection_prepare_auth_options(server, GetUserId());
+	conn = remote_connection_open(server->servername, connection_options, NULL);
 
 	if (NULL == conn)
 		return false;
 
 	if (PQstatus(conn->pg_conn) == CONNECTION_OK)
 	{
-		if (1 == PQsendQuery(conn->pg_conn, PING_QUERY))
-		{
-			PGresult *res = PQgetResult(conn->pg_conn);
-
-			success = (PQresultStatus(res) == PGRES_TUPLES_OK);
-			PQclear(res);
-		}
+		PGresult *res = remote_connection_exec(conn, PING_QUERY);
+		success = (PQresultStatus(res) == PGRES_TUPLES_OK);
 	}
 
 	remote_connection_close(conn);

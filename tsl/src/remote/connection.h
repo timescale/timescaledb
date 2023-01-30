@@ -57,15 +57,11 @@ typedef struct TSConnectionError
  * `remote_connection_cache_get_connection` instead. Must be closed with
  * `remote_connection_close`
  */
-extern TSConnection *remote_connection_open_with_options(const char *node_name,
-														 List *connection_options,
-														 bool set_dist_id);
-extern TSConnection *remote_connection_open_with_options_nothrow(const char *node_name,
-																 List *connection_options,
-																 char **errmsg);
-extern TSConnection *remote_connection_open_by_id(TSConnectionId id);
-extern TSConnection *remote_connection_open(Oid server_id, Oid user_id);
-extern TSConnection *remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg);
+extern TSConnection *remote_connection_open(const char *node_name, List *connection_options,
+											char **errmsg);
+extern TSConnection *remote_connection_open_session(const char *node_name, List *connection_options,
+													bool set_dist_id);
+extern TSConnection *remote_connection_open_session_by_id(TSConnectionId id);
 extern List *remote_connection_prepare_auth_options(const ForeignServer *server, Oid user_id);
 extern int remote_connection_xact_depth_get(const TSConnection *conn);
 extern int remote_connection_xact_depth_inc(TSConnection *conn);

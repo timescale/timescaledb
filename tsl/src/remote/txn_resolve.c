@@ -61,7 +61,8 @@ Datum
 remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 {
 	Oid foreign_server_oid = PG_GETARG_OID(0);
-	TSConnection *conn = remote_connection_open(foreign_server_oid, GetUserId());
+	TSConnectionId id = remote_connection_id(foreign_server_oid, GetUserId());
+	TSConnection *conn = remote_connection_open_session_by_id(id);
 	int resolved = 0;
 
 	/*
