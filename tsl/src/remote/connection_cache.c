@@ -164,7 +164,7 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * remote_connection_close at cleanup is critical.
 	 */
 	old = MemoryContextSwitchTo(ts_cache_memory_ctx(cache));
-	entry->conn = remote_connection_open_by_id(*id);
+	entry->conn = remote_connection_open_session_by_id(*id);
 	MemoryContextSwitchTo(old);
 
 	/* Set the hash values of the foreign server and role for cache

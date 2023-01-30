@@ -28,17 +28,27 @@
 TSConnection *
 get_connection()
 {
-	return remote_connection_open_with_options(
-		"testdb",
-		list_make4(makeDefElem("user",
-							   (Node *) makeString(GetUserNameFromId(GetUserId(), false)),
-							   -1),
-				   makeDefElem("host", (Node *) makeString("localhost"), -1),
-				   makeDefElem("dbname", (Node *) makeString(get_database_name(MyDatabaseId)), -1),
-				   makeDefElem("port",
-							   (Node *) makeString(pstrdup(GetConfigOption("port", false, false))),
-							   -1)),
-		false);
+	return remote_connection_open_session("testdb",
+										  list_make4(makeDefElem("user",
+																 (Node *) makeString(
+																	 GetUserNameFromId(GetUserId(),
+																					   false)),
+																 -1),
+													 makeDefElem("host",
+																 (Node *) makeString("localhost"),
+																 -1),
+													 makeDefElem("dbname",
+																 (Node *) makeString(
+																	 get_database_name(
+																		 MyDatabaseId)),
+																 -1),
+													 makeDefElem("port",
+																 (Node *) makeString(pstrdup(
+																	 GetConfigOption("port",
+																					 false,
+																					 false))),
+																 -1)),
+										  false);
 }
 
 static void
