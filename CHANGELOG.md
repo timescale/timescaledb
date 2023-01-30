@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #5245 Mange life-cycle of connections via memory contexts
 * #5246 Make connection establishment interruptible
 * #5253 Make data node command execution interruptible
+* #5243 Enable real-time aggregation for continuous aggregates with joins
 
 **Bugfixes**
 * #4926 Fix corruption when inserting into compressed chunks

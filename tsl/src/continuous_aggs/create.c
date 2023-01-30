@@ -2635,14 +2635,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	bool finalized = DatumGetBool(with_clause_options[ContinuousViewOptionFinalized].parsed);
 
 	finalqinfo.finalized = finalized;
-	if (list_length(panquery->jointree->fromlist) >= CONTINUOUS_AGG_MAX_JOIN_RELATIONS &&
-		!materialized_only)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("real-time continuous aggregates are not supported with joins"),
-				 errhint("set materialized_only to true")));
-	}
 
 	/*
 	 * Assign the column_name aliases in CREATE VIEW to the query.
@@ -3387,7 +3379,25 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 												  tce->lt_opr,
 												  varno,
 												  matpartcolno);
-	varno = list_length(q2->rtable);
+	/*
+	 * If there is join in CAgg definition then adjust varno
+	 * to get time column from the hypertable in the join.
+	 */
+	if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+	{
+		RangeTblRef *rtref = linitial_node(RangeTblRef, q2->jointree->fromlist);
+		RangeTblEntry *rte = list_nth(q2->rtable, rtref->rtindex - 1);
+		RangeTblRef *rtref_other = lsecond_node(RangeTblRef, q2->jointree->fromlist);
+		RangeTblEntry *rte_other = list_nth(q2->rtable, rtref_other->rtindex - 1);
+
+		Oid normal_table_id = ts_is_hypertable(rte->relid) ? rte_other->relid : rte->relid;
+		if (normal_table_id == rte->relid)
+			varno = 2;
+		else
+			varno = 1;
+	}
+	else
+		varno = list_length(q2->rtable);
 	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,
 									   get_negator(tce->lt_opr),
