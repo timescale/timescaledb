@@ -276,8 +276,12 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
+#if PG16_LT
+#define RelationSetNewRelfilenumber RelationSetNewRelfilenode
+#endif
+
 	capture_pgclass_stats(table_oid, &pages, &visible, &tuples);
-	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
+	RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
@@ -286,7 +290,7 @@ truncate_relation(Oid table_oid)
 	if (OidIsValid(toast_relid))
 	{
 		rel = table_open(toast_relid, AccessExclusiveLock);
-		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
+		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
 		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
 		table_close(rel, NoLock);
 	}
