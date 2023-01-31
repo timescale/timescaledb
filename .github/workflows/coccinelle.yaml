@@ -1,6 +1,6 @@
 # Check our codebase for defective programming patterns
 name: Coccinelle
-on:
+"on":
   pull_request:
   push:
     branches:

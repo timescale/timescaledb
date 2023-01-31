@@ -1,5 +1,5 @@
 name: Additional tests
-on:
+"on":
   push:
     branches:
       - main

@@ -1,5 +1,5 @@
 name: Check CHANGELOG.md updated
-on:
+"on":
   pull_request:
     types: [opened, synchronize, reopened, edited]
     branches: [main]

@@ -4,7 +4,7 @@
 # branch that you select when running the workflow. 
 
 name: Release TimescaleDB
-on:
+"on":
   workflow_dispatch:
     inputs:
       version:

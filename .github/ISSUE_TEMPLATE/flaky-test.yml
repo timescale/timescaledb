@@ -8,7 +8,9 @@ body:
     id: tests
     attributes:
       label: Which test is flaky?
-      description: Use this template to submit reports about flaky tests (pass or fail with no underlying change in code) in TimescaleDB CI.
+      description: >-
+        Use this template to submit reports about flaky tests (pass or fail with
+        no underlying change in code) in TimescaleDB CI.
     validations:
       required: true
 

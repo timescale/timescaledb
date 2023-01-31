@@ -33,7 +33,9 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev build-essential autoconf autoconf-archive libpqxx-dev libboost-regex-dev libsqlite3-dev
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
+            libkrb5-dev build-essential autoconf autoconf-archive libpqxx-dev \
+            libboost-regex-dev libsqlite3-dev
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get update
         sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
@@ -65,7 +67,9 @@ jobs:
       run: |
         mkdir ~/pgdata
         /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl initdb -D ~/pgdata
-        /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl -D ~/pgdata start -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp"
+        /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl -D ~/pgdata start \
+            -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" \
+            -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp"
         psql -h /tmp postgres -c 'CREATE DATABASE smith;'
         psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
         psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'

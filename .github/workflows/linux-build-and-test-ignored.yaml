@@ -2,7 +2,7 @@
 # needed to run required workflows even when the real workflow is not
 # executed because some files were ignored.
 name: Regression
-on:
+"on":
   push:
     branches:
       - prerelease_test

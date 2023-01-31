@@ -1,6 +1,6 @@
 # Test installation of our homebrew tap for latest version
 name: Homebrew
-on:
+"on":
   schedule:
     # run daily 20:00 on main branch
     - cron: '0 20 * * *'
@@ -49,7 +49,9 @@ jobs:
         else
           version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
         fi
-        installed_version=$(psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" postgres | sed -e 's! !!g')
+        installed_version=$(psql -X -t \
+            -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" \
+            postgres | sed -e 's! !!g')
         if [ "$version" != "$installed_version" ];then
           echo "Installed version \"${installed_version}\" does not match expected version \"${version}\"."
           false

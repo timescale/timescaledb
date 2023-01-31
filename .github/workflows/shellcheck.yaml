@@ -1,6 +1,6 @@
 # Test our shell scripts for bugs
 name: Shellcheck
-on:
+"on":
   pull_request:
     paths:
       - '**.sh'

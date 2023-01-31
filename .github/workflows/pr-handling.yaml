@@ -10,7 +10,7 @@ name: Assign PR to author and reviewers
 # NOTE: Only API calls should be made in the actions defined here. The
 #       committed code should _NOT_ be touched in any case.
 
-on:
+"on":
   pull_request_target:
     types: [ opened, reopened, ready_for_review ]
 

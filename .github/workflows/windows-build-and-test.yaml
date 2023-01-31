@@ -1,6 +1,6 @@
 # Test building the extension on Windows
 name: Regression Windows
-on:
+"on":
   push:
     branches:
       - main
@@ -54,7 +54,8 @@ jobs:
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata"]
         tsl_ignores: ["compression_algos remote_connection"]
-        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht data_fetcher dist_compression dist_remote_error remote_txn"]
+        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht
+          data_fetcher dist_compression dist_remote_error remote_txn"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 12
@@ -124,17 +125,21 @@ jobs:
       id: cache-postgresql
       with:
         path: ~\PostgreSQL\${{ matrix.pg }}
-        key: ${{ runner.os }}-build-pg${{ matrix.pkg_version }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}
+        key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
+          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} `
+          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
 
     - name: Configure TimescaleDB
-      run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON
+      run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+        -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" `
+        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON
     - name: Build TimescaleDB
       run: cmake --build build_win --config ${{ matrix.build_type }}
     - name: Install TimescaleDB
@@ -213,7 +218,9 @@ jobs:
           make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
         fi
 
-        make -C build_wsl -k regresschecklocal-t IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
+        make -C build_wsl -k regresschecklocal-t \
+          IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" \
+          SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
 
     - name: Show regression diffs
       id: collectlogs
@@ -248,7 +255,9 @@ jobs:
       shell: wsl-bash {0}
       env:
         # Update when adding new variables.
-        WSLENV: "JOB_NAME:CI_STATS_DB:GITHUB_EVENT_NAME:GITHUB_REF_NAME:GITHUB_REPOSITORY:GITHUB_RUN_ATTEMPT:GITHUB_RUN_ID:GITHUB_RUN_NUMBER:JOB_STATUS"
+        WSLENV: "JOB_NAME:CI_STATS_DB:GITHUB_EVENT_NAME:GITHUB_REF_NAME\
+          :GITHUB_REPOSITORY:GITHUB_RUN_ATTEMPT:GITHUB_RUN_ID:GITHUB_RUN_NUMBER:JOB_STATUS"
+
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.

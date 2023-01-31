@@ -1,5 +1,5 @@
 name: Regression Linux i386
-on:
+"on":
   push:
     branches:
       - main
@@ -35,7 +35,8 @@ jobs:
       options: --privileged --ulimit core=-1
       env:
         DEBIAN_FRONTEND: noninteractive
-        IGNORES: append-* debug_notice transparent_decompression-* transparent_decompress_chunk-* plan_skip_scan-12 pg_dump
+        IGNORES: "append-* debug_notice transparent_decompression-*
+          transparent_decompress_chunk-* plan_skip_scan-12 pg_dump"
         SKIPS: chunk_adaptive
     strategy:
       fail-fast: false
@@ -55,17 +56,20 @@ jobs:
         apt-get update
         apt-get install -y gnupg postgresql-common
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl libtest-most-perl sudo gdb git wget gawk
+        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
+          libtest-most-perl sudo gdb git wget gawk
         apt-get install -y postgresql-${PG_MAJOR} postgresql-server-dev-${PG_MAJOR}
 
     - name: Build pg_isolation_regress
       run: |
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/postgresql
         tar --extract --file postgresql.tar.bz2 --directory ~/postgresql --strip-components 1
         cd ~/postgresql
-        ./configure --prefix=/usr/lib/postgresql/${PG_MAJOR} --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib
+        ./configure --prefix=/usr/lib/postgresql/${PG_MAJOR} --enable-debug \
+          --enable-cassert --with-openssl --without-readline --without-zlib
         make -C src/test/isolation
         chown -R postgres:postgres ~/postgresql
 
@@ -88,7 +92,8 @@ jobs:
       run: |
         set -o pipefail
         export LANG=C.UTF-8
-        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES} ${{ matrix.ignores_version }}" SKIPS="${SKIPS}" | tee installcheck.log
+        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES} \
+          ${{ matrix.ignores_version }}" SKIPS="${SKIPS}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

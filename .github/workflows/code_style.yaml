@@ -40,6 +40,19 @@ jobs:
           find . -name '*.p[lm]' -exec perltidy -b -bext=/ {} +
           git diff --exit-code
 
+  yaml_checks:
+    name: Check YAML code in tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install yamllint
+      - name: Checkout source
+        uses: actions/checkout@v3
+      - name: Run yamllint
+        run: |
+          find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
+
   cc_checks:
     name: Check code formatting
     runs-on: ubuntu-22.04

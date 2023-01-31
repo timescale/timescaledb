@@ -1,6 +1,6 @@
 # Test our extension sql scripts are following security best practices
 name: pgspot
-on:
+"on":
   pull_request:
   push:
     branches:
@@ -15,15 +15,21 @@ jobs:
       # _timescaledb_internal.policy_compression and _timescaledb_internal.policy_compression_execute
       # _timescaledb_internal.cagg_migrate_execute_plan and _timescaledb_internal.cagg_migrate
       # do not have explicit search_path because this would prevent them doing transaction control
-      PGSPOT_OPTS: --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts timestamp,"offset" interval)'
+      PGSPOT_OPTS: --proc-without-search-path
+          'extschema.time_bucket(bucket_width interval,ts timestamp,"offset" interval)'
         --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts timestamptz,"offset" interval)'
         --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts date,"offset" interval)'
         --proc-without-search-path 'extschema.recompress_chunk(chunk regclass,if_not_compressed boolean = FALSE)'
         --proc-without-search-path '_timescaledb_internal.policy_compression(job_id integer,config jsonb)'
-        --proc-without-search-path '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
-        --proc-without-search-path '_timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
-        --proc-without-search-path 'extschema.cagg_migrate(_cagg regclass,_override boolean = FALSE,_drop_old boolean = FALSE)'
-        --proc-without-search-path 'extschema.cagg_migrate(cagg regclass,override boolean = FALSE,drop_old boolean = FALSE)'
+        --proc-without-search-path
+          '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,
+            maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
+        --proc-without-search-path
+          '_timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
+        --proc-without-search-path
+          'extschema.cagg_migrate(_cagg regclass,_override boolean = FALSE,_drop_old boolean = FALSE)'
+        --proc-without-search-path
+          'extschema.cagg_migrate(cagg regclass,override boolean = FALSE,drop_old boolean = FALSE)'
 
     steps:
 
@@ -61,14 +67,17 @@ jobs:
         downgrade_to=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
 
         # Show files used
-        ls -la build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+        ls -la build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql \
+          build/sql/timescaledb--${version}--${downgrade_to}.sql
 
         # The next pgspot execution tests the installation script by itself
         pgspot ${{ env.PGSPOT_OPTS }} build/sql/timescaledb--${version}.sql
         # The next pgspot execution tests the update script to the latest version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${downgrade_to}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
+        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${downgrade_to}.sql \
+          build/sql/timescaledb--${downgrade_to}--${version}.sql
         # The next pgspot execution tests the downgrade script to the previous version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql \
+          build/sql/timescaledb--${version}--${downgrade_to}.sql
 
