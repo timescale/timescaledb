@@ -9,6 +9,10 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #4804 Skip bucketing when start or end of refresh job is null
 * #4926 Fix corruption when inserting into compressed chunks
+* #5218 Add role-level security to job error log
+* #5214 Fix use of prepared statement in async module
+* #5259 Lock down search_path in SPI calls
+* #5255 Fix year not multiple of day/month in nested CAgg
 
 ## 2.9.2 (2023-01-27)
 

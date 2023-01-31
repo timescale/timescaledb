@@ -265,6 +265,27 @@ SET timezone TO 'UTC';
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
 
+-- bug report 5231
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 year\''
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'3 month\''
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 month\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 year\''
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 week\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 year\''
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 week\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+
 -- Cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DATA_NODE_1;

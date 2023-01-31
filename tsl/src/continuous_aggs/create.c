@@ -1111,6 +1111,17 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 			break;
 		case INTERVALOID:
 		{
+			/*
+			 * epoch will treat year as 365.25 days. This leads to the unexpected
+			 * result that year is not multiple of day or month, which is perceived
+			 * as a bug. For that reason, we treat all months as 30 days regardless of year
+			 */
+			if (bucket_info.interval->month && !bucket_info.interval->day &&
+				!bucket_info.interval->time)
+			{
+				bucket_info.interval->day = bucket_info.interval->month * DAYS_PER_MONTH;
+				bucket_info.interval->month = 0;
+			}
 			Datum epoch = DirectFunctionCall2(interval_part,
 											  PointerGetDatum(cstring_to_text("epoch")),
 											  IntervalPGetDatum(bucket_info.interval));
