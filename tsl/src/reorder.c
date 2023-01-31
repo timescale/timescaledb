@@ -244,6 +244,11 @@ tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
 	if ((rc = SPI_connect_ext(nonatomic ? SPI_OPT_NONATOMIC : 0)) != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
+	/* Lock down search_path */
+	rc = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (rc < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
 	/* perform the actual distributed chunk move after a few sanity checks */
 	chunk_copy(chunk_id, src_node_name, dst_node_name, op_id, delete_on_src_node);
 
@@ -328,6 +333,11 @@ tsl_subscription_exec(PG_FUNCTION_ARGS)
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
+	/* Lock down search_path */
+	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
 	res = SPI_execute(subscription_cmd, false /* read_only */, 0 /*count*/);
 
 	if (res < 0)
@@ -364,6 +374,11 @@ tsl_copy_chunk_cleanup_proc(PG_FUNCTION_ARGS)
 
 	if ((rc = SPI_connect_ext(nonatomic ? SPI_OPT_NONATOMIC : 0)) != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+
+	/* Lock down search_path */
+	rc = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (rc < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
 	/* perform the cleanup/repair depending on the stage */
 	chunk_copy_cleanup(operation_id);
