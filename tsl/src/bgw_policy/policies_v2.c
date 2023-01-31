@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <miscadmin.h>
+#include <nodes/miscnodes.h>
 #include <utils/builtins.h>
 #include <utils/float.h>
 #include <parser/parse_coerce.h>
@@ -36,10 +37,12 @@ ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 	{
 		double val;
 		char *num = DatumGetCString(arg);
-		bool have_error = false;
-		val = float8in_internal_opt_error(num, NULL, "double precision", num, &have_error);
+		ErrorSaveContext escontext = {T_ErrorSaveContext};
 
-		if (have_error)
+		val = float8in_internal(num, NULL, "double precision", num,
+								(Node *) &escontext);
+
+		if (escontext.error_occurred)
 			return false;
 
 		arg = Float8GetDatum(val);
