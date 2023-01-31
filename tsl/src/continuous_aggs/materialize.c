@@ -59,6 +59,11 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 	if (res != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI in materializer");
 
+	/* Lock down search_path */
+	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
 	/* pin the start of new_materialization to the end of new_materialization,
 	 * we are not allowed to materialize beyond that point
 	 */
