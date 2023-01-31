@@ -13,6 +13,7 @@
 #include <miscadmin.h>
 #include <parser/parse_type.h>
 #include <port/pg_bswap.h>
+#include <storage/latch.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
@@ -313,13 +314,13 @@ get_copy_connection_to_data_node(RemoteCopyContext *context, TSConnectionId requ
 	if (status == CONN_IDLE)
 	{
 		TSConnectionError err;
-		if (!remote_connection_begin_copy(connection,
-										  psprintf("%s /* batch %d conn %p */",
-												   state->outgoing_copy_cmd,
-												   context->batch_ordinal,
-												   remote_connection_get_pg_conn(connection)),
-										  state->using_binary,
-										  &err))
+		if (!remote_connection_begin_copy_in(connection,
+											 psprintf("%s /* batch %d conn %p */",
+													  state->outgoing_copy_cmd,
+													  context->batch_ordinal,
+													  remote_connection_get_pg_conn(connection)),
+											 state->using_binary,
+											 &err))
 		{
 			remote_connection_error_elog(&err, ERROR);
 		}
@@ -433,13 +434,14 @@ flush_active_connections(CopyConnectionState *state)
 		 * and it's level-triggered, so we have to recreate the set each time.
 		 */
 		WaitEventSet *set =
-			CreateWaitEventSet(CurrentMemoryContext, list_length(busy_connections) + 1);
+			CreateWaitEventSet(CurrentMemoryContext, list_length(busy_connections) + 2);
 
 		/*
 		 * Postmaster-managed callers must handle postmaster death somehow,
 		 * as stated by the comments in WaitLatchOrSocket.
 		 */
 		(void) AddWaitEventToSet(set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET, NULL, NULL);
+		(void) AddWaitEventToSet(set, WL_LATCH_SET, PGINVALID_SOCKET, MyLatch, NULL);
 
 		/*
 		 * Add wait events for each busy connection.
@@ -649,7 +651,7 @@ end_copy_on_failure(CopyConnectionState *state)
 		TSConnection *conn = lfirst(lc);
 
 		if (remote_connection_get_status(conn) == CONN_COPY_IN &&
-			!remote_connection_end_copy(conn, &err))
+			!remote_connection_end_copy_in(conn, &err))
 		{
 			failure = true;
 		}
@@ -1466,7 +1468,6 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		TSConnectionId required_id = remote_connection_id(dn->server_oid, GetUserId());
 		Assert(dn->connection == NULL);
 		dn->connection = get_copy_connection_to_data_node(context, required_id);
-		PGconn *pg_conn = remote_connection_get_pg_conn(dn->connection);
 
 		resetStringInfo(&copy_data);
 		for (int row = 0; row < dn->rows_total; row++)
@@ -1481,15 +1482,13 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		 * of memory. It just grows the buffer and tries to flush in
 		 * pqPutMsgEnd().
 		 */
-		int res = PQputCopyData(pg_conn, copy_data.data, copy_data.len);
+		TSConnectionError err;
+
+		int res =
+			remote_connection_put_copy_data(dn->connection, copy_data.data, copy_data.len, &err);
 
 		if (res == -1)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONNECTION_EXCEPTION),
-					 errmsg("could not send COPY data"),
-					 errdetail("%s", PQerrorMessage(pg_conn))));
-		}
+			remote_connection_error_elog(&err, ERROR);
 
 		/*
 		 * We don't have to specially flush the data here, because the flush is

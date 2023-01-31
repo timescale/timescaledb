@@ -135,7 +135,7 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	{
 		TSConnectionError err;
 
-		if (!remote_connection_end_copy(entry->conn, &err))
+		if (!remote_connection_end_copy_in(entry->conn, &err))
 			remote_connection_error_elog(&err, ERROR);
 	}
 

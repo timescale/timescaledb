@@ -72,6 +72,9 @@ extern bool remote_connection_xact_is_transitioning(const TSConnection *conn);
 extern bool remote_connection_ping(const char *node_name);
 extern void remote_connection_close(TSConnection *conn);
 extern PGresult *remote_connection_get_result(const TSConnection *conn);
+extern PGresult *remote_connection_exec_params(TSConnection *conn, const char *cmd,
+											   StmtParams *params, bool binary,
+											   bool single_row_mode);
 extern PGresult *remote_connection_exec(TSConnection *conn, const char *cmd);
 extern PGresult *remote_connection_execf(TSConnection *conn, const char *fmt, ...)
 	pg_attribute_printf(2, 3);
@@ -105,6 +108,7 @@ typedef enum TSConnectionStatus
 	CONN_IDLE,		 /* No command being processed */
 	CONN_PROCESSING, /* Command/query is being processed */
 	CONN_COPY_IN,	 /* Connection is in COPY_IN mode */
+	CONN_COPY_OUT,	 /* Connection is in COPY_OUT mode */
 } TSConnectionStatus;
 
 TSConnectionResult remote_connection_drain(TSConnection *conn, TimestampTz endtime,
@@ -128,6 +132,7 @@ extern void remote_result_close(PGresult *res);
 extern TSConnectionId remote_connection_id(const Oid server_oid, const Oid user_oid);
 extern void remote_connection_id_set(TSConnectionId *const id, const Oid server_oid,
 									 const Oid user_oid);
+extern void remote_connection_free_mem(char *buffer);
 
 typedef struct RemoteConnectionStats
 {
@@ -145,11 +150,17 @@ extern RemoteConnectionStats *remote_connection_stats_get(void);
 /*
  * Connection functions for COPY mode.
  */
-extern bool remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binary,
-										 TSConnectionError *err);
-extern bool remote_connection_end_copy(TSConnection *conn, TSConnectionError *err);
-extern bool remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
+extern bool remote_connection_begin_copy_in(TSConnection *conn, const char *copycmd, bool binary,
 											TSConnectionError *err);
+extern bool remote_connection_end_copy_in(TSConnection *conn, TSConnectionError *err);
+extern int remote_connection_get_copy_data(const TSConnection *conn, char **buffer);
+
+extern bool remote_connection_begin_copy_out(TSConnection *conn, const char *stmt,
+											 StmtParams *params, TSConnectionError *err);
+extern bool remote_connection_end_copy_out(TSConnection *conn, bool cancel, TSConnectionError *err);
+
+extern bool remote_connection_put_copy_data(const TSConnection *conn, const char *buffer,
+											size_t nbytes, TSConnectionError *err);
 
 /* Error handling functions for connections */
 extern void remote_connection_get_error(const TSConnection *conn, TSConnectionError *err);

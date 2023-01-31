@@ -106,6 +106,41 @@ select count(*) from uk_price_paid;
 
 select count(*) from uk_price_paid;
 
+-- Test COPY with statement timeouts
+truncate uk_price_paid;
+set statement_timeout=200;
+\set ON_ERROR_STOP 0
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
+\set ON_ERROR_STOP 1
+
+reset statement_timeout;
+
+-- Test that distributed insert with copy works with statement timeouts
+truncate uk_price_paid;
+set timescaledb.enable_distributed_insert_with_copy=true;
+set statement_timeout=200;
+\set ON_ERROR_STOP 0
+insert into uk_price_paid select * from uk_price_paid_r2;
+\set ON_ERROR_STOP 1
+reset statement_timeout;
+
+-- Also timeout a query, but need a bigger data set
+\copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
+\set ON_ERROR_STOP 0
+-- try very small timeout
+set statement_timeout=1;
+select * from uk_price_paid;
+
+-- try a little bigger timeout
+set statement_timeout=20;
+select * from uk_price_paid;
+
+-- even bigger timeout
+set statement_timeout=100;
+select * from uk_price_paid;
+\set ON_ERROR_STOP 1
+reset statement_timeout;
+
 -- Teardown
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 DROP DATABASE :DN_DBNAME_1;
