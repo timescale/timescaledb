@@ -2901,10 +2901,16 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	if (NULL == dim)
 		elog(ERROR, "invalid open dimension index %d", dimension_index);
 
-	/* Query for the last bucket in the materialized hypertable */
+	/*
+	 * Query for the last bucket in the materialized hypertable.
+	 * Since this might be run as part of a parallel operation
+	 * we cannot use SET search_path here to lock down the
+	 * search_path and instead have to fully schema-qualify
+	 * everything.
+	 */
 	command = makeStringInfo();
 	appendStringInfo(command,
-					 "SELECT max(%s) FROM %s.%s",
+					 "SELECT pg_catalog.max(%s) FROM %s.%s",
 					 quote_identifier(NameStr(dim->fd.column_name)),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
 					 quote_identifier(NameStr(ht->fd.table_name)));
