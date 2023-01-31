@@ -359,8 +359,8 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
-	/* SPI calls must be qualified otherwise they are unsafe */
-	res = SPI_exec("SET search_path TO pg_catalog, pg_temp", 0);
+	/* Lock down search_path */
+	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
 	if (res < 0)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
@@ -398,7 +398,6 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		old_context = MemoryContextSwitchTo(spi_context);
 	}
 
-	res = SPI_exec("RESET search_path", 0);
 	res = SPI_finish();
 
 	Assert(res == SPI_OK_FINISH);
@@ -462,8 +461,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
-	/* SPI calls must be qualified otherwise they are unsafe */
-	res = SPI_exec("SET search_path TO pg_catalog, pg_temp", 0);
+	/* Lock down search_path */
+	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
 	if (res < 0)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
@@ -525,7 +524,6 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
 		old_context = MemoryContextSwitchTo(spi_context);
 	}
-	res = SPI_exec("RESET search_path", 0);
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
 }

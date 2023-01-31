@@ -717,6 +717,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
+	/* Lock down search_path */
+	rc = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (rc < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
 	/* Like regular materialized views, require owner to refresh. */
 	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER,
