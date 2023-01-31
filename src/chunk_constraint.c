@@ -181,6 +181,8 @@ chunk_constraint_insert_relation(const Relation rel, const ChunkConstraint *cc)
 void
 ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs)
 {
+	if(!ccs)
+		return;
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Relation rel;
