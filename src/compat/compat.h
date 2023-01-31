@@ -633,9 +633,11 @@ pg_strtoint64(const char *str)
 #endif
 
 /*
- * PG15 consolidate VACUUM xid cutoff logic.
+ * PG15 consolidated VACUUM xid cutoff logic, and PG16 did away with
+ * vacuum_set_xid_limits altogether, in favor of a separate struct.
  *
  * https://github.com/postgres/postgres/commit/efa4a946
+ * https://github.com/postgres/postgres/commit/4ce3afb8
  */
 #if PG15_LT
 #define vacuum_set_xid_limits_compat(rel,                                                          \
