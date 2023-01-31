@@ -1,6 +1,6 @@
 # Test rpm package installation for latest version
 name: RPM packages
-on:
+"on":
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
@@ -9,6 +9,7 @@ on:
     - '*'
     branches:
     - release_test
+
 jobs:
   rpm_tests:
     name: RPM ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
@@ -26,12 +27,16 @@ jobs:
             pkg_suffix: "-oss"
 
     steps:
-    - name: Add repositories
+    - name: Add postgres repositories
+      run: "yum install -y \"https://download.postgresql.org/pub/repos/yum/reporpms/\
+        EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm\""
+    - name: Add other repositories
       run: |
-        yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-
         # we need EPEL on centos 7 to satisfy PG15 dependencies
-        if [[ "$(rpm -E %{rhel})" -eq "7" ]]; then yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm; fi
+        if [[ "$(rpm -E %{rhel})" -eq "7" ]]
+        then
+          yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+        fi
 
         tee /etc/yum.repos.d/timescale_timescaledb.repo <<EOL
         [timescale_timescaledb]
@@ -81,19 +86,26 @@ jobs:
       run: |
         sudo -u postgres /usr/pgsql-${{ matrix.pg }}/bin/pg_ctl -D /var/lib/pgsql/${{ matrix.pg }}/data start
         while ! /usr/pgsql-${{ matrix.pg }}/bin/pg_isready; do sleep 1; done
-        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
-        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb" \
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
+        installed_version=$(sudo -u postgres psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
         if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
           false
         fi
 
     - name: Test Downgrade
       run: |
-        # since this runs nightly on main we have to get the previous version from the last released version and not current branch
-        prev_version=$(wget --quiet -O - https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config | grep update_from_version | sed -e 's!update_from_version = !!')
+        # Since this runs nightly on main we have to get the previous version
+        # from the last released version and not current branch.
+        prev_version=$(wget --quiet -O - \
+          https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
+          | grep update_from_version | sed -e 's!update_from_version = !!')
         yum downgrade -y timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}-${prev_version}
-        sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}';SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
-        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}'" \
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
+        installed_version=$(sudo -u postgres psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi

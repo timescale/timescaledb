@@ -1,5 +1,5 @@
 name: Coverity
-on:
+"on":
   schedule:
     # run at 22:00 on every saturday
     - cron: '0 22 * * SAT'
@@ -31,7 +31,9 @@ jobs:
 
     - name: Coverity tools
       run: |
-        wget https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.COVERITY_TOKEN }}&project=timescale%2Ftimescaledb" -O coverity_tool.tgz -q
+        wget https://scan.coverity.com/download/linux64 \
+          --post-data "token=${{ secrets.COVERITY_TOKEN }}&project=timescale%2Ftimescaledb" \
+          -O coverity_tool.tgz -q
         tar xf coverity_tool.tgz
         mv cov-analysis-linux64-* coverity
 
@@ -50,4 +52,5 @@ jobs:
         COVERITY_URL: https://scan.coverity.com/builds?project=timescale%2Ftimescaledb
       run: |
         tar czf timescaledb.tgz cov-int
-        curl $FORM_TOKEN $FORM_EMAIL $FORM_DESC $FORM_FILE --form version="$(grep '^version' version.config | cut -b11-)-${{ matrix.pg }}" $COVERITY_URL
+        curl $FORM_TOKEN $FORM_EMAIL $FORM_DESC $FORM_FILE \
+          --form version="$(grep '^version' version.config | cut -b11-)-${{ matrix.pg }}" $COVERITY_URL

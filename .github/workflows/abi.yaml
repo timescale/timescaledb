@@ -7,7 +7,7 @@
 # This test is expected to fail when upstream does ABI incompatible changes
 # in a new minor postgresql version.
 name: ABI Test
-on:
+"on":
   schedule:
     # run daily 20:00 on main branch
     - cron: '0 20 * * *'
@@ -41,7 +41,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [ "12backward", "12forward", "13backward", "13forward", "14backward", "14forward", "15backward", "15forward" ]
+        test: [ "12backward", "12forward", "13backward", "13forward",
+          "14backward", "14forward", "15backward", "15forward" ]
         os: [ windows-2019 ]
         include:
           - test: 12backward
@@ -123,7 +124,8 @@ jobs:
           cp build_abi/install_lib/* `pg_config --pkglibdir`
           chown -R postgres /mnt
           set -o pipefail
-          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t regresscheck-shared IGNORES="${{matrix.ignores}}" | tee installcheck.log
+          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t \
+            regresscheck-shared IGNORES="${{matrix.ignores}}" | tee installcheck.log
         EOF
 
     - name: Show regression diffs

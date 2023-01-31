@@ -1,6 +1,6 @@
 # Test installation of windows package for latest version
 name: Windows Packages
-on:
+"on":
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
@@ -9,6 +9,7 @@ on:
     - '*'
     branches:
     - release_test
+
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -82,22 +83,29 @@ jobs:
         # as fallback for main
         if (grep '^version = [0-9.]\+$' version.config)
         {
-          $version=grep '^version = ' version.config | sed -e 's!^version = !!'
+          $version=sed -n 's!^version = !!p' version.config
         } else {
-          $version=grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!'
+          $version=sed -n 's!^update_from_version = !!p' version.config
         }
-        echo "version=${version}" >>$GITHUB_OUTPUT
+        cat version.config
+        echo "Determined version: "
+        echo "version=$version"
+        echo "version=$version" >>$env:GITHUB_OUTPUT
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} --force -y --install-args="'--prefix $HOME/PostgreSQL/${{ matrix.pg }} --extract-only yes'"
+        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} `
+          --force -y --install-args="'--prefix $HOME/PostgreSQL/${{ matrix.pg }} --extract-only yes'"
         choco install wget
+
+    - name: Download TimescaleDB
+      run: "wget --quiet -O timescaledb.zip 'https://timescalereleases.blob.core.windows.net/windows/\
+        timescaledb-postgresql-${{ matrix.pg }}_latest-windows-amd64.zip'"
 
     - name: Install TimescaleDB
       run: |
-        wget --quiet -O timescaledb.zip 'https://timescalereleases.blob.core.windows.net/windows/timescaledb-postgresql-${{ matrix.pg }}_latest-windows-amd64.zip'
         tar -xf timescaledb.zip
         cd timescaledb
         ./setup.exe -yes-tune -pgconfig "$HOME/PostgreSQL/${{ matrix.pg }}/bin/pg_config"
@@ -109,10 +117,14 @@ jobs:
 
     - name: Test creating extension
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
-        $installed_version = ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -X `
+          -c "CREATE EXTENSION timescaledb" `
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+        $installed_version = ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres `
+          -d postgres -qtAX -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb'"
         $installed_version = $installed_version.Trim()
-        if (${installed_version} -notmatch "${{ steps.version.outputs.version }}")
+        echo "Installed version is '${installed_version}'"
+        if ("${installed_version}" -ne "${{ steps.version.outputs.version }}")
         {
           false
         }

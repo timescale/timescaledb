@@ -1,5 +1,5 @@
 name: Pull Request Validation
-on:
+"on":
   pull_request:
     types: [opened, synchronize, reopened, edited]
     branches: [main]

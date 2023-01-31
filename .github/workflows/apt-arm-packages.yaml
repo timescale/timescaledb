@@ -1,6 +1,6 @@
 # Test installing our ubuntu and debian ARM64 packages for the latest version.
 name: APT ARM64 packages
-on:
+"on":
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
@@ -33,7 +33,8 @@ jobs:
       run: |
         cat <<"EOF" | docker exec -i arm_container bash
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl lsb-release gnupg apt-transport-https sudo postgresql-common
+          apt-get install -y --no-install-recommends ca-certificates curl \
+            lsb-release gnupg apt-transport-https sudo postgresql-common
           yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
           curl -s https://packagecloud.io/install/repositories/timescale/timescaledb/script.deb.sh | bash
         EOF
@@ -41,14 +42,18 @@ jobs:
     - name: Install timescaledb
       run: |
         cat <<"EOF" | docker exec -i arm_container bash
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
           timescaledb-tune --quiet --yes
         EOF
 
     - name: List available versions
       run: |
         cat <<"EOF" | docker exec -i arm_container bash
-          apt-cache show timescaledb-2-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
+          apt-cache show timescaledb-2-postgresql-${{ matrix.pg }} \
+            | grep -e Version: -e Depends: \
+            | tr '\n' ' ' \
+            | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
         EOF
 
     - name: Show files in package
@@ -77,8 +82,11 @@ jobs:
         cat <<"EOF" | docker exec -i arm_container bash
           set -e
           pg_ctlcluster ${{ matrix.pg }} main start
-          sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
-          installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+          sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb" \
+            -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+          installed_version=$(sudo -u postgres psql -X -t \
+            -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" \
+            | sed -e 's! !!g')
           if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
             false
           fi

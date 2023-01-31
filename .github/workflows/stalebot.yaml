@@ -1,5 +1,5 @@
 name: 'Close stale issues'
-on:
+"on":
   schedule:
     - cron: '30 1 * * *'
   workflow_dispatch:
@@ -10,15 +10,27 @@ jobs:
     steps:
       - uses: actions/stale@v5
         with:
-          stale-issue-message: |
+          stale-issue-message: "
             Dear Author,
+            \n\n
+            This issue has been automatically marked as stale due to lack of
+            activity. With only the issue description that is currently
+            provided, we do not have enough information to take action. If you
+            have or find the answers we would need, please reach out. Otherwise,
+            this issue will be closed in 30 days.
+            \n\n
+            Thank you!
+            "
 
-            This issue has been automatically marked as stale due to lack of activity. With only the issue description that is currently provided, we do not have enough information to take action. If you have or find the answers we would need, please reach out. Otherwise, this issue will be closed in 30 days. Thank you!
-
-          close-issue-message: |
+          close-issue-message: "
             Dear Author,
-
-            We are closing this issue due to lack of activity. Feel free to add a comment to this issue if you can provide more information and we will re-open it. Thank you!
+            \n\n
+            We are closing this issue due to lack of activity. Feel free to add
+            a comment to this issue if you can provide more information and we
+            will re-open it.
+            \n\n
+            Thank you!
+            "
 
           # Don't process PRs
           days-before-stale: -1

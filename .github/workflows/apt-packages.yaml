@@ -1,6 +1,6 @@
 # Test installing our ubuntu and debian packages for the latest version.
 name: APT packages
-on:
+"on":
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
@@ -36,18 +36,21 @@ jobs:
         apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
-        echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list
+        echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
+          > /etc/apt/sources.list.d/timescaledb.list
         wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
 
     - name: Install timescaledb
       run: |
         apt-get update
-        apt-get install -y --no-install-recommends timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} timescaledb-tools
+        apt-get install -y --no-install-recommends \
+          timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} timescaledb-tools
         timescaledb-tune --quiet --yes
 
     - name: List available versions
       run: |
-        apt-cache show timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
+        apt-cache show timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} \
+          | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
 
     - name: Show files in package
       run: |
@@ -71,18 +74,25 @@ jobs:
     - name: Test Installation
       run: |
         pg_ctlcluster ${{ matrix.pg }} main start
-        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
-        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb" \
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+        installed_version=$(sudo -u postgres psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
         if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
           false
         fi
 
     - name: Test Downgrade
       run: |
-        # since this runs nightly on main we have to get the previous version from the last released version and not current branch
-        prev_version=$(wget --quiet -O - https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config | grep update_from_version | sed -e 's!update_from_version = !!')
-        sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}';SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
-        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        # Since this runs nightly on main we have to get the previous version
+        # from the last released version and not current branch.
+        prev_version=$(wget --quiet -O - \
+        https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
+          | grep update_from_version | sed -e 's!update_from_version = !!')
+        sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}'" \
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+        installed_version=$(sudo -u postgres psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi

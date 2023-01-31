@@ -1,6 +1,6 @@
 # Run regression tests under memory sanitizer
 name: Sanitizer test
-on:
+"on":
   push:
     branches:
       - main
@@ -32,9 +32,21 @@ env:
   LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
   # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
   #LDFLAGS: "-fsanitize=address,undefined"
-  ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
-  LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt print_suppressions=0 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
-  UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer/sanitizer log_exe_name=true print_suppressions=false exitcode=27 external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+  ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
+    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+    external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+
+  LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt
+    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+    external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+
+  UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
+    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+    external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
   SKIPS: "remote_txn"
 jobs:
@@ -71,7 +83,8 @@ jobs:
     - name: Install Linux Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl libtest-most-perl ${{ env.extra_packages }}
+        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+          libtest-most-perl ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -97,16 +110,19 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}
+        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
+          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib --without-libxml
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
+          --with-openssl --without-readline --without-zlib --without-libxml
         make -j $MAKE_JOBS
         make -j $MAKE_JOBS -C src/test/isolation
         make -j $MAKE_JOBS -C contrib/postgres_fdw
@@ -125,7 +141,8 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=5
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
+          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=5
         make -j $MAKE_JOBS -C build
         make -C build install
 
@@ -136,7 +153,8 @@ jobs:
         # test seems to fail due to a PostgreSQL bug where AbortStartTime in
         # postmaster.c is not atomic but read/written across signal handlers
         # and ServerLoop.
-        make -k -C build installcheck SKIPS="${SKIPS} ${{matrix.skips_version}}" IGNORES="${IGNORES} ${{matrix.ignores_version}}" | tee installcheck.log
+        make -k -C build installcheck SKIPS="${SKIPS} ${{matrix.skips_version}}" \
+          IGNORES="${IGNORES} ${{matrix.ignores_version}}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
