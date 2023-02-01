@@ -23,7 +23,7 @@ def run_query(query):
 
     # Have to work around the unique GraphQL convention of returning 200 for errors.
     if request.status_code != 200 or "errors" in response:
-        raise Exception(
+        raise ValueError(
             f"Query failed to run by returning code of {request.status_code}."
             f"\nQuery: '{query}'"
             f"\nResponse: '{request.json()}'"

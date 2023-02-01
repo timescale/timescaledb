@@ -85,7 +85,11 @@ jobs:
           pip install --upgrade pip
           # Inexplicably, at some point pip started to insist on installing
           # prospector==1.7.7, which is incompatible with the new pylint.
-          pip install black prospector==1.8.4 psutil pylint pygithub
+          # Also pin the version of the other tools so that they don't fail
+          # sporadically when a new version becomes available.
+          pip install black prospector==1.8.4 pylint==2.16.0 dodgy==0.2.1 \
+            mccabe==0.7.0 pycodestyle==2.9.1 pyflakes==2.5.0 \
+            psutil pygithub
           pip list
           pip list --user
       - name: Checkout source
