@@ -66,4 +66,4 @@ file_blacklist:
   - test/expected/*.out
 
 label_blacklist:
-  - pr-backport
+  - is-auto-backport

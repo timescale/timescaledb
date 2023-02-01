@@ -5,7 +5,7 @@ name: Check CHANGELOG.md updated
     # It's important to check that the changelog is updated with bug fixes that
     # we backport to the release branches, so these branches are included as
     # well.
-    branches: [main, "[0-9]+.[0-9]+.x"]
+    branches: [main, '[0-9]+.[0-9]+.x']
 jobs:
   # Check that the CHANGELOG is updated by the pull request. This can be
   # disabled by adding a trailer line of the following form to the
