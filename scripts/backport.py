@@ -193,7 +193,6 @@ main_commits = [
     ).splitlines()
     if line
 ]
-main_titles = {x[1] for x in main_commits}
 
 branch_commits = [
     line.split("\t")
@@ -209,10 +208,7 @@ branch_commit_titles = {x[1] for x in branch_commits}
 # out which of them have to be backported, and remember the corresponding PRs.
 # We also have to remember which commits to backport. The list from PR itself is
 # not what we need, these are the original commits from the PR branch, and we
-# need the resulting commits in master. Store them as dict(pr number -> PRInfo).
-prs_to_backport = {}
-
-
+# need the resulting commits in master.
 class PRInfo:
     """Information about the PR to be backported."""
 
@@ -222,7 +218,38 @@ class PRInfo:
         self.issue_number = issue_number_
 
 
+def should_backport_by_labels(pygithub_object):
+    """Should we backport the given PR/issue, judging by the labels?
+    Note that this works in ternary logic:
+    True means we must,
+    False means we must not (tags to disable backport take precedence),
+    and None means weak no (no tags to either request or disable backport)"""
+    labels = {label.name for label in pygithub_object.labels}
+    stopper_labels = labels.intersection(
+        ["disable-auto-backport", "auto-backport-not-done"]
+    )
+    if stopper_labels:
+        print(
+            f"#{pygithub_object.number} '{pygithub_object.title}' is labeled as '{list(stopper_labels)[0]}' which prevents automated backporting."
+        )
+        return False
+
+    force_labels = labels.intersection(["bug", "force-auto-backport"])
+    if force_labels:
+        print(
+            f"#{pygithub_object.number} '{pygithub_object.title}' is labeled as '{list(force_labels)[0]}' which requests automated backporting."
+        )
+        return True
+
+    return None
+
+
+# Go through the commits unique to main, and build a dict(pr number -> PRInfo)
+# of PRs that we will consider for backporting.
+prs_to_backport = {}
 for commit_sha, commit_title in main_commits:
+    print()
+
     if commit_title in branch_commit_titles:
         print(f"{commit_sha[:9]} '{commit_title}' is already in the branch.")
         continue
@@ -234,51 +261,47 @@ for commit_sha, commit_title in main_commits:
         print(f"{commit_sha[:9]} '{commit_title}' does not belong to a PR.")
         continue
 
+    if pulls.totalCount > 1:
+        # What would that mean? Just play it safe and skip it.
+        print(
+            f"{commit_sha[:9]} '{commit_title}' references multiple PRs: {', '.join([pull.number for pull in pulls])}"
+        )
+        continue
+
     pull = pulls[0]
+
+    # Next, we're going to look at the labels of both the PR and the linked
+    # issue, if any, to understand whether we should backport the fix. We have
+    # labels to request backport like "bug", and labels to prevent backport
+    # like "disable-auto-backport", on both issue and the PR. We're going to use
+    # the ternary False/None/True logic to combine them properly.
     issue_number = get_referenced_issue(pull.number)
     if not issue_number:
+        should_backport_issue_ternary = None
         print(
             f"{commit_sha[:9]} belongs to the PR #{pull.number} '{pull.title}' that does not close an issue."
         )
-        continue
-
-    pr_labels = {label.name for label in pull.labels}
-    stopper_labels = pr_labels.intersection(["no-backport", "pr-auto-backport-failed"])
-    if stopper_labels:
+    else:
+        issue = source_repo.get_issue(number=issue_number)
+        should_backport_issue_ternary = should_backport_by_labels(issue)
         print(
-            f"{commit_sha[:9]} belongs to the PR #{pull.number} '{pull.title}' labeled as '{list(stopper_labels)[0]}' which prevents automated backporting."
+            f"{commit_sha[:9]} belongs to the PR #{pull.number} '{pull.title}' "
+            f"that references the issue #{issue.number} '{issue.title}'."
         )
+    should_backport_pr_ternary = should_backport_by_labels(pull)
+
+    # We backport if either the PR or the issue labels request the backport, and
+    # none of them prevent it. I'm writing it with `is True` because I don't
+    # remember python rules for ternary logic with None (do you?).
+    if (
+        should_backport_pr_ternary is True or should_backport_issue_ternary is True
+    ) and (
+        should_backport_pr_ternary is not False
+        and should_backport_issue_ternary is not False
+    ):
+        print(f"{commit_sha[:9]} '{commit_title}' will be considered for backporting.")
+    else:
         continue
-
-    changed_files = {file.filename for file in pull.get_files()}
-    stopper_files = changed_files.intersection(
-        ["sql/updates/latest-dev.sql", "sql/updates/reverse-dev.sql"]
-    )
-    if stopper_files:
-        print(
-            f"{commit_sha[:9]} belongs to the PR #{pull.number} '{pull.title}' that modifies '{list(stopper_files)[0]}' which prevents automated backporting."
-        )
-        continue
-
-    issue = source_repo.get_issue(number=issue_number)
-    issue_labels = {label.name for label in issue.labels}
-
-    if "bug" not in issue_labels:
-        print(
-            f"{commit_sha[:9]} fixes the issue #{issue.number} '{issue.title}' that is not labeled as 'bug'."
-        )
-        continue
-
-    if "no-backport" in issue_labels:
-        print(
-            f"{commit_sha[:9]} fixes the issue #{issue.number} '{issue.title}' that is labeled as 'no-backport'."
-        )
-        continue
-
-    print(
-        f"{commit_sha[:9]} '{commit_title}' from PR #{pull.number} '{pull.title}' "
-        f"that fixes the issue #{issue.number} '{issue.title}' will be considered for backporting."
-    )
 
     # Remember the PR and the corresponding resulting commit in main.
     if pull.number not in prs_to_backport:
@@ -287,6 +310,32 @@ for commit_sha, commit_title in main_commits:
     # We're traversing the history backwards, and want to have the list of
     # commits in forward order.
     prs_to_backport[pull.number].pygithub_commits.insert(0, pygithub_commit)
+
+
+def report_backport_not_done(original_pr, reason, details=None):
+    """If something prevents us from backporting the PR automatically,
+    report it in a comment to original PR, and add a label preventing
+    further attempts."""
+    print(
+        f"Will not backport the PR #{original_pr.number} '{original_pr.title}': {reason}"
+    )
+
+    github_comment = f"Automated backport to {backport_target} not done: {reason}."
+
+    if details:
+        github_comment += f"\n\n{details}"
+
+    # Link to the job if we're running in the Github Action environment.
+    if "GITHUB_REPOSITORY" in os.environ:
+        github_comment += (
+            "\n\n"
+            f"[Job log](https://github.com/{os.environ.get('GITHUB_REPOSITORY')}"
+            f"/actions/runs/{os.environ.get('GITHUB_RUN_ID')}"
+            f"/attempts/{os.environ.get('GITHUB_RUN_ATTEMPT')})"
+        )
+
+    original_pr.create_issue_comment(github_comment)
+    original_pr.add_to_labels("auto-backport-not-done")
 
 
 # Now, go over the list of PRs that we have collected, and try to backport
@@ -305,55 +354,71 @@ for pr_info in prs_to_backport.values():
         )
         continue
 
-    # Our general notion is that there should be one commit per PR, and if there
-    # are several, they might be fixing different issues, and we can't figure
-    # figure out which commit fixes which, and which of the fixes should be
-    # backported, so we just play safe here and refuse to backport them.
-    commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
-    if len(commit_shas) > 1:
-        print(
-            f'Will not backport the PR #{original_pr.number}: "{original_pr.title}" because it contains multiple commits.'
-        )
-        original_pr.add_to_labels("pr-auto-backport-failed")
-        continue
-
     # Try to cherry-pick the commits.
     git_check(
         f"checkout --quiet --detach {target_remote}/{backport_target} > /dev/null"
     )
 
+    commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
     if git_returncode(f"cherry-pick --quiet -m 1 -x {' '.join(commit_shas)}") != 0:
+        details = f"### Git status\n\n```\n{git_output('status')}\n```"
         git_check("cherry-pick --abort")
-        print(
-            f'Conflict while backporting pull request #{original_pr.number}: "{original_pr.title}"'
-        )
-        original_pr.add_to_labels("pr-auto-backport-failed")
+        report_backport_not_done(original_pr, "cherry-pick failed", details)
         continue
 
-    # Push the branch and create the backport PR
+    # Push the backport branch.
     git_check(
         f"push --quiet {target_remote} @:refs/heads/{backport_branch} > /dev/null 2>&1"
     )
 
-    original_description = original_pr.body
-    # Comment out the Github issue reference keywords like 'Fixes #1234', to
-    # avoid having multiple PRs saying they fix a given issue. The backport PR
-    # is going to reference the fixed issue as "Original issue #xxxx".
+    # Prepare description for the backport PR.
+    backport_description = (
+        f"This is an automated backport of #{original_pr.number}: {original_pr.title}."
+    )
+
+    if pr_info.issue_number:
+        backport_description += f"\nThe original issue is #{pr_info.issue_number}."
+
+    # Do not merge the PR automatically if it changes some particularly
+    # conflict-prone files that are better to review manually. Also mention this
+    # in the description.
+    changed_files = {file.filename for file in original_pr.get_files()}
+    stopper_files = changed_files.intersection(
+        ["sql/updates/latest-dev.sql", "sql/updates/reverse-dev.sql"]
+    )
+    if stopper_files:
+        backport_description += (
+            "\n"
+            f"This PR will not be merged automatically, because it modifies '{list(stopper_files)[0]}' "
+            "which is conflict-prone. Please review these changes manually."
+        )
+    else:
+        backport_description += (
+            "\n"
+            "This PR will be merged automatically after all the relevant CI checks pass."
+        )
+
+    backport_description += (
+        " If this fix should not be backported, or will be backported manually, "
+        "just close this PR. You can use the backport branch to add your "
+        "changes, it won't be modified automatically anymore."
+        "\n"
+        "\n"
+        "For more details, please see the [documentation]"
+        "(https://github.com/timescale/eng-database/wiki/Releasing-TimescaleDB#automated-cherry-picking-of-bug-fixes)"
+    )
+
+    # Add original PR description. Comment out the Github issue reference
+    # keywords like 'Fixes #1234', to avoid having multiple PRs saying they fix
+    # a given issue. The backport PR is going to reference the fixed issue as
+    # "Original issue #xxxx".
     original_description = re.sub(
         r"((fix|clos|resolv)[esd]+)(\s+#[0-9]+)",
         r"`\1`\3",
-        original_description,
+        original_pr.body,
         flags=re.IGNORECASE,
     )
-    backport_description = (
-        f"""This is an automated backport of #{original_pr.number}: {original_pr.title}.
-The original issue is #{pr_info.issue_number}.
-"""
-        "\n"
-        "This PR will be merged automatically after all the relevant CI checks pass. "
-        "If this fix should not be backported, or will be backported manually, "
-        "just close this PR. You can use the backport branch to add your "
-        "changes, it won't be modified automatically anymore."
+    backport_description += (
         "\n"
         "\n"
         "## Original description"
@@ -363,15 +428,17 @@ The original issue is #{pr_info.issue_number}.
         f"{original_description}"
     )
 
+    # Create the backport PR.
     backport_pr = target_repo.create_pull(
         title=f"Backport to {backport_target}: #{original_pr.number}: {original_pr.title}",
         body=backport_description,
         head=backport_branch,
         base=backport_target,
     )
-    backport_pr.add_to_labels("pr-backport")
+    backport_pr.add_to_labels("is-auto-backport")
     backport_pr.add_to_assignees(original_pr.user.login)
-    set_auto_merge(backport_pr.number)
+    if not stopper_files:
+        set_auto_merge(backport_pr.number)
 
     print(
         f"Created backport PR #{backport_pr.number} for #{original_pr.number}: {original_pr.title}"
