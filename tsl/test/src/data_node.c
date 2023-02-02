@@ -15,6 +15,7 @@
 
 TS_FUNCTION_INFO_V1(ts_test_data_node_show);
 TS_FUNCTION_INFO_V1(ts_unchecked_add_data_node);
+TS_FUNCTION_INFO_V1(ts_data_node_exec);
 
 /*
  * Tests the ts_data_node_get_node_name_list() function.
@@ -95,4 +96,34 @@ Datum
 ts_unchecked_add_data_node(PG_FUNCTION_ARGS)
 {
 	return data_node_add_without_dist_id(fcinfo);
+}
+
+/*
+ * Execute a command on a data node.
+ *
+ * Mostly for debugging connection execution functions.
+ */
+Datum
+ts_data_node_exec(PG_FUNCTION_ARGS)
+{
+	const char *nodename = PG_GETARG_CSTRING(0);
+	TSConnection *conn = data_node_get_connection(nodename, REMOTE_TXN_NO_PREP_STMT, true);
+	const text *cmdstr;
+	PGresult *res;
+
+	if (PG_ARGISNULL(1))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("command string cannot be NULL")));
+
+	cmdstr = PG_GETARG_TEXT_P(1);
+	res = remote_connection_exec(conn, text_to_cstring(cmdstr));
+
+	if (PQresultStatus(res) != PGRES_COMMAND_OK && PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		PQclear(res);
+		remote_connection_elog(conn, ERROR);
+	}
+
+	PG_RETURN_VOID();
 }
