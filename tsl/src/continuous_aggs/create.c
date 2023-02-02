@@ -1487,6 +1487,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		}
 
 		ts_cache_release(hcache);
+
+		/*
+		 * We need a GROUP By clause with time_bucket on the partitioning
+		 * column of the hypertable
+		 */
+		Assert(query->groupClause);
+		caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList);
 	}
 
 	/* Check row security settings for the table. */
@@ -1495,14 +1502,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate on hypertable with row security")));
 
-	/*
-	 * We need a GROUP By clause with time_bucket on the partitioning
-	 * column of the hypertable.
-	 */
-	Assert(query->groupClause);
-	caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList);
-
-	/* Nested cagg validations. */
+	/* nested cagg validations */
 	if (is_nested)
 	{
 		int64 bucket_width = 0, bucket_width_parent = 0;
