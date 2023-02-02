@@ -24,6 +24,7 @@
 #include <nodes/makefuncs.h>
 #include <port.h>
 #include <postmaster/postmaster.h>
+#include <storage/latch.h>
 #include <utils/builtins.h>
 #include <utils/fmgrprotos.h>
 #include <utils/inval.h>

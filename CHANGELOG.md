@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #5241 Allow RETURNING clause when inserting into compressed chunks
 * #5245 Mange life-cycle of connections via memory contexts
 * #5246 Make connection establishment interruptible
+* #5253 Make data node command execution interruptible
 
 **Bugfixes**
 * #4804 Skip bucketing when start or end of refresh job is null
