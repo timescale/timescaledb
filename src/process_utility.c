@@ -3352,7 +3352,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 					process_altertable_drop_not_null(ht, cmd);
 				break;
 			case AT_AddColumn:
+#if PG16_LT
 			case AT_AddColumnRecurse:
+#endif
 			{
 				ColumnDef *col;
 				ListCell *constraint_lc;
@@ -3370,12 +3372,16 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				break;
 			}
 			case AT_DropColumn:
+#if PG16_LT
 			case AT_DropColumnRecurse:
+#endif
 				if (NULL != ht)
 					process_altertable_drop_column(ht, cmd);
 				break;
 			case AT_AddConstraint:
+#if PG16_LT
 			case AT_AddConstraintRecurse:
+#endif
 				Assert(IsA(cmd->def, Constraint));
 
 				if (NULL == ht)
@@ -3657,7 +3663,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		}
 		break;
 		case AT_AddConstraint:
+#if PG16_LT
 		case AT_AddConstraintRecurse:
+#endif
 		{
 			Constraint *stmt = (Constraint *) cmd->def;
 			const char *conname = stmt->conname;
@@ -3721,7 +3729,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			process_altertable_alter_constraint_end(ht, cmd);
 			break;
 		case AT_ValidateConstraint:
+#if PG16_LT
 		case AT_ValidateConstraintRecurse:
+#endif
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
 		case AT_DropCluster:
@@ -3783,11 +3793,15 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_AddColumn:
+#if PG16_LT
 		case AT_AddColumnRecurse:
+#endif
 			/* this is handled for compressed hypertables by tsl code */
 			break;
 		case AT_DropColumn:
+#if PG16_LT
 		case AT_DropColumnRecurse:
+#endif
 #if PG13_GE
 		case AT_DropExpression:
 #endif
@@ -3798,7 +3812,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_DropConstraint:
+#if PG16_LT
 		case AT_DropConstraintRecurse:
+#endif
 			/* drop constraints handled by process_ddl_sql_drop */
 			break;
 #if PG13_LT
