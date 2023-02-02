@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <executor/executor.h>
 #include <commands/explain.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <nodes/nodeFuncs.h>
 #include <utils/lsyscache.h>
@@ -255,10 +256,11 @@ get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *
 	RangeTblEntry *rte;
 	TSConnectionId id;
 	int rtindex;
+	RTEPermissionInfo *perminfo;
 
 	/*
 	 * Identify which user to do the remote access as.  This should match what
-	 * ExecCheckRTEPerms() does.  In case of a join or aggregate, use the
+	 * ExecCheckPermissions() does.  In case of a join or aggregate, use the
 	 * lowest-numbered member RTE as a representative; we would get the same
 	 * result from any.
 	 */
@@ -268,8 +270,9 @@ get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *
 		rtindex = bms_next_member(scanrelids, -1);
 
 	rte = rt_fetch(rtindex, estate->es_range_table);
+	perminfo = getRTEPermissionInfo(estate->es_rteperminfos, rte);
 
-	remote_connection_id_set(&id, server_id, rte->checkAsUser ? rte->checkAsUser : GetUserId());
+	remote_connection_id_set(&id, server_id, perminfo->checkAsUser ? perminfo->checkAsUser : GetUserId());
 
 	return remote_dist_txn_get_connection(id,
 										  list_length(exprs) ? REMOTE_TXN_USE_PREP_STMT :

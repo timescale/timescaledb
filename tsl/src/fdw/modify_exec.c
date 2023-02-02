@@ -105,14 +105,15 @@ initialize_fdw_data_node_state(TsFdwDataNodeState *fdw_data_node, TSConnectionId
  *		operation
  */
 static TsFdwModifyState *
-create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check_as_user,
+create_foreign_modify(EState *estate, ResultRelInfo *rri, CmdType operation,
 					  Plan *subplan, char *query, List *target_attrs, bool has_returning,
 					  List *retrieved_attrs, List *server_id_list)
 {
 	TsFdwModifyState *fmstate;
+	Relation rel = rri->ri_RelationDesc;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	ListCell *lc;
-	Oid user_id = OidIsValid(check_as_user) ? check_as_user : GetUserId();
+	Oid user_id = ExecGetResultRelCheckAsUser(rri, estate);
 	int i = 0;
 	int num_data_nodes, num_all_data_nodes;
 	int32 hypertable_id = ts_chunk_get_hypertable_id_by_relid(rel->rd_id);
@@ -350,9 +351,8 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 
 	/* Construct an execution state. */
 	fmstate = create_foreign_modify(estate,
-									rri->ri_RelationDesc,
+									rri,
 									operation,
-									rte->checkAsUser,
 									subplan,
 									query,
 									target_attrs,

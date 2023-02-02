@@ -1326,14 +1326,9 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	 * which is the right thing for all except target tables.
 	 */
 	rte->lateral = false;
+	rte->perminfoindex = 0;
 	rte->inh = false;
 	rte->inFromCl = false;
-
-	rte->requiredPerms = 0;
-	rte->checkAsUser = InvalidOid; /* not set-uid by default, either */
-	rte->selectedCols = NULL;
-	rte->insertedCols = NULL;
-	rte->updatedCols = NULL;
 
 	return rte;
 }
