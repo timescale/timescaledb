@@ -24,6 +24,7 @@
 #include <nodes/makefuncs.h>
 #include <port.h>
 #include <postmaster/postmaster.h>
+#include <storage/latch.h>
 #include <utils/builtins.h>
 #include <utils/fmgrprotos.h>
 #include <utils/inval.h>
@@ -169,6 +170,8 @@ typedef struct TSConnection
 	MemoryContext mcxt;
 	MemoryContextCallback mcxt_cb;
 	bool mcxt_cb_invoked;
+	WaitEventSet *wes;
+	int sockeventpos;
 } TSConnection;
 
 /*
@@ -381,6 +384,8 @@ handle_conn_destroy(PGEventConnDestroy *event)
 
 	conn->pg_conn = NULL;
 	list_detach(&conn->ln);
+
+	FreeWaitEventSet(conn->wes);
 
 	/* No need to delete the memory context here if handler was invoked by the
 	 * MemoryContextDelete callback */
@@ -608,11 +613,9 @@ extract_connection_options(List *defelems, const char **keywords, const char **v
 }
 
 static bool
-get_update_conn_cmd(TSConnection *conn, StringInfo cmdbuf)
+prepend_enforced_conn_settings(TSConnection *conn, StringInfo cmdbuf)
 {
 	const char *local_tz_name = pg_get_timezone_name(session_timezone);
-
-	initStringInfo(cmdbuf);
 
 	/*
 	 * We need to enforce the same timezone setting across nodes. Otherwise,
@@ -628,8 +631,16 @@ get_update_conn_cmd(TSConnection *conn, StringInfo cmdbuf)
 	if (conn->tz_name[0] == '\0' ||
 		(local_tz_name && pg_strcasecmp(conn->tz_name, local_tz_name) != 0))
 	{
+		StringInfo newcmd = makeStringInfo();
+
 		strncpy(conn->tz_name, local_tz_name, TZ_STRLEN_MAX);
-		appendStringInfo(cmdbuf, "SET TIMEZONE = '%s'", local_tz_name);
+		appendStringInfo(newcmd, "SET TIMEZONE = '%s'", local_tz_name);
+
+		if (cmdbuf->len > 0)
+			appendStringInfo(newcmd, ";%s", cmdbuf->data);
+
+		*cmdbuf = *newcmd;
+
 		return true;
 	}
 
@@ -667,7 +678,7 @@ remote_connection_configure_if_changed(TSConnection *conn)
 	 * command, we will send a SET TIMEZONE command with the new timezone
 	 * first.
 	 */
-	if (get_update_conn_cmd(conn, &cmd))
+	if (prepend_enforced_conn_settings(conn, &cmd))
 	{
 		PGresult *result = remote_connection_exec(conn, cmd.data);
 		success = (PQresultStatus(result) == PGRES_COMMAND_OK);
@@ -729,7 +740,7 @@ remote_connection_configure(TSConnection *conn)
 		i++;
 	}
 
-	result = PQexec(conn->pg_conn, sql.data);
+	result = remote_connection_exec(conn, sql.data);
 	success = PQresultStatus(result) == PGRES_COMMAND_OK;
 	PQclear(result);
 	pfree(sql.data);
@@ -790,6 +801,14 @@ remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name
 	conn->results.prev = &conn->results;
 	conn->binary_copy = false;
 	conn->mcxt = mcxt;
+	conn->wes = CreateWaitEventSet(mcxt, 3);
+	AddWaitEventToSet(conn->wes, WL_LATCH_SET, PGINVALID_SOCKET, MyLatch, NULL);
+	AddWaitEventToSet(conn->wes, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET, NULL, NULL);
+	/* Register the socket to get the position in the events array. The actual
+	 * events used here does not matter, since it will be modified as
+	 * appropriate when needed. */
+	conn->sockeventpos =
+		AddWaitEventToSet(conn->wes, WL_SOCKET_READABLE, PQsocket(conn->pg_conn), NULL, NULL);
 
 	/* Register a memory context callback that will ensure the connection is
 	 * always closed and the resources are freed */
@@ -900,30 +919,155 @@ remote_connection_get_result_error(const PGresult *res, TSConnectionError *err)
 	fill_result_error(err, ERRCODE_CONNECTION_EXCEPTION, "", res);
 }
 
+PGresult *
+remote_connection_get_result(const TSConnection *conn)
+{
+	PGresult *pgres = NULL;
+	int busy = 1;
+
+	do
+	{
+		CHECK_FOR_INTERRUPTS();
+
+		busy = PQisBusy(conn->pg_conn);
+
+		if (busy == 1)
+		{
+			/* Busy, wait for readable */
+			WaitEvent event;
+
+			ModifyWaitEvent(conn->wes, conn->sockeventpos, WL_SOCKET_READABLE, NULL);
+			WaitEventSetWait(conn->wes, -1, &event, 1, PG_WAIT_EXTENSION);
+
+			if (event.events & WL_LATCH_SET)
+			{
+				/* Check for interrupts at top of the loop */
+				ResetLatch(MyLatch);
+			}
+
+			if (event.events & WL_SOCKET_READABLE)
+			{
+				Assert(event.pos == conn->sockeventpos);
+				Assert(event.fd == PQsocket(conn->pg_conn));
+
+				if (PQconsumeInput(conn->pg_conn) == 0)
+				{
+					pgres = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+					PQfireResultCreateEvents(conn->pg_conn, pgres);
+					return pgres;
+				}
+			}
+		}
+		else if (busy == 0)
+		{
+			/* PQgetResult would not block */
+			pgres = PQgetResult(conn->pg_conn);
+		}
+		else
+		{
+			pg_unreachable();
+			Assert(false);
+		}
+	} while (busy == 1);
+
+	return pgres;
+}
+
 /*
  * Execute a remote command.
  *
- * Like PQexec, which this functions uses internally, the PGresult returned
- * describes only the last command executed in a multi-command string.
+ * The execution blocks until a result is received or a failure occurs. Unlike
+ * PQexec() and PQexecParams(), however, this function observes PostgreSQL
+ * interrupts (e.g., a query is canceled). Like PQexecParams(), the PGresult
+ * returned describes only the last command executed in a multi-command
+ * string.
  */
 PGresult *
 remote_connection_exec(TSConnection *conn, const char *cmd)
 {
-	PGresult *res;
+	WaitEvent event;
+	PGresult *res = NULL;
+	int ret = 0;
+	size_t cmdlen = strlen(cmd);
+	StringInfoData cmd_buf = {
+		.data = (char *) cmd,
+		.len = cmdlen,
+		.maxlen = cmdlen + 1,
+	};
 
-	if (!remote_connection_configure_if_changed(conn))
+	prepend_enforced_conn_settings(conn, &cmd_buf);
+
+	do
 	{
-		res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
-		PQfireResultCreateEvents(conn->pg_conn, res);
-		return res;
-	}
+		CHECK_FOR_INTERRUPTS();
 
-	res = PQexec(conn->pg_conn, cmd);
+		/* Wait for writable socket in outer loop */
+		ModifyWaitEvent(conn->wes, conn->sockeventpos, WL_SOCKET_WRITEABLE, NULL);
+		WaitEventSetWait(conn->wes, -1, &event, 1, PG_WAIT_EXTENSION);
+
+		if (event.events & WL_LATCH_SET)
+		{
+			ResetLatch(MyLatch);
+			CHECK_FOR_INTERRUPTS();
+		}
+		if (event.events & WL_SOCKET_WRITEABLE)
+		{
+			PGresult *last_result;
+
+			ret = PQsendQuery(conn->pg_conn, cmd_buf.data);
+
+			if (ret == 0)
+			{
+				res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+				PQfireResultCreateEvents(conn->pg_conn, res);
+				return res;
+			}
+
+			/* Command sent, so now wait for readable result in inner loop */
+			last_result = NULL;
+
+			/*
+			 * Read all results, but return only one in order to recreate the
+			 * behavior of the blocking PQexec() call. We need to handle
+			 * PG12,13 differently to be compatible across all versions of
+			 * PostgreSQL. In libpq's PQexec() errors from all the results are
+			 * concactinated, but that is not possible here due to lack of
+			 * access to internals. PG14 handles that automatically, however.
+			 */
+			while ((res = remote_connection_get_result(conn)) != NULL)
+			{
+				if (last_result)
+				{
+#if PG14_LT
+					if (PQresultStatus(last_result) == PGRES_FATAL_ERROR &&
+						PQresultStatus(res) == PGRES_FATAL_ERROR)
+					{
+						PQclear(res);
+						res = last_result;
+					}
+					else
+						PQclear(last_result);
+#else
+					PQclear(last_result);
+#endif
+				}
+
+				last_result = res;
+
+				if (PQresultStatus(res) == PGRES_COPY_IN || PQresultStatus(res) == PGRES_COPY_OUT ||
+					PQresultStatus(res) == PGRES_COPY_BOTH ||
+					PQstatus(conn->pg_conn) == CONNECTION_BAD)
+					break;
+			}
+
+			res = last_result;
+		}
+	} while (res == NULL);
 
 	/*
 	 * Workaround for the libpq disconnect case.
 	 *
-	 * libpq disconnect will create an result object without creating
+	 * libpq disconnect will create an empty result object without generating
 	 * events, which is usually done for a regular errors.
 	 *
 	 * In order to be compatible with our error handling code, force
@@ -932,15 +1076,12 @@ remote_connection_exec(TSConnection *conn, const char *cmd)
 	 */
 	if (res)
 	{
-		ExecStatusType status = PQresultStatus(res);
 		ResultEntry *entry = PQresultInstanceData(res, eventproc);
 
-		if (status == PGRES_FATAL_ERROR && entry == NULL)
-		{
-			res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+		if (entry == NULL)
 			PQfireResultCreateEvents(conn->pg_conn, res);
-		}
 	}
+
 	return res;
 }
 

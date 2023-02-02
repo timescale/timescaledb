@@ -257,7 +257,6 @@ data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption co
 	const ForeignServer *server;
 	TSConnectionId id;
 
-	Assert(data_node != NULL);
 	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false, false);
 	id = remote_connection_id(server->serverid, GetUserId());
 
