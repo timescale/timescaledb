@@ -36,7 +36,7 @@ convert_type_to_text(Datum value, Oid from_type)
 	if (!OidIsValid(outfunc))
 		TYPE_ERROR("output", from_type);
 
-	return DirectFunctionCall1(textin, CStringGetDatum(OidFunctionCall1(outfunc, value)));
+	return DirectFunctionCall1(textin, OidFunctionCall1(outfunc, value));
 }
 
 static Datum
