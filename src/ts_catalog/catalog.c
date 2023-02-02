@@ -456,7 +456,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		{
 			RangeVar *sequence;
 
-			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name));
+			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name, NULL));
 			tables_info[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
 		}
 		else
