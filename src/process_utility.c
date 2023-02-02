@@ -856,10 +856,14 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 
 		relid = classform->oid;
 
+#if PG16_LT
+#define vacuum_is_permitted_for_relation vacuum_is_relation_owner
+#endif
+
 		/* check permissions of relation */
-		if (!vacuum_is_relation_owner(relid,
-									  classform,
-									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+		if (!vacuum_is_permitted_for_relation(relid,
+											  classform,
+											  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
 			continue;
 
 		/*
