@@ -71,6 +71,7 @@ extern void remote_connection_xact_transition_end(TSConnection *conn);
 extern bool remote_connection_xact_is_transitioning(const TSConnection *conn);
 extern bool remote_connection_ping(const char *node_name);
 extern void remote_connection_close(TSConnection *conn);
+extern PGresult *remote_connection_get_result(const TSConnection *conn);
 extern PGresult *remote_connection_exec(TSConnection *conn, const char *cmd);
 extern PGresult *remote_connection_execf(TSConnection *conn, const char *fmt, ...)
 	pg_attribute_printf(2, 3);
