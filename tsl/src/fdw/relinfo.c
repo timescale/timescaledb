@@ -189,7 +189,7 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 
 	if (IS_TIMESTAMP_TYPE(time_dim_type))
 	{
-		TimestampTz now = GetSQLCurrentTimestamp(-1);
+		TimestampTz now = GetCurrentTransactionStartTimestamp();
 #ifdef TS_DEBUG
 		if (ts_current_timestamp_override_value >= 0)
 			now = ts_current_timestamp_override_value;
