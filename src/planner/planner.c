@@ -1277,7 +1277,12 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				query->rowMarks == NIL && (rte->requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				query->rowMarks == NIL
+#if PG16_LT
+				/* XXX Does this code make sense for 14/15, either? */
+				&& (rte->requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0
+#endif
+				)
 			{
 				rte_mark_for_expansion(rte);
 			}
