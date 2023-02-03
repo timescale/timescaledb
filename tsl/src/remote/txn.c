@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <storage/procarray.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
 #include <utils/snapmgr.h>
 #include <libpq-fe.h>
 #include <miscadmin.h>
