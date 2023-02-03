@@ -50,9 +50,14 @@ is_valid_now_func(Node *node)
 	if (IsA(node, FuncExpr) && castNode(FuncExpr, node)->funcid == F_NOW)
 		return true;
 
+#if PG16_LT
 	if (IsA(node, SQLValueFunction) &&
 		castNode(SQLValueFunction, node)->type == SVFOP_CURRENT_TIMESTAMP)
 		return true;
+#else
+	if (IsA(node, FuncExpr) && castNode(FuncExpr, node)->funcid == F_CURRENT_TIMESTAMP)
+		return true;
+#endif
 
 	return false;
 }

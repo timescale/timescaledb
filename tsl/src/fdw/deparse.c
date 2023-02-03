@@ -354,11 +354,13 @@ contain_mutable_functions_walker(Node *node, void *context)
 	if (check_functions_in_node(node, contain_mutable_functions_checker, context))
 		return true;
 
+#if PG16_LT
 	if (IsA(node, SQLValueFunction))
 	{
 		/* all variants of SQLValueFunction are stable */
 		return true;
 	}
+#endif
 
 	if (IsA(node, NextValueExpr))
 	{
