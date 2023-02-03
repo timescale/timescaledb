@@ -379,6 +379,7 @@ decompress_chunk_exec(CustomScanState *node)
 
 		/* Reset expression memory context to clean out any cruft from
 		 * previous tuple. */
+		/* FIXME why? Do this after initialize_batch(). */
 		ResetExprContext(econtext);
 
 		if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext))
