@@ -976,7 +976,7 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 		 * rels, and then grab its PlaceHolderInfo to tell for sure.
 		 */
 		if (!bms_overlap(phv->phrels, root->curOuterRels) ||
-			!bms_is_subset(find_placeholder_info(root, phv, false)->ph_eval_at, root->curOuterRels))
+			!bms_is_subset(find_placeholder_info(root, phv)->ph_eval_at, root->curOuterRels))
 		{
 			/*
 			 * We can't replace the whole PHV, but we might still need to
