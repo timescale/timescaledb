@@ -377,11 +377,6 @@ decompress_chunk_exec(CustomScanState *node)
 
 		econtext->ecxt_scantuple = slot;
 
-		/* Reset expression memory context to clean out any cruft from
-		 * previous tuple. */
-		/* FIXME why? Do this after initialize_batch(). */
-		ResetExprContext(econtext);
-
 		if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext))
 		{
 			InstrCountFiltered1(node, 1);
@@ -424,6 +419,8 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 	{
 		if (!state->initialized)
 		{
+			ExecClearTuple(slot);
+
 			TupleTableSlot *subslot = ExecProcNode(linitial(state->csstate.custom_ps));
 
 			if (TupIsNull(subslot))
@@ -431,9 +428,17 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 			batch_done = false;
 			initialize_batch(state, subslot);
-		}
 
-		ExecClearTuple(slot);
+			/*
+			 * Reset expression memory context to clean out any cruft from
+			 * previous tuple. Our batches are 1000 rows max, and this memory
+			 * context is used by ExecProject and ExecQual, which shouldn't
+			 * leak too much. So we only do this per batch and not per tuple to
+			 * save some CPU.
+			 */
+			ExprContext *econtext = state->csstate.ss.ps.ps_ExprContext;
+			ResetExprContext(econtext);
+		}
 
 		for (i = 0; i < state->num_columns; i++)
 		{
@@ -508,9 +513,16 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 		{
 			state->initialized = false;
 			continue;
+		} else if (TTS_EMPTY(slot))
+		{
+			/*
+			 * It's a virtual tuple slot, so no point in clearing/storing it
+			 * per each row, we can just update the values in-place. This saves
+			 * some CPU. We have to store it after ExecQual fails or after a new
+			 * batch.
+			 */
+			ExecStoreVirtualTuple(slot);
 		}
-
-		ExecStoreVirtualTuple(slot);
 
 		return slot;
 	}
