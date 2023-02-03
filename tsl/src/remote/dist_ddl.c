@@ -782,13 +782,15 @@ dist_ddl_process_alter_table(const ProcessUtilityArgs *args)
 		switch (cmd->subtype)
 		{
 			case AT_AddColumn:
-			case AT_AddColumnRecurse:
 			case AT_DropColumn:
-			case AT_DropColumnRecurse:
 			case AT_AddConstraint:
-			case AT_AddConstraintRecurse:
 			case AT_DropConstraint:
+#if PG16_LT
+			case AT_AddColumnRecurse:
+			case AT_DropColumnRecurse:
+			case AT_AddConstraintRecurse:
 			case AT_DropConstraintRecurse:
+#endif
 			case AT_SetNotNull:
 			case AT_DropNotNull:
 			case AT_AddIndex:

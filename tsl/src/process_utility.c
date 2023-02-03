@@ -38,7 +38,9 @@ tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
 	switch (cmd->subtype)
 	{
 		case AT_AddColumn:
+#if PG16_LT
 		case AT_AddColumnRecurse:
+#endif
 			if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ||
 				TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 			{
@@ -47,7 +49,9 @@ tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
 			}
 			break;
 		case AT_DropColumn:
+#if PG16_LT
 		case AT_DropColumnRecurse:
+#endif
 			if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ||
 				TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 			{
