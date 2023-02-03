@@ -354,7 +354,14 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
 	chunk_rri->ri_onConflict = onconfl;
 
-#if PG14_GE
+#if PG16_GE
+	/*
+	 * XXX is this correct after upstream fb958b5d? Specificially, is
+	 * hyper_to_chunk_map already compatible with the new system?
+	 */
+	chunk_rri->ri_RootToChildMap = map;
+	chunk_rri->ri_RootToChildMapValid = true;
+#elif PG14_GE
 	chunk_rri->ri_RootToPartitionMap = map;
 #endif
 
