@@ -130,6 +130,10 @@ SET ROLE :ROLE_1;
 -- partitions with repartition=>false
 SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 
+-- reset to 3 partitions
+SELECT * FROM set_number_partitions('disttable', 3, 'device');
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+
 CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
