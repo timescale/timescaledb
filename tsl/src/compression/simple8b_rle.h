@@ -56,8 +56,10 @@
 
 #define SIMPLE8B_MAX_VALUES_PER_SLOT 64
 
+/* clang-format off */
 #define SIMPLE8B_NUM_ELEMENTS ((uint8[]){ 0, 64, 32, 21, 16, 12, 10, 9, 8,  6,  5,  4,  3,  2,  1 })
 #define SIMPLE8B_BIT_LENGTH   ((uint8[]){ 0,  1,  2,  3,  4,  5,  6, 7, 8, 10, 12, 16, 21, 32, 64, 36 })
+/* clang-format on */
 
 /* Normal compression uses 1k rows, but the regression tests use up to 1020. */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1020
@@ -586,17 +588,17 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		else
 		{
 			// Might have partial last block.
-			const int n_block_values = Min(SIMPLE8B_NUM_ELEMENTS[selector_value],
-				n_total_values - decompressed_index);
-			Assert(n_block_values == SIMPLE8B_NUM_ELEMENTS[selector_value]
-				|| block_index == compressed->num_blocks - 1);
+			const int n_block_values =
+				Min(SIMPLE8B_NUM_ELEMENTS[selector_value], n_total_values - decompressed_index);
+			Assert(n_block_values == SIMPLE8B_NUM_ELEMENTS[selector_value] ||
+				   block_index == compressed->num_blocks - 1);
 
 			const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[selector_value];
 
 			for (int i = 0; i < n_block_values; i++)
 			{
-				const uint64 value = (block_data >> (bits_per_value * i))
-					& simple8brle_selector_get_bitmask(selector_value);
+				const uint64 value = (block_data >> (bits_per_value * i)) &
+									 simple8brle_selector_get_bitmask(selector_value);
 				decompressed_values[decompressed_index + i] = value;
 			}
 			decompressed_index += n_block_values;

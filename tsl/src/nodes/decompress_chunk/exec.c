@@ -513,7 +513,8 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 		{
 			state->initialized = false;
 			continue;
-		} else if (TTS_EMPTY(slot))
+		}
+		else if (TTS_EMPTY(slot))
 		{
 			/*
 			 * It's a virtual tuple slot, so no point in clearing/storing it
