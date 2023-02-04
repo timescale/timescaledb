@@ -2437,6 +2437,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	ListCell *lc;
 	FromExpr *fromexpr;
 	RangeTblEntry *rte;
+	RTEPermissionInfo *perminfo;
 
 	/*
 	 * For initial cagg creation rtable will have only 1 entry,
@@ -2457,24 +2458,28 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	}
 	else
 		rte = llast_node(RangeTblEntry, inp->final_userquery->rtable);
+
+	/*
+	 * XXX this fails when we've created the RTE ourselves, but where should we
+	 * put the new perminfo, final_userquery or final_selquery?
+	 */
+	perminfo = getRTEPermissionInfo(inp->final_userquery->rteperminfos, rte);
+
 	rte->relid = mattbladdress->objectId;
 	rte->rtekind = RTE_RELATION;
 	rte->relkind = RELKIND_RELATION;
 	rte->tablesample = NULL;
 	rte->eref->colnames = NIL;
-	rte->selectedCols = NULL;
 	/* Aliases for column names for the materialization table. */
 	foreach (lc, matcollist)
 	{
 		ColumnDef *cdef = (ColumnDef *) lfirst(lc);
 		rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
-		rte->selectedCols =
-			bms_add_member(rte->selectedCols,
+		perminfo->selectedCols =
+			bms_add_member(perminfo->selectedCols,
 						   list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber);
 	}
-	rte->requiredPerms |= ACL_SELECT;
-	rte->insertedCols = NULL;
-	rte->updatedCols = NULL;
+	perminfo->requiredPerms |= ACL_SELECT;
 
 	/* 2. Fixup targetlist with the correct rel information. */
 	foreach (lc, inp->final_seltlist)
