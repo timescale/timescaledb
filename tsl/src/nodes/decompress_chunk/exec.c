@@ -79,7 +79,7 @@ typedef struct DecompressChunkState
 	int hypertable_id;
 	Oid chunk_relid;
 	List *hypertable_compression_info;
-	int counter;
+	int rows_left;
 	MemoryContext per_batch_context;
 } DecompressChunkState;
 
@@ -301,7 +301,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 static void
-initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
+initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
+				 TupleTableSlot *decompressed_slot)
 {
 	Datum value;
 	bool isnull;
@@ -317,7 +318,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 		{
 			case COMPRESSED_COLUMN:
 			{
-				value = slot_getattr(slot, column->compressed_scan_attno, &isnull);
+				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
 				if (!isnull)
 				{
 					CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
@@ -328,22 +329,29 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 																			column->typid);
 				}
 				else
+				{
 					column->compressed.iterator = NULL;
+					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+					decompressed_slot->tts_values[attr] =
+						getmissingattr(decompressed_slot->tts_tupleDescriptor,
+									   attr + 1,
+									   &decompressed_slot->tts_isnull[attr]);
+				}
 
 				break;
 			}
 			case SEGMENTBY_COLUMN:
-				value = slot_getattr(slot, column->compressed_scan_attno, &isnull);
-				if (!isnull)
-					column->segmentby.value = value;
-				else
-					column->segmentby.value = (Datum) 0;
-
-				column->segmentby.isnull = isnull;
+			{
+				AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+				decompressed_slot->tts_values[attr] =
+					slot_getattr(compressed_slot,
+								 column->compressed_scan_attno,
+								 &decompressed_slot->tts_isnull[attr]);
 				break;
+			}
 			case COUNT_COLUMN:
-				value = slot_getattr(slot, column->compressed_scan_attno, &isnull);
-				state->counter = DatumGetInt32(value);
+				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
+				state->rows_left = DatumGetInt32(value);
 				/* count column should never be NULL */
 				Assert(!isnull);
 				break;
@@ -412,119 +420,87 @@ static TupleTableSlot *
 decompress_chunk_create_tuple(DecompressChunkState *state)
 {
 	TupleTableSlot *slot = state->csstate.ss.ss_ScanTupleSlot;
-	bool batch_done = false;
-	int i;
 
 	while (true)
 	{
+		if (state->initialized && state->rows_left <= 0)
+		{
+			/*
+			 * Reached end of batch, check that all compressed columns are in
+			 * sync.
+			 */
+			for (int i = 0; i < state->num_columns; i++)
+			{
+				DecompressChunkColumnState *column = &state->columns[i];
+				if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
+				{
+					DecompressResult result =
+						column->compressed.iterator->try_next(column->compressed.iterator);
+					if (!result.is_done)
+					{
+						elog(ERROR, "compressed column out of sync with batch counter");
+					}
+				}
+			}
+
+			state->initialized = false;
+		}
+
 		if (!state->initialized)
 		{
 			ExecClearTuple(slot);
 
-			TupleTableSlot *subslot = ExecProcNode(linitial(state->csstate.custom_ps));
-
-			if (TupIsNull(subslot))
-				return NULL;
-
-			batch_done = false;
-			initialize_batch(state, subslot);
-
 			/*
 			 * Reset expression memory context to clean out any cruft from
-			 * previous tuple. Our batches are 1000 rows max, and this memory
+			 * previous batch. Our batches are 1000 rows max, and this memory
 			 * context is used by ExecProject and ExecQual, which shouldn't
 			 * leak too much. So we only do this per batch and not per tuple to
 			 * save some CPU.
 			 */
 			ExprContext *econtext = state->csstate.ss.ps.ps_ExprContext;
 			ResetExprContext(econtext);
+
+			TupleTableSlot *subslot = ExecProcNode(linitial(state->csstate.custom_ps));
+
+			if (TupIsNull(subslot))
+				return NULL;
+
+			initialize_batch(state, subslot, slot);
 		}
 
-		for (i = 0; i < state->num_columns; i++)
+		Assert(state->initialized && state->rows_left > 0);
+
+		for (int i = 0; i < state->num_columns; i++)
 		{
 			DecompressChunkColumnState *column = &state->columns[i];
-			switch (column->type)
+			if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
 			{
-				case COUNT_COLUMN:
-					if (state->counter <= 0)
-						/*
-						 * we continue checking other columns even if counter
-						 * reaches zero to sanity check all columns are in sync
-						 * and agree about batch end
-						 */
-						batch_done = true;
-					else
-						state->counter--;
-					break;
-				case COMPRESSED_COLUMN:
+				DecompressResult result =
+					column->compressed.iterator->try_next(column->compressed.iterator);
+
+				if (result.is_done)
 				{
-					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
-
-					if (!column->compressed.iterator)
-					{
-						slot->tts_values[attr] = getmissingattr(slot->tts_tupleDescriptor,
-																attr + 1,
-																&slot->tts_isnull[attr]);
-					}
-					else
-					{
-						DecompressResult result;
-						result = column->compressed.iterator->try_next(column->compressed.iterator);
-
-						if (result.is_done)
-						{
-							batch_done = true;
-							continue;
-						}
-						else if (batch_done)
-						{
-							/*
-							 * since the count column is the first column batch_done
-							 * might be true if compressed column is out of sync with
-							 * the batch counter.
-							 */
-							elog(ERROR, "compressed column out of sync with batch counter");
-						}
-
-						slot->tts_values[attr] = result.val;
-						slot->tts_isnull[attr] = result.is_null;
-					}
-
-					break;
+					elog(ERROR, "compressed column out of sync with batch counter");
 				}
-				case SEGMENTBY_COLUMN:
-				{
-					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
-					slot->tts_values[attr] = column->segmentby.value;
-					slot->tts_isnull[attr] = column->segmentby.isnull;
-					break;
-				}
-				case SEQUENCE_NUM_COLUMN:
-					/*
-					 * nothing to do here for sequence number
-					 * we only needed this for sorting in node below
-					 */
-					break;
+				AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+				slot->tts_values[attr] = result.val;
+				slot->tts_isnull[attr] = result.is_null;
 			}
 		}
 
-		if (batch_done)
+		/*
+		 * It's a virtual tuple slot, so no point in clearing/storing it
+		 * per each row, we can just update the values in-place. This saves
+		 * some CPU. We have to store it after ExecQual fails or after a new
+		 * batch.
+		 */
+		if (TTS_EMPTY(slot))
 		{
-			state->initialized = false;
-			continue;
-		}
-		else if (TTS_EMPTY(slot))
-		{
-			/*
-			 * It's a virtual tuple slot, so no point in clearing/storing it
-			 * per each row, we can just update the values in-place. This saves
-			 * some CPU. We have to store it after ExecQual fails or after a new
-			 * batch.
-			 */
 			ExecStoreVirtualTuple(slot);
 		}
 
+		state->rows_left--;
 		return slot;
 	}
 }
