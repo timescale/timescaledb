@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <parser/parsetree.h>
+#include <parser/parse_relation.h>
 #include <access/sysattr.h>
 #include <utils/rel.h>
 
@@ -33,12 +34,12 @@ get_insert_attrs(Relation rel)
 }
 
 static List *
-get_update_attrs(RangeTblEntry *rte)
+get_update_attrs(RTEPermissionInfo *perminfo)
 {
 	List *attrs = NIL;
 	int col = -1;
 
-	while ((col = bms_next_member(rte->updatedCols, col)) >= 0)
+	while ((col = bms_next_member(perminfo->updatedCols, col)) >= 0)
 	{
 		/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
 		AttrNumber attno = col + FirstLowInvalidHeapAttributeNumber;
@@ -187,7 +188,11 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 							 &retrieved_attrs);
 			break;
 		case CMD_UPDATE:
-			target_attrs = get_update_attrs(rte);
+		{
+			RTEPermissionInfo *perminfo;
+			perminfo = getRTEPermissionInfo(root->parse->rteperminfos, rte);
+
+			target_attrs = get_update_attrs(perminfo);
 			deparseUpdateSql(&sql,
 							 rte,
 							 result_relation,
@@ -197,6 +202,7 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 							 &retrieved_attrs);
 			data_nodes = get_chunk_data_nodes(rel->rd_id);
 			break;
+		}
 		case CMD_DELETE:
 			deparseDeleteSql(&sql, rte, result_relation, rel, returning_list, &retrieved_attrs);
 			data_nodes = get_chunk_data_nodes(rel->rd_id);
