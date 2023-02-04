@@ -18,6 +18,7 @@
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
+#include <parser/parse_relation.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
@@ -61,7 +62,8 @@ check_for_system_columns(Bitmapset *attrs_used)
  * which scan columns become which decompressed columns (fill decompression_map).
  */
 static void
-build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *chunk_attrs_needed)
+build_decompression_map(DecompressChunkPath *path, List *scan_tlist,
+						List *perminfos, Bitmapset *chunk_attrs_needed)
 {
 	/*
 	 * Track which normal and metadata columns we were able to find in the
@@ -70,6 +72,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	bool missing_count = true;
 	bool missing_sequence = path->needs_sequence_num;
 	Bitmapset *chunk_attrs_found = NULL;
+	RTEPermissionInfo *perminfo;
 
 	/*
 	 * FIXME this way to determine which columns are used is actually wrong, see
@@ -77,7 +80,8 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	 * Left as is for now, because changing it uncovers a whole new story with
 	 * ctid.
 	 */
-	check_for_system_columns(path->info->ht_rte->selectedCols);
+	perminfo = getRTEPermissionInfo(perminfos, path->info->ht_rte);
+	check_for_system_columns(perminfo->selectedCols);
 
 	/*
 	 * We allow tableoid system column, it won't be in the targetlist but will
@@ -449,7 +453,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Determine which compressed colum goes to which output column.
 	 */
-	build_decompression_map(dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
+	build_decompression_map(dcpath, compressed_scan->plan.targetlist,
+							root->parse->rteperminfos, chunk_attrs_needed);
 
 	/*
 	 * Add a sort if the compressed scan is not ordered appropriately.
