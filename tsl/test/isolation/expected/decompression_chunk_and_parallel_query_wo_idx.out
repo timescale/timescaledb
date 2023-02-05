@@ -31,7 +31,17 @@ step s2_read_sensor_data:
 step s1_decompress: 
    SELECT count(*) FROM (SELECT decompress_chunk(i, if_compressed => true) FROM show_chunks('sensor_data') i) i;
    SELECT compression_status FROM chunk_compression_stats('sensor_data');
- <waiting ...>
+
+count
+-----
+    1
+(1 row)
+
+compression_status
+------------------
+Uncompressed      
+(1 row)
+
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
 
@@ -43,10 +53,9 @@ step s3_unlock_decompression_before_reindex_lock:
 
    SELECT debug_waitpoint_release('decompress_chunk_impl_before_reindex');
 
-locktype|mode     |granted|     objid
---------+---------+-------+----------
-advisory|ShareLock|f      |3966149665
-(1 row)
+locktype|mode|granted|objid
+--------+----+-------+-----
+(0 rows)
 
 debug_waitpoint_release
 -----------------------
@@ -64,25 +73,13 @@ step s3_unlock_decompression_after_reindex_lock:
 
    SELECT debug_waitpoint_release('decompress_chunk_impl_after_reindex');
 
-locktype|mode     |granted|     objid
---------+---------+-------+----------
-advisory|ShareLock|f      |1858017383
-(1 row)
+locktype|mode|granted|objid
+--------+----+-------+-----
+(0 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
-
-step s1_decompress: <... completed>
-count
------
-    1
-(1 row)
-
-compression_status
-------------------
-Uncompressed      
 (1 row)
 
 step s2_read_sensor_data: 

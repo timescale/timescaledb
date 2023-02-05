@@ -1503,6 +1503,7 @@ typedef struct RowDecompressor
 
 	TupleDesc out_desc;
 	Relation out_rel;
+	ResultRelInfo *indexstate;
 
 	CommandId mycid;
 	BulkInsertState bistate;
@@ -1545,6 +1546,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 
 		.out_desc = out_desc,
 		.out_rel = out_rel,
+		.indexstate = ts_catalog_open_indexes(out_rel),
 
 		.mycid = GetCurrentCommandId(true),
 		.bistate = GetBulkInsertState(),
@@ -1587,7 +1589,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 * We may as well allow readers to keep reading the compressed data while
 	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation out_rel = table_open(out_table, ExclusiveLock);
+	Relation out_rel = table_open(out_table, AccessExclusiveLock);
 	Relation in_rel = relation_open(in_table, ExclusiveLock);
 
 	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
@@ -1611,24 +1613,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	FreeBulkInsertState(decompressor.bistate);
 	MemoryContextDelete(decompressor.per_compressed_row_ctx);
-
-	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
-	 * so the strong locks taken by reindex_relation shouldn't matter. */
-#if PG14_LT
-	int options = 0;
-#else
-	ReindexParams params = { 0 };
-	ReindexParams *options = &params;
-#endif
-
-	/* The reindex_relation() function creates an AccessExclusiveLock on the
-	 * chunk index (if present). After calling this function, concurrent
-	 * SELECTs have to wait until the index lock is released. When no
-	 * index is present concurrent SELECTs can be still performed in
-	 * parallel. */
-	DEBUG_WAITPOINT("decompress_chunk_impl_before_reindex");
-	reindex_relation(out_table, 0, options);
-	DEBUG_WAITPOINT("decompress_chunk_impl_after_reindex");
+	ts_catalog_close_indexes(decompressor.indexstate);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1766,6 +1751,8 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
 						decompressor->mycid,
 						0 /*=options*/,
 						decompressor->bistate);
+
+			ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
 
 			heap_freetuple(decompressed_tuple);
 			wrote_data = true;
