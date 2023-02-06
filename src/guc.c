@@ -80,8 +80,8 @@ bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
-int ts_guc_max_open_chunks_per_insert = 10;
-int ts_guc_max_cached_chunks_per_hypertable = 10;
+int ts_guc_max_open_chunks_per_insert; /* default is computed at runtime */
+int ts_guc_max_cached_chunks_per_hypertable = 100;
 #ifdef USE_TELEMETRY
 TelemetryLevel ts_guc_telemetry_level = TELEMETRY_DEFAULT;
 char *ts_telemetry_cloud = NULL;
@@ -90,10 +90,10 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
-TSDLLEXPORT bool ts_guc_enable_2pc;
+TSDLLEXPORT bool ts_guc_enable_2pc = true;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
-TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
-TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
+TSDLLEXPORT bool ts_guc_enable_connection_binary_data = true;
+TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format = DCTF_Auto;
 TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
@@ -104,7 +104,7 @@ TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
-char *ts_current_timestamp_mock = "";
+char *ts_current_timestamp_mock = NULL;
 #endif
 
 /* Hook for plugins to allow additional SSL options */
