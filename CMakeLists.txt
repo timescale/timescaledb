@@ -417,6 +417,9 @@ if(${PG_VERSION_MAJOR} GREATER "12")
 endif()
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
+# At the moment, meson doesn't record the -rpath in pg_config.
+set(CMAKE_INSTALL_RPATH ${PG_LIBDIR})
+
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
         DESTINATION "${PG_SHAREDIR}/extension")
 
