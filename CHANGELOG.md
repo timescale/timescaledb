@@ -6,6 +6,8 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+## 2.10.0-dev
+
 **Features**
 * #5241 Allow RETURNING clause when inserting into compressed chunks
 * #5245 Mange life-cycle of connections via memory contexts
