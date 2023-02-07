@@ -68,7 +68,8 @@ set(OLD_REV_FILES
     2.8.1--2.8.0.sql
     2.9.0--2.8.1.sql
     2.9.1--2.9.0.sql
-    2.9.2--2.9.1.sql)
+    2.9.2--2.9.1.sql
+    2.9.3--2.9.2.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
