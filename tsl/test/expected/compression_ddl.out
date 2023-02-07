@@ -1273,3 +1273,28 @@ Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._compressed_hypertable_23 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
 
 DROP TABLE metric CASCADE;
+-- Creating hypertable
+CREATE TABLE "tEst2" (
+    "Id" uuid NOT NULL,
+    "Time" timestamp with time zone NOT NULL,
+    CONSTRAINT "test2_pkey" PRIMARY KEY ("Id", "Time")
+);
+SELECT create_hypertable(
+  '"tEst2"',
+  'Time',
+  chunk_time_interval => INTERVAL '1 day'
+);
+  create_hypertable  
+---------------------
+ (24,public,tEst2,t)
+(1 row)
+
+alter table "tEst2" set (timescaledb.compress=true, timescaledb.compress_segmentby='"Id"');
+CREATE MATERIALIZED VIEW "tEst2_mv"
+WITH (timescaledb.continuous) AS
+SELECT "Id" as "Idd",
+   time_bucket(INTERVAL '1 day', "Time") AS "bUcket"
+FROM public."tEst2"
+GROUP BY "Idd", "bUcket";
+NOTICE:  continuous aggregate "tEst2_mv" is already up-to-date
+ALTER MATERIALIZED VIEW "tEst2_mv" SET (timescaledb.compress = true);
