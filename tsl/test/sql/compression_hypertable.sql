@@ -50,12 +50,9 @@ INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_mins
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = '"Time" DESC');
 
-SELECT
-  $$
-  SELECT * FROM test1 ORDER BY "Time"
-  $$ AS "QUERY" \gset
-
-SELECT 'test1' AS "HYPERTABLE_NAME" \gset
+\set QUERY 'SELECT * FROM test1'
+\set QUERY_ORDER 'ORDER BY "Time"'
+\set HYPERTABLE_NAME 'test1'
 
 \ir include/compression_test_hypertable.sql
 \set TYPE timestamptz
@@ -103,12 +100,10 @@ INSERT INTO test2 SELECT t, gen_rand_minstd(), gen_rand_minstd()::text, gen_rand
 
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, "Time" DESC');
 
-SELECT
-  $$
-  SELECT * FROM test2 ORDER BY c, "Time"
-  $$ AS "QUERY" \gset
+\set QUERY 'SELECT * FROM test2'
+\set QUERY_ORDER 'ORDER BY c,"Time"'
+\set HYPERTABLE_NAME 'test2'
 
-SELECT 'test2' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable.sql
 
 \set TYPE int
@@ -146,9 +141,9 @@ select location, count(*)
 from test4
 group by location ORDER BY location;
 
-SELECT $$ SELECT * FROM test4 ORDER BY timec $$ AS "QUERY" \gset
-
-SELECT 'test4' AS "HYPERTABLE_NAME" \gset
+\set QUERY 'SELECT * FROM test4'
+\set QUERY_ORDER 'ORDER BY timec'
+\set HYPERTABLE_NAME 'test4'
 
 \ir include/compression_test_hypertable.sql
 \set TYPE TIMESTAMPTZ
@@ -188,10 +183,9 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 insert into test5
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), NULL, gen_rand_minstd();
 
-
-SELECT $$ SELECT * FROM test5 ORDER BY device_id, time $$ AS "QUERY" \gset
-
-SELECT 'test5' AS "HYPERTABLE_NAME" \gset
+\set QUERY 'SELECT * FROM test5'
+\set QUERY_ORDER 'ORDER BY device_id, time'
+\set HYPERTABLE_NAME 'test5'
 
 \ir include/compression_test_hypertable.sql
 \set TYPE TEXT
@@ -220,8 +214,8 @@ INSERT INTO test6 SELECT t, d, customtype_in((t + d)::TEXT::cstring)
 INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
   FROM generate_series(1, 200) t;
 
-\set QUERY 'SELECT * FROM test6 ORDER BY device_id, time'
-
+\set QUERY 'SELECT * FROM test6'
+\set QUERY_ORDER 'ORDER BY device_id, time'
 \set HYPERTABLE_NAME 'test6'
 
 \ir include/compression_test_hypertable.sql
@@ -248,8 +242,8 @@ INSERT INTO test7
   FROM generate_series(10, 20) t,
        generate_series('2019/03/01'::DATE, '2019/03/10', '1d') d;
 
-\set QUERY 'SELECT * FROM test7 ORDER BY time, c1'
-
+\set QUERY 'SELECT * FROM test7'
+\set QUERY_ORDER 'ORDER BY time, c1'
 \set HYPERTABLE_NAME 'test7'
 
 \ir include/compression_test_hypertable.sql
