@@ -24,6 +24,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \set IS_DISTRIBUTED TRUE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
+\set IS_JOIN FALSE
 
 -- ########################################################
 -- ## INTEGER data type tests
