@@ -263,7 +263,7 @@ get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 			result = timebucket_fini;
 		}
 	}
-	while (result <= TimestampTzGetDatum(finish_time))
+	while (DatumGetTimestampTz(result) <= finish_time)
 	{
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
 	}
