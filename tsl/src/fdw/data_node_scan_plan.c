@@ -297,33 +297,15 @@ ts_ec_member_matches_foreign(PlannerInfo *root, RelOptInfo *rel, EquivalenceClas
 	return true;
 }
 
-static void
-add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
+/*
+ * Build parameterizations that are useful for performing joins with the given
+ * hypertable relation. We will use them to generate the parameterized data node
+ * scan paths. The code is mostly copied from postgres_fdw,
+ * postgresGetForeignPaths().
+ */
+static List *
+build_parameterizations(PlannerInfo *root, RelOptInfo *hyper_rel)
 {
-	TsFdwRelInfo *fpinfo = fdw_relinfo_get(baserel);
-	Path *path;
-
-	if (baserel->reloptkind == RELOPT_JOINREL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("foreign joins are not supported")));
-
-	path = data_node_scan_path_create(root,
-									  baserel,
-									  NULL, /* default pathtarget */
-									  fpinfo->rows,
-									  fpinfo->startup_cost,
-									  fpinfo->total_cost,
-									  NIL, /* no pathkeys */
-									  NULL,
-									  NULL /* no extra plan */,
-									  NIL);
-
-	fdw_utils_add_path(baserel, path);
-
-	/* Add paths with pathkeys */
-	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, data_node_scan_path_create);
-
 	/*
 	 * Thumb through all join clauses for the rel to identify which outer
 	 * relations could supply one or more safe-to-send-to-remote join clauses.
@@ -343,28 +325,28 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 	 */
 	List *ppi_list = NIL;
 	ListCell *lc;
-	foreach (lc, baserel->joininfo)
+	foreach (lc, hyper_rel->joininfo)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 		Relids required_outer;
 		ParamPathInfo *param_info;
 
 		/* Check if clause can be moved to this rel */
-		if (!join_clause_is_movable_to(rinfo, baserel))
+		if (!join_clause_is_movable_to(rinfo, hyper_rel))
 		{
 			continue;
 		}
 
 		/* See if it is safe to send to remote */
-		if (!ts_is_foreign_expr(root, baserel, rinfo->clause))
+		if (!ts_is_foreign_expr(root, hyper_rel, rinfo->clause))
 		{
 			continue;
 		}
 
 		/* Calculate required outer rels for the resulting path */
-		required_outer = bms_union(rinfo->clause_relids, baserel->lateral_relids);
+		required_outer = bms_union(rinfo->clause_relids, hyper_rel->lateral_relids);
 		/* We do not want the data node rel itself listed in required_outer */
-		required_outer = bms_del_member(required_outer, baserel->relid);
+		required_outer = bms_del_member(required_outer, hyper_rel->relid);
 
 		/*
 		 * required_outer probably can't be empty here, but if it were, we
@@ -376,7 +358,7 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 		}
 
 		/* Get the ParamPathInfo */
-		param_info = get_baserel_parampathinfo(root, baserel, required_outer);
+		param_info = get_baserel_parampathinfo(root, hyper_rel, required_outer);
 		Assert(param_info != NULL);
 
 		/*
@@ -391,7 +373,7 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 	 * were absorbed into EquivalenceClauses.  See if we can make anything out
 	 * of EquivalenceClauses.
 	 */
-	if (baserel->has_eclass_joins)
+	if (hyper_rel->has_eclass_joins)
 	{
 		/*
 		 * We repeatedly scan the eclass list looking for column references
@@ -410,10 +392,10 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 			/* Make clauses, skipping any that join to lateral_referencers */
 			arg.current = NULL;
 			clauses = generate_implied_equalities_for_column(root,
-															 baserel,
+															 hyper_rel,
 															 ts_ec_member_matches_foreign,
 															 (void *) &arg,
-															 baserel->lateral_referencers);
+															 hyper_rel->lateral_referencers);
 
 			/* Done if there are no more expressions in the data node rel */
 			if (arg.current == NULL)
@@ -430,27 +412,27 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 				ParamPathInfo *param_info;
 
 				/* Check if clause can be moved to this rel */
-				if (!join_clause_is_movable_to(rinfo, baserel))
+				if (!join_clause_is_movable_to(rinfo, hyper_rel))
 				{
 					continue;
 				}
 
 				/* See if it is safe to send to remote */
-				if (!ts_is_foreign_expr(root, baserel, rinfo->clause))
+				if (!ts_is_foreign_expr(root, hyper_rel, rinfo->clause))
 				{
 					continue;
 				}
 
 				/* Calculate required outer rels for the resulting path */
-				required_outer = bms_union(rinfo->clause_relids, baserel->lateral_relids);
-				required_outer = bms_del_member(required_outer, baserel->relid);
+				required_outer = bms_union(rinfo->clause_relids, hyper_rel->lateral_relids);
+				required_outer = bms_del_member(required_outer, hyper_rel->relid);
 				if (bms_is_empty(required_outer))
 				{
 					continue;
 				}
 
 				/* Get the ParamPathInfo */
-				param_info = get_baserel_parampathinfo(root, baserel, required_outer);
+				param_info = get_baserel_parampathinfo(root, hyper_rel, required_outer);
 				Assert(param_info != NULL);
 
 				/* Add it to list unless we already have it */
@@ -462,15 +444,82 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 		}
 	}
 
+	return ppi_list;
+}
+
+static void
+add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptInfo *hyper_rel,
+						 List *ppi_list)
+{
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(data_node_rel);
+	Path *path;
+
+	if (data_node_rel->reloptkind == RELOPT_JOINREL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("foreign joins are not supported")));
+
+	path = data_node_scan_path_create(root,
+									  data_node_rel,
+									  NULL, /* default pathtarget */
+									  fpinfo->rows,
+									  fpinfo->startup_cost,
+									  fpinfo->total_cost,
+									  NIL, /* no pathkeys */
+									  NULL,
+									  NULL /* no extra plan */,
+									  NIL);
+
+	fdw_utils_add_path(data_node_rel, path);
+
+	/* Add paths with pathkeys */
+	fdw_add_paths_with_pathkeys_for_rel(root, data_node_rel, NULL, data_node_scan_path_create);
+
 	/*
-	 * Now build a path for each useful outer relation.
+	 * Now build a path for each useful outer relation, if the parameterized
+	 * data node scans are not disabled.
 	 */
-	foreach (lc, ppi_list)
+	if (!ts_guc_enable_parameterized_data_node_scan)
 	{
-		ParamPathInfo *param_info = (ParamPathInfo *) lfirst(lc);
+		return;
+	}
+
+	ListCell *ppi_cell;
+	foreach (ppi_cell, ppi_list)
+	{
+		ParamPathInfo *param_info = (ParamPathInfo *) lfirst(ppi_cell);
+
+		/*
+		 * Check if we have an index path locally that matches the
+		 * parameterization. If so, we're going to have the same index path on
+		 * the data node, and it's going to be significantly cheaper that a seq
+		 * scan. We don't know precise values, but we have to discount it later
+		 * so that the remote index paths are preferred.
+		 */
+		bool index_matches_parameterization = false;
+		ListCell *path_cell;
+		foreach (path_cell, hyper_rel->pathlist)
+		{
+			Path *path = (Path *) lfirst(path_cell);
+			if (path->param_info == param_info)
+			{
+				/*
+				 * We shouldn't have parameterized seq scans. Can be an
+				 * IndexPath (includes index-only scans) or a BitmapHeapPath.
+				 */
+				Assert(path->type == T_BitmapHeapPath || path->type == T_IndexPath);
+
+				index_matches_parameterization = true;
+				break;
+			}
+		}
+
+		/*
+		 * As a baseline, cost the data node scan as a seq scan.
+		 */
 		Cost startup_cost = 0;
 		Cost run_cost = 0;
-		double rows = baserel->tuples > 1 ? baserel->tuples : 123456;
+		double rows = data_node_rel->tuples > 1 ? data_node_rel->tuples : 123456;
 
 		/* Run remote non-join clauses. */
 		const double remote_sel_sane =
@@ -478,22 +527,38 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 				fpinfo->remote_conds_sel :
 				0.1;
 
-		startup_cost += baserel->reltarget->cost.startup;
+		startup_cost += data_node_rel->reltarget->cost.startup;
 		startup_cost += fpinfo->remote_conds_cost.startup;
 		run_cost += fpinfo->remote_conds_cost.per_tuple * rows;
 		run_cost += cpu_tuple_cost * rows;
-		run_cost += seq_page_cost * baserel->pages;
+		run_cost += seq_page_cost * data_node_rel->pages;
 		rows *= remote_sel_sane;
+
+		/*
+		 * For this parameterization, we're going to have an index scan on the
+		 * remote. We don't have a way to calculate the precise cost for it, so
+		 * at least discount it by a constant factor compared to the seq scan.
+		 */
+		if (index_matches_parameterization)
+		{
+			run_cost *= 0.1;
+		}
 
 		/* Run remote join clauses. */
 		QualCost remote_join_cost;
 		cost_qual_eval(&remote_join_cost, param_info->ppi_clauses, root);
+
 		/*
-		 * We don't have up to date per-column statistics for distributed
-		 * hypertables currently, so the join estimates are going to be way off.
-		 * The worst is when they are too low and we end up transferring much
-		 * more rows from the data node that we expected. Just hardcode it at
-		 * 0.1 per clause for now.
+		 * We don't have up to date per-column statistics for the root
+		 * distributed hypertable currently, so the join estimates are going to
+		 * be way off. The worst is when they are too low and we end up
+		 * transferring much more rows from the data node that we expected. Just
+		 * hardcode it at 0.1 per clause for now.
+		 * In the future, we could make use of per-chunk per-column statistics
+		 * that we do have, by injecting them into the Postgres cost functions
+		 * through the get_relation_stats_hook. For a data node scan, we would
+		 * combine statistics for all participating chunks on the given data
+		 * node.
 		 */
 		const double remote_join_sel = pow(0.1, list_length(param_info->ppi_clauses));
 
@@ -517,7 +582,9 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 		rows *= local_sel_sane;
 
 		/* Compute the output targetlist. */
-		run_cost += baserel->reltarget->cost.per_tuple * rows;
+		run_cost += data_node_rel->reltarget->cost.per_tuple * rows;
+
+		rows = clamp_row_est(rows);
 
 		/*
 		 * ppi_rows currently won't get looked at by anything, but still we
@@ -527,7 +594,7 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 
 		/* Make the path */
 		path = data_node_scan_path_create(root,
-										  baserel,
+										  data_node_rel,
 										  NULL, /* default pathtarget */
 										  rows,
 										  startup_cost,
@@ -537,7 +604,7 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 										  NULL,
 										  NIL); /* no fdw_private list */
 
-		add_path(baserel, (Path *) path);
+		add_path(data_node_rel, (Path *) path);
 	}
 }
 
@@ -723,6 +790,26 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	push_down_group_bys(root, hyper_rel, ht->space, &scas);
 
 	/*
+	 * Index path for this relation are not useful by themselves, but we are
+	 * going to use them to guess whether the remote scan can use an index for a
+	 * given parameterization. This is needed to estimate the cost for
+	 * parameterized data node scans. We will reset the pathlist below so these
+	 * path are not going to be used.
+	 */
+	create_index_paths(root, hyper_rel);
+
+	/*
+	 * Not sure what parameterizations there could be except the ones used for
+	 * join. Still, it's hard to verify from the code because
+	 * get_baserel_parampathinfo() is called all over the place w/o checking if
+	 * a join would be valid for the given required_outer. So for generating
+	 * the parameterized data node scan paths we'll use the explicit list of
+	 * ppis valid for joins that we just built, and not the entire
+	 * hyper_rel->ppilist.
+	 */
+	List *ppi_list = build_parameterizations(root, hyper_rel);
+
+	/*
 	 * Create estimates and paths for each data node rel based on data node chunk
 	 * assignments.
 	 */
@@ -753,7 +840,7 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 
 		if (!bms_is_empty(sca->chunk_relids))
 		{
-			add_data_node_scan_paths(root, data_node_rel);
+			add_data_node_scan_paths(root, data_node_rel, hyper_rel, ppi_list);
 			data_node_rels_list = lappend(data_node_rels_list, data_node_rel);
 #if PG15_GE
 			data_node_live_rels = bms_add_member(data_node_live_rels, i);

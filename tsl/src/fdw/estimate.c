@@ -121,14 +121,30 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 		get_agg_clause_costs_compat(root, (Node *) fpinfo->grouped_tlist, aggsplit, &aggcosts);
 	}
 
-	/* Get number of grouping columns and possible number of groups */
+	/*
+	 * Get number of grouping columns and possible number of groups. We don't
+	 * have per-column ndistinct statistics on access node for the root
+	 * distributed hypertable, so in this case hardcode it as 1/10 of all rows
+	 * to incentivize grouping push down.
+	 * We do have per-column per-chunk statistics, so we could do better by
+	 * combining these statistics for the participating chunks. This probably
+	 * should be done together with correcting the join selectivity estimation
+	 * in add_data_node_scan_paths.
+	 */
 	num_group_cols = list_length(root->parse->groupClause);
-	num_groups = estimate_num_groups_compat(root,
-											get_sortgrouplist_exprs(root->parse->groupClause,
-																	fpinfo->grouped_tlist),
-											input_rows,
-											NULL,
-											NULL);
+	if (fpinfo->type == TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
+	{
+		num_groups = clamp_row_est(input_rows / 10.);
+	}
+	else
+	{
+		num_groups = estimate_num_groups_compat(root,
+												get_sortgrouplist_exprs(root->parse->groupClause,
+																		fpinfo->grouped_tlist),
+												input_rows,
+												NULL,
+												NULL);
+	}
 
 	/*
 	 * Get the retrieved_rows and rows estimates.  If there are HAVING

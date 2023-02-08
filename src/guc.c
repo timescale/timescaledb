@@ -76,6 +76,7 @@ bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 bool ts_guc_enable_per_data_node_queries = true;
+bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
@@ -287,6 +288,19 @@ _guc_init(void)
 							 "Enable the optimization that combines different chunks belonging to "
 							 "the same hypertable into a single query per data_node",
 							 &ts_guc_enable_per_data_node_queries,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_parameterized_data_node_scan",
+							 "Enable parameterized data node scans",
+							 "Disable this as a workaround in case these plans are incorrectly "
+							 "chosen "
+							 "by the query planner when they are suboptimal",
+							 &ts_guc_enable_parameterized_data_node_scan,
 							 true,
 							 PGC_USERSET,
 							 0,
