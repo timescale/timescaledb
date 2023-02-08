@@ -1,45 +1,11 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-------------------------------------
--- Set up a distributed environment
-------------------------------------
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\set DATA_NODE_3 :TEST_DBNAME _3
-\ir include/remote_exec.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-CREATE SCHEMA IF NOT EXISTS test;
-psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-GRANT USAGE ON SCHEMA test TO PUBLIC;
-CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
-LANGUAGE C;
-CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], command text)
-RETURNS TABLE("table_record" CSTRING[])
-AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
-LANGUAGE C;
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-         node_name         |   host    | port  |         database          | node_created | database_created | extension_created 
----------------------------+-----------+-------+---------------------------+--------------+------------------+-------------------
- db_cagg_on_cagg_dist_ht_1 | localhost | 55432 | db_cagg_on_cagg_dist_ht_1 | t            | t                | t
- db_cagg_on_cagg_dist_ht_2 | localhost | 55432 | db_cagg_on_cagg_dist_ht_2 | t            | t                | t
- db_cagg_on_cagg_dist_ht_3 | localhost | 55432 | db_cagg_on_cagg_dist_ht_3 | t            | t                | t
-(3 rows)
-
-GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
--- PG15 requires this explicit GRANT on schema public
-GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- Global test variables
-\set IS_DISTRIBUTED TRUE
+\set IS_DISTRIBUTED FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
-\set IS_JOIN FALSE
+\set IS_JOIN TRUE
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -64,9 +30,9 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- CAGGs on CAGGs tests
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
@@ -86,6 +52,7 @@ psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exi
 \endif
 \if :IS_JOIN
   DROP TABLE IF EXISTS devices CASCADE;
+psql:include/cagg_on_cagg_setup.sql:30: NOTICE:  table "devices" does not exist, skipping
   CREATE TABLE devices ( device_id int not null, name text, location text);
   INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
@@ -94,17 +61,17 @@ psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exi
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
- table_name 
-------------
- conditions
-(1 row)
-
   \endif
 \else
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_hypertable('conditions', 'time');
   \else
     SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
+ table_name 
+------------
+ conditions
+(1 row)
+
   \endif
 \endif
 \if :IS_TIME_DIMENSION
@@ -219,8 +186,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -238,11 +205,12 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
+(3 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
@@ -263,17 +231,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-(1 row)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -296,17 +267,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-(1 row)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -323,19 +297,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-     10 |           2
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          10 |         1
+      0 |           5 |         2
+      0 |          20 |         3
+(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -357,19 +332,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          17
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          37
-     10 |           2
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -377,13 +353,13 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
@@ -391,19 +367,20 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          17
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          37
-     10 |           2
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -441,8 +418,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
@@ -474,6 +451,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
+\set ON_ERROR_STOP 0
 \set IS_DEFAULT_COLUMN_ORDER TRUE
 \ir include/cagg_on_cagg_setup.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -482,9 +460,9 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- CAGGs on CAGGs tests
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
@@ -511,17 +489,17 @@ DROP TABLE IF EXISTS conditions CASCADE;
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
- table_name 
-------------
- conditions
-(1 row)
-
   \endif
 \else
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_hypertable('conditions', 'time');
   \else
     SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
+ table_name 
+------------
+ conditions
+(1 row)
+
   \endif
 \endif
 \if :IS_TIME_DIMENSION
@@ -636,8 +614,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -655,11 +633,12 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
+(3 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
@@ -680,17 +659,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-(1 row)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -713,17 +695,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-(1 row)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -740,19 +725,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          15
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-     10 |           2
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          10 |         1
+      0 |           5 |         2
+      0 |          20 |         3
+(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -774,19 +760,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          17
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          37
-     10 |           2
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -794,13 +781,13 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
@@ -808,19 +795,20 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
-      0 |          17
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |           5 |         2
+      0 |          10 |         1
+      5 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          37
-     10 |           2
-(2 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      0 |          20 |         3
+      0 |           5 |         2
+      0 |          10 |         1
+(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -858,8 +846,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
@@ -893,6 +881,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 --
 -- Validation test for non-multiple bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTEGER \'2\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'5\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
@@ -968,6 +957,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTEGER \'2\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
 \set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
@@ -1057,6 +1047,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for bucket size less than source
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTEGER \'4\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
@@ -1129,8 +1120,6 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be greate
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
 psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
--- cleanup
-DROP TABLE conditions;
 -- ########################################################
 -- ## TIMESTAMP data type tests
 -- ########################################################
@@ -1140,6 +1129,7 @@ DROP TABLE conditions;
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1_hourly
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2_daily
 \set CAGG_NAME_3TH_LEVEL conditions_summary_3_weekly
+\set IS_JOIN TRUE
 SET timezone TO 'UTC';
 --
 -- Run common tests for TIMESTAMP
@@ -1156,13 +1146,12 @@ SET timezone TO 'UTC';
 -- CAGGs on CAGGs tests
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
-psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exist, skipping
 \if :IS_DEFAULT_COLUMN_ORDER
     CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
@@ -1184,18 +1173,18 @@ psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exi
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-psql:include/cagg_on_cagg_setup.sql:37: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
- table_name 
-------------
- conditions
-(1 row)
-
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
   \endif
 \else
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_hypertable('conditions', 'time');
+psql:include/cagg_on_cagg_setup.sql:43: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+ table_name 
+------------
+ conditions
+(1 row)
+
   \else
     SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
   \endif
@@ -1307,8 +1296,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -1326,11 +1315,12 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
+(3 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
@@ -1351,17 +1341,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
-(1 row)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -1384,17 +1377,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
-(1 row)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -1411,19 +1407,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
- Mon Jan 03 00:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
- Mon Jan 03 00:00:00 2022 |           2
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -1445,19 +1442,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          17
- Sun Jan 02 00:00:00 2022 |          20
- Mon Jan 03 00:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          37
- Mon Jan 03 00:00:00 2022 |           2
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -1465,13 +1463,13 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
@@ -1479,19 +1477,20 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          17
- Sun Jan 02 00:00:00 2022 |          20
- Mon Jan 03 00:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          37
- Mon Jan 03 00:00:00 2022 |           2
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -1529,8 +1528,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
@@ -1570,9 +1569,9 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- CAGGs on CAGGs tests
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
@@ -1597,18 +1596,18 @@ DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-psql:include/cagg_on_cagg_setup.sql:37: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
- table_name 
-------------
- conditions
-(1 row)
-
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
   \endif
 \else
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_hypertable('conditions', 'time');
+psql:include/cagg_on_cagg_setup.sql:43: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+ table_name 
+------------
+ conditions
+(1 row)
+
   \else
     SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
   \endif
@@ -1720,8 +1719,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -1739,11 +1738,12 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
+(3 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
@@ -1764,17 +1764,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
-(1 row)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -1797,17 +1800,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
-(1 row)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -1824,19 +1830,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          15
- Sun Jan 02 00:00:00 2022 |          20
- Mon Jan 03 00:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
- Mon Jan 03 00:00:00 2022 |           2
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -1858,19 +1865,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          17
- Sun Jan 02 00:00:00 2022 |          20
- Mon Jan 03 00:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          37
- Mon Jan 03 00:00:00 2022 |           2
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -1878,13 +1886,13 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
@@ -1892,19 +1900,20 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          17
- Sun Jan 02 00:00:00 2022 |          20
- Mon Jan 03 00:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |           5 |         2
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sun Jan 02 00:00:00 2022 |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          37
- Mon Jan 03 00:00:00 2022 |           2
-(2 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 |          20 |         3
+ Mon Dec 27 00:00:00 2021 |           5 |         2
+ Mon Dec 27 00:00:00 2021 |          10 |         1
+(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -1942,8 +1951,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
@@ -1977,6 +1986,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 --
 -- Validation test for variable bucket on top of fixed bucket
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 month\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'60 days\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket'
@@ -2053,6 +2063,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'3 hours\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
@@ -2128,6 +2139,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
@@ -2217,6 +2229,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for bucket size less than source
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
@@ -2306,6 +2319,7 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
 \set BUCKET_WIDTH_3TH 'INTERVAL \'1 week\''
 -- Different order of time dimension in raw ht
+\set ON_ERROR_STOP 0
 \set IS_DEFAULT_COLUMN_ORDER FALSE
 \ir include/cagg_on_cagg_setup.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -2314,9 +2328,9 @@ SET timezone TO 'UTC';
 -- CAGGs on CAGGs tests
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
@@ -2341,17 +2355,17 @@ DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
- table_name 
-------------
- conditions
-(1 row)
-
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
   \endif
 \else
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_hypertable('conditions', 'time');
+ table_name 
+------------
+ conditions
+(1 row)
+
   \else
     SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
   \endif
@@ -2463,8 +2477,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -2482,11 +2496,12 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
+(3 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
@@ -2507,17 +2522,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
-(1 row)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -2540,17 +2558,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
-(1 row)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -2567,19 +2588,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
- Mon Jan 03 00:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
- Mon Jan 03 00:00:00 2022 UTC |           2
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -2601,19 +2623,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          17
- Sun Jan 02 00:00:00 2022 UTC |          20
- Mon Jan 03 00:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          37
- Mon Jan 03 00:00:00 2022 UTC |           2
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -2621,13 +2644,13 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
@@ -2635,19 +2658,20 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          17
- Sun Jan 02 00:00:00 2022 UTC |          20
- Mon Jan 03 00:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          37
- Mon Jan 03 00:00:00 2022 UTC |           2
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -2685,8 +2709,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
@@ -2718,6 +2742,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
+\set ON_ERROR_STOP 0
 \set IS_DEFAULT_COLUMN_ORDER TRUE
 \ir include/cagg_on_cagg_setup.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -2726,9 +2751,9 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- CAGGs on CAGGs tests
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
-Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
+Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
@@ -2753,17 +2778,17 @@ DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
- table_name 
-------------
- conditions
-(1 row)
-
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
   \endif
 \else
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_hypertable('conditions', 'time');
+ table_name 
+------------
+ conditions
+(1 row)
+
   \else
     SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
   \endif
@@ -2875,8 +2900,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -2894,11 +2919,12 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
+(3 rows)
 
 --SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
@@ -2919,17 +2945,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
-(1 row)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -2952,17 +2981,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
+(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
-(1 row)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -2979,19 +3011,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          15
- Sun Jan 02 00:00:00 2022 UTC |          20
- Mon Jan 03 00:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
- Mon Jan 03 00:00:00 2022 UTC |           2
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -3013,19 +3046,20 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          17
- Sun Jan 02 00:00:00 2022 UTC |          20
- Mon Jan 03 00:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          37
- Mon Jan 03 00:00:00 2022 UTC |           2
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -3033,13 +3067,13 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
@@ -3047,19 +3081,20 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          17
- Sun Jan 02 00:00:00 2022 UTC |          20
- Mon Jan 03 00:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |           5 |         2
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sun Jan 02 00:00:00 2022 UTC |          20 |         3
 (3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          37
- Mon Jan 03 00:00:00 2022 UTC |           2
-(2 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Mon Dec 27 00:00:00 2021 UTC |          20 |         3
+ Mon Dec 27 00:00:00 2021 UTC |           5 |         2
+ Mon Dec 27 00:00:00 2021 UTC |          10 |         1
+(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -3097,8 +3132,8 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 (5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
+ bucket | temperature | device_id 
+--------+-------------+-----------
 (0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
@@ -3132,6 +3167,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 --
 -- Validation test for variable bucket on top of fixed bucket
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 month\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'60 days\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket'
@@ -3208,6 +3244,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'3 hours\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
@@ -3283,6 +3320,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
@@ -3372,6 +3410,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for bucket size less than source
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
@@ -3447,6 +3486,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validations using time bucket with timezone (ref issue #5126)
 --
+\set ON_ERROR_STOP 0
 \set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST TRUE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH TRUE
@@ -3978,6 +4018,11 @@ UNION ALL
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+-- test some intuitive intervals that should work but
+-- were not working due to unix epochs
+-- validation test for 1 year on top of one day
+-- validation test for 1 year on top of 1 month
+-- validation test for 1 year on top of 1 week
 -- bug report 5231
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 year\''
@@ -4376,425 +4421,3 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 30 days] should b
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
 psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
--- bug report 5277
-\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
-\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
--- epoch plus cast to int would compute a bucket width of 0 for parent
-\set BUCKET_WIDTH_1ST 'INTERVAL \'146 ms\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 ms\''
-\ir include/cagg_on_cagg_validations.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set CAGG_NAME_1ST_LEVEL conditions_summary_1
-\set CAGG_NAME_2TH_LEVEL conditions_summary_2
---
--- CAGG on hypertable (1st level)
---
-CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
-    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM conditions
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_1ST_LEVEL
-                               View "public.conditions_summary_1"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_58.bucket,
-    _materialized_hypertable_58.temperature
-   FROM _timescaledb_internal._materialized_hypertable_58
-  WHERE _materialized_hypertable_58.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(58)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 0.146 secs'::interval, conditions."time") AS bucket,
-    sum(conditions.temperature) AS temperature
-   FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(58)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 0.146 secs'::interval, conditions."time"));
-
---
--- CAGG on CAGG (2th level)
---
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-\echo :WARNING_MESSAGE
--- SHOULD WORK
-CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_2TH_LEVEL
-                               View "public.conditions_summary_2"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_59.bucket,
-    _materialized_hypertable_59.temperature
-   FROM _timescaledb_internal._materialized_hypertable_59
-  WHERE _materialized_hypertable_59.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 1.168 secs'::interval, conditions_summary_1.bucket) AS bucket,
-    sum(conditions_summary_1.temperature) AS temperature
-   FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 1.168 secs'::interval, conditions_summary_1.bucket));
-
-\set ON_ERROR_STOP 1
-\set VERBOSITY terse
---
--- Cleanup
---
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
-\set BUCKET_WIDTH_1ST 'INTERVAL \'9344 ms\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'74752 ms\''
-\ir include/cagg_on_cagg_validations.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set CAGG_NAME_1ST_LEVEL conditions_summary_1
-\set CAGG_NAME_2TH_LEVEL conditions_summary_2
---
--- CAGG on hypertable (1st level)
---
-CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
-    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM conditions
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_1ST_LEVEL
-                               View "public.conditions_summary_1"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_60.bucket,
-    _materialized_hypertable_60.temperature
-   FROM _timescaledb_internal._materialized_hypertable_60
-  WHERE _materialized_hypertable_60.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(60)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 9.344 secs'::interval, conditions."time") AS bucket,
-    sum(conditions.temperature) AS temperature
-   FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(60)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 9.344 secs'::interval, conditions."time"));
-
---
--- CAGG on CAGG (2th level)
---
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-\echo :WARNING_MESSAGE
--- SHOULD WORK
-CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_2TH_LEVEL
-                               View "public.conditions_summary_2"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_61.bucket,
-    _materialized_hypertable_61.temperature
-   FROM _timescaledb_internal._materialized_hypertable_61
-  WHERE _materialized_hypertable_61.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(61)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 1 min 14.752 secs'::interval, conditions_summary_1.bucket) AS bucket,
-    sum(conditions_summary_1.temperature) AS temperature
-   FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(61)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 1 min 14.752 secs'::interval, conditions_summary_1.bucket));
-
-\set ON_ERROR_STOP 1
-\set VERBOSITY terse
---
--- Cleanup
---
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
-\set BUCKET_WIDTH_1ST 'INTERVAL \'74752 ms\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'598016 ms\''
-\ir include/cagg_on_cagg_validations.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set CAGG_NAME_1ST_LEVEL conditions_summary_1
-\set CAGG_NAME_2TH_LEVEL conditions_summary_2
---
--- CAGG on hypertable (1st level)
---
-CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
-    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM conditions
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_1ST_LEVEL
-                               View "public.conditions_summary_1"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_62.bucket,
-    _materialized_hypertable_62.temperature
-   FROM _timescaledb_internal._materialized_hypertable_62
-  WHERE _materialized_hypertable_62.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(62)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 1 min 14.752 secs'::interval, conditions."time") AS bucket,
-    sum(conditions.temperature) AS temperature
-   FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(62)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 1 min 14.752 secs'::interval, conditions."time"));
-
---
--- CAGG on CAGG (2th level)
---
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-\echo :WARNING_MESSAGE
--- SHOULD WORK
-CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_2TH_LEVEL
-                               View "public.conditions_summary_2"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_63.bucket,
-    _materialized_hypertable_63.temperature
-   FROM _timescaledb_internal._materialized_hypertable_63
-  WHERE _materialized_hypertable_63.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(63)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 9 mins 58.016 secs'::interval, conditions_summary_1.bucket) AS bucket,
-    sum(conditions_summary_1.temperature) AS temperature
-   FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(63)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 9 mins 58.016 secs'::interval, conditions_summary_1.bucket));
-
-\set ON_ERROR_STOP 1
-\set VERBOSITY terse
---
--- Cleanup
---
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
--- test microseconds - should pass
-\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 usec\''
-\ir include/cagg_on_cagg_validations.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set CAGG_NAME_1ST_LEVEL conditions_summary_1
-\set CAGG_NAME_2TH_LEVEL conditions_summary_2
---
--- CAGG on hypertable (1st level)
---
-CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
-    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM conditions
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_1ST_LEVEL
-                               View "public.conditions_summary_1"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_64.bucket,
-    _materialized_hypertable_64.temperature
-   FROM _timescaledb_internal._materialized_hypertable_64
-  WHERE _materialized_hypertable_64.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 0.000146 secs'::interval, conditions."time") AS bucket,
-    sum(conditions.temperature) AS temperature
-   FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 0.000146 secs'::interval, conditions."time"));
-
---
--- CAGG on CAGG (2th level)
---
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-\echo :WARNING_MESSAGE
--- SHOULD WORK
-CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_2TH_LEVEL
-                               View "public.conditions_summary_2"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_65.bucket,
-    _materialized_hypertable_65.temperature
-   FROM _timescaledb_internal._materialized_hypertable_65
-  WHERE _materialized_hypertable_65.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(65)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 0.001168 secs'::interval, conditions_summary_1.bucket) AS bucket,
-    sum(conditions_summary_1.temperature) AS temperature
-   FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(65)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 0.001168 secs'::interval, conditions_summary_1.bucket));
-
-\set ON_ERROR_STOP 1
-\set VERBOSITY terse
---
--- Cleanup
---
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
--- test microseconds - SHOULD FAIL
-\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'1160 usec\''
-\ir include/cagg_on_cagg_validations.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set CAGG_NAME_1ST_LEVEL conditions_summary_1
-\set CAGG_NAME_2TH_LEVEL conditions_summary_2
---
--- CAGG on hypertable (1st level)
---
-CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
-    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM conditions
-GROUP BY 1
-WITH NO DATA;
-\d+ :CAGG_NAME_1ST_LEVEL
-                               View "public.conditions_summary_1"
-   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
--------------+--------------------------+-----------+----------+---------+---------+-------------
- bucket      | timestamp with time zone |           |          |         | plain   | 
- temperature | numeric                  |           |          |         | main    | 
-View definition:
- SELECT _materialized_hypertable_66.bucket,
-    _materialized_hypertable_66.temperature
-   FROM _timescaledb_internal._materialized_hypertable_66
-  WHERE _materialized_hypertable_66.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(66)), '-infinity'::timestamp with time zone)
-UNION ALL
- SELECT time_bucket('@ 0.000146 secs'::interval, conditions."time") AS bucket,
-    sum(conditions.temperature) AS temperature
-   FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(66)), '-infinity'::timestamp with time zone)
-  GROUP BY (time_bucket('@ 0.000146 secs'::interval, conditions."time"));
-
---
--- CAGG on CAGG (2th level)
---
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-\echo :WARNING_MESSAGE
--- SHOULD WORK
-CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
-SELECT
-  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
-  \else
-    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
-  \endif
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
-WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 0.00116 secs] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 0.000146 secs].
-\d+ :CAGG_NAME_2TH_LEVEL
-\set ON_ERROR_STOP 1
-\set VERBOSITY terse
---
--- Cleanup
---
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
-DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
--- Cleanup
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
-DROP DATABASE :DATA_NODE_3;
