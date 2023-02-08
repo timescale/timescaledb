@@ -64,6 +64,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_multi.sql
     cagg_on_cagg.sql
     cagg_on_cagg_dist_ht.sql
+    cagg_on_cagg_joins.sql
+    cagg_on_cagg_joins_dist_ht.sql
     continuous_aggs_deprecated.sql
     cagg_tableam.sql
     cagg_usage.sql
