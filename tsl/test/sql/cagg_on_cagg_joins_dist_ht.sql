@@ -2,11 +2,30 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+------------------------------------
+-- Set up a distributed environment
+------------------------------------
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+
+\ir include/remote_exec.sql
+
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- PG15 requires this explicit GRANT on schema public
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+
 -- Global test variables
-\set IS_DISTRIBUTED FALSE
+\set IS_DISTRIBUTED TRUE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
-\set IS_JOIN FALSE
+\set IS_JOIN TRUE
+
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -34,7 +53,6 @@
 \set IS_DEFAULT_COLUMN_ORDER TRUE
 \ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
-
 --
 -- Validation test for non-multiple bucket sizes
 --
@@ -58,6 +76,9 @@
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
 \ir include/cagg_on_cagg_validations.sql
+
+-- cleanup
+DROP TABLE conditions;
 
 -- ########################################################
 -- ## TIMESTAMP data type tests
@@ -245,12 +266,6 @@ SET timezone TO 'UTC';
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
 
--- test some intuitive intervals that should work but
--- were not working due to unix epochs
--- validation test for 1 year on top of one day
--- validation test for 1 year on top of 1 month
--- validation test for 1 year on top of 1 week
-
 -- bug report 5231
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 year\''
@@ -298,3 +313,9 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1160 usec\''
 \ir include/cagg_on_cagg_validations.sql
+
+-- Cleanup
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

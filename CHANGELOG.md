@@ -10,6 +10,10 @@ accidentally triggering the load of a previous DB version.**
 * #5212 Allow pushdown of reference table joins
 * #5312 Add timeout support to the ping_data_node()
 * #5361 Add parallel support for partialize_agg()
+* #5252 Improve unique constraint support on compressed hypertables
+* #5312 Add timeout support to ping_data_node()
+* #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
+* #5344 Enable JOINS for Hierarchical Continuous Aggregates
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
@@ -50,7 +54,6 @@ We recommend that you upgrade at the next available opportunity.
 * #5364 Fix num_chunks inconsistency in hypertables view
 * #5367 Fix column name handling in old-style continuous aggregates
 * #5378 Fix multinode DML HA performance regression
-* #5384 Fix Hierarchical Continuous Aggregates chunk_interval_size
 * #5304 Fix sub-second intervals in hierarchical caggs
 
 **Thanks**
@@ -87,6 +90,8 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 * #5262 Extend enabling compression on a continuous aggregrate with 'compress_segmentby' and 'compress_orderby' parameters
 * #5343 Set PortalContext when starting job
 * #5312 Add timeout support to the ping_data_node()
+* #5212 Allow pushdown of reference table joins
+* #5344 Enable JOINS for Hierarchical continuous aggregates
 
 **Bugfixes**
 * #5214 Fix use of prepared statement in async module

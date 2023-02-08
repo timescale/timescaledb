@@ -6,7 +6,7 @@
 \set IS_DISTRIBUTED FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
-\set IS_JOIN FALSE
+\set IS_JOIN TRUE
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -31,6 +31,7 @@
 \ir include/cagg_on_cagg_common.sql
 
 -- Default tests
+\set ON_ERROR_STOP 0
 \set IS_DEFAULT_COLUMN_ORDER TRUE
 \ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
@@ -38,6 +39,7 @@
 --
 -- Validation test for non-multiple bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTEGER \'2\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'5\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
@@ -46,6 +48,7 @@
 --
 -- Validation test for equal bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTEGER \'2\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
 \set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
@@ -54,6 +57,7 @@
 --
 -- Validation test for bucket size less than source
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTEGER \'4\''
 \set BUCKET_WIDTH_2TH 'INTEGER \'2\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
@@ -69,7 +73,7 @@
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1_hourly
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2_daily
 \set CAGG_NAME_3TH_LEVEL conditions_summary_3_weekly
-
+\set IS_JOIN TRUE
 SET timezone TO 'UTC';
 
 --
@@ -92,6 +96,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for variable bucket on top of fixed bucket
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 month\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'60 days\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket'
@@ -100,6 +105,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for non-multiple bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'3 hours\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
@@ -108,6 +114,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for equal bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
@@ -116,6 +123,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for bucket size less than source
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
@@ -142,11 +150,13 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_3TH 'INTERVAL \'1 week\''
 
 -- Different order of time dimension in raw ht
+\set ON_ERROR_STOP 0
 \set IS_DEFAULT_COLUMN_ORDER FALSE
 \ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
 
 -- Default tests
+\set ON_ERROR_STOP 0
 \set IS_DEFAULT_COLUMN_ORDER TRUE
 \ir include/cagg_on_cagg_setup.sql
 \ir include/cagg_on_cagg_common.sql
@@ -154,6 +164,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for variable bucket on top of fixed bucket
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 month\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'60 days\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket'
@@ -162,6 +173,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for non-multiple bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'3 hours\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because non-multiple bucket sizes'
@@ -170,6 +182,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for equal bucket sizes
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE 'SHOULD WORK because new bucket should be greater than previous'
@@ -178,6 +191,7 @@ SET timezone TO 'UTC';
 --
 -- Validation test for bucket size less than source
 --
+\set ON_ERROR_STOP 0
 \set BUCKET_WIDTH_1ST 'INTERVAL \'2 hours\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 hour\''
 \set WARNING_MESSAGE '-- SHOULD ERROR because new bucket should be greater than previous'
@@ -186,6 +200,7 @@ SET timezone TO 'UTC';
 --
 -- Validations using time bucket with timezone (ref issue #5126)
 --
+\set ON_ERROR_STOP 0
 \set TIME_DIMENSION_DATATYPE TIMESTAMPTZ
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST TRUE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH TRUE
@@ -270,31 +285,4 @@ SET timezone TO 'UTC';
 
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 week\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
-\ir include/cagg_on_cagg_validations.sql
-
--- bug report 5277
-\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
-\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
-
--- epoch plus cast to int would compute a bucket width of 0 for parent
-\set BUCKET_WIDTH_1ST 'INTERVAL \'146 ms\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 ms\''
-\ir include/cagg_on_cagg_validations.sql
-
-\set BUCKET_WIDTH_1ST 'INTERVAL \'9344 ms\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'74752 ms\''
-\ir include/cagg_on_cagg_validations.sql
-
-\set BUCKET_WIDTH_1ST 'INTERVAL \'74752 ms\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'598016 ms\''
-\ir include/cagg_on_cagg_validations.sql
-
--- test microseconds - should pass
-\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 usec\''
-\ir include/cagg_on_cagg_validations.sql
-
--- test microseconds - SHOULD FAIL
-\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
-\set BUCKET_WIDTH_2TH 'INTERVAL \'1160 usec\''
 \ir include/cagg_on_cagg_validations.sql
