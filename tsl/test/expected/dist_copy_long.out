@@ -116,6 +116,7 @@ select count(*) from uk_price_paid;
 
 truncate uk_price_paid;
 set timescaledb.max_open_chunks_per_insert = 1117;
+WARNING:  insert cache size is larger than hypertable chunk cache size
 \copy uk_price_paid from program 'zcat < data/prices-100k-random-1.tsv.gz';
 select count(*) from uk_price_paid;
  count  

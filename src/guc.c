@@ -107,6 +107,12 @@ bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = "";
 #endif
 
+/*
+ * We have to understand if we have finished initializing the GUCs, so that we
+ * know when it's OK to check their values for mutual consistency.
+ */
+static bool gucs_are_initialized = false;
+
 /* Hook for plugins to allow additional SSL options */
 set_ssl_options_hook_type ts_set_ssl_options_hook = NULL;
 
@@ -117,11 +123,44 @@ ts_assign_ssl_options_hook(void *fn)
 	ts_set_ssl_options_hook = (set_ssl_options_hook_type) fn;
 }
 
+/*
+ * Warn about the mismatched cache sizes that can lead to cache thrashing.
+ */
+static void
+validate_chunk_cache_sizes(int hypertable_chunks, int insert_chunks)
+{
+	/*
+	 * Note that this callback is also called when the individual GUCs are
+	 * initialized, so we are going to see temporary mismatched values here.
+	 * That's why we also have to check that the GUC initialization have
+	 * finished.
+	 */
+	if (gucs_are_initialized && insert_chunks > hypertable_chunks)
+	{
+		ereport(WARNING,
+				(errmsg("insert cache size is larger than hypertable chunk cache size"),
+				 errdetail("insert cache size is %d, hypertable chunk cache size is %d",
+						   insert_chunks,
+						   hypertable_chunks),
+				 errhint("This is a configuration problem. Either increase "
+						 "timescaledb.max_cached_chunks_per_hypertable (preferred) or decrease "
+						 "timescaledb.max_open_chunks_per_insert.")));
+	}
+}
+
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
 {
 	/* invalidate the hypertable cache to reset */
 	ts_hypertable_cache_invalidate_callback();
+
+	validate_chunk_cache_sizes(newval, ts_guc_max_open_chunks_per_insert);
+}
+
+static void
+assign_max_open_chunks_per_insert_hook(int newval, void *extra)
+{
+	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
 }
 
 void
@@ -453,27 +492,20 @@ _guc_init(void)
 							"Maximum open chunks per insert",
 							"Maximum number of open chunk tables per insert",
 							&ts_guc_max_open_chunks_per_insert,
-							Min(work_mem * INT64CONST(1024) / INT64CONST(25000),
-								PG_INT16_MAX), /* Measurements via
-												* `MemoryContextStats(TopMemoryContext)`
-												* show chunk insert
-												* state memory context
-												* takes up ~25K bytes
-												* (work_mem is in
-												* kbytes) */
+							1024,
 							0,
 							PG_INT16_MAX,
 							PGC_USERSET,
 							0,
 							NULL,
-							NULL,
+							assign_max_open_chunks_per_insert_hook,
 							NULL);
 
 	DefineCustomIntVariable("timescaledb.max_cached_chunks_per_hypertable",
 							"Maximum cached chunks",
 							"Maximum number of chunks stored in the cache",
 							&ts_guc_max_cached_chunks_per_hypertable,
-							100,
+							1024,
 							0,
 							65536,
 							PGC_USERSET,
@@ -591,6 +623,11 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+
+	gucs_are_initialized = true;
+
+	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable,
+							   ts_guc_max_open_chunks_per_insert);
 }
 
 void

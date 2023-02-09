@@ -111,6 +111,7 @@ SELECT * FROM chunk_query_data_node WHERE hypertable_name = 'uk_price_paid' LIMI
 (5 rows)
 
 set timescaledb.max_open_chunks_per_insert = 1117;
+WARNING:  insert cache size is larger than hypertable chunk cache size
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_1', available=>true);
   node_name  |   host    | port  |           database           | available 
