@@ -453,14 +453,7 @@ _guc_init(void)
 							"Maximum open chunks per insert",
 							"Maximum number of open chunk tables per insert",
 							&ts_guc_max_open_chunks_per_insert,
-							Min(work_mem * INT64CONST(1024) / INT64CONST(25000),
-								PG_INT16_MAX), /* Measurements via
-												* `MemoryContextStats(TopMemoryContext)`
-												* show chunk insert
-												* state memory context
-												* takes up ~25K bytes
-												* (work_mem is in
-												* kbytes) */
+							1024,
 							0,
 							PG_INT16_MAX,
 							PGC_USERSET,
@@ -473,7 +466,7 @@ _guc_init(void)
 							"Maximum cached chunks",
 							"Maximum number of chunks stored in the cache",
 							&ts_guc_max_cached_chunks_per_hypertable,
-							100,
+							1024,
 							0,
 							65536,
 							PGC_USERSET,

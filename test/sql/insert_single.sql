@@ -154,6 +154,14 @@ INSERT INTO "nondefault_mem_settings" VALUES
 ('2002-03-20T09:00:00', 31.9),
 ('2003-03-20T09:00:00', 32.9);
 
+--warning about mismatched cache sizes
+SET timescaledb.max_open_chunks_per_insert = 100;
+SET timescaledb.max_cached_chunks_per_hypertable = 10;
+INSERT INTO "nondefault_mem_settings" VALUES
+('2001-05-20T09:00:00', 36.6),
+('2002-05-20T09:00:00', 37.9),
+('2003-05-20T09:00:00', 38.9);
+
 --unlimited
 SET timescaledb.max_open_chunks_per_insert = 0;
 SET timescaledb.max_cached_chunks_per_hypertable = 0;

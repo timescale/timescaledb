@@ -37,6 +37,19 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
 	cd->prev_cis = NULL;
 	cd->prev_cis_oid = InvalidOid;
 
+	/* Warn about mismatched cache sizes that can lead to cache thrashing. */
+	if (ts_guc_max_open_chunks_per_insert > ts_guc_max_cached_chunks_per_hypertable)
+	{
+		ereport(WARNING,
+				errmsg("insert cache size is larger than hypertable chunk cache size"),
+				errdetail("insert cache size is %d, hypertable chunk cache size is %d",
+						  ts_guc_max_open_chunks_per_insert,
+						  ts_guc_max_cached_chunks_per_hypertable),
+				errhint("This is a configuration problem. Either increase "
+						"timescaledb.max_cached_chunks_per_hypertable (preferred) or decrease "
+						"timescaledb.max_open_chunks_per_insert."));
+	}
+
 	return cd;
 }
 
