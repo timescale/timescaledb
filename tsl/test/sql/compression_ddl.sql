@@ -549,3 +549,26 @@ WHERE uc_hypertable.table_name like 'metric' \gset
 
 DROP TABLE metric CASCADE;
 
+-- Creating hypertable
+CREATE TABLE "tEst2" (
+    "Id" uuid NOT NULL,
+    "Time" timestamp with time zone NOT NULL,
+    CONSTRAINT "test2_pkey" PRIMARY KEY ("Id", "Time")
+);
+
+SELECT create_hypertable(
+  '"tEst2"',
+  'Time',
+  chunk_time_interval => INTERVAL '1 day'
+);
+
+alter table "tEst2" set (timescaledb.compress=true, timescaledb.compress_segmentby='"Id"');
+
+CREATE MATERIALIZED VIEW "tEst2_mv"
+WITH (timescaledb.continuous) AS
+SELECT "Id" as "Idd",
+   time_bucket(INTERVAL '1 day', "Time") AS "bUcket"
+FROM public."tEst2"
+GROUP BY "Idd", "bUcket";
+
+ALTER MATERIALIZED VIEW "tEst2_mv" SET (timescaledb.compress = true);

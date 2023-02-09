@@ -43,6 +43,11 @@ SET enable_partitionwise_aggregate = ON;
 -- Print queries to stdout and send to server
 \set OUTPUT_CMD '\\p \\g'
 
+-- For predictable plans
+set enable_hashjoin to off;
+set enable_mergejoin to off;
+set enable_hashagg to off;
+
 ---------------------------------------------------------------------
 -- EXPLAINs without ordering
 ---------------------------------------------------------------------

@@ -45,125 +45,250 @@ select count(*) from show_chunks('metric_dist');
 (1 row)
 
 -- dictionary
-create table metric_name(id int primary key, name text);
+create table metric_name(id int, name text collate "C",
+    constraint metric_name_name unique (name),
+    constraint metric_name_id primary key (id));
 insert into metric_name values (1, 'cpu1'), (3, 'cpu3'),  (7, 'cpu7');
+insert into metric_name select x, 'other' || x
+    from generate_series(1000, 10000) x
+;
 analyze metric_name;
 -- for predictable plans
-set enable_hashjoin to off;
-set enable_mergejoin to off;
 set enable_hashagg to off;
+set enable_material to off;
+set enable_mergejoin to off;
+-- not present on PG 12
+\set ECHO errors
 -- Subquery + IN
 select id, max(value), count(*)
 from metric_dist
 where id in (select id from metric_name where name like 'cpu%')
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 order by id
 ;
  id |       max        | count 
 ----+------------------+-------
-  1 | 49.9941974878311 |   139
-  3 | 49.3596792221069 |   138
-  7 |  49.795538187027 |   146
+  1 | 49.9941974878311 |  4174
+  3 | 49.9958902597427 |  4119
+  7 | 49.9881327152252 |  4316
 (3 rows)
 
 explain (costs off, verbose)
 select id, max(value), count(*)
 from metric_dist
 where id in (select id from metric_name where name like 'cpu%')
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 order by id
 ;
-                                                                                                                                              QUERY PLAN                                                                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                        QUERY PLAN                                                                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value), count(*)
    Group Key: metric_dist.id
-   ->  Nested Loop
+   ->  Sort
          Output: metric_dist.id, metric_dist.value
-         ->  Index Scan using metric_name_pkey on public.metric_name
-               Output: metric_name.id, metric_name.name
-               Filter: (metric_name.name ~~ 'cpu%'::text)
-         ->  Custom Scan (DataNodeScan) on public.metric_dist
+         Sort Key: metric_dist.id
+         ->  Nested Loop
                Output: metric_dist.id, metric_dist.value
-               Data node: data_node_1
-               Chunks: _dist_hyper_1_52_chunk
-               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
-(13 rows)
+               ->  Index Scan using metric_name_name on public.metric_name
+                     Output: metric_name.id, metric_name.name
+                     Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+                     Filter: (metric_name.name ~~ 'cpu%'::text)
+               ->  Custom Scan (DataNodeScan) on public.metric_dist
+                     Output: metric_dist.id, metric_dist.value
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+(17 rows)
 
+-- Check that the GUC to disable these plans works. Our cost model is very
+-- heuristic and may be often wrong, so there needs to be a way to disable them.
+set timescaledb.enable_parameterized_data_node_scan to false;
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ id |       max        | count 
+----+------------------+-------
+  1 | 49.9941974878311 |  4174
+  3 | 49.9958902597427 |  4119
+  7 | 49.9881327152252 |  4316
+(3 rows)
+
+explain (costs off, verbose)
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+                                                                                                                                                         QUERY PLAN                                                                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: metric_dist.id, max(metric_dist.value), count(*)
+   Group Key: metric_dist.id
+   ->  Sort
+         Output: metric_dist.id, metric_dist.value
+         Sort Key: metric_dist.id
+         ->  Hash Join
+               Output: metric_dist.id, metric_dist.value
+               Inner Unique: true
+               Hash Cond: (metric_dist.id = metric_name.id)
+               ->  Custom Scan (DataNodeScan) on public.metric_dist
+                     Output: metric_dist.id, metric_dist.value
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) ORDER BY id ASC NULLS LAST
+               ->  Hash
+                     Output: metric_name.id
+                     ->  Index Scan using metric_name_name on public.metric_name
+                           Output: metric_name.id
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+                           Filter: (metric_name.name ~~ 'cpu%'::text)
+(21 rows)
+
+reset timescaledb.enable_parameterized_data_node_scan;
 -- Shippable EC join
 select name, max(value), count(*)
 from metric_dist join metric_name using (id)
 where name like 'cpu%'
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
  name |       max        | count 
 ------+------------------+-------
- cpu1 | 49.9941974878311 |   139
- cpu3 | 49.3596792221069 |   138
- cpu7 |  49.795538187027 |   146
+ cpu1 | 49.9941974878311 |  4174
+ cpu3 | 49.9958902597427 |  4119
+ cpu7 | 49.9881327152252 |  4316
 (3 rows)
 
 explain (costs off, verbose)
 select name, max(value), count(*)
 from metric_dist join metric_name using (id)
 where name like 'cpu%'
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                     QUERY PLAN                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: metric_name.name, max(metric_dist.value), count(*)
+   Group Key: metric_name.name
+   ->  Nested Loop
+         Output: metric_name.name, metric_dist.value
+         ->  Index Scan using metric_name_name on public.metric_name
+               Output: metric_name.id, metric_name.name
+               Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+               Filter: (metric_name.name ~~ 'cpu%'::text)
+         ->  Custom Scan (DataNodeScan) on public.metric_dist
+               Output: metric_dist.value, metric_dist.id
+               Data node: data_node_1
+               Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+(14 rows)
+
+-- Shipping still might make sense if the local table is outer.
+explain (costs off, verbose)
+select name, max(value), count(*)
+from metric_dist right join metric_name using (id)
+where name like 'cpu%'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by name
+order by name
+;
+                                                                                                                                                     QUERY PLAN                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: metric_name.name, max(metric_dist.value), count(*)
+   Group Key: metric_name.name
+   ->  Nested Loop
+         Output: metric_name.name, metric_dist.value
+         ->  Index Scan using metric_name_name on public.metric_name
+               Output: metric_name.id, metric_name.name
+               Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+               Filter: (metric_name.name ~~ 'cpu%'::text)
+         ->  Custom Scan (DataNodeScan) on public.metric_dist
+               Output: metric_dist.value, metric_dist.id
+               Data node: data_node_1
+               Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+(14 rows)
+
+-- Shipping doesn't make sense if the distributed table is outer.
+explain (costs off, verbose)
+select name, max(value), count(*)
+from metric_dist
+left join (select * from metric_name where name like 'cpu%') t using (id)
+where ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by name
+order by name
+;
+                                                                                                                                            QUERY PLAN                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
    ->  Sort
          Output: metric_name.name, metric_dist.value
-         Sort Key: metric_name.name
-         ->  Nested Loop
+         Sort Key: metric_name.name COLLATE "C"
+         ->  Hash Left Join
                Output: metric_name.name, metric_dist.value
-               ->  Seq Scan on public.metric_name
-                     Output: metric_name.id, metric_name.name
-                     Filter: (metric_name.name ~~ 'cpu%'::text)
+               Inner Unique: true
+               Hash Cond: (metric_dist.id = metric_name.id)
                ->  Custom Scan (DataNodeScan) on public.metric_dist
                      Output: metric_dist.value, metric_dist.id
                      Data node: data_node_1
-                     Chunks: _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
-(16 rows)
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+               ->  Hash
+                     Output: metric_name.name, metric_name.id
+                     ->  Index Scan using metric_name_name on public.metric_name
+                           Output: metric_name.name, metric_name.id
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+                           Filter: (metric_name.name ~~ 'cpu%'::text)
+(21 rows)
 
 -- Non-shippable EC join
 explain (costs off, verbose)
 select name, max(value), count(*)
 from metric_dist join metric_name on name = concat('cpu', metric_dist.id)
-where ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+where metric_name.name like 'cpu%'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                    QUERY PLAN                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                            QUERY PLAN                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
    ->  Sort
          Output: metric_name.name, metric_dist.value
-         Sort Key: metric_name.name
-         ->  Nested Loop
+         Sort Key: metric_name.name COLLATE "C"
+         ->  Hash Join
                Output: metric_name.name, metric_dist.value
-               Join Filter: (concat('cpu', metric_dist.id) = metric_name.name)
+               Inner Unique: true
+               Hash Cond: ((concat('cpu', metric_dist.id))::text = metric_name.name)
                ->  Custom Scan (DataNodeScan) on public.metric_dist
                      Output: metric_dist.value, metric_dist.id
                      Data node: data_node_1
-                     Chunks: _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone))
-               ->  Materialize
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+               ->  Hash
                      Output: metric_name.name
-                     ->  Seq Scan on public.metric_name
+                     ->  Index Only Scan using metric_name_name on public.metric_name
                            Output: metric_name.name
-(18 rows)
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+                           Filter: (metric_name.name ~~ 'cpu%'::text)
+(21 rows)
 
 -- Shippable non-EC join. The weird condition is to only use immutable functions
 -- that can be shipped to the remote node. `id::text` does CoerceViaIO which is
@@ -172,81 +297,80 @@ order by name
 select name, max(value), count(*)
 from metric_dist join metric_name
     on texteq('cpu' || textin(int4out(metric_dist.id)), name)
-where ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+where metric_name.name like 'cpu%'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
  name |       max        | count 
 ------+------------------+-------
- cpu1 | 49.9941974878311 |   139
- cpu3 | 49.3596792221069 |   138
- cpu7 |  49.795538187027 |   146
+ cpu1 | 49.9941974878311 |  4174
+ cpu3 | 49.9958902597427 |  4119
+ cpu7 | 49.9881327152252 |  4316
 (3 rows)
 
 explain (costs off, verbose)
 select name, max(value), count(*)
 from metric_dist join metric_name
     on texteq('cpu' || textin(int4out(metric_dist.id)), name)
-where ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+where metric_name.name like 'cpu%'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                                                   QUERY PLAN                                                                                                                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                       QUERY PLAN                                                                                                                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
-   ->  Sort
+   ->  Nested Loop
          Output: metric_name.name, metric_dist.value
-         Sort Key: metric_name.name
-         ->  Nested Loop
-               Output: metric_name.name, metric_dist.value
-               ->  Seq Scan on public.metric_name
-                     Output: metric_name.id, metric_name.name
-               ->  Custom Scan (DataNodeScan) on public.metric_dist
-                     Output: metric_dist.value, metric_dist.id
-                     Data node: data_node_1
-                     Chunks: _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) AND (texteq(('cpu'::text || textin(int4out(id))), $1::text))
-(15 rows)
+         ->  Index Only Scan using metric_name_name on public.metric_name
+               Output: metric_name.name
+               Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+               Filter: (metric_name.name ~~ 'cpu%'::text)
+         ->  Custom Scan (DataNodeScan) on public.metric_dist
+               Output: metric_dist.value, metric_dist.id
+               Data node: data_node_1
+               Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (texteq(('cpu'::text || textin(int4out(id))), $1::text))
+(14 rows)
 
 -- Non-shippable non-EC join.
 explain (costs off, verbose)
 select name, max(value), count(*)
 from metric_dist join metric_name
     on texteq(concat('cpu', textin(int4out(metric_dist.id))), name)
-where ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+where metric_name.name like 'cpu%'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                    QUERY PLAN                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                         QUERY PLAN                                                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
-   ->  Sort
+   ->  Nested Loop
          Output: metric_name.name, metric_dist.value
-         Sort Key: metric_name.name
-         ->  Nested Loop
-               Output: metric_name.name, metric_dist.value
-               Join Filter: texteq(concat('cpu', textin(int4out(metric_dist.id))), metric_name.name)
-               ->  Custom Scan (DataNodeScan) on public.metric_dist
-                     Output: metric_dist.value, metric_dist.id
-                     Data node: data_node_1
-                     Chunks: _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone))
-               ->  Materialize
-                     Output: metric_name.name
-                     ->  Seq Scan on public.metric_name
-                           Output: metric_name.name
-(18 rows)
+         Join Filter: texteq(concat('cpu', textin(int4out(metric_dist.id))), metric_name.name)
+         ->  Index Only Scan using metric_name_name on public.metric_name
+               Output: metric_name.name
+               Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+               Filter: (metric_name.name ~~ 'cpu%'::text)
+         ->  Custom Scan (DataNodeScan) on public.metric_dist
+               Output: metric_dist.value, metric_dist.id
+               Data node: data_node_1
+               Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+(15 rows)
 
 -- distinct on, order by, limit 1, with subquery
 select distinct on (id)
     id, ts, value
 from metric_dist
 where id in (select id from metric_name where name like 'cpu%')
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 order by id, ts, value
 limit 1
 ;
@@ -260,30 +384,30 @@ select distinct on (id)
     id, ts, value
 from metric_dist
 where id in (select id from metric_name where name like 'cpu%')
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 order by id, ts, value
 limit 1
 ;
-                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                             QUERY PLAN                                                                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: metric_dist.id, metric_dist.ts, metric_dist.value
    ->  Unique
          Output: metric_dist.id, metric_dist.ts, metric_dist.value
-         ->  Nested Loop
+         ->  Sort
                Output: metric_dist.id, metric_dist.ts, metric_dist.value
-               Inner Unique: true
-               Join Filter: (metric_dist.id = metric_name.id)
-               ->  Custom Scan (DataNodeScan) on public.metric_dist
+               Sort Key: metric_dist.id, metric_dist.ts, metric_dist.value
+               ->  Nested Loop
                      Output: metric_dist.id, metric_dist.ts, metric_dist.value
-                     Data node: data_node_1
-                     Chunks: _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT DISTINCT ON (id) ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) ORDER BY id ASC NULLS LAST, ts ASC NULLS LAST, value ASC NULLS LAST
-               ->  Materialize
-                     Output: metric_name.id
-                     ->  Seq Scan on public.metric_name
-                           Output: metric_name.id
+                     ->  Index Scan using metric_name_name on public.metric_name
+                           Output: metric_name.id, metric_name.name
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
                            Filter: (metric_name.name ~~ 'cpu%'::text)
+                     ->  Custom Scan (DataNodeScan) on public.metric_dist
+                           Output: metric_dist.id, metric_dist.ts, metric_dist.value
+                           Data node: data_node_1
+                           Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (18 rows)
 
 -- distinct on, order by, limit 1, with explicit join
@@ -291,7 +415,7 @@ select distinct on (name)
     name, ts, value
 from metric_dist join metric_name using (id)
 where name like 'cpu%'
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 order by name, ts, value
 limit 1
 ;
@@ -305,68 +429,66 @@ select distinct on (name)
     name, ts, value
 from metric_dist join metric_name using (id)
 where name like 'cpu%'
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 order by name, ts, value
 limit 1
 ;
-                                                                                                                                                      QUERY PLAN                                                                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                             QUERY PLAN                                                                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: metric_name.name, metric_dist.ts, metric_dist.value
    ->  Unique
          Output: metric_name.name, metric_dist.ts, metric_dist.value
          ->  Sort
                Output: metric_name.name, metric_dist.ts, metric_dist.value
-               Sort Key: metric_name.name, metric_dist.ts, metric_dist.value
+               Sort Key: metric_name.name COLLATE "C", metric_dist.ts, metric_dist.value
                ->  Nested Loop
                      Output: metric_name.name, metric_dist.ts, metric_dist.value
-                     ->  Seq Scan on public.metric_name
+                     ->  Index Scan using metric_name_name on public.metric_name
                            Output: metric_name.id, metric_name.name
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
                            Filter: (metric_name.name ~~ 'cpu%'::text)
                      ->  Custom Scan (DataNodeScan) on public.metric_dist
                            Output: metric_dist.ts, metric_dist.value, metric_dist.id
                            Data node: data_node_1
-                           Chunks: _dist_hyper_1_52_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
-(17 rows)
+                           Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+(18 rows)
 
--- If the local table is very big, the parameterized nested loop might download
--- the entire dist table or even more than that (in case of not equi-join).
+-- If there are a lot of rows chosen from the local table, the parameterized
+-- nested loop might download the entire dist table or even more than that (in
+-- case of not equi-join or duplicate join keys).
 -- Check that the parameterized plan is not chosen in this case.
-create table metric_name_big as select * from metric_name;
-insert into metric_name_big select x, 'other' || x
-    from generate_series(1000, 10000) x
-;
-analyze metric_name_big;
 explain (costs off, verbose)
 select name, max(value), count(*)
 from metric_dist
-join metric_name_big using (id)
-where ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+join metric_name using (id)
+where ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                       QUERY PLAN                                                                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                            QUERY PLAN                                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
-   Output: metric_name_big.name, max(metric_dist.value), count(*)
-   Group Key: metric_name_big.name
+   Output: metric_name.name, max(metric_dist.value), count(*)
+   Group Key: metric_name.name
    ->  Sort
-         Output: metric_name_big.name, metric_dist.value
-         Sort Key: metric_name_big.name
-         ->  Nested Loop
-               Output: metric_name_big.name, metric_dist.value
-               Join Filter: (metric_dist.id = metric_name_big.id)
-               ->  Seq Scan on public.metric_name_big
-                     Output: metric_name_big.id, metric_name_big.name
-               ->  Materialize
+         Output: metric_name.name, metric_dist.value
+         Sort Key: metric_name.name COLLATE "C"
+         ->  Hash Join
+               Output: metric_name.name, metric_dist.value
+               Inner Unique: true
+               Hash Cond: (metric_dist.id = metric_name.id)
+               ->  Custom Scan (DataNodeScan) on public.metric_dist
                      Output: metric_dist.value, metric_dist.id
-                     ->  Custom Scan (DataNodeScan) on public.metric_dist
-                           Output: metric_dist.value, metric_dist.id
-                           Data node: data_node_1
-                           Chunks: _dist_hyper_1_52_chunk
-                           Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone))
-(18 rows)
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+               ->  Hash
+                     Output: metric_name.name, metric_name.id
+                     ->  Seq Scan on public.metric_name
+                           Output: metric_name.name, metric_name.id
+(19 rows)
 
 -- An interesting special case is when the remote SQL has a parameter, but it is
 -- the result of an initplan. It's not "parameterized" in the join sense, because
@@ -376,27 +498,28 @@ explain (costs off, verbose)
 select id, max(value)
 from metric_dist
 where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 order by id
 ;
-                                                                                                                                                            QUERY PLAN                                                                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                    QUERY PLAN                                                                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value)
    Group Key: metric_dist.id
    InitPlan 1 (returns $0)
      ->  Aggregate
            Output: array_agg(metric_name.id)
-           ->  Seq Scan on public.metric_name
+           ->  Index Scan using metric_name_name on public.metric_name
                  Output: metric_name.id, metric_name.name
+                 Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
                  Filter: (metric_name.name ~~ 'cpu%'::text)
    ->  Custom Scan (DataNodeScan) on public.metric_dist
          Output: metric_dist.id, metric_dist.value
          Data node: data_node_1
-         Chunks: _dist_hyper_1_52_chunk
-         Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) AND ((id = ANY ($1::integer[]))) ORDER BY id ASC NULLS LAST
-(14 rows)
+         Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+         Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND ((id = ANY ($1::integer[]))) ORDER BY id ASC NULLS LAST
+(15 rows)
 
 -- Multiple joins. Test both EC and non-EC (texteq) join in one query.
 create table metric_location(id int, location text);
@@ -405,7 +528,7 @@ analyze metric_location;
 select id, max(value)
 from metric_dist natural join metric_location natural join metric_name
 where name like 'cpu%' and texteq(location, 'Yerevan')
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 ;
  id |       max        
@@ -417,11 +540,11 @@ explain (costs off, verbose)
 select id, max(value)
 from metric_dist natural join metric_location natural join metric_name
 where name like 'cpu%' and texteq(location, 'Yerevan')
-    and ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 ;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                        QUERY PLAN                                                                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value)
    Group Key: metric_dist.id
@@ -437,21 +560,22 @@ group by id
                      ->  Seq Scan on public.metric_location
                            Output: metric_location.id, metric_location.location
                            Filter: texteq(metric_location.location, 'Yerevan'::text)
-                     ->  Seq Scan on public.metric_name
+                     ->  Index Scan using metric_name_name on public.metric_name
                            Output: metric_name.id, metric_name.name
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
                            Filter: (metric_name.name ~~ 'cpu%'::text)
                ->  Custom Scan (DataNodeScan) on public.metric_dist
                      Output: metric_dist.id, metric_dist.value
                      Data node: data_node_1
-                     Chunks: _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-02-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
-(23 rows)
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+(24 rows)
 
 -- Multiple joins on different variables. Use a table instead of a CTE for saner
 -- stats.
 create table max_value_times as
 select distinct on (id) id, ts from metric_dist
-where ts between '2022-02-02 02:02:02+03' and '2022-02-03 02:02:02+03'
+where ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 order by id, value desc
 ;
 analyze max_value_times;
@@ -461,24 +585,73 @@ from metric_dist natural join max_value_times natural join metric_name
 where name like 'cpu%'
 order by 1
 ;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
    Output: metric_dist.id, metric_dist.value
+   Sort Key: metric_dist.id
    ->  Nested Loop
-         Output: max_value_times.ts, max_value_times.id, metric_name.id
-         Join Filter: (max_value_times.id = metric_name.id)
-         ->  Index Scan using metric_name_pkey on public.metric_name
-               Output: metric_name.id, metric_name.name
-               Filter: (metric_name.name ~~ 'cpu%'::text)
-         ->  Materialize
-               Output: max_value_times.ts, max_value_times.id
+         Output: metric_dist.id, metric_dist.value
+         ->  Hash Join
+               Output: max_value_times.ts, max_value_times.id, metric_name.id
+               Inner Unique: true
+               Hash Cond: (max_value_times.id = metric_name.id)
                ->  Seq Scan on public.max_value_times
-                     Output: max_value_times.ts, max_value_times.id
-   ->  Custom Scan (DataNodeScan) on public.metric_dist
-         Output: metric_dist.id, metric_dist.value, metric_dist.ts
-         Data node: data_node_1
-         Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
-         Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::timestamp with time zone = ts)) AND (($2::integer = id))
-(17 rows)
+                     Output: max_value_times.id, max_value_times.ts
+               ->  Hash
+                     Output: metric_name.id
+                     ->  Index Scan using metric_name_name on public.metric_name
+                           Output: metric_name.id
+                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+                           Filter: (metric_name.name ~~ 'cpu%'::text)
+         ->  Custom Scan (DataNodeScan) on public.metric_dist
+               Output: metric_dist.id, metric_dist.value, metric_dist.ts
+               Data node: data_node_1
+               Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
+               Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::timestamp with time zone = ts)) AND (($2::integer = id))
+(22 rows)
+
+-- Two distributed hypertables, each joined to reference and all joined together.
+-- The query finds the percentage of time points where one metric is higher than
+-- another, and also tweaked not to use initplans.Requires hash join.
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) filter (where m1.value > m2.value) / count(*)
+from metric_dist m1
+join metric_dist m2 using (ts)
+where m1.id in (select id from metric_name where name = 'cpu1')
+    and m2.id in (select id from metric_name where name = 'cpu3')
+;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: (count(*) FILTER (WHERE (m1.value > m2.value)) / count(*))
+   ->  Hash Join (actual rows=91 loops=1)
+         Output: m1.value, m2.value
+         Hash Cond: (m1.ts = m2.ts)
+         ->  Nested Loop (actual rows=50037 loops=1)
+               Output: m1.value, m1.ts
+               ->  Index Scan using metric_name_name on public.metric_name (actual rows=1 loops=1)
+                     Output: metric_name.id, metric_name.name
+                     Index Cond: (metric_name.name = 'cpu1'::text)
+               ->  Custom Scan (DataNodeScan) on public.metric_dist m1 (actual rows=50037 loops=1)
+                     Output: m1.value, m1.ts, m1.id
+                     Data node: data_node_1
+                     Fetcher Type: Cursor
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
+                     Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::integer = id))
+         ->  Hash (actual rows=50101 loops=1)
+               Output: m2.value, m2.ts
+               Buckets: 65536 (originally 1024)  Batches: 1 (originally 1) 
+               ->  Nested Loop (actual rows=50101 loops=1)
+                     Output: m2.value, m2.ts
+                     ->  Index Scan using metric_name_name on public.metric_name metric_name_1 (actual rows=1 loops=1)
+                           Output: metric_name_1.id, metric_name_1.name
+                           Index Cond: (metric_name_1.name = 'cpu3'::text)
+                     ->  Custom Scan (DataNodeScan) on public.metric_dist m2 (actual rows=50101 loops=1)
+                           Output: m2.value, m2.ts, m2.id
+                           Data node: data_node_1
+                           Fetcher Type: Cursor
+                           Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
+                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::integer = id))
+(30 rows)
 
