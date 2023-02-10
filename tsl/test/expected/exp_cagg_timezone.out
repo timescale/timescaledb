@@ -818,6 +818,7 @@ ORDER BY month;
 
 -- Check compatibility with compressed distributed hypertables
 ALTER MATERIALIZED VIEW conditions_dist_1m_manual SET ( timescaledb.compress );
+NOTICE:  defaulting compress_orderby to bucket
 SELECT compress_chunk(ch)
 FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
               compress_chunk               

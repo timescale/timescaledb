@@ -22,6 +22,7 @@ typedef struct WithClauseDefinition
 
 typedef struct WithClauseResult
 {
+	const WithClauseDefinition *definition;
 	bool is_default;
 	Datum parsed;
 } WithClauseResult;
@@ -31,4 +32,6 @@ extern TSDLLEXPORT void ts_with_clause_filter(const List *def_elems, List **with
 
 extern TSDLLEXPORT WithClauseResult *
 ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, Size nargs);
+
+extern TSDLLEXPORT char *ts_with_clause_result_deparse_value(const WithClauseResult *result);
 #endif /* TIMESCALEDB_WITH_CLAUSE_PARSER_H */

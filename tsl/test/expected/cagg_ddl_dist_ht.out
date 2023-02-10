@@ -1689,6 +1689,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
+psql:include/cagg_ddl_common.sql:1141: NOTICE:  defaulting compress_orderby to time_bucket
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1706,6 +1707,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
+psql:include/cagg_ddl_common.sql:1149: NOTICE:  defaulting compress_orderby to time_bucket
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1772,6 +1774,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
+psql:include/cagg_ddl_common.sql:1185: NOTICE:  defaulting compress_orderby to time_bucket
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1789,6 +1792,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
+psql:include/cagg_ddl_common.sql:1193: NOTICE:  defaulting compress_orderby to time_bucket
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
