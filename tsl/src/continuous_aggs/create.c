@@ -1151,11 +1151,10 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 				bucket_info.interval->day = bucket_info.interval->month * DAYS_PER_MONTH;
 				bucket_info.interval->month = 0;
 			}
-			Datum epoch = DirectFunctionCall2(interval_part,
-											  PointerGetDatum(cstring_to_text("epoch")),
-											  IntervalPGetDatum(bucket_info.interval));
-			/* Cast float8 to int8. */
-			width = DatumGetInt64(DirectFunctionCall1(dtoi8, epoch));
+
+			/* Convert Interval to int64 */
+			width =
+				ts_interval_value_to_internal(IntervalPGetDatum(bucket_info.interval), INTERVALOID);
 			break;
 		}
 		default:
