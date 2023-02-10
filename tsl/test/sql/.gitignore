@@ -11,6 +11,7 @@
 /dist_query-*.sql
 /dist_hypertable-*.sql
 /dist_partial_agg-*.sql
+/dist_ref_table_join-*.sql
 /hypertable_distributed-*.sql
 /jit-*.sql
 /modify_exclusion-*.sql
