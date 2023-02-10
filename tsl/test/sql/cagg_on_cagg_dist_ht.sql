@@ -286,6 +286,33 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
 \ir include/cagg_on_cagg_validations.sql
 
+-- bug report 5277
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
+
+-- epoch plus cast to int would compute a bucket width of 0 for parent
+\set BUCKET_WIDTH_1ST 'INTERVAL \'146 ms\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 ms\''
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_WIDTH_1ST 'INTERVAL \'9344 ms\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'74752 ms\''
+\ir include/cagg_on_cagg_validations.sql
+
+\set BUCKET_WIDTH_1ST 'INTERVAL \'74752 ms\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'598016 ms\''
+\ir include/cagg_on_cagg_validations.sql
+
+-- test microseconds - should pass
+\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 usec\''
+\ir include/cagg_on_cagg_validations.sql
+
+-- test microseconds - SHOULD FAIL
+\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1160 usec\''
+\ir include/cagg_on_cagg_validations.sql
+
 -- Cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DATA_NODE_1;
