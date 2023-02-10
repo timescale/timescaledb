@@ -1,6 +1,12 @@
-ignore: "test/src"
+# If it says that commit YAML is invalid again,
+# validate it with:
+# curl --data-binary @.codecov.yml https://codecov.io/validate
+# More docs: https://docs.codecov.com/docs/codecov-yaml#repository-yaml
+ignore:
+  - "test/src"
 coverage:
   status:
     project:
       default:
-        flags: pr
+        flags:
+          - pr
