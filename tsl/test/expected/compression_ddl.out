@@ -1272,8 +1272,7 @@ Indexes:
 Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._compressed_hypertable_23 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
 
-DROP TABLE metric CASCADE;
--- Creating hypertable
+-- #5290 Compression can't be enabled on caggs
 CREATE TABLE "tEst2" (
     "Id" uuid NOT NULL,
     "Time" timestamp with time zone NOT NULL,
@@ -1298,3 +1297,43 @@ FROM public."tEst2"
 GROUP BY "Idd", "bUcket";
 NOTICE:  continuous aggregate "tEst2_mv" is already up-to-date
 ALTER MATERIALIZED VIEW "tEst2_mv" SET (timescaledb.compress = true);
+NOTICE:  defaulting compress_segmentby to "Idd"
+NOTICE:  defaulting compress_orderby to "bUcket"
+-- #5161 segmentby param
+CREATE MATERIALIZED VIEW test1_cont_view2
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true
+      )
+AS SELECT time_bucket('1 hour', "Time") as t, SUM(intcol) as sum,txtcol as "iDeA"
+   FROM test1
+   GROUP BY 1,txtcol WITH NO DATA;
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true,
+  timescaledb.compress_segmentby = 'invalid_column'
+);
+NOTICE:  defaulting compress_orderby to t
+ERROR:  column "invalid_column" does not exist
+\set ON_ERROR_STOP 1
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true
+);
+NOTICE:  defaulting compress_segmentby to "iDeA"
+NOTICE:  defaulting compress_orderby to t
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true,
+  timescaledb.compress_segmentby = '"iDeA"'
+);
+NOTICE:  defaulting compress_orderby to t
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true,
+  timescaledb.compress_orderby = '"iDeA"'
+);
+NOTICE:  defaulting compress_segmentby to "iDeA"
+ERROR:  cannot use column "iDeA" for both ordering and segmenting
+\set ON_ERROR_STOP 1
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = false
+);
+DROP TABLE metric CASCADE;

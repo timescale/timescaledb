@@ -48,6 +48,10 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionMaterializedOnly,
 	ContinuousViewOptionCompress,
 	ContinuousViewOptionFinalized,
+	ContinuousViewOptionCompressSegmentBy,
+	ContinuousViewOptionCompressOrderBy,
+	ContinuousViewOptionCompressChunkTimeInterval,
+	ContinuousViewOptionMax
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType
@@ -59,6 +63,9 @@ typedef enum ContinuousAggViewType
 } ContinuousAggViewType;
 
 extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const List *defelems);
+
+extern TSDLLEXPORT List *
+ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses);
 
 #define BUCKET_WIDTH_VARIABLE (-1)
 

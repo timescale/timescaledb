@@ -194,28 +194,37 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 	return defelems;
 }
 
-/* enable/disable compression on continuous aggregate */
+/* forwards compression related changes via an alter statement to the underlying HT */
 static void
-cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, bool compress_enable)
+cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems)
 {
-	List *defelems = NIL;
 	Assert(mat_ht != NULL);
-	if (compress_enable)
-		defelems = cagg_get_compression_params(agg, mat_ht);
+	WithClauseResult *with_clause_options =
+		ts_compress_hypertable_set_clause_parse(compress_defelems);
 
-	DefElem *enable = makeDefElemExtended("timescaledb",
-										  "compress",
-										  compress_enable ? (Node *) makeString("true") :
-															(Node *) makeString("false"),
-										  DEFELEM_UNSPEC,
-										  -1);
-	defelems = lappend(defelems, enable);
+	if (with_clause_options[CompressEnabled].parsed)
+	{
+		List *default_compress_defelems = cagg_get_compression_params(agg, mat_ht);
+		WithClauseResult *default_with_clause_options =
+			ts_compress_hypertable_set_clause_parse(default_compress_defelems);
+		/* Merge defaults if there's any. */
+		for (int i = 0; i < CompressOptionMax; i++)
+		{
+			if (with_clause_options[i].is_default && !default_with_clause_options[i].is_default)
+			{
+				with_clause_options[i] = default_with_clause_options[i];
+				elog(NOTICE,
+					 "defaulting %s to %s",
+					 with_clause_options[i].definition->arg_name,
+					 ts_with_clause_result_deparse_value(&with_clause_options[i]));
+			}
+		}
+	}
 
-	WithClauseResult *with_clause_options = ts_compress_hypertable_set_clause_parse(defelems);
 	AlterTableCmd alter_cmd = {
 		.type = T_AlterTableCmd,
 		.subtype = AT_SetRelOptions,
-		.def = (Node *) defelems,
+		.def = (Node *) compress_defelems,
 	};
 
 	tsl_process_compress_table(&alter_cmd, mat_ht, with_clause_options);
@@ -249,16 +258,16 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
 	}
-	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
+	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
+
+	if (list_length(compression_options) > 0)
 	{
-		bool compress_enable =
-			DatumGetBool(with_clause_options[ContinuousViewOptionCompress].parsed);
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
 		Assert(mat_ht != NULL);
 
-		cagg_alter_compression(agg, mat_ht, compress_enable);
+		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(hcache);
 	}
 	if (!with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default)

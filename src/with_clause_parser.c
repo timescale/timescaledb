@@ -15,6 +15,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include "debug_assert.h"
 #include "with_clause_parser.h"
 
 #define TIMESCALEDB_NAMESPACE "timescaledb"
@@ -76,6 +77,7 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 
 	for (i = 0; i < nargs; i++)
 	{
+		results[i].definition = &args[i];
 		results[i].parsed = args[i].default_val;
 		results[i].is_default = true;
 	}
@@ -111,6 +113,22 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 	}
 
 	return results;
+}
+
+extern TSDLLEXPORT char *
+ts_with_clause_result_deparse_value(const WithClauseResult *result)
+{
+	Oid oid = result->definition->type_id;
+	Ensure(OidIsValid(oid), "argument \"%d\" has invalid OID", oid);
+
+	Oid in_fn;
+	bool typIsVarlena pg_attribute_unused();
+
+	getTypeOutputInfo(oid, &in_fn, &typIsVarlena);
+	Ensure(OidIsValid(in_fn), "no output function for type with OID %d", oid);
+
+	char *val = OidOutputFunctionCall(in_fn, result->parsed);
+	return val;
 }
 
 static Datum

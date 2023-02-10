@@ -48,6 +48,8 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 \set VERBOSITY default
 -- Test 1 step policy for integer type buckets
 ALTER materialized view mat_m1 set (timescaledb.compress = true);
+NOTICE:  defaulting compress_segmentby to a
+NOTICE:  defaulting compress_orderby to time_partition_col
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
 ERROR:  policy refresh window too small
@@ -282,6 +284,7 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 \set VERBOSITY default
 -- Test 1 step policy for timestamp type buckets
 ALTER materialized view max_mat_view_date set (timescaledb.compress = true);
+NOTICE:  defaulting compress_orderby to time_bucket
 -- Only works for cagg
 SELECT timescaledb_experimental.add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
@@ -760,6 +763,7 @@ GROUP BY 1 WITH NO DATA;
 \set VERBOSITY default
 -- Test 1 step policy for smallint type buckets
 ALTER materialized view mat_smallint set (timescaledb.compress = true);
+NOTICE:  defaulting compress_orderby to a
 -- All policies are added in one step
 SELECT timescaledb_experimental.add_policies('mat_smallint', refresh_start_offset => 10::smallint, refresh_end_offset => 1::smallint, compress_after => 11::smallint, drop_after => 20::smallint);
  add_policies 
@@ -962,6 +966,7 @@ FROM bigint_tab
 GROUP BY 1 WITH NO DATA;
 -- Test 1 step policy for bigint type buckets
 ALTER materialized view mat_bigint set (timescaledb.compress = true);
+NOTICE:  defaulting compress_orderby to a
 -- All policies are added in one step
 SELECT timescaledb_experimental.add_policies('mat_bigint', refresh_start_offset => 10::bigint, refresh_end_offset => 1::bigint, compress_after => 11::bigint, drop_after => 20::bigint);
  add_policies 
@@ -1032,7 +1037,9 @@ SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 (1 row)
 
 ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to a
 ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to a
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('mat_smallint', 0::smallint);
 ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_smallint
@@ -1105,6 +1112,8 @@ SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  compression not enabled on continuous aggregate "metrics_cagg"
 \set ON_ERROR_STOP 1
 ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
+NOTICE:  defaulting compress_segmentby to device_id
+NOTICE:  defaulting compress_orderby to dayb
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
  COMP_JOB 
 ----------
