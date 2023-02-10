@@ -29,6 +29,7 @@ We recommend that you upgrade at the next available opportunity.
 * #5367 Fix column name handling in old-style continuous aggregates
 * #5378 Fix multinode DML HA performance regression
 * #5384 Fix Hierarchical Continuous Aggregates chunk_interval_size
+* #5304 Fix sub-second intervals in hierarchical caggs
 
 **Thanks**
 * @justinozavala for reporting an issue with PL/Python procedures in the background worker
