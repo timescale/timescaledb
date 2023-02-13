@@ -644,6 +644,7 @@ add_custom_target(licensecheck
 if(CODECOVERAGE)
   add_subdirectory(codecov)
 endif()
+
 if(IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)
   configure_file(${PROJECT_SOURCE_DIR}/scripts/githooks/commit_msg.py
                  ${PROJECT_SOURCE_DIR}/.git/hooks/commit-msg COPYONLY)
