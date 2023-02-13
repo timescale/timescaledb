@@ -674,7 +674,7 @@ QUERY PLAN
          ->  Gather Merge (actual rows=10 loops=1)
                Workers Planned: 1
                Workers Launched: 1
-               ->  Sort (actual rows=304 loops=2)
+               ->  Sort (actual rows=5 loops=2)
                      Sort Key: m1."time", m1.device_id
                      Sort Method: quicksort 
                      Worker 0:  Sort Method: quicksort 
@@ -705,7 +705,7 @@ QUERY PLAN
                ->  Gather Merge (actual rows=10 loops=1)
                      Workers Planned: 1
                      Workers Launched: 1
-                     ->  Sort (actual rows=304 loops=2)
+                     ->  Sort (actual rows=5 loops=2)
                            Sort Key: m1."time", m1.device_id
                            Sort Method: quicksort 
                            Worker 0:  Sort Method: quicksort 

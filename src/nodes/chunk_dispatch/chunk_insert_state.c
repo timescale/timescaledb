@@ -32,6 +32,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "chunk_index.h"
 #include "indexing.h"
+#include <utils/inval.h>
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -727,6 +728,8 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		ts_chunk_set_partial(chunk);
+		/* changed chunk status, so invalidate any plans involving this chunk */
+		CacheInvalidateRelcacheByRelid(chunk_relid);
 	}
 
 	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)

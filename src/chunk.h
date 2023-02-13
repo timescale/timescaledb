@@ -266,4 +266,48 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *m
 		Assert((chunk)->relkind == RELKIND_RELATION || (chunk)->relkind == RELKIND_FOREIGN_TABLE); \
 	} while (0)
 
+/*
+ * The chunk status field values are persisted in the database and must never be changed.
+ * Those values are used as flags and must always be powers of 2 to allow bitwise operations.
+ * When adding new status values we must make sure to add special handling for these values
+ * to the downgrade script as previous versions will not know how to deal with those.
+ */
+#define CHUNK_STATUS_DEFAULT 0
+/*
+ * Setting a Data-Node chunk as CHUNK_STATUS_COMPRESSED means that the corresponding
+ * compressed_chunk_id field points to a chunk that holds the compressed data. Otherwise,
+ * the corresponding compressed_chunk_id is NULL.
+ *
+ * However, for Access-Nodes compressed_chunk_id is always NULL. CHUNK_STATUS_COMPRESSED being set
+ * means that a remote compress_chunk() operation has taken place for this distributed
+ * meta-chunk. On the other hand, if CHUNK_STATUS_COMPRESSED is cleared, then it is probable
+ * that a remote compress_chunk() has not taken place, but not certain.
+ *
+ * For the above reason, this flag should not be assumed to be consistent (when it is cleared)
+ * for Access-Nodes. When used in distributed hypertables one should take advantage of the
+ * idempotent properties of remote compress_chunk() and distributed compression policy to
+ * make progress.
+ */
+#define CHUNK_STATUS_COMPRESSED 1
+/*
+ * When inserting into a compressed chunk the configured compress_orderby is not retained.
+ * Any such chunks need an explicit Sort step to produce ordered output until the chunk
+ * ordering has been restored by recompress_chunk. This flag can only exist on compressed
+ * chunks.
+ */
+#define CHUNK_STATUS_COMPRESSED_UNORDERED 2
+/*
+ * A chunk is in frozen state (i.e no inserts/updates/deletes into this chunk are
+ * permitted. Other chunk level operations like dropping chunk etc. are also blocked.
+ *
+ */
+#define CHUNK_STATUS_FROZEN 4
+/*
+ * A chunk is in this state when it is compressed but also has uncompressed tuples
+ * in the uncompressed chunk.
+ */
+#define CHUNK_STATUS_COMPRESSED_PARTIAL 8
+
+extern TSDLLEXPORT bool ts_chunk_clear_status(Chunk *chunk, int32 status);
+
 #endif /* TIMESCALEDB_CHUNK_H */
