@@ -1239,8 +1239,8 @@ WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
                relname               
 -------------------------------------
- _hyper_18_105_chunk
- _hyper_18_105_chunk_test2_timec_idx
+ _hyper_18_104_chunk
+ _hyper_18_104_chunk_test2_timec_idx
  test2
 (3 rows)
 
@@ -1251,7 +1251,7 @@ SELECT decompress_chunk(ch) INTO decompressed_chunks FROM show_chunks('test2') c
 SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_18_105_chunk
+ _timescaledb_internal._hyper_18_104_chunk
 (1 row)
 
 -- the chunk, compressed chunk + index + toast tables are in tablespace2 now .
@@ -1267,7 +1267,7 @@ WHERE reltablespace in
 (1 row)
 
 DROP TABLE test2 CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_19_107_chunk
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_19_106_chunk
 DROP TABLESPACE tablespace2;
 -- Create a table with a compressed table and then delete the
 -- compressed table and see that the drop of the hypertable does not

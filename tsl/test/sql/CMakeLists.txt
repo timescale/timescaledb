@@ -99,7 +99,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql
-    fixed_schedules.sql)
+    fixed_schedules.sql
+    recompress_chunk_segmentwise.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))

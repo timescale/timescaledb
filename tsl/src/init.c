@@ -237,6 +237,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 	.health_check = ts_dist_health_check,
 	.mn_get_foreign_join_paths = tsl_mn_get_foreign_join_paths,
+	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
+	.get_compressed_chunk_index_for_recompression =
+		tsl_get_compressed_chunk_index_for_recompression,
 };
 
 static void

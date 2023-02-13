@@ -9,6 +9,20 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
+#include <utils/sortsupport.h>
+
+typedef struct SegmentMetaMinMaxBuilder
+{
+	Oid type_oid;
+	bool empty;
+	bool has_null;
+
+	SortSupportData ssup;
+	bool type_by_val;
+	int16 type_len;
+	Datum min;
+	Datum max;
+} SegmentMetaMinMaxBuilder;
 
 typedef struct SegmentMetaMinMaxBuilder SegmentMetaMinMaxBuilder;
 
