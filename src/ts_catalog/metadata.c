@@ -156,8 +156,13 @@ ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid type,
 	}
 
 	/* We have to copy the key here because heap_form_tuple will copy NAMEDATALEN
-	 * into the tuple instead of checking length. */
-	strlcpy(key_data, metadata_key, NAMEDATALEN);
+	 * into the tuple instead of checking length.
+	 * We use strncpy to fill the rest of buffer with zeroes to avoid junk
+	 * and then manually set the last symbol to 0, akin to namestrcpy;
+	 */
+	
+	strncpy(key_data, metadata_key, NAMEDATALEN);
+	key_data[NAMEDATALEN - 1] = '\0';
 
 	/* Insert into the catalog table for persistence */
 	values[AttrNumberGetAttrOffset(Anum_metadata_key)] = CStringGetDatum(key_data);
