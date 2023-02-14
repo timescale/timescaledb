@@ -80,8 +80,8 @@ bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
-int ts_guc_max_open_chunks_per_insert; /* default is computed at runtime */
-int ts_guc_max_cached_chunks_per_hypertable = 100;
+int ts_guc_max_open_chunks_per_insert = 1024;
+int ts_guc_max_cached_chunks_per_hypertable = 1024;
 #ifdef USE_TELEMETRY
 TelemetryLevel ts_guc_telemetry_level = TELEMETRY_DEFAULT;
 char *ts_telemetry_cloud = NULL;
