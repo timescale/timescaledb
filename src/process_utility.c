@@ -1505,7 +1505,8 @@ process_relations_in_namespace(GrantStmt *stmt, Name schema_name, Oid namespaceI
 
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
-		Name relname = &((Form_pg_class) GETSTRUCT(tuple))->relname;
+		Name relname = palloc(NAMEDATALEN);
+		namestrcpy(relname, NameStr(((Form_pg_class) GETSTRUCT(tuple))->relname));
 
 		/* these are being added for the first time into this list */
 		process_grant_add_by_name(stmt, false, schema_name, relname);
