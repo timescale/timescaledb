@@ -141,7 +141,7 @@ ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid type,
 	bool isnull = false;
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
-	char key_data[NAMEDATALEN];
+	NameData key_data;
 
 	rel = table_open(catalog_get_table_id(catalog, METADATA), ShareRowExclusiveLock);
 
@@ -157,10 +157,10 @@ ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid type,
 
 	/* We have to copy the key here because heap_form_tuple will copy NAMEDATALEN
 	 * into the tuple instead of checking length. */
-	strlcpy(key_data, metadata_key, NAMEDATALEN);
+	namestrcpy(&key_data, metadata_key);
 
 	/* Insert into the catalog table for persistence */
-	values[AttrNumberGetAttrOffset(Anum_metadata_key)] = CStringGetDatum(key_data);
+	values[AttrNumberGetAttrOffset(Anum_metadata_key)] = NameGetDatum(&key_data);
 	values[AttrNumberGetAttrOffset(Anum_metadata_value)] =
 		convert_type_to_text(metadata_value, type);
 	values[AttrNumberGetAttrOffset(Anum_metadata_include_in_telemetry)] =
