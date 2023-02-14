@@ -1214,11 +1214,27 @@ dist_ddl_start(ProcessUtilityArgs *args)
 			dist_ddl_execute(true);
 			break;
 		case DIST_DDL_EXEC_ON_START_NO_2PC:
-			dist_ddl_execute(false);
-			/* Import distributed hypertable stats after executing
-			 * ANALYZE command. */
+			/*
+			 * if it's an ANALYZE stmt then don't execute it on DNs,
+			 * only fetch the stats. This assumes that autovacuum/autoanalyze
+			 * will do its job properly on each DN. If we invoke ANALYZE
+			 * on each DN then it will cause a lot of unwanted I/O if a lot
+			 * of chunks are present and can unsettle the kernel cache in terms
+			 * of actual queries related buffers.
+			 *
+			 * if VACUUM is invoked, then do run it on DNs
+			 */
 			if (IsA(args->parsetree, VacuumStmt))
+			{
+				VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
+
+				if (get_vacuum_options(stmt) & VACOPT_VACUUM)
+					dist_ddl_execute(false);
 				dist_ddl_get_analyze_stats(args);
+				dist_ddl_state_reset();
+			}
+			else
+				dist_ddl_execute(false);
 			break;
 		case DIST_DDL_EXEC_ON_END:
 		case DIST_DDL_EXEC_NONE:
