@@ -1378,7 +1378,7 @@ typedef struct CatalogTableInfo
 
 typedef struct CatalogDatabaseInfo
 {
-	char database_name[NAMEDATALEN];
+	NameData database_name;
 	Oid database_id;
 	Oid schema_id;
 	Oid owner_uid;

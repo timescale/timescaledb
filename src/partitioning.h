@@ -25,8 +25,8 @@
 
 typedef struct PartitioningFunc
 {
-	char schema[NAMEDATALEN];
-	char name[NAMEDATALEN];
+	NameData schema;
+	NameData name;
 	Oid rettype;
 
 	/*
@@ -38,7 +38,7 @@ typedef struct PartitioningFunc
 
 typedef struct PartitioningInfo
 {
-	char column[NAMEDATALEN];
+	NameData column;
 	AttrNumber column_attnum;
 	DimensionType dimtype;
 	PartitioningFunc partfunc;

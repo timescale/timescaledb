@@ -50,6 +50,7 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 
 **Thanks**
 * @henriquegelio for reporting the issue on fixed schedules
+* #5336 Use NameData and namestrcpy for names
 
 ## 2.9.3 (2023-02-03)
 
