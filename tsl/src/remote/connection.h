@@ -148,8 +148,8 @@ extern RemoteConnectionStats *remote_connection_stats_get(void);
 extern bool remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binary,
 										 TSConnectionError *err);
 extern bool remote_connection_end_copy(TSConnection *conn, TSConnectionError *err);
-extern bool remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
-											TSConnectionError *err);
+extern bool remote_connection_put_copy_data(const TSConnection *conn, const char *buffer,
+											size_t len, TSConnectionError *err);
 
 /* Error handling functions for connections */
 extern void remote_connection_get_error(const TSConnection *conn, TSConnectionError *err);
@@ -173,7 +173,7 @@ extern void remote_connection_get_result_error(const PGresult *res, TSConnection
 			 (err)->remote.sqlcmd ? errcontext("Remote SQL command: %s", (err)->remote.sqlcmd) :   \
 									0))
 
-/*
+/*11
  * Report an error we got from the remote host.
  *
  * elevel: error level to use (typically ERROR, but might be less)

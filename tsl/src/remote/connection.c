@@ -2159,6 +2159,132 @@ remote_connection_set_single_row_mode(TSConnection *conn)
 }
 
 static bool
+remote_connection_flush(const TSConnection *conn, TSConnectionError *err)
+{
+	bool flushed = false;
+
+	while (!flushed)
+	{
+		int ret;
+
+		CHECK_FOR_INTERRUPTS();
+
+		ret = PQflush(conn->pg_conn);
+
+		if (ret == 0)
+			flushed = true;
+		else if (ret == 1)
+		{
+			WaitEvent event;
+
+			/* Need to wait */
+			ModifyWaitEvent(conn->wes,
+							conn->sockeventpos,
+							WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE,
+							NULL);
+
+			WaitEventSetWait(conn->wes, -1, &event, 1, PG_WAIT_EXTENSION);
+
+			if (event.events & WL_LATCH_SET)
+			{
+				ResetLatch(MyLatch);
+				CHECK_FOR_INTERRUPTS();
+			}
+
+			if (event.events & WL_SOCKET_READABLE)
+			{
+				if (PQconsumeInput(conn->pg_conn) == 0)
+				{
+					remote_connection_get_error(conn, err);
+					return false;
+				}
+			}
+
+			if (event.events & WL_SOCKET_WRITEABLE)
+			{
+				/* Try to flush again */
+			}
+		}
+		else
+		{
+			/* Error */
+			Assert(ret == -1);
+			remote_connection_get_error(conn, err);
+			return false;
+		}
+	}
+
+	return flushed;
+}
+
+bool
+remote_connection_put_copy_data(const TSConnection *conn, const char *buffer, size_t nbytes,
+								TSConnectionError *err)
+{
+	int res = 0;
+
+	Assert(PQisnonblocking(conn->pg_conn));
+	Assert(conn->status == CONN_COPY_IN);
+
+	do
+	{
+		res = PQputCopyData(conn->pg_conn, buffer, nbytes);
+
+		switch (res)
+		{
+			case 0:
+			{
+				/* Full buffers, wait... */
+				WaitEvent event;
+
+				ModifyWaitEvent(conn->wes,
+								conn->sockeventpos,
+								WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE,
+								NULL);
+				WaitEventSetWait(conn->wes, -1, &event, 1, PG_WAIT_EXTENSION);
+
+				if (event.events & WL_LATCH_SET)
+				{
+					ResetLatch(MyLatch);
+					CHECK_FOR_INTERRUPTS();
+				}
+
+				if (event.events & WL_SOCKET_READABLE)
+				{
+					if (PQconsumeInput(conn->pg_conn) == 0)
+					{
+						remote_connection_get_error(conn, err);
+						return false;
+					}
+				}
+
+				if (event.events & WL_SOCKET_WRITEABLE)
+				{
+					/* Flush data from previous call */
+					if (!remote_connection_flush(conn, err))
+						return false;
+				}
+
+				break;
+			}
+			case 1:
+				/* Success -> flush after exiting the loop */
+				break;
+			case -1:
+				return fill_connection_error(err,
+											 ERRCODE_CONNECTION_FAILURE,
+											 "failed sending COPY data",
+											 conn);
+			default:
+				pg_unreachable();
+				break;
+		}
+	} while (res == 0);
+
+	return remote_connection_flush(conn, err);
+}
+
+static bool
 send_binary_copy_header(const TSConnection *conn, TSConnectionError *err)
 {
 	/* File header for binary format */
@@ -2252,23 +2378,6 @@ err_end_copy:
 	PQputCopyEnd(pg_conn, err->msg);
 
 	return false;
-}
-
-bool
-remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
-								TSConnectionError *err)
-{
-	int res;
-
-	res = PQputCopyData(remote_connection_get_pg_conn(conn), buffer, len);
-
-	if (res != 1)
-		return fill_connection_error(err,
-									 ERRCODE_CONNECTION_EXCEPTION,
-									 "could not send COPY data",
-									 conn);
-
-	return true;
 }
 
 static bool
