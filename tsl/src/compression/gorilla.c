@@ -520,8 +520,8 @@ gorilla_decompress_all(GorillaDecompressionIterator *iter)
 	uint64 *restrict decompressed_values = iter->decompressed_values;
 	bool *restrict decompressed_nulls = iter->decompressed_nulls;
 	uint64 prev_value = 0;
-	uint8_t prev_xor_bits_used;
-	uint8_t prev_leading_zeros;
+	uint8_t prev_xor_bits_used = 0;
+	uint8_t prev_leading_zeros = 0;
 	for (int i = 0; i < n_total; i++)
 	{
 		if (iter->has_nulls && iter->nulls.decompressed_values[i])
