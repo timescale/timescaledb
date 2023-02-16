@@ -12,6 +12,11 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <utils/relcache.h>
+
+#ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1020
+#endif
+
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
  * varlen header, and followed by a version specifying which compression
@@ -49,6 +54,88 @@ typedef struct DecompressResult
 	bool is_done;
 } DecompressResult;
 
+/*
+ * Let's use Arrow C data interface. There are many computation engines that are
+ * compatible with it, even if it's a bit excessive for our current needs.
+ *
+ * https://arrow.apache.org/docs/format/CDataInterface.html
+ */
+typedef struct ArrowArray
+{
+	/*
+	 * Mandatory. The logical length of the array (i.e. its number of items).
+	 */
+	int64_t length;
+
+	/*
+	 * Mandatory. The number of null items in the array. MAY be -1 if not yet
+	 * computed.
+	 */
+	int64_t null_count;
+
+	/*
+	 * Mandatory. The logical offset inside the array (i.e. the number of
+	 * items from the physical start of the buffers). MUST be 0 or positive.
+	 *
+	 * Producers MAY specify that they will only produce 0-offset arrays to
+	 * ease implementation of consumer code. Consumers MAY decide not to
+	 * support non-0-offset arrays, but they should document this limitation.
+	 */
+	int64_t offset;
+
+	/*
+	 * Mandatory. The number of physical buffers backing this array. The
+	 * number of buffers is a function of the data type, as described in the
+	 * Columnar format specification.
+	 *
+	 * Buffers of children arrays are not included.
+	 */
+	int64_t n_buffers;
+
+	/*
+	 * Mandatory. The number of children this type has.
+	 */
+	int64_t n_children;
+
+	/*
+	 * Mandatory. A C array of pointers to the start of each physical buffer
+	 * backing this array. Each void* pointer is the physical start of a
+	 * contiguous buffer. There must be ArrowArray.n_buffers pointers.
+	 *
+	 * The producer MUST ensure that each contiguous buffer is large enough to
+	 * represent length + offset values encoded according to the Columnar
+	 * format specification.
+	 *
+	 * It is recommended, but not required, that the memory addresses of the
+	 * buffers be aligned at least according to the type of primitive data
+	 * that they contain. Consumers MAY decide not to support unaligned
+	 * memory.
+	 *
+	 * The buffer pointers MAY be null only in two situations:
+	 *
+	 * - for the null bitmap buffer, if ArrowArray.null_count is 0;
+	 *
+	 * - for any buffer, if the size in bytes of the corresponding buffer would
+	 * be 0.
+	 *
+	 * Buffers of children arrays are not included.
+	 */
+	const void **buffers;
+
+	struct ArrowArray **children;
+	struct ArrowArray *dictionary;
+
+	/*
+	 * Mandatory. A pointer to a producer-provided release callback.
+	 *
+	 * See below for memory management and release callback semantics.
+	 */
+	void (*release)(struct ArrowArray *);
+
+	/* Opaque producer-specific data */
+	void *private_data;
+} ArrowArray;
+
 /* Forward declaration of ColumnCompressionInfo so we don't need to include catalog.h */
 typedef struct FormData_hypertable_compression ColumnCompressionInfo;
 
@@ -67,6 +154,7 @@ typedef struct DecompressionIterator
 
 	Oid element_type;
 	DecompressResult (*try_next)(struct DecompressionIterator *);
+	ArrowArray (*decompress_all)(struct DecompressionIterator *);
 } DecompressionIterator;
 
 /*
@@ -135,8 +223,10 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_GORILLA == 3, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DELTADELTA == 4, "algorithm index has changed");
 
-	/* This should change when adding a new algorithm after adding the new algorithm to the assert
-	 * list above. This statement prevents adding a new algorithm without updating the asserts above
+	/*
+	 * This should change when adding a new algorithm after adding the new
+	 * algorithm to the assert list above. This statement prevents adding a
+	 * new algorithm without updating the asserts above
 	 */
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 5,
 					 "number of algorithms have changed, the asserts should be updated");

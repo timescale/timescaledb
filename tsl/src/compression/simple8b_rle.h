@@ -62,7 +62,9 @@
 /* clang-format on */
 
 /* Normal compression uses 1k rows, but the regression tests use up to 1020. */
+#ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1020
+#endif
 
 /********************
  ***  Public API  ***

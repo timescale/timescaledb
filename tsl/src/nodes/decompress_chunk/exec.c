@@ -64,6 +64,8 @@ typedef struct DecompressChunkColumnState
 		{
 			DecompressionIterator *iterator;
 		} compressed;
+
+		ArrowArray data;
 	};
 } DecompressChunkColumnState;
 
@@ -79,7 +81,8 @@ typedef struct DecompressChunkState
 	int hypertable_id;
 	Oid chunk_relid;
 	List *hypertable_compression_info;
-	int rows_left;
+	int total_rows;
+	int current_row;
 	MemoryContext per_batch_context;
 } DecompressChunkState;
 
@@ -300,6 +303,34 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 													 ALLOCSET_DEFAULT_SIZES);
 }
 
+static bool
+arrow_validity_bitmap_get(const uint64 *bitmap, int row_number)
+{
+	const int qword_index = row_number / 64;
+	const int bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+	return (bitmap[qword_index] & mask) ? 1 : 0;
+}
+
+static void
+arrow_validity_bitmap_set(uint64 *bitmap, int row_number, bool value)
+{
+	const int qword_index = row_number / 64;
+	const int bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+
+	if (value)
+	{
+		bitmap[qword_index] |= mask;
+	}
+	else
+	{
+		bitmap[qword_index] &= ~mask;
+	}
+
+	Assert(arrow_validity_bitmap_get(bitmap, row_number) == value);
+}
+
 static void
 initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				 TupleTableSlot *decompressed_slot)
@@ -309,6 +340,9 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 	int i;
 	MemoryContext old_context = MemoryContextSwitchTo(state->per_batch_context);
 	MemoryContextReset(state->per_batch_context);
+
+	state->total_rows = 0;
+	state->current_row = 0;
 
 	for (i = 0; i < state->num_columns; i++)
 	{
@@ -327,6 +361,53 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 						tsl_get_decompression_iterator_init(header->compression_algorithm,
 															state->reverse)(PointerGetDatum(header),
 																			column->typid);
+					int current_row = 0;
+					int nulls1 = 0;
+					uint64 *restrict validity_bitmap =
+						palloc0(sizeof(uint64) * ((GLOBAL_MAX_ROWS_PER_COMPRESSION + 64 - 1) / 64));
+					uint64 *restrict values =
+						palloc(sizeof(uint64) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
+					for (DecompressResult res =
+							 column->compressed.iterator->try_next(column->compressed.iterator);
+						 !res.is_done;
+						 res = column->compressed.iterator->try_next(column->compressed.iterator))
+					{
+						arrow_validity_bitmap_set(validity_bitmap, current_row, !res.is_null);
+						values[current_row] = res.val;
+						current_row++;
+
+						if (res.is_null)
+						{
+							nulls1++;
+						}
+					}
+
+					int nulls2 = 0;
+					for (int i = 0; i < current_row; i++)
+					{
+						if (!arrow_validity_bitmap_get(validity_bitmap, i))
+						{
+							nulls2++;
+						}
+					}
+
+					Assert(nulls1 == nulls2);
+
+					column->data.n_buffers = 2;
+					column->data.buffers = palloc(sizeof(void *) * 2);
+					column->data.buffers[0] = validity_bitmap;
+					column->data.buffers[1] = values;
+					column->data.length = current_row;
+					column->data.null_count = -1;
+
+					if (state->total_rows == 0)
+					{
+						state->total_rows = current_row;
+					}
+					else if (state->total_rows != current_row)
+					{
+						elog(ERROR, "compressed column out of sync with batch counter");
+					}
 				}
 				else
 				{
@@ -351,7 +432,15 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 			}
 			case COUNT_COLUMN:
 				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
-				state->rows_left = DatumGetInt32(value);
+				int count_value = DatumGetInt32(value);
+				if (state->total_rows == 0)
+				{
+					state->total_rows = count_value;
+				}
+				else if (state->total_rows != count_value)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
 				/* count column should never be NULL */
 				Assert(!isnull);
 				break;
@@ -423,26 +512,11 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 	while (true)
 	{
-		if (state->initialized && state->rows_left <= 0)
+		if (state->initialized && state->current_row >= state->total_rows)
 		{
 			/*
-			 * Reached end of batch, check that all compressed columns are in
-			 * sync.
+			 * Reached end of batch.
 			 */
-			for (int i = 0; i < state->num_columns; i++)
-			{
-				DecompressChunkColumnState *column = &state->columns[i];
-				if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
-				{
-					DecompressResult result =
-						column->compressed.iterator->try_next(column->compressed.iterator);
-					if (!result.is_done)
-					{
-						elog(ERROR, "compressed column out of sync with batch counter");
-					}
-				}
-			}
-
 			state->initialized = false;
 		}
 
@@ -468,24 +542,20 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 			initialize_batch(state, subslot, slot);
 		}
 
-		Assert(state->initialized && state->rows_left > 0);
+		Assert(state->initialized);
+		Assert(state->total_rows > 0);
+		Assert(state->current_row < state->total_rows);
 
 		for (int i = 0; i < state->num_columns; i++)
 		{
 			DecompressChunkColumnState *column = &state->columns[i];
 			if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
 			{
-				DecompressResult result =
-					column->compressed.iterator->try_next(column->compressed.iterator);
-
-				if (result.is_done)
-				{
-					elog(ERROR, "compressed column out of sync with batch counter");
-				}
-
 				AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
-				slot->tts_values[attr] = result.val;
-				slot->tts_isnull[attr] = result.is_null;
+				/* FIXME add code for passing float8 by reference on 32-bit systems. */
+				slot->tts_values[attr] = ((Datum *) column->data.buffers[1])[state->current_row];
+				slot->tts_isnull[attr] =
+					!arrow_validity_bitmap_get(column->data.buffers[0], state->current_row);
 			}
 		}
 
@@ -500,7 +570,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 			ExecStoreVirtualTuple(slot);
 		}
 
-		state->rows_left--;
+		state->current_row++;
 		return slot;
 	}
 }

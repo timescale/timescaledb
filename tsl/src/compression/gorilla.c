@@ -584,6 +584,7 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->base.forward = true;
 	iterator->base.element_type = element_type;
 	iterator->base.try_next = gorilla_get_iterator(/* forward = */ true, element_type);
+	iterator->base.decompress_all = NULL;
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
@@ -695,6 +696,7 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 	iterator->base.forward = false;
 	iterator->base.element_type = element_type;
 	iterator->base.try_next = gorilla_get_iterator(/* forward = */ false, element_type);
+	iterator->base.decompress_all = NULL;
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
