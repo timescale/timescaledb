@@ -7,7 +7,7 @@ FAILED=false
 true > coccinelle.diff
 
 for f in "${SCRIPT_DIR}"/../coccinelle/*.cocci; do
-	find "${SCRIPT_DIR}"/.. -name '*.c' -exec spatch --very-quiet -sp_file "$f" {} + | tee -a coccinelle.diff
+  spatch --very-quiet --include-headers --sp-file "$f" --dir "${SCRIPT_DIR}"/.. | tee -a coccinelle.diff
   rc=$?
   if [ $rc -ne 0 ]; then
     FAILED=true
