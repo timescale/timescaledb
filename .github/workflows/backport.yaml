@@ -2,11 +2,16 @@ name: Backport Bug Fixes
 on:
   schedule:
     # Run weekdays 12:00 on main branch, so that it doesn't wreak havoc on
-    # weekends.
+    # weekends. Good to have regular runs so that we can react to changes in
+    # issue tags, or retry some spurious network errors, or whatever.
     - cron: '0 12 * * 1-5'
   workflow_dispatch:
   push:
     branches:
+      # Ideally we want to create a backport PR as soon as the fix is merged
+      # into the main branch
+      - main
+
       # You can run and debug new versions of the backport script by pushing it
       # to this branch. workflow_dispatch can only be run through github cli for
       # branches that are not main, so it's inconvenient.

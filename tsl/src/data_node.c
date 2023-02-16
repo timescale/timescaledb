@@ -1593,7 +1593,7 @@ Datum
 data_node_alter(PG_FUNCTION_ARGS)
 {
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
-	const char *host = PG_ARGISNULL(1) ? NULL : TextDatumGetCString(PG_GETARG_TEXT_P(1));
+	const char *host = PG_ARGISNULL(1) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *database = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
 	int port = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT32(3);
 	bool available_is_null = PG_ARGISNULL(4);

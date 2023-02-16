@@ -879,7 +879,7 @@ ts_sub_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
 	Datum now;
 	int64 res;
 
-	AssertArg(IS_INTEGER_TYPE(time_dim_type));
+	Assert(IS_INTEGER_TYPE(time_dim_type));
 
 	now = OidFunctionCall0(now_func);
 	switch (time_dim_type)

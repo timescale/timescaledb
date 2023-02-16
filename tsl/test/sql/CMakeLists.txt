@@ -95,7 +95,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     remote_txn.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
-    license_tsl.sql)
+    license_tsl.sql
+    fixed_schedules.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))

@@ -67,55 +67,89 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 	TimestampTz initial_start = PG_GETARG_TIMESTAMPTZ(2);
 	text *timezone = PG_ARGISNULL(3) ? NULL : PG_GETARG_TEXT_PP(3);
 
-	Datum timebucket_fini, result, offset;
+	Datum timebucket_fini, timebucket_init, result;
 	Datum schedint_datum = IntervalPGetDatum(schedule_interval);
+	Interval one_month = {
+		.day = 0,
+		.time = 0,
+		.month = 1,
+	};
 
-	if (timezone == NULL)
+	if (schedule_interval->month > 0)
 	{
-		offset = DirectFunctionCall2(ts_timestamptz_bucket,
-									 schedint_datum,
-									 TimestampTzGetDatum(initial_start));
+		if (timezone == NULL)
+		{
+			timebucket_init = DirectFunctionCall2(ts_timestamptz_bucket,
+												  schedint_datum,
+												  TimestampTzGetDatum(initial_start));
+			timebucket_fini = DirectFunctionCall2(ts_timestamptz_bucket,
+												  schedint_datum,
+												  TimestampTzGetDatum(finish_time));
+		}
+		else
+		{
+			char *tz = text_to_cstring(timezone);
+			timebucket_fini = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+												  schedint_datum,
+												  TimestampTzGetDatum(finish_time),
+												  CStringGetTextDatum(tz));
 
-		timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
-											  schedint_datum,
-											  TimestampTzGetDatum(finish_time),
-											  TimestampTzGetDatum(initial_start));
-		/* always the next time_bucket */
-		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+			timebucket_init = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+												  schedint_datum,
+												  TimestampTzGetDatum(initial_start),
+												  CStringGetTextDatum(tz));
+		}
+		/* always the next bucket */
+		timebucket_fini =
+			DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
+		/* get the number of months between them */
+		Datum year_init =
+			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("year"), timebucket_init);
+		Datum year_fini =
+			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("year"), timebucket_fini);
+
+		Datum month_init =
+			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_init);
+		Datum month_fini =
+			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_fini);
+
+		/* convert everything to months */
+		float8 month_diff = DatumGetFloat8(year_fini) * 12 + DatumGetFloat8(month_fini) -
+							(DatumGetFloat8(year_init) * 12 + DatumGetFloat8(month_init));
+
+		Datum months_to_add = DirectFunctionCall2(interval_mul,
+												  IntervalPGetDatum(&one_month),
+												  Float8GetDatum(month_diff));
+		result = DirectFunctionCall2(timestamptz_pl_interval,
+									 TimestampTzGetDatum(initial_start),
+									 months_to_add);
 	}
 	else
 	{
-		char *tz = text_to_cstring(timezone);
-		timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
-											  schedint_datum,
-											  TimestampTzGetDatum(finish_time),
-											  CStringGetTextDatum(tz),
-											  TimestampTzGetDatum(initial_start));
-		/* always the next time_bucket */
-		result = DirectFunctionCall2(timestamptz_pl_interval, timebucket_fini, schedint_datum);
-
-		offset = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
-									 schedint_datum,
-									 TimestampTzGetDatum(initial_start),
-									 CStringGetTextDatum(tz));
+		if (timezone == NULL)
+		{
+			/* it is safe to use the origin in time_bucket calculation */
+			timebucket_fini = DirectFunctionCall3(ts_timestamptz_bucket,
+												  schedint_datum,
+												  TimestampTzGetDatum(finish_time),
+												  TimestampTzGetDatum(initial_start));
+			result = timebucket_fini;
+		}
+		else
+		{
+			char *tz = text_to_cstring(timezone);
+			timebucket_fini = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+												  schedint_datum,
+												  TimestampTzGetDatum(finish_time),
+												  CStringGetTextDatum(tz),
+												  TimestampTzGetDatum(initial_start));
+			result = timebucket_fini;
+		}
 	}
-
-	offset = DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(initial_start), offset);
-	/* if we have a month component, the origin doesn't work so we must manually
-	 include the offset */
-	if (schedule_interval->month)
-	{
-		result = DirectFunctionCall2(timestamptz_pl_interval, result, offset);
-	}
-	/*
-	 * adding the schedule interval above to get the next bucket might still not hit
-	 * the next bucket if we are crossing DST. So we can end up with a next_start value
-	 * that is actually less than the finish time of the job. Hence, we have to make sure
-	 * the next scheduled slot we compute is in the future and not in the past
-	 */
 	while (DatumGetTimestampTz(result) <= finish_time)
+	{
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
-
+	}
 	return result;
 }
 

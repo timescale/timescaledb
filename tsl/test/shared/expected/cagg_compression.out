@@ -52,6 +52,8 @@ WHERE
 (1 row)
 
 ALTER MATERIALIZED VIEW metrics_compressed_summary SET (timescaledb.compress);
+psql:include/cagg_compression_setup.sql:42: NOTICE:  defaulting compress_segmentby to device_id
+psql:include/cagg_compression_setup.sql:42: NOTICE:  defaulting compress_orderby to bucket
 CALL refresh_continuous_aggregate('metrics_compressed_summary', NULL, '2000-01-15 23:55:00+0');
 SELECT CASE WHEN res is NULL THEN NULL
             ELSE 'compressed'
@@ -112,6 +114,8 @@ WHERE
 (1 row)
 
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.compress);
+psql:include/cagg_compression_setup.sql:94: NOTICE:  defaulting compress_segmentby to device_id
+psql:include/cagg_compression_setup.sql:94: NOTICE:  defaulting compress_orderby to bucket
 CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-15 23:55:00+0');
 SELECT CASE WHEN res is NULL THEN NULL
             ELSE 'compressed'
@@ -347,5 +351,6 @@ SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
 NOTICE:  continuous aggregate "comp_rename_cagg" is already up-to-date
 ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";
 ALTER MATERIALIZED VIEW comp_rename_cagg SET ( timescaledb.compress='true');
+NOTICE:  defaulting compress_orderby to "time"
 DROP TABLE comp_rename CASCADE;
 NOTICE:  drop cascades to 3 other objects

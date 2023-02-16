@@ -479,6 +479,15 @@ INSERT INTO "nondefault_mem_settings" VALUES
 ('2001-03-20T09:00:00', 30.6),
 ('2002-03-20T09:00:00', 31.9),
 ('2003-03-20T09:00:00', 32.9);
+--warning about mismatched cache sizes
+SET timescaledb.max_open_chunks_per_insert = 100;
+WARNING:  insert cache size is larger than hypertable chunk cache size
+SET timescaledb.max_cached_chunks_per_hypertable = 10;
+WARNING:  insert cache size is larger than hypertable chunk cache size
+INSERT INTO "nondefault_mem_settings" VALUES
+('2001-05-20T09:00:00', 36.6),
+('2002-05-20T09:00:00', 37.9),
+('2003-05-20T09:00:00', 38.9);
 --unlimited
 SET timescaledb.max_open_chunks_per_insert = 0;
 SET timescaledb.max_cached_chunks_per_hypertable = 0;
@@ -497,10 +506,13 @@ SELECT * FROM "nondefault_mem_settings";
  Tue Mar 20 09:00:00 2001 | 30.6
  Wed Mar 20 09:00:00 2002 | 31.9
  Thu Mar 20 09:00:00 2003 | 32.9
+ Sun May 20 09:00:00 2001 | 36.6
+ Mon May 20 09:00:00 2002 | 37.9
+ Tue May 20 09:00:00 2003 | 38.9
  Fri Apr 20 09:00:00 2001 | 33.6
  Sat Apr 20 09:00:00 2002 | 34.9
  Sun Apr 20 09:00:00 2003 | 35.9
-(11 rows)
+(14 rows)
 
 --test rollback
 BEGIN;
@@ -527,7 +539,7 @@ SAVEPOINT savepoint_2;
 SAVEPOINT
 \set ON_ERROR_STOP 0
 INSERT INTO "data_records" ("time", "value") VALUES (3, -1);
-ERROR:  new row for relation "_hyper_13_34_chunk" violates check constraint "data_records_value_check"
+ERROR:  new row for relation "_hyper_13_37_chunk" violates check constraint "data_records_value_check"
 \set ON_ERROR_STOP 1
 ROLLBACK TO SAVEPOINT savepoint_2;
 ROLLBACK

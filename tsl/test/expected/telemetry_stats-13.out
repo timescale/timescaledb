@@ -375,6 +375,8 @@ FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
 (4 rows)
 
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
+NOTICE:  defaulting compress_segmentby to device
+NOTICE:  defaulting compress_orderby to hour
 SELECT compress_chunk(c)
 FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
              compress_chunk              

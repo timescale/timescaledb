@@ -1525,6 +1525,8 @@ SELECT mat_htid AS "MAT_HTID"
 FROM cagg_compression_status
 WHERE cagg_name = 'search_query_count_3' \gset
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'true');
+NOTICE:  defaulting compress_segmentby to grp_5_5,search_query
+NOTICE:  defaulting compress_orderby to bucket
 SELECT cagg_name, mat_table_name
 FROM cagg_compression_status where cagg_name = 'search_query_count_3';
       cagg_name       |       mat_table_name        
@@ -1677,6 +1679,7 @@ AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
  FROM test_morecols GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "test_morecols_cagg"
 ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
+NOTICE:  defaulting compress_orderby to time_bucket
 SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
               compress_chunk              
 ------------------------------------------

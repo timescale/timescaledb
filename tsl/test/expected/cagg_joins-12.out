@@ -52,7 +52,141 @@ INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),
 CREATE TABLE devices_dup AS SELECT * FROM devices;
 CREATE VIEW devices_view AS SELECT * FROM devices;
 --Create a cagg with join between a hypertable and a normal table
--- with equality condition on inner join type
+-- with equality condition on inner join type and realtime aggregation enabled
+CREATE MATERIALIZED VIEW conditions_summary_daily_realtime
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_daily_realtime"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+\d+ conditions_summary_daily_realtime
+              View "public.conditions_summary_daily_realtime"
+ Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+--------+---------+-----------+----------+---------+----------+-------------
+ bucket | date    |           |          |         | plain    | 
+ avg    | numeric |           |          |         | main     | 
+ max    | integer |           |          |         | plain    | 
+ min    | integer |           |          |         | plain    | 
+ name   | text    |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.avg,
+    _materialized_hypertable_3.max,
+    _materialized_hypertable_3.min,
+    _materialized_hypertable_3.name
+   FROM _timescaledb_internal._materialized_hypertable_3 _materialized_hypertable_3
+  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_internal.to_date(_timescaledb_internal.cagg_watermark(3)), '-infinity'::date)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
+    avg(conditions.temperature) AS avg,
+    max(conditions.temperature) AS max,
+    min(conditions.temperature) AS min,
+    devices.name
+   FROM conditions,
+    devices
+  WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_internal.to_date(_timescaledb_internal.cagg_watermark(3)), '-infinity'::date)
+  GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day));
+
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-06-30', 'Moscow', 28, 3);
+SELECT *
+FROM conditions_summary_daily_realtime
+ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(15 rows)
+
+--Create a cagg with join between a hypertable and a normal table
+-- with equality condition on inner join type and realtime aggregation enabled
+-- with a different order in the from clause
+CREATE MATERIALIZED VIEW conditions_summary_daily_realtime_reorder
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM devices, conditions
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_daily_realtime_reorder"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+\d+ conditions_summary_daily_realtime_reorder
+          View "public.conditions_summary_daily_realtime_reorder"
+ Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+--------+---------+-----------+----------+---------+----------+-------------
+ bucket | date    |           |          |         | plain    | 
+ avg    | numeric |           |          |         | main     | 
+ max    | integer |           |          |         | plain    | 
+ min    | integer |           |          |         | plain    | 
+ name   | text    |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.avg,
+    _materialized_hypertable_4.max,
+    _materialized_hypertable_4.min,
+    _materialized_hypertable_4.name
+   FROM _timescaledb_internal._materialized_hypertable_4 _materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_internal.to_date(_timescaledb_internal.cagg_watermark(4)), '-infinity'::date)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
+    avg(conditions.temperature) AS avg,
+    max(conditions.temperature) AS max,
+    min(conditions.temperature) AS min,
+    devices.name
+   FROM devices,
+    conditions
+  WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_internal.to_date(_timescaledb_internal.cagg_watermark(4)), '-infinity'::date)
+  GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day));
+
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-07-01', 'Moscow', 28, 3);
+SELECT *
+FROM conditions_summary_daily_realtime_reorder
+ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
+--Create a cagg with join between a hypertable and a normal table
+-- with equality condition on inner join type and realtime aggregation disabled
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -186,23 +320,10 @@ FROM conditions_summary_daily
 GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "cagg_on_cagg"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+\set VERBOSITY terse
 DROP MATERIALIZED VIEW cagg_on_cagg CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_6_35_chunk
-drop cascades to table _timescaledb_internal._hyper_6_36_chunk
---Error out when real time aggregation is enabled
-CREATE MATERIALIZED VIEW conditions_summary_daily_realtime
-WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
-SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
-   AVG(temperature),
-   MAX(temperature),
-   MIN(temperature),
-   name
-FROM conditions, devices
-WHERE conditions.device_id = devices.device_id
-GROUP BY name, bucket;
-ERROR:  real-time continuous aggregates are not supported with joins
-HINT:  set materialized_only to true
+\set VERBOSITY default
 CREATE TABLE cities(name text, currency text);
 INSERT INTO cities VALUES ('Berlin', 'EUR'), ('London', 'PND');
 --Error out when from clause has sub selects
@@ -330,29 +451,15 @@ FROM conditions_summary_daily_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
 GROUP BY conditions.temperature, bucket, cagg.name;
 ERROR:  joins for hierarchical continuous aggregates are not supported
+\set VERBOSITY terse
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 9 other objects
-DETAIL:  drop cascades to view _timescaledb_internal._partial_view_3
-drop cascades to view _timescaledb_internal._direct_view_3
-drop cascades to view _timescaledb_internal._partial_view_4
-drop cascades to view _timescaledb_internal._direct_view_4
-drop cascades to view conditions_summary_daily_2
-drop cascades to view _timescaledb_internal._partial_view_5
-drop cascades to view _timescaledb_internal._direct_view_5
-drop cascades to view _timescaledb_internal._partial_view_7
-drop cascades to view _timescaledb_internal._direct_view_7
+NOTICE:  drop cascades to 15 other objects
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_3_29_chunk
-drop cascades to table _timescaledb_internal._hyper_3_30_chunk
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_4_31_chunk
-drop cascades to table _timescaledb_internal._hyper_4_32_chunk
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_5_33_chunk
-drop cascades to table _timescaledb_internal._hyper_5_34_chunk
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_7_37_chunk
-drop cascades to table _timescaledb_internal._hyper_7_38_chunk
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects
 DROP TABLE devices CASCADE;
 NOTICE:  drop cascades to view devices_view
 DROP TABLE conditions_dup CASCADE;

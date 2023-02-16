@@ -39,6 +39,7 @@
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "errors.h"
+#include "compression_with_clause.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
@@ -59,7 +60,7 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(false),
 		},
-        [ContinuousViewOptionCompress] = {
+		[ContinuousViewOptionCompress] = {
 			.arg_name = "compress",
 			.type_id = BOOLOID,
 		},
@@ -67,6 +68,18 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.arg_name = "finalized",
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(true),
+		},
+		[ContinuousViewOptionCompressSegmentBy] = {
+			 .arg_name = "compress_segmentby",
+			 .type_id = TEXTOID,
+		},
+		[ContinuousViewOptionCompressOrderBy] = {
+			 .arg_name = "compress_orderby",
+			 .type_id = TEXTOID,
+		},
+		[ContinuousViewOptionCompressChunkTimeInterval] = {
+			 .arg_name = "compress_chunk_time_interval",
+			 .type_id = INTERVALOID,
 		},
 };
 
@@ -77,6 +90,51 @@ ts_continuous_agg_with_clause_parse(const List *defelems)
 								 continuous_aggregate_with_clause_def,
 								 TS_ARRAY_LEN(continuous_aggregate_with_clause_def));
 }
+
+List *
+ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
+{
+	List *ret = NIL;
+
+	for (int i = 0; i < CompressOptionMax; i++)
+	{
+		int option_index = 0;
+		switch (i)
+		{
+			case CompressEnabled:
+				option_index = ContinuousViewOptionCompress;
+				break;
+			case CompressSegmentBy:
+				option_index = ContinuousViewOptionCompressSegmentBy;
+				break;
+			case CompressOrderBy:
+				option_index = ContinuousViewOptionCompressOrderBy;
+				break;
+			case CompressChunkTimeInterval:
+				option_index = ContinuousViewOptionCompressChunkTimeInterval;
+				break;
+			default:
+				elog(ERROR, "Unhandled compression option");
+				break;
+		}
+
+		const WithClauseResult *input = &with_clauses[option_index];
+		WithClauseDefinition def = continuous_aggregate_with_clause_def[option_index];
+
+		if (!input->is_default)
+		{
+			Node *value = (Node *) makeString(ts_with_clause_result_deparse_value(input));
+			DefElem *elem = makeDefElemExtended("timescaledb",
+												(char *) def.arg_name,
+												value,
+												DEFELEM_UNSPEC,
+												-1);
+			ret = lappend(ret, elem);
+		}
+	}
+	return ret;
+}
+
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
 {

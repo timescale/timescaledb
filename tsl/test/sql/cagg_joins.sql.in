@@ -43,7 +43,53 @@ CREATE TABLE devices_dup AS SELECT * FROM devices;
 CREATE VIEW devices_view AS SELECT * FROM devices;
 
 --Create a cagg with join between a hypertable and a normal table
--- with equality condition on inner join type
+-- with equality condition on inner join type and realtime aggregation enabled
+CREATE MATERIALIZED VIEW conditions_summary_daily_realtime
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+\d+ conditions_summary_daily_realtime
+
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-06-30', 'Moscow', 28, 3);
+
+SELECT *
+FROM conditions_summary_daily_realtime
+ORDER BY bucket;
+
+--Create a cagg with join between a hypertable and a normal table
+-- with equality condition on inner join type and realtime aggregation enabled
+-- with a different order in the from clause
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_realtime_reorder
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM devices, conditions
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+
+\d+ conditions_summary_daily_realtime_reorder
+
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-07-01', 'Moscow', 28, 3);
+
+SELECT *
+FROM conditions_summary_daily_realtime_reorder
+ORDER BY bucket;
+
+--Create a cagg with join between a hypertable and a normal table
+-- with equality condition on inner join type and realtime aggregation disabled
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -168,19 +214,9 @@ SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
 FROM conditions_summary_daily
 GROUP BY 1;
 
+\set VERBOSITY terse
 DROP MATERIALIZED VIEW cagg_on_cagg CASCADE;
-
---Error out when real time aggregation is enabled
-CREATE MATERIALIZED VIEW conditions_summary_daily_realtime
-WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
-SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
-   AVG(temperature),
-   MAX(temperature),
-   MIN(temperature),
-   name
-FROM conditions, devices
-WHERE conditions.device_id = devices.device_id
-GROUP BY name, bucket;
+\set VERBOSITY default
 
 CREATE TABLE cities(name text, currency text);
 INSERT INTO cities VALUES ('Berlin', 'EUR'), ('London', 'PND');
@@ -302,6 +338,7 @@ FROM conditions_summary_daily_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
 GROUP BY conditions.temperature, bucket, cagg.name;
 
+\set VERBOSITY terse
 DROP TABLE conditions CASCADE;
 DROP TABLE devices CASCADE;
 DROP TABLE conditions_dup CASCADE;

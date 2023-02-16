@@ -547,9 +547,7 @@ WHERE uc_hypertable.table_name like 'metric' \gset
 -- get definition of compressed hypertable and notice the index
 \d :COMP_SCHEMA_NAME.:COMP_TABLE_NAME
 
-DROP TABLE metric CASCADE;
-
--- Creating hypertable
+-- #5290 Compression can't be enabled on caggs
 CREATE TABLE "tEst2" (
     "Id" uuid NOT NULL,
     "Time" timestamp with time zone NOT NULL,
@@ -572,3 +570,43 @@ FROM public."tEst2"
 GROUP BY "Idd", "bUcket";
 
 ALTER MATERIALIZED VIEW "tEst2_mv" SET (timescaledb.compress = true);
+
+
+-- #5161 segmentby param
+CREATE MATERIALIZED VIEW test1_cont_view2
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true
+      )
+AS SELECT time_bucket('1 hour', "Time") as t, SUM(intcol) as sum,txtcol as "iDeA"
+   FROM test1
+   GROUP BY 1,txtcol WITH NO DATA;
+
+
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true,
+  timescaledb.compress_segmentby = 'invalid_column'
+);
+\set ON_ERROR_STOP 1
+
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true
+);
+
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true,
+  timescaledb.compress_segmentby = '"iDeA"'
+);
+
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = true,
+  timescaledb.compress_orderby = '"iDeA"'
+);
+\set ON_ERROR_STOP 1
+
+ALTER MATERIALIZED VIEW test1_cont_view2 SET (
+  timescaledb.compress = false
+);
+
+DROP TABLE metric CASCADE;

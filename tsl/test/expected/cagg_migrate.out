@@ -214,6 +214,7 @@ psql:include/cagg_migrate_common.sql:155: ERROR:  plan already exists for contin
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
+psql:include/cagg_migrate_common.sql:159: NOTICE:  defaulting compress_orderby to bucket
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
 SELECT add_continuous_aggregate_policy('conditions_summary_daily', '30 days'::interval, '1 day'::interval, '1 hour'::interval);
@@ -256,6 +257,7 @@ psql:include/cagg_migrate_common.sql:178: NOTICE:  drop cascades to 10 other obj
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 psql:include/cagg_migrate_common.sql:179: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:180: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:180: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -400,6 +402,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
+psql:include/cagg_migrate_common.sql:232: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:232: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -503,6 +506,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
+psql:include/cagg_migrate_common.sql:254: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:254: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 psql:include/cagg_migrate_common.sql:254: NOTICE:  drop cascades to 10 other objects
 psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1002 not found, skipping
@@ -889,6 +893,7 @@ psql:include/cagg_migrate_common.sql:155: ERROR:  plan already exists for contin
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
+psql:include/cagg_migrate_common.sql:159: NOTICE:  defaulting compress_orderby to bucket
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -931,6 +936,7 @@ psql:include/cagg_migrate_common.sql:178: NOTICE:  drop cascades to 6 other obje
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 psql:include/cagg_migrate_common.sql:179: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:180: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:180: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -1063,6 +1069,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
+psql:include/cagg_migrate_common.sql:232: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:232: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -1166,6 +1173,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
+psql:include/cagg_migrate_common.sql:254: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:254: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 psql:include/cagg_migrate_common.sql:254: NOTICE:  drop cascades to 6 other objects
 psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1014 not found, skipping
@@ -1547,6 +1555,7 @@ psql:include/cagg_migrate_common.sql:155: ERROR:  plan already exists for contin
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
+psql:include/cagg_migrate_common.sql:159: NOTICE:  defaulting compress_orderby to bucket
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -1589,6 +1598,7 @@ psql:include/cagg_migrate_common.sql:178: NOTICE:  drop cascades to 6 other obje
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 psql:include/cagg_migrate_common.sql:179: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
+psql:include/cagg_migrate_common.sql:180: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:180: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -1721,6 +1731,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
+psql:include/cagg_migrate_common.sql:232: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:232: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -1824,6 +1835,7 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
+psql:include/cagg_migrate_common.sql:254: NOTICE:  defaulting compress_orderby to bucket
 psql:include/cagg_migrate_common.sql:254: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
 psql:include/cagg_migrate_common.sql:254: NOTICE:  drop cascades to 6 other objects
 psql:include/cagg_migrate_common.sql:254: NOTICE:  job 1026 not found, skipping
