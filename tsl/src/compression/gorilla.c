@@ -106,17 +106,11 @@ typedef struct GorillaDecompressionIterator
 	BitArrayIterator leading_zeros;
 	Simple8bRleDecompressionIterator num_bits_used;
 	BitArrayIterator xors;
-	bool has_nulls;
 	Simple8bRleDecompressionIterator nulls;
 	uint64 prev_val;
 	uint8 prev_leading_zeroes;
 	uint8 prev_xor_bits_used;
-
-	/* make row value and null sequential (struct) for easier more memory-local get() */
-	bool *decompressed_nulls;
-	uint64 *decompressed_values;
-	uint64 num_elements;
-	uint64 num_elements_returned;
+	bool has_nulls;
 } GorillaDecompressionIterator;
 
 /********************
@@ -510,71 +504,7 @@ compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum goril
 												  gorilla_compressed));
 }
 
-static void
-gorilla_decompress_all(GorillaDecompressionIterator *iter)
-{
-	const int n_total = iter->has_nulls ? iter->nulls.num_elements : iter->tag0s.num_elements;
-	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	iter->num_elements = n_total;
-
-	uint64 *restrict decompressed_values = iter->decompressed_values;
-	bool *restrict decompressed_nulls = iter->decompressed_nulls;
-	uint64 prev_value = 0;
-	uint8_t prev_xor_bits_used = 0;
-	uint8_t prev_leading_zeros = 0;
-	for (int i = 0; i < n_total; i++)
-	{
-		if (iter->has_nulls && iter->nulls.decompressed_values[i])
-		{
-			/* Placeholder. */
-			decompressed_values[i] = 0;
-			decompressed_nulls[i] = true;
-			continue;
-		}
-
-		const Simple8bRleDecompressResult tag0 =
-			simple8brle_decompression_iterator_try_next_forward(&iter->tag0s);
-		Assert(!tag0.is_done);
-
-		if (tag0.val == 0)
-		{
-			Assert(i > 0);
-			decompressed_values[i] = prev_value;
-			continue;
-		}
-		else
-		{
-			Assert(tag0.val == 1);
-		}
-
-		const Simple8bRleDecompressResult tag1 =
-			simple8brle_decompression_iterator_try_next_forward(&iter->tag1s);
-		Assert(!tag1.is_done);
-
-		if (tag1.val != 0)
-		{
-			Assert(tag1.val == 1);
-			const Simple8bRleDecompressResult num_xor_bits =
-				simple8brle_decompression_iterator_try_next_forward(&iter->num_bits_used);
-			Assert(!num_xor_bits.is_done);
-			prev_xor_bits_used = num_xor_bits.val;
-			prev_leading_zeros = bit_array_iter_next(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
-		}
-		else
-		{
-			Assert(i > 0);
-		}
-
-		const uint64 xored_value = bit_array_iter_next(&iter->xors, prev_xor_bits_used)
-								   << (64 - (prev_leading_zeros + prev_xor_bits_used));
-		prev_value ^= xored_value;
-
-		decompressed_values[i] = prev_value;
-	}
-}
-
-static DecompressResult (*gorilla_get_iterator(bool forward,
-											   Oid output_type))(DecompressionIterator *);
+static ArrowArray (*gorilla_get_decompress_all(Oid type))(DecompressionIterator *);
 
 DecompressionIterator *
 gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type)
@@ -583,13 +513,11 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
 	iterator->base.forward = true;
 	iterator->base.element_type = element_type;
-	iterator->base.try_next = gorilla_get_iterator(/* forward = */ true, element_type);
-	iterator->base.decompress_all = NULL;
+	iterator->base.try_next = gorilla_decompression_iterator_try_next_forward;
+	iterator->base.decompress_all_forward_direction = gorilla_get_decompress_all(element_type);
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
-	iterator->num_elements = 0;
-	iterator->num_elements_returned = 0;
 	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
 
 	simple8brle_decompression_iterator_init_forward(&iterator->tag0s, iterator->gorilla_data.tag0s);
@@ -599,74 +527,122 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 													iterator->gorilla_data.num_bits_used_per_xor);
 	bit_array_iterator_init(&iterator->xors, &iterator->gorilla_data.xors);
 
-	if (iterator->gorilla_data.nulls != NULL)
-	{
-		iterator->has_nulls = true;
+	iterator->has_nulls = iterator->gorilla_data.nulls != NULL;
+	if (iterator->has_nulls)
 		simple8brle_decompression_iterator_init_forward(&iterator->nulls,
 														iterator->gorilla_data.nulls);
-	}
-	else
-	{
-		iterator->has_nulls = false;
-	}
-
-	iterator->decompressed_values = palloc(sizeof(uint64) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	iterator->decompressed_nulls = palloc0(sizeof(bool) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	gorilla_decompress_all(iterator);
 
 	return &iterator->base;
 }
 
-static pg_attribute_always_inline DecompressResultInternal
-gorilla_decompression_iterator_try_next_true(GorillaDecompressionIterator *iter)
+static inline DecompressResult
+convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 {
-	if (iter->num_elements_returned >= iter->num_elements)
+	if (res_internal.is_done || res_internal.is_null)
 	{
-		return (DecompressResultInternal){ .is_done = true };
+		return (DecompressResult){
+			.is_done = res_internal.is_done,
+			.is_null = res_internal.is_null,
+		};
 	}
 
-	const uint32 pos = iter->num_elements_returned;
-	iter->num_elements_returned++;
+	switch (element_type)
+	{
+		case FLOAT8OID:
+			return (DecompressResult){
+				.val = Float8GetDatum(bits_get_double(res_internal.val)),
+			};
+		case FLOAT4OID:
+			return (DecompressResult){
+				.val = Float4GetDatum(bits_get_float(res_internal.val)),
+			};
+		case INT8OID:
+			return (DecompressResult){
+				.val = Int64GetDatum(res_internal.val),
+			};
+		case INT4OID:
+			return (DecompressResult){
+				.val = Int32GetDatum(res_internal.val),
+			};
+		case INT2OID:
+			return (DecompressResult){
+				.val = Int16GetDatum(res_internal.val),
+			};
+		default:
+			elog(ERROR, "invalid type requested from gorilla decompression");
+	}
+	pg_unreachable();
+}
 
-	return (DecompressResultInternal){ .val = iter->decompressed_values[pos],
-									   .is_null = iter->decompressed_nulls[pos] };
+static DecompressResultInternal
+gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIterator *iter)
+{
+	Simple8bRleDecompressResult tag0;
+	Simple8bRleDecompressResult tag1;
+	uint64 xor ;
+
+	if (iter->has_nulls)
+	{
+		Simple8bRleDecompressResult null =
+			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
+		/* Could slightly improve performance here by not returning a tail of non-null bits */
+		if (null.is_done)
+			return (DecompressResultInternal){
+				.is_done = true,
+			};
+
+		if (null.val != 0)
+		{
+			Assert(null.val == 1);
+			return (DecompressResultInternal){
+				.is_null = true,
+			};
+		}
+	}
+
+	tag0 = simple8brle_decompression_iterator_try_next_forward(&iter->tag0s);
+	/* if we don't have a null bitset, this will determine when we're done */
+	if (tag0.is_done)
+		return (DecompressResultInternal){
+			.is_done = true,
+		};
+
+	if (tag0.val == 0)
+		return (DecompressResultInternal){
+			.val = iter->prev_val,
+		};
+
+	tag1 = simple8brle_decompression_iterator_try_next_forward(&iter->tag1s);
+	Assert(!tag1.is_done);
+
+	if (tag1.val != 0)
+	{
+		Simple8bRleDecompressResult num_xor_bits;
+		/* get new xor sizes */
+		iter->prev_leading_zeroes =
+			bit_array_iter_next(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
+		num_xor_bits = simple8brle_decompression_iterator_try_next_forward(&iter->num_bits_used);
+		Assert(!num_xor_bits.is_done);
+		iter->prev_xor_bits_used = num_xor_bits.val;
+	}
+
+	xor = bit_array_iter_next(&iter->xors, iter->prev_xor_bits_used);
+	if (iter->prev_leading_zeroes + iter->prev_xor_bits_used < 64)
+		xor <<= 64 - (iter->prev_leading_zeroes + iter->prev_xor_bits_used);
+	iter->prev_val ^= xor;
+
+	return (DecompressResultInternal){
+		.val = iter->prev_val,
+	};
 }
 
 DecompressResult
 gorilla_decompression_iterator_try_next_forward(DecompressionIterator *iter_base)
 {
 	Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_GORILLA && iter_base->forward);
-	return gorilla_get_iterator(iter_base->forward, iter_base->element_type)(iter_base);
-}
-
-static pg_attribute_always_inline Datum
-convert_FLOAT8OID(uint64_t value)
-{
-	return Float8GetDatum(bits_get_double(value));
-}
-
-static pg_attribute_always_inline Datum
-convert_FLOAT4OID(uint64_t value)
-{
-	return Float4GetDatum(bits_get_float(value));
-}
-
-static pg_attribute_always_inline Datum
-convert_INT8OID(uint64_t value)
-{
-	return Int64GetDatum(value);
-}
-
-static pg_attribute_always_inline Datum
-convert_INT4OID(uint64_t value)
-{
-	return Int64GetDatum(value);
-}
-
-static pg_attribute_always_inline Datum
-convert_INT2OID(uint64_t value)
-{
-	return Int64GetDatum(value);
+	return convert_from_internal(gorilla_decompression_iterator_try_next_forward_internal(
+									 (GorillaDecompressionIterator *) iter_base),
+								 iter_base->element_type);
 }
 
 /****************************************
@@ -691,133 +667,151 @@ convert_INT2OID(uint64_t value)
 DecompressionIterator *
 gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid element_type)
 {
-	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
-	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
-	iterator->base.forward = false;
-	iterator->base.element_type = element_type;
-	iterator->base.try_next = gorilla_get_iterator(/* forward = */ false, element_type);
-	iterator->base.decompress_all = NULL;
-	iterator->prev_val = 0;
-	iterator->prev_leading_zeroes = 0;
-	iterator->prev_xor_bits_used = 0;
-	iterator->num_elements = 0;
-	iterator->num_elements_returned = 0;
-	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
+	GorillaDecompressionIterator *iter = palloc(sizeof(*iter));
+	Simple8bRleDecompressResult num_xor_bits;
 
-	simple8brle_decompression_iterator_init_forward(&iterator->tag0s, iterator->gorilla_data.tag0s);
-	simple8brle_decompression_iterator_init_forward(&iterator->tag1s, iterator->gorilla_data.tag1s);
-	bit_array_iterator_init(&iterator->leading_zeros, &iterator->gorilla_data.leading_zeros);
-	simple8brle_decompression_iterator_init_forward(&iterator->num_bits_used,
-													iterator->gorilla_data.num_bits_used_per_xor);
-	bit_array_iterator_init(&iterator->xors, &iterator->gorilla_data.xors);
+	iter->base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
+	iter->base.forward = false;
+	iter->base.element_type = element_type;
+	iter->base.try_next = gorilla_decompression_iterator_try_next_reverse;
+	/* FIXME: "unpack all" needs forward bit iterators, so we can't use it with
+	 * reverse init. Need different interfaces. */
+	iter->base.decompress_all_forward_direction = NULL;
+	compressed_gorilla_data_init_from_datum(&iter->gorilla_data, gorilla_compressed);
 
-	if (iterator->gorilla_data.nulls != NULL)
-	{
-		iterator->has_nulls = true;
-		simple8brle_decompression_iterator_init_forward(&iterator->nulls,
-														iterator->gorilla_data.nulls);
-	}
-	else
-	{
-		iterator->has_nulls = false;
-	}
+	simple8brle_decompression_iterator_init_reverse(&iter->tag0s, iter->gorilla_data.tag0s);
+	simple8brle_decompression_iterator_init_reverse(&iter->tag1s, iter->gorilla_data.tag1s);
+	bit_array_iterator_init_rev(&iter->leading_zeros, &iter->gorilla_data.leading_zeros);
+	simple8brle_decompression_iterator_init_reverse(&iter->num_bits_used,
+													iter->gorilla_data.num_bits_used_per_xor);
+	bit_array_iterator_init_rev(&iter->xors, &iter->gorilla_data.xors);
 
-	iterator->decompressed_values = palloc(sizeof(uint64) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	iterator->decompressed_nulls = palloc0(sizeof(bool) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	gorilla_decompress_all(iterator);
+	iter->has_nulls = iter->gorilla_data.nulls != NULL;
+	if (iter->has_nulls)
+		simple8brle_decompression_iterator_init_reverse(&iter->nulls, iter->gorilla_data.nulls);
 
-	return &iterator->base;
+	/* we need to know how many bits are used, even if the last value didn't store them */
+	iter->prev_leading_zeroes =
+		bit_array_iter_next_rev(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
+	num_xor_bits = simple8brle_decompression_iterator_try_next_reverse(&iter->num_bits_used);
+	Assert(!num_xor_bits.is_done);
+	iter->prev_xor_bits_used = num_xor_bits.val;
+	iter->prev_val = iter->gorilla_data.header->last_value;
+	return &iter->base;
 }
 
-static pg_attribute_always_inline DecompressResultInternal
-gorilla_decompression_iterator_try_next_false(GorillaDecompressionIterator *iter)
+static DecompressResultInternal
+gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIterator *iter)
 {
-	if (iter->num_elements_returned >= iter->num_elements)
+	Simple8bRleDecompressResult tag0;
+	Simple8bRleDecompressResult tag1;
+	uint64 val;
+	uint64 xor ;
+
+	if (iter->has_nulls)
 	{
-		return (DecompressResultInternal){ .is_done = true };
+		Simple8bRleDecompressResult null =
+			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
+
+		if (null.is_done)
+			return (DecompressResultInternal){
+				.is_done = true,
+			};
+
+		if (null.val != 0)
+		{
+			Assert(null.val == 1);
+			return (DecompressResultInternal){
+				.is_null = true,
+			};
+		}
 	}
 
-	const uint32 pos = iter->num_elements - iter->num_elements_returned - 1;
-	iter->num_elements_returned++;
+	val = iter->prev_val;
+
+	tag0 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag0s);
+	/* if we don't have a null bitset, this will determine when we're done */
+	if (tag0.is_done)
+		return (DecompressResultInternal){
+			.is_done = true,
+		};
+
+	if (tag0.val == 0)
+		return (DecompressResultInternal){
+			.val = val,
+		};
+
+	xor = bit_array_iter_next_rev(&iter->xors, iter->prev_xor_bits_used);
+
+	if (iter->prev_leading_zeroes + iter->prev_xor_bits_used < 64)
+		xor <<= 64 - (iter->prev_leading_zeroes + iter->prev_xor_bits_used);
+	iter->prev_val ^= xor;
+
+	tag1 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag1s);
+
+	if (tag1.val != 0)
+	{
+		/* get new xor sizes */
+		Simple8bRleDecompressResult num_xor_bits =
+			simple8brle_decompression_iterator_try_next_reverse(&iter->num_bits_used);
+		/* there're an implicit leading 0 to num_xor_bits and prev_leading_zeroes,
+		 */
+		if (num_xor_bits.is_done)
+		{
+			iter->prev_xor_bits_used = 0;
+			iter->prev_leading_zeroes = 0;
+		}
+		else
+		{
+			iter->prev_xor_bits_used = num_xor_bits.val;
+			iter->prev_leading_zeroes =
+				bit_array_iter_next_rev(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
+		}
+	}
 
 	return (DecompressResultInternal){
-		.val = iter->decompressed_values[pos],
-		.is_null = iter->decompressed_nulls[pos],
+		.val = val,
 	};
 }
 
-/* for unit tests */
 DecompressResult
 gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base)
 {
 	Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_GORILLA &&
 		   !iter_base->forward);
-	return gorilla_get_iterator(iter_base->forward, iter_base->element_type)(iter_base);
+	return convert_from_internal(gorilla_decompression_iterator_try_next_reverse_internal(
+									 (GorillaDecompressionIterator *) iter_base),
+								 iter_base->element_type);
 }
 
-/*
- * Why are we doing this instead of plain reinterpret_cast?
- * Should be possible from void* with good alignment (does it work for type punning?).
- * float4 -> 64-bit datum does sign extension, have to investigate if it's important,
- * and if other types do something weird as well.
- */
-static pg_attribute_always_inline DecompressResult
-gorilla_decompression_iterator_try_next_common(
-	GorillaDecompressionIterator *iter,
-	DecompressResultInternal (*next)(GorillaDecompressionIterator *), Datum (*toDatum)(uint64_t))
+#define ELEMENT_TYPE uint16
+#include "gorilla_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint32
+#include "gorilla_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint64
+#include "gorilla_impl.c"
+#undef ELEMENT_TYPE
+
+static ArrowArray (*gorilla_get_decompress_all(Oid type))(DecompressionIterator *)
 {
-	DecompressResultInternal result_internal = next(iter);
-	return (DecompressResult){
-		.is_done = result_internal.is_done,
-		.is_null = result_internal.is_null,
-		.val = toDatum(result_internal.val),
-	};
-}
-
-#define REPEAT_COMBOS(X)                                                                           \
-	X(true, FLOAT8OID)                                                                             \
-	X(true, FLOAT4OID)                                                                             \
-	X(true, INT8OID)                                                                               \
-	X(true, INT4OID)                                                                               \
-	X(true, INT2OID)                                                                               \
-	X(false, FLOAT8OID)                                                                            \
-	X(false, FLOAT4OID)                                                                            \
-	X(false, INT8OID)                                                                              \
-	X(false, INT4OID)                                                                              \
-	X(false, INT2OID)
-
-#define DEFINE_ITERATOR(DIRECTION, TYPE)                                                           \
-	static DecompressResult gorilla_decompression_iterator_try_next_##DIRECTION##_##TYPE(          \
-		DecompressionIterator *iter_base)                                                          \
-	{                                                                                              \
-		Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_GORILLA);                 \
-		return gorilla_decompression_iterator_try_next_common(                                     \
-			(GorillaDecompressionIterator *) iter_base,                                            \
-			gorilla_decompression_iterator_try_next_##DIRECTION,                                   \
-			convert_##TYPE);                                                                       \
-	}
-
-REPEAT_COMBOS(DEFINE_ITERATOR)
-
-#undef DEFINE_ITERATOR
-
-static DecompressResult (*gorilla_get_iterator(bool forward,
-											   Oid output_type))(DecompressionIterator *)
-{
-#define CHOOSE_ITERATOR(CONST_FORWARD, CONST_OUTPUT_TYPE)                                          \
-	if (CONST_FORWARD == forward && CONST_OUTPUT_TYPE == output_type)                              \
-	{                                                                                              \
-		return gorilla_decompression_iterator_try_next_##CONST_FORWARD##_##CONST_OUTPUT_TYPE;      \
-	}                                                                                              \
-	else
-
-	REPEAT_COMBOS(CHOOSE_ITERATOR)
+	switch (type)
 	{
-		elog(ERROR, "invalid type requested from gorilla decompression");
-		return NULL;
+		case FLOAT8OID:
+		case INT8OID:
+			return gorilla_decompress_all_uint64;
+		case FLOAT4OID:
+		case INT4OID:
+			return gorilla_decompress_all_uint32;
+		case INT2OID:
+			return gorilla_decompress_all_uint16;
+		default:
+			elog(ERROR, "type oid %d is not supported for gorilla decompression", type);
+			return NULL;
 	}
-
-#undef CHOOSE_ITERATOR
 }
 
 /*************

@@ -360,6 +360,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 			.forward = scan_forward,
 			.element_type = element_type,
 			.try_next = (scan_forward ? dictionary_decompression_iterator_try_next_forward : dictionary_decompression_iterator_try_next_reverse),
+			.decompress_all_forward_direction = NULL,
 		},
 		.compressed = bitmap,
 		.values = palloc(sizeof(Datum) * bitmap->num_distinct),

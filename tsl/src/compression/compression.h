@@ -7,11 +7,15 @@
 #define TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
 
 #include <postgres.h>
+
 #include <c.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
+#include <utils/date.h>
+#include <utils/lsyscache.h>
 #include <utils/relcache.h>
+#include <utils/timestamp.h>
 
 #ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1020
@@ -136,6 +140,34 @@ typedef struct ArrowArray
 	void *private_data;
 } ArrowArray;
 
+static pg_attribute_always_inline bool
+arrow_validity_bitmap_get(const uint64 *bitmap, int row_number)
+{
+	const int qword_index = row_number / 64;
+	const int bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+	return (bitmap[qword_index] & mask) ? 1 : 0;
+}
+
+static pg_attribute_always_inline void
+arrow_validity_bitmap_set(uint64 *bitmap, int row_number, bool value)
+{
+	const int qword_index = row_number / 64;
+	const int bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+
+	if (value)
+	{
+		bitmap[qword_index] |= mask;
+	}
+	else
+	{
+		bitmap[qword_index] &= ~mask;
+	}
+
+	Assert(arrow_validity_bitmap_get(bitmap, row_number) == value);
+}
+
 /* Forward declaration of ColumnCompressionInfo so we don't need to include catalog.h */
 typedef struct FormData_hypertable_compression ColumnCompressionInfo;
 
@@ -154,8 +186,99 @@ typedef struct DecompressionIterator
 
 	Oid element_type;
 	DecompressResult (*try_next)(struct DecompressionIterator *);
-	ArrowArray (*decompress_all)(struct DecompressionIterator *);
+	ArrowArray (*decompress_all_forward_direction)(struct DecompressionIterator *);
 } DecompressionIterator;
+
+static inline void
+datum_to_arrow(Datum datum, void *buffer, int row_index, Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case BOOLOID:
+			((int8 *) buffer)[row_index] = DatumGetBool(datum);
+			break;
+		case CHAROID:
+			((int8 *) buffer)[row_index] = DatumGetChar(datum);
+			break;
+		case INT2OID:
+			((int16 *) buffer)[row_index] = DatumGetInt16(datum);
+			break;
+		case INT4OID:
+			((int32 *) buffer)[row_index] = DatumGetInt32(datum);
+			break;
+		case INT8OID:
+			((int64 *) buffer)[row_index] = DatumGetInt64(datum);
+			break;
+		case FLOAT4OID:
+			((float4 *) buffer)[row_index] = DatumGetFloat4(datum);
+			break;
+		case FLOAT8OID:
+			((float8 *) buffer)[row_index] = DatumGetFloat8(datum);
+			break;
+		case DATEOID:
+			((int32 *) buffer)[row_index] = DatumGetDateADT(datum);
+			break;
+		case TIMESTAMPTZOID:
+			((int64 *) buffer)[row_index] = DatumGetTimestampTz(datum);
+			break;
+		case TIMESTAMPOID:
+			((int64 *) buffer)[row_index] = DatumGetTimestamp(datum);
+			break;
+		default:
+			elog(ERROR, "cannot convert datum with oid %d to arrow type", typeoid);
+	}
+}
+
+// static pg_attribute_always_inline ArrowArray
+// default_decompress_all_forward_direction(struct DecompressionIterator *iterator,
+// 	DecompressResult (*try_next_impl) (struct DecompressionIterator *))
+// {
+// 	//Assert(iterator->forward);
+//
+// 	ArrowArray result;
+//
+// 	int current_row = 0;
+// 	int nulls1 = 0;
+// 	int typlen = get_typlen(iterator->element_type);
+// 	Assert(typlen > 0);
+// 	uint64 * validity_bitmap =
+// 			palloc0(sizeof(uint64) * ((GLOBAL_MAX_ROWS_PER_COMPRESSION + 64 - 1) / 64));
+// 	void * values =
+// 			palloc(typlen * GLOBAL_MAX_ROWS_PER_COMPRESSION);
+// 	for (DecompressResult res = try_next_impl(iterator);
+// 		 !res.is_done;
+// 		 res = try_next_impl(iterator))
+// 	{
+// 		arrow_validity_bitmap_set(validity_bitmap, current_row, !res.is_null);
+// 		datum_to_arrow(res.val, values, current_row, iterator->element_type);
+// 		current_row++;
+//
+// 		if (res.is_null)
+// 		{
+// 			nulls1++;
+// 		}
+// 	}
+//
+// 	int nulls2 = 0;
+// 	for (int i = 0; i < current_row; i++)
+// 	{
+// 		if (!arrow_validity_bitmap_get(validity_bitmap, i))
+// 		{
+// 			nulls2++;
+// 		}
+// 	}
+//
+// 	Assert(nulls1 == nulls2);
+//
+// 	result.n_buffers = 2;
+// 	result.buffers = palloc(sizeof(void *) * 2);
+// 	result.buffers[0] = validity_bitmap;
+// 	result.buffers[1] = values;
+// 	result.length = current_row;
+// 	result.null_count = -1;
+//
+// 	return result;
+// }
 
 /*
  * TOAST_STORAGE_EXTENDED for out of line storage.

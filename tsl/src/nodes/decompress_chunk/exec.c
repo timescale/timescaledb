@@ -14,6 +14,7 @@
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
 #include <utils/typcache.h>
@@ -63,9 +64,8 @@ typedef struct DecompressChunkColumnState
 		struct
 		{
 			DecompressionIterator *iterator;
+			ArrowArray data;
 		} compressed;
-
-		ArrowArray data;
 	};
 } DecompressChunkColumnState;
 
@@ -303,34 +303,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 													 ALLOCSET_DEFAULT_SIZES);
 }
 
-static bool
-arrow_validity_bitmap_get(const uint64 *bitmap, int row_number)
-{
-	const int qword_index = row_number / 64;
-	const int bit_index = row_number % 64;
-	const uint64 mask = 1ull << bit_index;
-	return (bitmap[qword_index] & mask) ? 1 : 0;
-}
-
-static void
-arrow_validity_bitmap_set(uint64 *bitmap, int row_number, bool value)
-{
-	const int qword_index = row_number / 64;
-	const int bit_index = row_number % 64;
-	const uint64 mask = 1ull << bit_index;
-
-	if (value)
-	{
-		bitmap[qword_index] |= mask;
-	}
-	else
-	{
-		bitmap[qword_index] &= ~mask;
-	}
-
-	Assert(arrow_validity_bitmap_get(bitmap, row_number) == value);
-}
-
 static void
 initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				 TupleTableSlot *decompressed_slot)
@@ -352,6 +324,9 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 		{
 			case COMPRESSED_COLUMN:
 			{
+				column->compressed.data.length = 0;
+				column->compressed.iterator = NULL;
+
 				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
 				if (!isnull)
 				{
@@ -361,52 +336,26 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 						tsl_get_decompression_iterator_init(header->compression_algorithm,
 															state->reverse)(PointerGetDatum(header),
 																			column->typid);
-					int current_row = 0;
-					int nulls1 = 0;
-					uint64 *restrict validity_bitmap =
-						palloc0(sizeof(uint64) * ((GLOBAL_MAX_ROWS_PER_COMPRESSION + 64 - 1) / 64));
-					uint64 *restrict values =
-						palloc(sizeof(uint64) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-					for (DecompressResult res =
-							 column->compressed.iterator->try_next(column->compressed.iterator);
-						 !res.is_done;
-						 res = column->compressed.iterator->try_next(column->compressed.iterator))
-					{
-						arrow_validity_bitmap_set(validity_bitmap, current_row, !res.is_null);
-						values[current_row] = res.val;
-						current_row++;
 
-						if (res.is_null)
+					Assert(column->compressed.iterator != NULL);
+
+					if (column->compressed.iterator->decompress_all_forward_direction)
+					{
+						column->compressed.data =
+							column->compressed.iterator->decompress_all_forward_direction(
+								column->compressed.iterator);
+
+						Assert(column->compressed.data.length > 0);
+						if (state->total_rows == 0)
 						{
-							nulls1++;
+							state->total_rows = column->compressed.data.length;
 						}
-					}
-
-					int nulls2 = 0;
-					for (int i = 0; i < current_row; i++)
-					{
-						if (!arrow_validity_bitmap_get(validity_bitmap, i))
+						else if (state->total_rows != column->compressed.data.length)
 						{
-							nulls2++;
+							elog(ERROR, "compressed column out of sync with batch counter");
 						}
-					}
 
-					Assert(nulls1 == nulls2);
-
-					column->data.n_buffers = 2;
-					column->data.buffers = palloc(sizeof(void *) * 2);
-					column->data.buffers[0] = validity_bitmap;
-					column->data.buffers[1] = values;
-					column->data.length = current_row;
-					column->data.null_count = -1;
-
-					if (state->total_rows == 0)
-					{
-						state->total_rows = current_row;
-					}
-					else if (state->total_rows != current_row)
-					{
-						elog(ERROR, "compressed column out of sync with batch counter");
+						column->compressed.iterator = NULL;
 					}
 				}
 				else
@@ -433,6 +382,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 			case COUNT_COLUMN:
 				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
 				int count_value = DatumGetInt32(value);
+				Assert(count_value > 0);
 				if (state->total_rows == 0)
 				{
 					state->total_rows = count_value;
@@ -503,6 +453,114 @@ decompress_chunk_end(CustomScanState *node)
 }
 
 /*
+
+static Oid
+arrow_type_to_postgres(char *type)
+{
+	if (strcmp(type, "n") == 0)
+	{
+		return UNKNOWNOID;
+	}
+	else if (strcmp(type, "b") == 0)
+	{
+		return BOOLOID;
+	}
+	else if (strcmp(type, "c") == 0)
+	{
+		return CHAROID;
+	}
+	else if (strcmp(type, "s") == 0)
+	{
+		return INT2OID;
+	}
+	else if (strcmp(type, "i") == 0)
+	{
+		return INT4OID;
+	}
+	else if (strcmp(type, "l") == 0)
+	{
+		return INT8OID;
+	}
+	else if (strcmp(type, "f") == 0)
+	{
+		return FLOAT4OID;
+	}
+	else if (strcmp(type, "g") == 0)
+	{
+		return FLOAT8OID;
+	}
+	else
+	{
+		elog(ERROR, "arrow type %s is not supported", type);
+		return InvalidOid;
+	}
+}
+
+static char*
+postgres_type_to_arrow(Oid oid)
+{
+	switch (oid)
+	{
+		case BOOLOID:
+			return "b";
+		case CHAROID:
+			return "c";
+		case INT2OID:
+			return "s";
+		case INT4OID:
+			return "i";
+		case INT8OID:
+			return "l";
+		case FLOAT4OID:
+			return "f";
+		case FLOAT8OID:
+			return "g";
+		case DATEOID:
+			return "tdD";
+		case TIMESTAMPTZOID:
+			return "ttu:UTC";
+		case TIMESTAMPOID:
+			return "ttu";
+		default:
+			elog(ERROR, "cannot convert type oid %d to arrow", oid);
+			return NULL;
+	}
+}
+
+*/
+
+static Datum
+arrow_to_datum(const void *buffer, int row_index, Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case BOOLOID:
+			return BoolGetDatum(((int8 *) buffer)[row_index]);
+		case CHAROID:
+			return CharGetDatum(((int8 *) buffer)[row_index]);
+		case INT2OID:
+			return Int16GetDatum(((int16 *) buffer)[row_index]);
+		case INT4OID:
+			return Int32GetDatum(((int32 *) buffer)[row_index]);
+		case INT8OID:
+			return Int64GetDatum(((int64 *) buffer)[row_index]);
+		case FLOAT4OID:
+			return Float4GetDatum(((float4 *) buffer)[row_index]);
+		case FLOAT8OID:
+			return Float8GetDatum(((float8 *) buffer)[row_index]);
+		case DATEOID:
+			return DateADTGetDatum(((int32 *) buffer)[row_index]);
+		case TIMESTAMPTZOID:
+			return TimestampTzGetDatum(((int64 *) buffer)[row_index]);
+		case TIMESTAMPOID:
+			return TimestampGetDatum(((int64 *) buffer)[row_index]);
+		default:
+			elog(ERROR, "cannot convert arrow type to datum with oid %d", typeoid);
+			return (Datum) 0;
+	}
+}
+
+/*
  * Create generated tuple according to column state
  */
 static TupleTableSlot *
@@ -515,9 +573,23 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 		if (state->initialized && state->current_row >= state->total_rows)
 		{
 			/*
-			 * Reached end of batch.
+			 * Reached end of batch. Check that the columns that we're decompressing
+			 * row-by-row have also ended.
 			 */
 			state->initialized = false;
+			for (int i = 0; i < state->num_columns; i++)
+			{
+				DecompressChunkColumnState *column = &state->columns[i];
+				if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
+				{
+					DecompressResult result =
+						column->compressed.iterator->try_next(column->compressed.iterator);
+					if (!result.is_done)
+					{
+						elog(ERROR, "compressed column out of sync with batch counter");
+					}
+				}
+			}
 		}
 
 		if (!state->initialized)
@@ -549,13 +621,37 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 		for (int i = 0; i < state->num_columns; i++)
 		{
 			DecompressChunkColumnState *column = &state->columns[i];
-			if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
+			if (column->type != COMPRESSED_COLUMN)
 			{
-				AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+				continue;
+			}
+
+			const AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+
+			if (column->compressed.data.length > 0)
+			{
+				Assert(column->compressed.iterator == NULL);
+
+				const int row_index = state->reverse ? state->total_rows - state->current_row - 1 :
+													   state->current_row;
 				/* FIXME add code for passing float8 by reference on 32-bit systems. */
-				slot->tts_values[attr] = ((Datum *) column->data.buffers[1])[state->current_row];
 				slot->tts_isnull[attr] =
-					!arrow_validity_bitmap_get(column->data.buffers[0], state->current_row);
+					!arrow_validity_bitmap_get(column->compressed.data.buffers[0], row_index);
+				slot->tts_values[attr] =
+					arrow_to_datum(column->compressed.data.buffers[1], row_index, column->typid);
+			}
+			else if (column->compressed.iterator != NULL)
+			{
+				DecompressResult result =
+					column->compressed.iterator->try_next(column->compressed.iterator);
+
+				if (result.is_done)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
+
+				slot->tts_isnull[attr] = result.is_null;
+				slot->tts_values[attr] = result.val;
 			}
 		}
 
