@@ -127,7 +127,7 @@ ts_bgw_start_worker(const char *name, const BgwParams *bgw_params)
 
 	strlcpy(worker.bgw_name, name, BGW_MAXLEN);
 	strlcpy(worker.bgw_library_name, ts_extension_get_so_name(), BGW_MAXLEN);
-	strlcpy(worker.bgw_function_name, bgw_params->bgw_main, sizeof(worker.bgw_function_name));
+	strlcpy(worker.bgw_function_name, bgw_params->bgw_main, BGW_MAXLEN);
 
 	memcpy(worker.bgw_extra, bgw_params, sizeof(*bgw_params));
 
