@@ -560,8 +560,10 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 	if (n_total_values > GLOBAL_MAX_ROWS_PER_COMPRESSION)
 	{
 		/* Don't allocate too much if we got corrupt data or something. */
-		elog(ERROR, "the number of elements in compressed data %d is larger than the maximum allowed %d",
-			n_total_values, GLOBAL_MAX_ROWS_PER_COMPRESSION);
+		elog(ERROR,
+			 "the number of elements in compressed data %d is larger than the maximum allowed %d",
+			 n_total_values,
+			 GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	}
 
 	/* Decompress all the rows in one go for better throughput. */
