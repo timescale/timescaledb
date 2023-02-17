@@ -814,6 +814,7 @@ static DecompressResult (*gorilla_get_iterator(bool forward,
 	REPEAT_COMBOS(CHOOSE_ITERATOR)
 	{
 		elog(ERROR, "invalid type requested from gorilla decompression");
+		return NULL;
 	}
 
 #undef CHOOSE_ITERATOR
