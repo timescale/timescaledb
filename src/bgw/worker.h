@@ -40,7 +40,7 @@ typedef struct BgwParams
 	int32 ttl;
 
 	/** Name of function to call when starting the background worker. */
-	char bgw_main[NAMEDATALEN];
+	char bgw_main[BGW_MAXLEN];
 } BgwParams;
 
 /**
