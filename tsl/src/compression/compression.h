@@ -65,13 +65,13 @@ typedef struct ArrowArray
 	/*
 	 * Mandatory. The logical length of the array (i.e. its number of items).
 	 */
-	int64_t length;
+	int64 length;
 
 	/*
 	 * Mandatory. The number of null items in the array. MAY be -1 if not yet
 	 * computed.
 	 */
-	int64_t null_count;
+	int64 null_count;
 
 	/*
 	 * Mandatory. The logical offset inside the array (i.e. the number of
@@ -81,7 +81,7 @@ typedef struct ArrowArray
 	 * ease implementation of consumer code. Consumers MAY decide not to
 	 * support non-0-offset arrays, but they should document this limitation.
 	 */
-	int64_t offset;
+	int64 offset;
 
 	/*
 	 * Mandatory. The number of physical buffers backing this array. The
@@ -90,12 +90,12 @@ typedef struct ArrowArray
 	 *
 	 * Buffers of children arrays are not included.
 	 */
-	int64_t n_buffers;
+	int64 n_buffers;
 
 	/*
 	 * Mandatory. The number of children this type has.
 	 */
-	int64_t n_children;
+	int64 n_children;
 
 	/*
 	 * Mandatory. A C array of pointers to the start of each physical buffer
