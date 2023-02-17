@@ -1198,7 +1198,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	List *fromList = NIL;
 	StringInfo hint = makeStringInfo();
 	StringInfo detail = makeStringInfo();
-	bool is_nested = false;
+	bool is_hierarchical = false;
 	Query *prev_query = NULL;
 	ContinuousAgg *cagg_parent = NULL;
 	Oid normal_table_id = InvalidOid;
@@ -1391,8 +1391,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			hcache = ts_hypertable_cache_pin();
 			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
 
-			/* If parent cagg is nested then we should get the matht otherwise the rawht. */
-			if (ContinuousAggIsNested(cagg_parent))
+			/* If parent cagg is hierarchical then we should get the matht otherwise the rawht. */
+			if (ContinuousAggIsHierarchical(cagg_parent))
 				ht_parent =
 					ts_hypertable_cache_get_entry_by_id(hcache,
 														cagg_parent->data.mat_hypertable_id);
@@ -1402,7 +1402,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 														cagg_parent->data.raw_hypertable_id);
 
 			/* Get the querydef for the source cagg. */
-			is_nested = true;
+			is_hierarchical = true;
 			prev_query = ts_continuous_agg_get_query(cagg_parent);
 		}
 
@@ -1472,7 +1472,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								part_dimension->fd.interval_length,
 								parent_mat_hypertable_id);
 
-		if (is_nested)
+		if (is_hierarchical)
 		{
 			const Dimension *part_dimension_parent =
 				hyperspace_get_open_dimension(ht_parent->space, 0);
@@ -1502,8 +1502,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate on hypertable with row security")));
 
-	/* nested cagg validations */
-	if (is_nested)
+	/* hierarchical cagg validations */
+	if (is_hierarchical)
 	{
 		int64 bucket_width = 0, bucket_width_parent = 0;
 		bool is_greater_or_equal_than_parent = true, is_multiple_of_parent = true;
