@@ -198,11 +198,11 @@ static inline uint32 simple8brle_block_append_rle(Simple8bRleBlock *compressed_b
 												  const uint64 *data, uint32 data_len);
 
 /* utils */
-static inline bool simple8brle_selector_is_rle(uint8 selector);
-static inline uint64 simple8brle_selector_get_bitmask(uint8 selector);
-static inline uint32 simple8brle_bits_for_value(uint64 v);
-static inline uint32 simple8brle_rledata_repeatcount(uint64 rledata);
-static inline uint64 simple8brle_rledata_value(uint64 rledata);
+static pg_attribute_always_inline bool simple8brle_selector_is_rle(uint8 selector);
+static pg_attribute_always_inline uint64 simple8brle_selector_get_bitmask(uint8 selector);
+static pg_attribute_always_inline uint32 simple8brle_bits_for_value(uint64 v);
+static pg_attribute_always_inline uint32 simple8brle_rledata_repeatcount(uint64 rledata);
+static pg_attribute_always_inline uint64 simple8brle_rledata_value(uint64 rledata);
 static uint32 simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks);
 
 /*******************************
@@ -569,7 +569,8 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 	/* Decompress all the rows in one go for better throughput. */
 	uint64 *restrict decompressed_values = palloc(sizeof(uint64) * n_total_values);
 	uint32 decompressed_index = 0;
-	for (uint32 block_index = 0; block_index < compressed->num_blocks; block_index++)
+	const uint32 num_blocks = compressed->num_blocks;
+	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
 		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
@@ -601,10 +602,11 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 			 * Bit-packed block. The last one might contain less than maximal
 			 * possible number of elements.
 			 */
-			const int n_block_values =
-				Min(SIMPLE8B_NUM_ELEMENTS[selector_value], n_total_values - decompressed_index);
-			Assert(n_block_values == SIMPLE8B_NUM_ELEMENTS[selector_value] ||
-				   block_index == compressed->num_blocks - 1);
+			const int n_block_values = (block_index == num_blocks - 1)
+				? n_total_values - decompressed_index
+				: SIMPLE8B_NUM_ELEMENTS[selector_value];
+
+			Assert(n_block_values <= SIMPLE8B_NUM_ELEMENTS[selector_value]);
 
 			const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[selector_value];
 
@@ -788,7 +790,7 @@ simple8brle_block_get_element(Simple8bRleBlock block, uint32 position_in_value)
  ***  Utility Functions  ***
  ***************************/
 
-static inline bool
+static pg_attribute_always_inline bool
 simple8brle_selector_is_rle(uint8 selector)
 {
 	return selector == SIMPLE8B_RLE_SELECTOR;
