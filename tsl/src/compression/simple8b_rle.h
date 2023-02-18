@@ -602,9 +602,9 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 			 * Bit-packed block. The last one might contain less than maximal
 			 * possible number of elements.
 			 */
-			const int n_block_values = (block_index == num_blocks - 1)
-				? n_total_values - decompressed_index
-				: SIMPLE8B_NUM_ELEMENTS[selector_value];
+			const int n_block_values = (block_index == num_blocks - 1) ?
+										   n_total_values - decompressed_index :
+										   SIMPLE8B_NUM_ELEMENTS[selector_value];
 
 			Assert(n_block_values <= SIMPLE8B_NUM_ELEMENTS[selector_value]);
 
