@@ -6,7 +6,12 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Bugfixes**
 * #5336 Use NameData and namestrcpy for names
+* #5317 Fix some incorrect memory handling
+
+**Thanks**
+* @Medvecrab for discovering an issue with copying NameData when forming heap tuples.
 
 ## 2.10.0 (2023-02-21)
 
@@ -40,8 +45,6 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 **Bugfixes**
 * #5214 Fix use of prepared statement in async module
 * #5218 Add role-level security to job error log
-* #5290 Compression can't be enabled on continuous aggregates when segmentby/orderby columns need quotation
-* #5311 Fix incorrect memory handling when working with names
 * #5239 Fix next_start calculation for fixed schedules
 * #5290 Fix enabling compression on continuous aggregates with columns requiring quotation
 
@@ -50,9 +53,6 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 
 **Thanks**
 * @justinozavala for reporting an issue with PL/Python procedures in the background worker
-
-**Thanks**
-* @Medvecrab for reporting incorrect memory handling when working with names
 
 ## 2.9.3 (2023-02-03)
 
