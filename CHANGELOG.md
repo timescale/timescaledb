@@ -4,28 +4,50 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.10.0 (2023-02-21)
+
+This release contains new features and bug fixes since the 2.9.3 release.
+We deem it moderate priority for upgrading.
+
+This release includes these noteworthy features:
+* Joins in continuous aggregates
+* Re-architecture of how compression works: ~2x improvement on INSERT rate into compressed chunks.
+* Full PostgreSQL 15 support for all existing features. Support for the newly introduced MERGE command on hypertables will be introduced on a follow-up release.
+
+**PostgreSQL 12 deprecation announcement**
+We will continue supporting PostgreSQL 12 until July 2023. Sooner to that time, we will announce the specific version of TimescaleDB in which PostgreSQL 12 support will not be included going forward.
+
+**Old format of Continuous Aggregates deprecation announcement**
+TimescaleDB 2.7 introduced a new format for continuous aggregates that improves performance.
+All instances with Continuous Aggregates using the old format should [migrate to the new format](https://docs.timescale.com/api/latest/continuous-aggregates/cagg_migrate/) by July 2023,
+when support for the old format will be removed.
+Sooner to that time, we will announce the specific version of TimescaleDB in which support for this feature will not be included going forward.
 
 **Features**
+* #4874 Allow joins in continuous aggregates
+* #4926 Refactor INSERT into compressed chunks
 * #5241 Allow RETURNING clause when inserting into compressed chunks
-* #5245 Mange life-cycle of connections via memory contexts
+* #5245 Manage life-cycle of connections via memory contexts
 * #5246 Make connection establishment interruptible
 * #5253 Make data node command execution interruptible
-* #5243 Enable real-time aggregation for continuous aggregates with joins
 * #5262 Extend enabling compression on a continuous aggregrate with 'compress_segmentby' and 'compress_orderby' parameters
 
 **Bugfixes**
-* #4926 Fix corruption when inserting into compressed chunks
-* #5218 Add role-level security to job error log
 * #5214 Fix use of prepared statement in async module
-* #5290 Compression can't be enabled on continuous aggregates when segmentby/orderby columns need quotation
+* #5218 Add role-level security to job error log
 * #5239 Fix next_start calculation for fixed schedules
+* #5290 Fix enabling compression on continuous aggregates with columns requiring quotation
+
+**Thanks**
+* @henriquegelio for reporting the issue on fixed schedules
 
 ## 2.9.3 (2023-02-03)
 
-This release contains bug fixes since the 2.9.2 release.
-This release is high priority for upgrade. We strongly recommend that you
-upgrade as soon as possible.
+This release contains bug fixes since the 2.9.2 release and a fix for a security vulnerability (#5259).
+You can check the security advisory(https://github.com/timescale/timescaledb/security/advisories/GHSA-44jh-j22r-33wq)
+for more information on the vulnerability and the platforms that are affected.
+
+This release is high priority for upgrade. We strongly recommend that you upgrade as soon as possible.
 
 **Bugfixes**
 * #4804 Skip bucketing when start or end of refresh job is null
@@ -97,7 +119,6 @@ This release also includes several bug fixes.
 * #4786 Extend the now() optimization to also apply to CURRENT_TIMESTAMP
 * #4820 Support parameterized data node scans in joins
 * #4830 Add function to change configuration of a data nodes
-* #4874 Allow joins in continuous aggregates
 * #4966 Handle DML activity when datanode is not available
 * #4971 Add function to drop stale chunks on a datanode
 
