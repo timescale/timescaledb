@@ -139,7 +139,7 @@ docker_run_vol() {
 wait_for_pg() {
     set +e
     for _ in {1..20}; do
-        sleep 0.5
+        sleep 1
 
         if docker_exec $1 "pg_isready -U postgres"
         then
@@ -147,7 +147,7 @@ wait_for_pg() {
             # ideal. Apperently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
             # queries
-            sleep 0.2
+            sleep 1
             set -e
             return 0
         fi
