@@ -764,6 +764,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
+	bool old_enable_osm_reads = ts_guc_enable_osm_reads;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
@@ -879,8 +880,13 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
+	/* Cagg should be able to see tiered data despite the server settings */
+	ts_guc_enable_osm_reads = true;
+
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
+
+	ts_guc_enable_osm_reads = old_enable_osm_reads;
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
