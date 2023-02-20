@@ -48,6 +48,10 @@
 #cmakedefine TELEMETRY_DEFAULT @TELEMETRY_DEFAULT@
 #endif
 
+#ifndef CODECOVERAGE
+#cmakedefine CODECOVERAGE @CODECOVERAGE@
+#endif
+
 /* Avoid conflicts with USE_OPENSSL defined by PostgreSQL */
 #cmakedefine TS_USE_OPENSSL
 

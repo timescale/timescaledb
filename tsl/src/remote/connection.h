@@ -173,7 +173,7 @@ extern void remote_connection_get_result_error(const PGresult *res, TSConnection
 			 (err)->remote.sqlcmd ? errcontext("Remote SQL command: %s", (err)->remote.sqlcmd) :   \
 									0))
 
-/*11
+/*
  * Report an error we got from the remote host.
  *
  * elevel: error level to use (typically ERROR, but might be less)

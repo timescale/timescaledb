@@ -2158,6 +2158,24 @@ remote_connection_set_single_row_mode(TSConnection *conn)
 	return PQsetSingleRowMode(conn->pg_conn);
 }
 
+/*
+ * PQflush() wrapper used for testing purposes.
+ */
+static int
+flush_conn(const TSConnection *conn)
+{
+#ifdef CODECOVERAGE
+	/* PQflush() rarely, if ever, blocks on writes in practice. To test the
+	   handling of blocked writes, induce this return value every Nth call. */
+	static unsigned count = 0;
+
+	if (count++ % 20 == 0)
+		return 1;
+#endif
+
+	return PQflush(conn->pg_conn);
+}
+
 static bool
 remote_connection_flush(const TSConnection *conn, TSConnectionError *err)
 {
@@ -2169,7 +2187,7 @@ remote_connection_flush(const TSConnection *conn, TSConnectionError *err)
 
 		CHECK_FOR_INTERRUPTS();
 
-		ret = PQflush(conn->pg_conn);
+		ret = flush_conn(conn);
 
 		if (ret == 0)
 			flushed = true;
@@ -2217,6 +2235,26 @@ remote_connection_flush(const TSConnection *conn, TSConnectionError *err)
 	return flushed;
 }
 
+static int
+put_copy_data(const TSConnection *conn, const char *buffer, size_t nbytes)
+{
+#ifdef CODECOVERAGE
+	/* PQputCopyData() returns 0 in non-blocking mode when it cannot write
+	 * the data due to full buffers. However, in practice that never
+	 * really happens because PQputCopyData() will, just try to increase
+	 * its buffer space until the application runs out of memory. Still,
+	 * we need to handle and test that situation in an unlikely
+	 * event. Therefore, simulate blocking by returning 0 for every Nth
+	 * call to increase code coverage.
+	 */
+	static unsigned callcount = 0;
+
+	if (callcount++ % 20 == 0)
+		return 0;
+#endif
+	return PQputCopyData(conn->pg_conn, buffer, nbytes);
+}
+
 bool
 remote_connection_put_copy_data(const TSConnection *conn, const char *buffer, size_t nbytes,
 								TSConnectionError *err)
@@ -2228,7 +2266,7 @@ remote_connection_put_copy_data(const TSConnection *conn, const char *buffer, si
 
 	do
 	{
-		res = PQputCopyData(conn->pg_conn, buffer, nbytes);
+		res = put_copy_data(conn, buffer, nbytes);
 
 		switch (res)
 		{
@@ -2270,14 +2308,13 @@ remote_connection_put_copy_data(const TSConnection *conn, const char *buffer, si
 			case 1:
 				/* Success -> flush after exiting the loop */
 				break;
-			case -1:
+			default:
+				/* Error */
+				Assert(res == -1);
 				return fill_connection_error(err,
 											 ERRCODE_CONNECTION_FAILURE,
 											 "failed sending COPY data",
 											 conn);
-			default:
-				pg_unreachable();
-				break;
 		}
 	} while (res == 0);
 
@@ -2417,7 +2454,7 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		{
 			CHECK_FOR_INTERRUPTS();
 
-			int flush_result = PQflush(conn->pg_conn);
+			int flush_result = flush_conn(conn);
 
 			if (flush_result == 1)
 			{
