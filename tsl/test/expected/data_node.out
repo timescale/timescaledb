@@ -674,6 +674,25 @@ SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1');
  t
 (1 row)
 
+-- Ensure timeout returned by argument
+SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1', interval '0s');
+ ping_data_node 
+----------------
+ f
+(1 row)
+
+SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1', interval '3s');
+ ping_data_node 
+----------------
+ t
+(1 row)
+
+SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1', interval '1 day');
+ ping_data_node 
+----------------
+ t
+(1 row)
+
 -- Create data node referencing postgres_fdw
 RESET ROLE;
 CREATE EXTENSION postgres_fdw;
