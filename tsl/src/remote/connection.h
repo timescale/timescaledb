@@ -58,7 +58,7 @@ typedef struct TSConnectionError
  * `remote_connection_close`
  */
 extern TSConnection *remote_connection_open(const char *node_name, List *connection_options,
-											char **errmsg);
+											TimestampTz endtime, char **errmsg);
 extern TSConnection *remote_connection_open_session(const char *node_name, List *connection_options,
 													bool set_dist_id);
 extern TSConnection *remote_connection_open_session_by_id(TSConnectionId id);
@@ -69,9 +69,11 @@ extern int remote_connection_xact_depth_dec(TSConnection *conn);
 extern void remote_connection_xact_transition_begin(TSConnection *conn);
 extern void remote_connection_xact_transition_end(TSConnection *conn);
 extern bool remote_connection_xact_is_transitioning(const TSConnection *conn);
-extern bool remote_connection_ping(const char *node_name);
+extern bool remote_connection_ping(const char *node_name, TimestampTz endtime);
 extern void remote_connection_close(TSConnection *conn);
-extern PGresult *remote_connection_get_result(const TSConnection *conn);
+extern PGresult *remote_connection_get_result(const TSConnection *conn, TimestampTz endtime);
+extern PGresult *remote_connection_exec_timeout(TSConnection *conn, const char *cmd,
+												TimestampTz endtime);
 extern PGresult *remote_connection_exec(TSConnection *conn, const char *cmd);
 extern PGresult *remote_connection_execf(TSConnection *conn, const char *fmt, ...)
 	pg_attribute_printf(2, 3);

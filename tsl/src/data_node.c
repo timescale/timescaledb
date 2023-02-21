@@ -598,7 +598,7 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 	{
 		List *node_options =
 			create_data_node_options(host, port, bootstrap_databases[i], username, password);
-		conn = remote_connection_open(node_name, node_options, &err);
+		conn = remote_connection_open(node_name, node_options, TS_NO_TIMEOUT, &err);
 
 		if (conn)
 			return conn;
@@ -1778,7 +1778,7 @@ drop_data_node_database(const ForeignServer *server)
 		server = data_node_get_foreign_server(nodename, ACL_USAGE, true, false);
 		/* Open a connection to the bootstrap database using the new server options */
 		conn_options = remote_connection_prepare_auth_options(server, userid);
-		conn = remote_connection_open(nodename, conn_options, &err);
+		conn = remote_connection_open(nodename, conn_options, TS_NO_TIMEOUT, &err);
 
 		if (NULL != conn)
 			break;
@@ -2056,6 +2056,9 @@ Datum
 data_node_ping(PG_FUNCTION_ARGS)
 {
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	Interval *timeout = PG_ARGISNULL(1) ? NULL : PG_GETARG_INTERVAL_P(1);
+	TimestampTz endtime = TS_NO_TIMEOUT;
+
 	/* Allow anyone to ping a data node. Otherwise the
 	 * timescaledb_information.data_node view won't work for those users. */
 	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false);
@@ -2063,7 +2066,11 @@ data_node_ping(PG_FUNCTION_ARGS)
 
 	Assert(NULL != server);
 
-	success = remote_connection_ping(server->servername);
+	/* Get endtime in microseconds */
+	if (timeout)
+		endtime = GetCurrentTimestamp() + ts_get_interval_period_approx(timeout);
+
+	success = remote_connection_ping(server->servername, endtime);
 
 	PG_RETURN_DATUM(BoolGetDatum(success));
 }

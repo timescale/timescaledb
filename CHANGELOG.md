@@ -41,6 +41,7 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 * #5253 Make data node command execution interruptible
 * #5262 Extend enabling compression on a continuous aggregrate with 'compress_segmentby' and 'compress_orderby' parameters
 * #5343 Set PortalContext when starting job
+* #5312 Add timeout support to the ping_data_node()
 
 **Bugfixes**
 * #5214 Fix use of prepared statement in async module
