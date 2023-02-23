@@ -1176,6 +1176,12 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 	if (joinrel->fdw_private)
 		return;
 
+	/* Distributed hypertables are not supported by MERGE at the moment. Ensure that
+	 * we perform our planning only on SELECTs.
+	 */
+	if (root->parse->commandType != CMD_SELECT)
+		return;
+
 #ifdef ENABLE_DEAD_CODE
 	/*
 	 * This code does not work for joins with lateral references, since those
