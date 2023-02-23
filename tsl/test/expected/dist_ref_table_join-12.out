@@ -1955,6 +1955,25 @@ DEBUG:  join pushdown on reference table is not supported for the used query
 (30 rows)
 
 -------
+-- MERGE is supported in PG >= 15. Currently, it is not supported in TimescaleDB
+-- on distributed hypertables. Perform a MERGE here to check if the join pushdown
+-- can handle the MERGE command properly. ON_ERROR_STOP is disabled for this test.
+-- Older PostgreSQL versions report an error because MERGE is not supported. This
+-- will be ignored due to the setting.
+-------
+\set ON_ERROR_STOP 0
+MERGE INTO metric as target_0
+USING metric as input_0
+    inner join (select id from metric_name as input_1) as subq_0
+      ON (TRUE)
+ON target_0.id = input_0.id
+WHEN MATCHED
+   THEN DO NOTHING
+WHEN NOT MATCHED
+   THEN DO NOTHING;
+ERROR:  syntax error at or near "MERGE" at character 1
+\set ON_ERROR_STOP 1
+-------
 -- Tests without enable_per_data_node_queries (no pushdown supported)
 -------
 SET timescaledb.enable_per_data_node_queries = false;
