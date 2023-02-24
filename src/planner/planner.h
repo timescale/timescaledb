@@ -90,12 +90,13 @@ typedef enum TsRelType
 
 typedef enum PartializeAggFixAggref
 {
-	TS_DO_NOT_FIX_AGGREF = 0,
-	TS_FIX_AGGREF = 1
+	TS_DO_NOT_FIX_AGGSPLIT = 0,
+	TS_FIX_AGGSPLIT_SIMPLE = 1,
+	TS_FIX_AGGSPLIT_FINAL = 2
 } PartializeAggFixAggref;
 
 Hypertable *ts_planner_get_hypertable(const Oid relid, const unsigned int flags);
-bool has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref);
+bool has_partialize_function(Node *node, PartializeAggFixAggref fix_aggref);
 bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
 
 extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);

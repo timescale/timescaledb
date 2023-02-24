@@ -74,6 +74,14 @@ NOTICE:  [db_dist_partial_agg_3]:
 (1 row)
 
 GRANT CREATE ON SCHEMA public TO :ROLE_1;
+-- make sure parallel query plans are preferred on data nodes
+ALTER DATABASE :DATA_NODE_1 SET parallel_setup_cost TO 1;
+ALTER DATABASE :DATA_NODE_2 SET parallel_setup_cost TO 1;
+ALTER DATABASE :DATA_NODE_3 SET parallel_setup_cost TO 1;
+-- make sure partitionwise aggregation is enabled on data nodes
+ALTER DATABASE :DATA_NODE_1 SET enable_partitionwise_aggregate TO true;
+ALTER DATABASE :DATA_NODE_2 SET enable_partitionwise_aggregate TO true;
+ALTER DATABASE :DATA_NODE_3 SET enable_partitionwise_aggregate TO true;
 SET ROLE :ROLE_1;
 SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'location', 3, chunk_time_interval => INTERVAL '1 day');
  table_name 
