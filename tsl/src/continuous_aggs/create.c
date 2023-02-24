@@ -1188,7 +1188,7 @@ static CAggTimebucketInfo
 cagg_validate_query(const Query *query, const bool finalized, const char *cagg_schema,
 					const char *cagg_name)
 {
-	CAggTimebucketInfo bucket_info, bucket_info_parent;
+	CAggTimebucketInfo bucket_info = { 0 }, bucket_info_parent;
 	Cache *hcache;
 	Hypertable *ht = NULL, *ht_parent = NULL;
 	RangeTblRef *rtref = NULL, *rtref_other = NULL;
