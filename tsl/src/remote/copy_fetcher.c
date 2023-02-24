@@ -20,6 +20,7 @@ typedef struct CopyFetcher
 	Datum *batch_values;
 	bool *batch_nulls;
 	bool file_trailer_received;
+	AsyncRequest *req;
 } CopyFetcher;
 
 static void copy_fetcher_send_fetch_request(DataFetcher *df);
@@ -61,6 +62,13 @@ copy_fetcher_reset(CopyFetcher *fetcher)
 {
 	fetcher->state.open = false;
 	fetcher->file_trailer_received = false;
+
+	if (fetcher->req != NULL)
+	{
+		pfree(fetcher->req);
+		fetcher->req = NULL;
+	}
+
 	data_fetcher_reset(&fetcher->state);
 }
 
@@ -113,24 +121,8 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 							 " Use cursor fetcher instead.")));
 		}
 
-		PGresult *res = PQgetResult(remote_connection_get_pg_conn(fetcher->state.conn));
-		if (res == NULL)
-		{
-			/* Shouldn't really happen but technically possible. */
-			TSConnectionError err;
-			remote_connection_get_error(fetcher->state.conn, &err);
-			remote_connection_error_elog(&err, ERROR);
-		}
-		if (PQresultStatus(res) != PGRES_COPY_OUT)
-		{
-			TSConnectionError err;
-			remote_connection_get_result_error(res, &err);
-			remote_connection_error_elog(&err, ERROR);
-		}
-
 		fetcher->state.open = true;
-		PQclear(res);
-		pfree(req);
+		fetcher->req = req;
 	}
 	PG_CATCH();
 	{
@@ -310,6 +302,37 @@ end_copy_before_eof(CopyFetcher *fetcher)
 	end_copy(fetcher, true);
 }
 
+static void
+copy_fetcher_read_fetch_response(CopyFetcher *fetcher)
+{
+	PGconn *conn = remote_connection_get_pg_conn(fetcher->state.conn);
+	PGresult *res;
+
+	if (fetcher->req == NULL)
+		return;
+
+	res = PQgetResult(conn);
+	pfree(fetcher->req);
+	fetcher->req = NULL;
+
+	if (res == NULL)
+	{
+		/* Shouldn't really happen but technically possible. */
+		TSConnectionError err;
+		remote_connection_get_error(fetcher->state.conn, &err);
+		remote_connection_error_elog(&err, ERROR);
+	}
+	if (PQresultStatus(res) != PGRES_COPY_OUT)
+	{
+		TSConnectionError err;
+		remote_connection_get_result_error(res, &err);
+		PQclear(res);
+		remote_connection_error_elog(&err, ERROR);
+	}
+
+	PQclear(res);
+}
+
 /*
  * Process response for ongoing async request
  */
@@ -324,6 +347,9 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 
 	Assert(fetcher->state.open);
 	data_fetcher_validate(&fetcher->state);
+
+	if (fetcher->req != NULL)
+		copy_fetcher_read_fetch_response(fetcher);
 
 	/*
 	 * We'll store the tuples in the batch_mctx.  First, flush the previous
