@@ -22,8 +22,7 @@ jobs:
         --proc-without-search-path 'extschema.recompress_chunk(chunk regclass,if_not_compressed boolean = FALSE)'
         --proc-without-search-path '_timescaledb_internal.policy_compression(job_id integer,config jsonb)'
         --proc-without-search-path
-          '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,
-            maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
+          '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
         --proc-without-search-path
           '_timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
         --proc-without-search-path
@@ -43,7 +42,7 @@ jobs:
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.4.0
+        python -m pip install pgspot==0.5.0
 
     - name: Build timescaledb sqlfiles
       run: |
