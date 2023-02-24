@@ -597,6 +597,25 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 				if (subplan)
 					ts_hypertable_modify_fixup_tlist(subplan);
 			}
+
+			if (IsA(stmt->planTree, Agg))
+			{
+				Agg *agg = castNode(Agg, stmt->planTree);
+
+				/* If top-level plan is the finalize step of a partial
+				 * aggregation, and it is wrapped in the partialize_agg()
+				 * function, we want to do the combine step but skip
+				 * finalization (e.g., for avg(), add up individual
+				 * sum+counts, but don't compute the final average). */
+				if (agg->aggsplit == AGGSPLIT_FINAL_DESERIAL &&
+					has_partialize_function((Node *) agg->plan.targetlist, TS_FIX_AGGSPLIT_FINAL))
+				{
+					/* Deserialize input -> combine -> skip the final step ->
+					 * serialize again */
+					agg->aggsplit = AGGSPLITOP_COMBINE | AGGSPLITOP_DESERIALIZE |
+									AGGSPLITOP_SERIALIZE | AGGSPLITOP_SKIPFINAL;
+				}
+			}
 		}
 
 		if (reset_baserel_info)

@@ -9,6 +9,7 @@ accidentally triggering the load of a previous DB version.**
 **Features**
 * #5212 Allow pushdown of reference table joins
 * #5312 Add timeout support to the ping_data_node()
+* #5361 Add parallel support for partialize_agg()
 
 **Bugfixes**
 

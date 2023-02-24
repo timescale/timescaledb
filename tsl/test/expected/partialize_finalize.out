@@ -410,6 +410,479 @@ SELECT '2022-01-01 00:00:00-03'::timestamptz + interval '1 year' * mix(x), mix(x
 FROM generate_series(1, 100000) x(x);
 SET force_parallel_mode = 'on';
 SET parallel_setup_cost = 0;
+-- Materialize partials from execution of parallel query plan
+EXPLAIN (VERBOSE, COSTS OFF)
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Partial Aggregate
+   Output: _timescaledb_internal.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL count(*))
+   ->  Gather
+         Output: (PARTIAL sum(_hyper_2_4_chunk.value)), (PARTIAL avg(_hyper_2_4_chunk.value)), (PARTIAL min(_hyper_2_4_chunk.value)), (PARTIAL max(_hyper_2_4_chunk.value)), (PARTIAL count(*))
+         Workers Planned: 2
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_2_4_chunk.value), PARTIAL avg(_hyper_2_4_chunk.value), PARTIAL min(_hyper_2_4_chunk.value), PARTIAL max(_hyper_2_4_chunk.value), PARTIAL count(*)
+               ->  Parallel Append
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_4_chunk
+                           Output: _hyper_2_4_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_5_chunk
+                           Output: _hyper_2_5_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_6_chunk
+                           Output: _hyper_2_6_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_7_chunk
+                           Output: _hyper_2_7_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_8_chunk
+                           Output: _hyper_2_8_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_9_chunk
+                           Output: _hyper_2_9_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_10_chunk
+                           Output: _hyper_2_10_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_11_chunk
+                           Output: _hyper_2_11_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_12_chunk
+                           Output: _hyper_2_12_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_13_chunk
+                           Output: _hyper_2_13_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_14_chunk
+                           Output: _hyper_2_14_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_15_chunk
+                           Output: _hyper_2_15_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_16_chunk
+                           Output: _hyper_2_16_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_17_chunk
+                           Output: _hyper_2_17_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_18_chunk
+                           Output: _hyper_2_18_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_19_chunk
+                           Output: _hyper_2_19_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_20_chunk
+                           Output: _hyper_2_20_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_21_chunk
+                           Output: _hyper_2_21_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_22_chunk
+                           Output: _hyper_2_22_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_23_chunk
+                           Output: _hyper_2_23_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_24_chunk
+                           Output: _hyper_2_24_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_25_chunk
+                           Output: _hyper_2_25_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_26_chunk
+                           Output: _hyper_2_26_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_27_chunk
+                           Output: _hyper_2_27_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_28_chunk
+                           Output: _hyper_2_28_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_29_chunk
+                           Output: _hyper_2_29_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_30_chunk
+                           Output: _hyper_2_30_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_31_chunk
+                           Output: _hyper_2_31_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_32_chunk
+                           Output: _hyper_2_32_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_33_chunk
+                           Output: _hyper_2_33_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_34_chunk
+                           Output: _hyper_2_34_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_35_chunk
+                           Output: _hyper_2_35_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_36_chunk
+                           Output: _hyper_2_36_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_37_chunk
+                           Output: _hyper_2_37_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_38_chunk
+                           Output: _hyper_2_38_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_39_chunk
+                           Output: _hyper_2_39_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_40_chunk
+                           Output: _hyper_2_40_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_41_chunk
+                           Output: _hyper_2_41_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_42_chunk
+                           Output: _hyper_2_42_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_43_chunk
+                           Output: _hyper_2_43_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_44_chunk
+                           Output: _hyper_2_44_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_45_chunk
+                           Output: _hyper_2_45_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_46_chunk
+                           Output: _hyper_2_46_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_47_chunk
+                           Output: _hyper_2_47_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_48_chunk
+                           Output: _hyper_2_48_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_49_chunk
+                           Output: _hyper_2_49_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_50_chunk
+                           Output: _hyper_2_50_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_51_chunk
+                           Output: _hyper_2_51_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_52_chunk
+                           Output: _hyper_2_52_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_53_chunk
+                           Output: _hyper_2_53_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_54_chunk
+                           Output: _hyper_2_54_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_55_chunk
+                           Output: _hyper_2_55_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_56_chunk
+                           Output: _hyper_2_56_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_57_chunk
+                           Output: _hyper_2_57_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_58_chunk
+                           Output: _hyper_2_58_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_59_chunk
+                           Output: _hyper_2_59_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_60_chunk
+                           Output: _hyper_2_60_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_61_chunk
+                           Output: _hyper_2_61_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_62_chunk
+                           Output: _hyper_2_62_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_63_chunk
+                           Output: _hyper_2_63_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_64_chunk
+                           Output: _hyper_2_64_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_65_chunk
+                           Output: _hyper_2_65_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_66_chunk
+                           Output: _hyper_2_66_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_67_chunk
+                           Output: _hyper_2_67_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_68_chunk
+                           Output: _hyper_2_68_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_69_chunk
+                           Output: _hyper_2_69_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_70_chunk
+                           Output: _hyper_2_70_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_71_chunk
+                           Output: _hyper_2_71_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_72_chunk
+                           Output: _hyper_2_72_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_73_chunk
+                           Output: _hyper_2_73_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_74_chunk
+                           Output: _hyper_2_74_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_75_chunk
+                           Output: _hyper_2_75_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_76_chunk
+                           Output: _hyper_2_76_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_77_chunk
+                           Output: _hyper_2_77_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_78_chunk
+                           Output: _hyper_2_78_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_79_chunk
+                           Output: _hyper_2_79_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_80_chunk
+                           Output: _hyper_2_80_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_81_chunk
+                           Output: _hyper_2_81_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_82_chunk
+                           Output: _hyper_2_82_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_83_chunk
+                           Output: _hyper_2_83_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_84_chunk
+                           Output: _hyper_2_84_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_85_chunk
+                           Output: _hyper_2_85_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_86_chunk
+                           Output: _hyper_2_86_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_87_chunk
+                           Output: _hyper_2_87_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_88_chunk
+                           Output: _hyper_2_88_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_89_chunk
+                           Output: _hyper_2_89_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_90_chunk
+                           Output: _hyper_2_90_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_91_chunk
+                           Output: _hyper_2_91_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_92_chunk
+                           Output: _hyper_2_92_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_93_chunk
+                           Output: _hyper_2_93_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_94_chunk
+                           Output: _hyper_2_94_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_95_chunk
+                           Output: _hyper_2_95_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_96_chunk
+                           Output: _hyper_2_96_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_97_chunk
+                           Output: _hyper_2_97_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_98_chunk
+                           Output: _hyper_2_98_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_99_chunk
+                           Output: _hyper_2_99_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_100_chunk
+                           Output: _hyper_2_100_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_101_chunk
+                           Output: _hyper_2_101_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_102_chunk
+                           Output: _hyper_2_102_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_103_chunk
+                           Output: _hyper_2_103_chunk.value
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_104_chunk
+                           Output: _hyper_2_104_chunk.value
+(210 rows)
+
+CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+-- Materialize partials from execution of non-parallel query plan
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (VERBOSE, COSTS OFF)
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Partial Aggregate
+   Output: _timescaledb_internal.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_internal.partialize_agg(PARTIAL count(*))
+   ->  Append
+         ->  Seq Scan on _timescaledb_internal._hyper_2_4_chunk
+               Output: _hyper_2_4_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_5_chunk
+               Output: _hyper_2_5_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_6_chunk
+               Output: _hyper_2_6_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk
+               Output: _hyper_2_7_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk
+               Output: _hyper_2_8_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk
+               Output: _hyper_2_9_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_10_chunk
+               Output: _hyper_2_10_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_11_chunk
+               Output: _hyper_2_11_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk
+               Output: _hyper_2_12_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_13_chunk
+               Output: _hyper_2_13_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_14_chunk
+               Output: _hyper_2_14_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_15_chunk
+               Output: _hyper_2_15_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_16_chunk
+               Output: _hyper_2_16_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_17_chunk
+               Output: _hyper_2_17_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_18_chunk
+               Output: _hyper_2_18_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_19_chunk
+               Output: _hyper_2_19_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_20_chunk
+               Output: _hyper_2_20_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_21_chunk
+               Output: _hyper_2_21_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_22_chunk
+               Output: _hyper_2_22_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_23_chunk
+               Output: _hyper_2_23_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_24_chunk
+               Output: _hyper_2_24_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_25_chunk
+               Output: _hyper_2_25_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_26_chunk
+               Output: _hyper_2_26_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_27_chunk
+               Output: _hyper_2_27_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_28_chunk
+               Output: _hyper_2_28_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_29_chunk
+               Output: _hyper_2_29_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_30_chunk
+               Output: _hyper_2_30_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_31_chunk
+               Output: _hyper_2_31_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_32_chunk
+               Output: _hyper_2_32_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_33_chunk
+               Output: _hyper_2_33_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_34_chunk
+               Output: _hyper_2_34_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_35_chunk
+               Output: _hyper_2_35_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_36_chunk
+               Output: _hyper_2_36_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_37_chunk
+               Output: _hyper_2_37_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_38_chunk
+               Output: _hyper_2_38_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_39_chunk
+               Output: _hyper_2_39_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_40_chunk
+               Output: _hyper_2_40_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_41_chunk
+               Output: _hyper_2_41_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_42_chunk
+               Output: _hyper_2_42_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_43_chunk
+               Output: _hyper_2_43_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_44_chunk
+               Output: _hyper_2_44_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_45_chunk
+               Output: _hyper_2_45_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_46_chunk
+               Output: _hyper_2_46_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_47_chunk
+               Output: _hyper_2_47_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_48_chunk
+               Output: _hyper_2_48_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_49_chunk
+               Output: _hyper_2_49_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_50_chunk
+               Output: _hyper_2_50_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_51_chunk
+               Output: _hyper_2_51_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_52_chunk
+               Output: _hyper_2_52_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_53_chunk
+               Output: _hyper_2_53_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_54_chunk
+               Output: _hyper_2_54_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_55_chunk
+               Output: _hyper_2_55_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_56_chunk
+               Output: _hyper_2_56_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_57_chunk
+               Output: _hyper_2_57_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_58_chunk
+               Output: _hyper_2_58_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_59_chunk
+               Output: _hyper_2_59_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_60_chunk
+               Output: _hyper_2_60_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_61_chunk
+               Output: _hyper_2_61_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_62_chunk
+               Output: _hyper_2_62_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_63_chunk
+               Output: _hyper_2_63_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_64_chunk
+               Output: _hyper_2_64_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_65_chunk
+               Output: _hyper_2_65_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_66_chunk
+               Output: _hyper_2_66_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_67_chunk
+               Output: _hyper_2_67_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_68_chunk
+               Output: _hyper_2_68_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_69_chunk
+               Output: _hyper_2_69_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_70_chunk
+               Output: _hyper_2_70_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_71_chunk
+               Output: _hyper_2_71_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_72_chunk
+               Output: _hyper_2_72_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_73_chunk
+               Output: _hyper_2_73_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_74_chunk
+               Output: _hyper_2_74_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_75_chunk
+               Output: _hyper_2_75_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_76_chunk
+               Output: _hyper_2_76_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_77_chunk
+               Output: _hyper_2_77_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_78_chunk
+               Output: _hyper_2_78_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_79_chunk
+               Output: _hyper_2_79_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_80_chunk
+               Output: _hyper_2_80_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_81_chunk
+               Output: _hyper_2_81_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_82_chunk
+               Output: _hyper_2_82_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_83_chunk
+               Output: _hyper_2_83_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_84_chunk
+               Output: _hyper_2_84_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_85_chunk
+               Output: _hyper_2_85_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_86_chunk
+               Output: _hyper_2_86_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_87_chunk
+               Output: _hyper_2_87_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_88_chunk
+               Output: _hyper_2_88_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_89_chunk
+               Output: _hyper_2_89_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_90_chunk
+               Output: _hyper_2_90_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_91_chunk
+               Output: _hyper_2_91_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_92_chunk
+               Output: _hyper_2_92_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_93_chunk
+               Output: _hyper_2_93_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_94_chunk
+               Output: _hyper_2_94_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_95_chunk
+               Output: _hyper_2_95_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_96_chunk
+               Output: _hyper_2_96_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_97_chunk
+               Output: _hyper_2_97_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_98_chunk
+               Output: _hyper_2_98_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_99_chunk
+               Output: _hyper_2_99_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_100_chunk
+               Output: _hyper_2_100_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_101_chunk
+               Output: _hyper_2_101_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_102_chunk
+               Output: _hyper_2_102_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_103_chunk
+               Output: _hyper_2_103_chunk.value
+         ->  Seq Scan on _timescaledb_internal._hyper_2_104_chunk
+               Output: _hyper_2_104_chunk.value
+(205 rows)
+
+CREATE MATERIALIZED VIEW issue4922_partials_non_parallel AS
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+RESET max_parallel_workers_per_gather;
+-- partials should be the same in both parallel and non-parallel execution
+SELECT * FROM issue4922_partials_parallel;
+    partial_sum     |                                        partial_avg                                         | partial_min | partial_max |   partial_count    
+--------------------+--------------------------------------------------------------------------------------------+-------------+-------------+--------------------
+ \x00000000004c4fa9 | \x00000001000000000000001400000002000000010000000800000000000186a00000000800000000004c4fa9 | \x00000000  | \x00000064  | \x00000000000186a0
+(1 row)
+
+SELECT * FROM issue4922_partials_non_parallel;
+    partial_sum     |                                        partial_avg                                         | partial_min | partial_max |   partial_count    
+--------------------+--------------------------------------------------------------------------------------------+-------------+-------------+--------------------
+ \x00000000004c4fa9 | \x00000001000000000000001400000002000000010000000800000000000186a00000000800000000004c4fa9 | \x00000000  | \x00000064  | \x00000000000186a0
+(1 row)
+
+-- Compare results from partial and non-partial query execution
 SELECT
   sum(value),
   avg(value),
@@ -429,259 +902,9 @@ SELECT
   _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
   _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
   _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
-FROM (
-  SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
-  FROM public.issue4922) AS a;
+FROM issue4922_partials_parallel;
    sum   |         avg         | min | max | count  
 ---------+---------------------+-----+-----+--------
  5001129 | 50.0112900000000000 |   0 | 100 | 100000
 (1 row)
-
--- Check for parallel planning
-EXPLAIN (COSTS OFF)
-SELECT
-  sum(value),
-  avg(value),
-  min(value),
-  max(value),
-  count(*)
-FROM issue4922;
-                           QUERY PLAN                            
------------------------------------------------------------------
- Finalize Aggregate
-   ->  Gather
-         Workers Planned: 2
-         ->  Partial Aggregate
-               ->  Parallel Append
-                     ->  Parallel Seq Scan on _hyper_2_4_chunk
-                     ->  Parallel Seq Scan on _hyper_2_5_chunk
-                     ->  Parallel Seq Scan on _hyper_2_6_chunk
-                     ->  Parallel Seq Scan on _hyper_2_7_chunk
-                     ->  Parallel Seq Scan on _hyper_2_8_chunk
-                     ->  Parallel Seq Scan on _hyper_2_9_chunk
-                     ->  Parallel Seq Scan on _hyper_2_10_chunk
-                     ->  Parallel Seq Scan on _hyper_2_11_chunk
-                     ->  Parallel Seq Scan on _hyper_2_12_chunk
-                     ->  Parallel Seq Scan on _hyper_2_13_chunk
-                     ->  Parallel Seq Scan on _hyper_2_14_chunk
-                     ->  Parallel Seq Scan on _hyper_2_15_chunk
-                     ->  Parallel Seq Scan on _hyper_2_16_chunk
-                     ->  Parallel Seq Scan on _hyper_2_17_chunk
-                     ->  Parallel Seq Scan on _hyper_2_18_chunk
-                     ->  Parallel Seq Scan on _hyper_2_19_chunk
-                     ->  Parallel Seq Scan on _hyper_2_20_chunk
-                     ->  Parallel Seq Scan on _hyper_2_21_chunk
-                     ->  Parallel Seq Scan on _hyper_2_22_chunk
-                     ->  Parallel Seq Scan on _hyper_2_23_chunk
-                     ->  Parallel Seq Scan on _hyper_2_24_chunk
-                     ->  Parallel Seq Scan on _hyper_2_25_chunk
-                     ->  Parallel Seq Scan on _hyper_2_26_chunk
-                     ->  Parallel Seq Scan on _hyper_2_27_chunk
-                     ->  Parallel Seq Scan on _hyper_2_28_chunk
-                     ->  Parallel Seq Scan on _hyper_2_29_chunk
-                     ->  Parallel Seq Scan on _hyper_2_30_chunk
-                     ->  Parallel Seq Scan on _hyper_2_31_chunk
-                     ->  Parallel Seq Scan on _hyper_2_32_chunk
-                     ->  Parallel Seq Scan on _hyper_2_33_chunk
-                     ->  Parallel Seq Scan on _hyper_2_34_chunk
-                     ->  Parallel Seq Scan on _hyper_2_35_chunk
-                     ->  Parallel Seq Scan on _hyper_2_36_chunk
-                     ->  Parallel Seq Scan on _hyper_2_37_chunk
-                     ->  Parallel Seq Scan on _hyper_2_38_chunk
-                     ->  Parallel Seq Scan on _hyper_2_39_chunk
-                     ->  Parallel Seq Scan on _hyper_2_40_chunk
-                     ->  Parallel Seq Scan on _hyper_2_41_chunk
-                     ->  Parallel Seq Scan on _hyper_2_42_chunk
-                     ->  Parallel Seq Scan on _hyper_2_43_chunk
-                     ->  Parallel Seq Scan on _hyper_2_44_chunk
-                     ->  Parallel Seq Scan on _hyper_2_45_chunk
-                     ->  Parallel Seq Scan on _hyper_2_46_chunk
-                     ->  Parallel Seq Scan on _hyper_2_47_chunk
-                     ->  Parallel Seq Scan on _hyper_2_48_chunk
-                     ->  Parallel Seq Scan on _hyper_2_49_chunk
-                     ->  Parallel Seq Scan on _hyper_2_50_chunk
-                     ->  Parallel Seq Scan on _hyper_2_51_chunk
-                     ->  Parallel Seq Scan on _hyper_2_52_chunk
-                     ->  Parallel Seq Scan on _hyper_2_53_chunk
-                     ->  Parallel Seq Scan on _hyper_2_54_chunk
-                     ->  Parallel Seq Scan on _hyper_2_55_chunk
-                     ->  Parallel Seq Scan on _hyper_2_56_chunk
-                     ->  Parallel Seq Scan on _hyper_2_57_chunk
-                     ->  Parallel Seq Scan on _hyper_2_58_chunk
-                     ->  Parallel Seq Scan on _hyper_2_59_chunk
-                     ->  Parallel Seq Scan on _hyper_2_60_chunk
-                     ->  Parallel Seq Scan on _hyper_2_61_chunk
-                     ->  Parallel Seq Scan on _hyper_2_62_chunk
-                     ->  Parallel Seq Scan on _hyper_2_63_chunk
-                     ->  Parallel Seq Scan on _hyper_2_64_chunk
-                     ->  Parallel Seq Scan on _hyper_2_65_chunk
-                     ->  Parallel Seq Scan on _hyper_2_66_chunk
-                     ->  Parallel Seq Scan on _hyper_2_67_chunk
-                     ->  Parallel Seq Scan on _hyper_2_68_chunk
-                     ->  Parallel Seq Scan on _hyper_2_69_chunk
-                     ->  Parallel Seq Scan on _hyper_2_70_chunk
-                     ->  Parallel Seq Scan on _hyper_2_71_chunk
-                     ->  Parallel Seq Scan on _hyper_2_72_chunk
-                     ->  Parallel Seq Scan on _hyper_2_73_chunk
-                     ->  Parallel Seq Scan on _hyper_2_74_chunk
-                     ->  Parallel Seq Scan on _hyper_2_75_chunk
-                     ->  Parallel Seq Scan on _hyper_2_76_chunk
-                     ->  Parallel Seq Scan on _hyper_2_77_chunk
-                     ->  Parallel Seq Scan on _hyper_2_78_chunk
-                     ->  Parallel Seq Scan on _hyper_2_79_chunk
-                     ->  Parallel Seq Scan on _hyper_2_80_chunk
-                     ->  Parallel Seq Scan on _hyper_2_81_chunk
-                     ->  Parallel Seq Scan on _hyper_2_82_chunk
-                     ->  Parallel Seq Scan on _hyper_2_83_chunk
-                     ->  Parallel Seq Scan on _hyper_2_84_chunk
-                     ->  Parallel Seq Scan on _hyper_2_85_chunk
-                     ->  Parallel Seq Scan on _hyper_2_86_chunk
-                     ->  Parallel Seq Scan on _hyper_2_87_chunk
-                     ->  Parallel Seq Scan on _hyper_2_88_chunk
-                     ->  Parallel Seq Scan on _hyper_2_89_chunk
-                     ->  Parallel Seq Scan on _hyper_2_90_chunk
-                     ->  Parallel Seq Scan on _hyper_2_91_chunk
-                     ->  Parallel Seq Scan on _hyper_2_92_chunk
-                     ->  Parallel Seq Scan on _hyper_2_93_chunk
-                     ->  Parallel Seq Scan on _hyper_2_94_chunk
-                     ->  Parallel Seq Scan on _hyper_2_95_chunk
-                     ->  Parallel Seq Scan on _hyper_2_96_chunk
-                     ->  Parallel Seq Scan on _hyper_2_97_chunk
-                     ->  Parallel Seq Scan on _hyper_2_98_chunk
-                     ->  Parallel Seq Scan on _hyper_2_99_chunk
-                     ->  Parallel Seq Scan on _hyper_2_100_chunk
-                     ->  Parallel Seq Scan on _hyper_2_101_chunk
-                     ->  Parallel Seq Scan on _hyper_2_102_chunk
-                     ->  Parallel Seq Scan on _hyper_2_103_chunk
-                     ->  Parallel Seq Scan on _hyper_2_104_chunk
-(106 rows)
-
--- Make sure even forcing the parallel mode those functions are not safe for parallel
-EXPLAIN (COSTS OFF)
-SELECT
-  _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_sum, NULL::bigint) AS sum,
-  _timescaledb_internal.finalize_agg('pg_catalog.avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_avg, NULL::numeric) AS avg,
-  _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
-  _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
-  _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
-FROM (
-  SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
-  FROM public.issue4922) AS a;
-                    QUERY PLAN                    
---------------------------------------------------
- Aggregate
-   ->  Partial Aggregate
-         ->  Append
-               ->  Seq Scan on _hyper_2_4_chunk
-               ->  Seq Scan on _hyper_2_5_chunk
-               ->  Seq Scan on _hyper_2_6_chunk
-               ->  Seq Scan on _hyper_2_7_chunk
-               ->  Seq Scan on _hyper_2_8_chunk
-               ->  Seq Scan on _hyper_2_9_chunk
-               ->  Seq Scan on _hyper_2_10_chunk
-               ->  Seq Scan on _hyper_2_11_chunk
-               ->  Seq Scan on _hyper_2_12_chunk
-               ->  Seq Scan on _hyper_2_13_chunk
-               ->  Seq Scan on _hyper_2_14_chunk
-               ->  Seq Scan on _hyper_2_15_chunk
-               ->  Seq Scan on _hyper_2_16_chunk
-               ->  Seq Scan on _hyper_2_17_chunk
-               ->  Seq Scan on _hyper_2_18_chunk
-               ->  Seq Scan on _hyper_2_19_chunk
-               ->  Seq Scan on _hyper_2_20_chunk
-               ->  Seq Scan on _hyper_2_21_chunk
-               ->  Seq Scan on _hyper_2_22_chunk
-               ->  Seq Scan on _hyper_2_23_chunk
-               ->  Seq Scan on _hyper_2_24_chunk
-               ->  Seq Scan on _hyper_2_25_chunk
-               ->  Seq Scan on _hyper_2_26_chunk
-               ->  Seq Scan on _hyper_2_27_chunk
-               ->  Seq Scan on _hyper_2_28_chunk
-               ->  Seq Scan on _hyper_2_29_chunk
-               ->  Seq Scan on _hyper_2_30_chunk
-               ->  Seq Scan on _hyper_2_31_chunk
-               ->  Seq Scan on _hyper_2_32_chunk
-               ->  Seq Scan on _hyper_2_33_chunk
-               ->  Seq Scan on _hyper_2_34_chunk
-               ->  Seq Scan on _hyper_2_35_chunk
-               ->  Seq Scan on _hyper_2_36_chunk
-               ->  Seq Scan on _hyper_2_37_chunk
-               ->  Seq Scan on _hyper_2_38_chunk
-               ->  Seq Scan on _hyper_2_39_chunk
-               ->  Seq Scan on _hyper_2_40_chunk
-               ->  Seq Scan on _hyper_2_41_chunk
-               ->  Seq Scan on _hyper_2_42_chunk
-               ->  Seq Scan on _hyper_2_43_chunk
-               ->  Seq Scan on _hyper_2_44_chunk
-               ->  Seq Scan on _hyper_2_45_chunk
-               ->  Seq Scan on _hyper_2_46_chunk
-               ->  Seq Scan on _hyper_2_47_chunk
-               ->  Seq Scan on _hyper_2_48_chunk
-               ->  Seq Scan on _hyper_2_49_chunk
-               ->  Seq Scan on _hyper_2_50_chunk
-               ->  Seq Scan on _hyper_2_51_chunk
-               ->  Seq Scan on _hyper_2_52_chunk
-               ->  Seq Scan on _hyper_2_53_chunk
-               ->  Seq Scan on _hyper_2_54_chunk
-               ->  Seq Scan on _hyper_2_55_chunk
-               ->  Seq Scan on _hyper_2_56_chunk
-               ->  Seq Scan on _hyper_2_57_chunk
-               ->  Seq Scan on _hyper_2_58_chunk
-               ->  Seq Scan on _hyper_2_59_chunk
-               ->  Seq Scan on _hyper_2_60_chunk
-               ->  Seq Scan on _hyper_2_61_chunk
-               ->  Seq Scan on _hyper_2_62_chunk
-               ->  Seq Scan on _hyper_2_63_chunk
-               ->  Seq Scan on _hyper_2_64_chunk
-               ->  Seq Scan on _hyper_2_65_chunk
-               ->  Seq Scan on _hyper_2_66_chunk
-               ->  Seq Scan on _hyper_2_67_chunk
-               ->  Seq Scan on _hyper_2_68_chunk
-               ->  Seq Scan on _hyper_2_69_chunk
-               ->  Seq Scan on _hyper_2_70_chunk
-               ->  Seq Scan on _hyper_2_71_chunk
-               ->  Seq Scan on _hyper_2_72_chunk
-               ->  Seq Scan on _hyper_2_73_chunk
-               ->  Seq Scan on _hyper_2_74_chunk
-               ->  Seq Scan on _hyper_2_75_chunk
-               ->  Seq Scan on _hyper_2_76_chunk
-               ->  Seq Scan on _hyper_2_77_chunk
-               ->  Seq Scan on _hyper_2_78_chunk
-               ->  Seq Scan on _hyper_2_79_chunk
-               ->  Seq Scan on _hyper_2_80_chunk
-               ->  Seq Scan on _hyper_2_81_chunk
-               ->  Seq Scan on _hyper_2_82_chunk
-               ->  Seq Scan on _hyper_2_83_chunk
-               ->  Seq Scan on _hyper_2_84_chunk
-               ->  Seq Scan on _hyper_2_85_chunk
-               ->  Seq Scan on _hyper_2_86_chunk
-               ->  Seq Scan on _hyper_2_87_chunk
-               ->  Seq Scan on _hyper_2_88_chunk
-               ->  Seq Scan on _hyper_2_89_chunk
-               ->  Seq Scan on _hyper_2_90_chunk
-               ->  Seq Scan on _hyper_2_91_chunk
-               ->  Seq Scan on _hyper_2_92_chunk
-               ->  Seq Scan on _hyper_2_93_chunk
-               ->  Seq Scan on _hyper_2_94_chunk
-               ->  Seq Scan on _hyper_2_95_chunk
-               ->  Seq Scan on _hyper_2_96_chunk
-               ->  Seq Scan on _hyper_2_97_chunk
-               ->  Seq Scan on _hyper_2_98_chunk
-               ->  Seq Scan on _hyper_2_99_chunk
-               ->  Seq Scan on _hyper_2_100_chunk
-               ->  Seq Scan on _hyper_2_101_chunk
-               ->  Seq Scan on _hyper_2_102_chunk
-               ->  Seq Scan on _hyper_2_103_chunk
-               ->  Seq Scan on _hyper_2_104_chunk
-(104 rows)
 
