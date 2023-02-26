@@ -7,6 +7,7 @@ accidentally triggering the load of a previous DB version.**
 ## Unreleased
 
 **Bugfixes**
+* #5364 Fix num_chunks inconsistency in hypertables view
 * #5336 Use NameData and namestrcpy for names
 * #5317 Fix some incorrect memory handling
 
