@@ -87,6 +87,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_triggers.sql
     dist_backup.sql
     insert_memory_usage.sql
+    information_view_chunk_count.sql
     read_only.sql
     remote_connection_cache.sql
     remote_connection.sql
