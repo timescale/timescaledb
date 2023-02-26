@@ -4,6 +4,16 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #5364 Fix num_chunks inconsistency in hypertables view
+* #5336 Use NameData and namestrcpy for names
+* #5317 Fix some incorrect memory handling
+
+**Thanks**
+* @Medvecrab for discovering an issue with copying NameData when forming heap tuples.
+
 ## 2.10.0 (2023-02-21)
 
 This release contains new features and bug fixes since the 2.9.3 release.

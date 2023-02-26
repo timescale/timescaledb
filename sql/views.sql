@@ -11,7 +11,7 @@ SELECT ht.schema_name AS hypertable_schema,
   (
     SELECT count(1)
     FROM _timescaledb_catalog.chunk ch
-    WHERE ch.hypertable_id = ht.id) AS num_chunks,
+    WHERE ch.hypertable_id = ht.id AND ch.dropped IS FALSE AND ch.osm_chunk IS FALSE) AS num_chunks,
   (
     CASE WHEN compression_state = 1 THEN
       TRUE
