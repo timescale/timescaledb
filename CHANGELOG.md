@@ -11,9 +11,12 @@ accidentally triggering the load of a previous DB version.**
 * #5362 Make copy fetcher more async
 * #5336 Use NameData and namestrcpy for names
 * #5317 Fix some incorrect memory handling
+* #5367 Rename columns in old-style continuous aggregates
 
 **Thanks**
 * @Medvecrab for discovering an issue with copying NameData when forming heap tuples.
+* @pushpeepkmonroe for discovering an issue in upgrading old-style
+  continuous aggregates with renamed columns
 
 ## 2.10.0 (2023-02-21)
 

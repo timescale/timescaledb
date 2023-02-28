@@ -21,7 +21,8 @@ SELECT
   :ts_major >= 2 AS has_create_mat_view,
   :ts_major >= 2 AS has_continuous_aggs_policy,
   :ts_major = 2 AND :ts_minor >= 7 AS has_continuous_aggs_finals_form,
-  :ts_major = 2 AND :ts_minor IN (7,8) AS has_continuous_aggs_finalized_option
+  :ts_major = 2 AND :ts_minor IN (7,8) AS has_continuous_aggs_finalized_option,
+  :ts_major = 2 AND :ts_minor IN (5) AS has_cagg_rename_col_bug
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
@@ -69,7 +70,9 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
     WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
     \endif
 \endif
-    SELECT time_bucket('1 week', timec) AS bucket, location, round(avg(humidity)) AS humidity
+    SELECT time_bucket('1 week', timec) AS bucket,
+           location,
+	   round(avg(humidity)) AS humidity
     FROM conditions_before
 \if :has_refresh_mat_view
     GROUP BY bucket, location;
@@ -132,15 +135,27 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
 \if :has_refresh_mat_view
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+
     -- ALTER VIEW cannot rename columns before PG13, but ALTER TABLE
     -- works for views.
-    ALTER TABLE rename_cols RENAME COLUMN bucket to "time";
+    --
+    -- Renaming one column that is used in the group by and one that is
+    -- not in the group by. Both should work.
+    ALTER TABLE rename_cols RENAME COLUMN bucket TO "time";
+\if :has_cagg_rename_col_bug == false
+    ALTER TABLE rename_cols RENAME COLUMN humidity TO moisture;
+\endif
 \else
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
     SELECT add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
 
-    ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket to "time";
+    -- Renaming one column that is used in the group by and one that
+    -- is not in the group by. Both should work.
+    ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket TO "time";
+\if :has_cagg_rename_col_bug == false
+    ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN humidity TO moisture;
+\endif
 \endif
 
 \if :WITH_SUPERUSER
