@@ -32,6 +32,32 @@ FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
 
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\endif
+
+
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
