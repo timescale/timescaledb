@@ -63,6 +63,7 @@
 #include "cross_module_fn.h"
 #include "scan_iterator.h"
 #include "debug_assert.h"
+#include "osm_callbacks.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -624,6 +625,20 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 		if (compressed_hypertable != NULL)
 			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
 	}
+
+#if PG14_GE
+	OsmCallbacks *callbacks = ts_get_osm_callbacks();
+
+	/* Invoke the OSM callback if set */
+	if (callbacks)
+	{
+		Name schema_name =
+			DatumGetName(slot_getattr(ti->slot, Anum_hypertable_schema_name, &isnull));
+		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_table_name, &isnull));
+
+		callbacks->hypertable_drop_hook(NameStr(*schema_name), NameStr(*table_name));
+	}
+#endif
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
