@@ -31,6 +31,7 @@ set(SOURCES
     init.c
     jsonb_utils.c
     license_guc.c
+    osm_callbacks.c
     partitioning.c
     process_utility.c
     scanner.c

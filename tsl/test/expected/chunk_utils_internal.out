@@ -439,6 +439,33 @@ SELECT * FROM hyper1_cagg ORDER BY 1;
      30 |     2
 (1 row)
 
+-- check that dropping cagg triggers OSM callback
+SELECT ts_setup_osm_hook();
+ ts_setup_osm_hook 
+-------------------
+ 
+(1 row)
+
+BEGIN;
+DROP MATERIALIZED VIEW hyper1_cagg CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_9_chunk
+NOTICE:  hypertable_drop_hook
+DROP TABLE test1.hyper1;
+NOTICE:  hypertable_drop_hook
+ROLLBACK;
+BEGIN;
+DROP TABLE test1.hyper1 CASCADE;
+NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_9_chunk
+NOTICE:  hypertable_drop_hook
+NOTICE:  hypertable_drop_hook
+ROLLBACK;
+SELECT ts_undo_osm_hook();
+ ts_undo_osm_hook 
+------------------
+ 
+(1 row)
+
 --TEST error case (un)freeze a non-chunk
 CREATE TABLE nochunk_tab( a timestamp, b integer);
 \set ON_ERROR_STOP 0
@@ -629,6 +656,7 @@ SELECT ts_setup_osm_hook();
 \set ON_ERROR_STOP 0
 --the mock hook returns true always. so cannot create a new chunk on the hypertable
 INSERT INTO ht_try VALUES ('2022-06-05 01:00', 222, 222);
+NOTICE:  chunk_insert_check_hook
 ERROR:  Cannot insert into tiered chunk range of public.ht_try - attempt to create new chunk with range  [Sat Jun 04 17:00:00 2022 PDT Sun Jun 05 17:00:00 2022 PDT] failed
 \set ON_ERROR_STOP 1
 SELECT ts_undo_osm_hook();
