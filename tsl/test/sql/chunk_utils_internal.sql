@@ -267,6 +267,17 @@ SELECT  _timescaledb_internal.drop_chunk( :'CHNAME1');
 SELECT * from test1.hyper1 ORDER BY 1;
 SELECT * FROM hyper1_cagg ORDER BY 1;
 
+-- check that dropping cagg triggers OSM callback
+SELECT ts_setup_osm_hook();
+BEGIN;
+DROP MATERIALIZED VIEW hyper1_cagg CASCADE;
+DROP TABLE test1.hyper1;
+ROLLBACK;
+BEGIN;
+DROP TABLE test1.hyper1 CASCADE;
+ROLLBACK;
+SELECT ts_undo_osm_hook();
+
 --TEST error case (un)freeze a non-chunk
 CREATE TABLE nochunk_tab( a timestamp, b integer);
 \set ON_ERROR_STOP 0
