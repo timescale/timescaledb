@@ -129,7 +129,8 @@ typedef struct RemoteCopyContext
 	List *attnums;
 	void *data_context; /* TextCopyContext or BinaryCopyContext */
 	bool binary_operation;
-	MemoryContext mctx; /* MemoryContext that holds the RemoteCopyContext */
+	MemoryContext mctx;	  /* MemoryContext that holds the RemoteCopyContext */
+	bool dns_unavailable; /* are some DNs marked as "unavailable"? */
 
 	/*
 	 * Incoming rows are batched before creating the chunks and sending them to
@@ -1026,6 +1027,7 @@ remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_c
 	context->connection_state.data_node_connections = NIL;
 	context->connection_state.using_binary = binary_copy;
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
+	context->dns_unavailable = data_node_some_unavailable();
 
 	context->batch_row_data = palloc0(sizeof(StringInfo) * MAX_BATCH_ROWS);
 	context->batch_points = palloc0(sizeof(Point *) * MAX_BATCH_ROWS);
@@ -1333,6 +1335,8 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	Hypertable *ht = context->ht;
 	const int n = context->batch_row_count;
 	Assert(n <= MAX_BATCH_ROWS);
+	int32 chunk_id = INVALID_CHUNK_ID;
+	List *chunk_data_nodes = NIL;
 
 	/*
 	 * This list tracks the per-batch insert states of the data nodes
@@ -1366,12 +1370,35 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		else
 			found = true;
 
-		/* get the filtered list of "available" DNs for this chunk but only if it's replicated */
-		if (found && ht->fd.replication_factor > 1)
+		/*
+		 * Get the filtered list of "available" DNs for this chunk but only if it's replicated. We
+		 * only fetch the filtered list once. Assuming that inserts will typically go to the same
+		 * chunk we should be able to reuse this filtered list a few more times
+		 *
+		 * The worse case scenario is one in which INSERT1 goes into CHUNK1, INSERT2 goes into
+		 * CHUNK2, INSERT3 goes into CHUNK1,... in which case we will end up refreshing the list
+		 * everytime
+		 *
+		 * We will also enter the below loop if we KNOW that any of the DNs has been marked
+		 * unavailable before we started this transaction. If not, then we know that every chunk's
+		 * datanode list is fine and no stale chunk metadata updates are needed.
+		 */
+		if (context->dns_unavailable && found && ht->fd.replication_factor > 1)
 		{
-			List *chunk_data_nodes =
-				ts_chunk_data_node_scan_by_chunk_id_filter(chunk->fd.id, CurrentMemoryContext);
+			if (chunk_id != chunk->fd.id)
+				chunk_id = INVALID_CHUNK_ID;
 
+			if (chunk_id == INVALID_CHUNK_ID)
+			{
+				if (chunk_data_nodes)
+					list_free(chunk_data_nodes);
+				chunk_data_nodes =
+					ts_chunk_data_node_scan_by_chunk_id_filter(chunk->fd.id, CurrentMemoryContext);
+				chunk_id = chunk->fd.id;
+			}
+
+			Assert(chunk_id == chunk->fd.id);
+			Assert(chunk_data_nodes != NIL);
 			/*
 			 * If the chunk was not created as part of this insert, we need to check whether any
 			 * of the chunk's data nodes are currently unavailable and in that case consider the
@@ -1386,8 +1413,6 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 			 */
 			if (ht->fd.replication_factor > list_length(chunk_data_nodes))
 				ts_cm_functions->dist_update_stale_chunk_metadata(chunk, chunk_data_nodes);
-
-			list_free(chunk_data_nodes);
 		}
 
 		/*
@@ -1495,6 +1520,14 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		 * We don't have to specially flush the data here, because the flush is
 		 * attempted after finishing each protocol message (pqPutMsgEnd()).
 		 */
+	}
+
+	/* reset static vars before returning */
+	chunk_id = INVALID_CHUNK_ID;
+	if (chunk_data_nodes)
+	{
+		list_free(chunk_data_nodes);
+		chunk_data_nodes = NIL;
 	}
 }
 
