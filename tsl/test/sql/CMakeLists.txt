@@ -25,7 +25,7 @@ set(TEST_FILES
     partialize_finalize.sql
     reorder.sql
     skip_scan.sql
-    size_utils.sql)
+    size_utils_tsl.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
