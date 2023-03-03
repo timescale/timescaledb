@@ -377,7 +377,6 @@ default_decompress_all_forward_direction(
 	return result;
 }
 
-
 static void
 initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				 TupleTableSlot *decompressed_slot)
@@ -422,15 +421,17 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 																 PointerGetDatum(header),
 																 column->typid);
 
-				if (!column->compressed.data && header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA)
+				if (!column->compressed.data &&
+					header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA)
 				{
 					/* Just some experimental stuff. */
 					DecompressionIterator *iterator =
-					tsl_get_decompression_iterator_init(header->compression_algorithm,
-														/* reverse = */ false)(PointerGetDatum(header),
-																		column->typid);
-					column->compressed.data = default_decompress_all_forward_direction(
-						iterator, iterator->try_next);
+						tsl_get_decompression_iterator_init(header->compression_algorithm,
+															/* reverse = */ false)(PointerGetDatum(
+																					   header),
+																				   column->typid);
+					column->compressed.data =
+						default_decompress_all_forward_direction(iterator, iterator->try_next);
 				}
 
 				if (column->compressed.data)
