@@ -1,7 +1,7 @@
 #define FUNCTION_NAME_HELPER(X) gorilla_decompress_all_##X
 #define FUNCTION_NAME(X) FUNCTION_NAME_HELPER(X)
 
-static ArrowArray
+static ArrowArray *
 FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 {
 	Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_GORILLA);
@@ -10,17 +10,6 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 	const int n_total = iter->has_nulls ? iter->nulls.num_elements : iter->tag0s.num_elements;
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	Assert(iter->tag0s.num_elements_returned == 0);
-
-/*
-	Assert(iter->num_elements_returned = 0);
-	iter->num_elements = n_total;
-	iter->num_elements_returned = n_total;
-
-	Compare it with the working version:
-	git difftool 88c7a8ee05d60971fa9c886540d2b6fdd6a9118d:tsl/src/compression/gorilla.c tsl/src/compression/gorilla_impl.c
-
-	But it's the same...
-*/
 
 	uint64 *restrict validity_bitmap = palloc0(sizeof(uint64) * ((n_total + 64 - 1) / 64));
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total);
@@ -80,15 +69,15 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 		arrow_validity_bitmap_set(validity_bitmap, i, true);
 	}
 
+	ArrowArray *result = palloc0(sizeof(ArrowArray));
 	const void **buffers = palloc(sizeof(void *) * 2);
 	buffers[0] = validity_bitmap;
 	buffers[1] = decompressed_values;
-	return (ArrowArray){
-		.n_buffers = 2,
-		.buffers = buffers,
-		.length = n_total,
-		.null_count = -1,
-	};
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = -1;
+	return result;
 }
 
 #undef FUNCTION_NAME

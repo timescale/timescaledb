@@ -343,7 +343,6 @@ array_decompression_iterator_alloc_forward(const char *serialized_data, Size dat
 	iterator->base.forward = true;
 	iterator->base.element_type = element_type;
 	iterator->base.try_next = array_decompression_iterator_try_next_forward;
-	iterator->base.decompress_all_forward_direction = NULL;
 
 	iterator->has_nulls = data.nulls != NULL;
 	if (iterator->has_nulls)
@@ -444,7 +443,6 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	iterator->base.forward = false;
 	iterator->base.element_type = element_type;
 	iterator->base.try_next = array_decompression_iterator_try_next_reverse;
-	iterator->base.decompress_all_forward_direction = NULL;
 
 	compressed_array_header = (ArrayCompressed *) compressed_data;
 	compressed_data += sizeof(*compressed_array_header);

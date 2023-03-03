@@ -504,8 +504,6 @@ compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum goril
 												  gorilla_compressed));
 }
 
-static ArrowArray (*gorilla_get_decompress_all(Oid type))(DecompressionIterator *);
-
 DecompressionIterator *
 gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type)
 {
@@ -514,7 +512,6 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->base.forward = true;
 	iterator->base.element_type = element_type;
 	iterator->base.try_next = gorilla_decompression_iterator_try_next_forward;
-	iterator->base.decompress_all_forward_direction = gorilla_get_decompress_all(element_type);
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
@@ -676,7 +673,6 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 	iter->base.try_next = gorilla_decompression_iterator_try_next_reverse;
 	/* FIXME: "unpack all" needs forward bit iterators, so we can't use it with
 	 * reverse init. Need different interfaces. */
-	iter->base.decompress_all_forward_direction = NULL;
 	compressed_gorilla_data_init_from_datum(&iter->gorilla_data, gorilla_compressed);
 
 	simple8brle_decompression_iterator_init_reverse(&iter->tag0s, iter->gorilla_data.tag0s);
@@ -796,20 +792,24 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 #include "gorilla_impl.c"
 #undef ELEMENT_TYPE
 
-static ArrowArray (*gorilla_get_decompress_all(Oid type))(DecompressionIterator *)
+ArrowArray *
+gorilla_decompress_all_forward_direction(Datum compressed_data, Oid element_type)
 {
-	switch (type)
+	DecompressionIterator *iter =
+		gorilla_decompression_iterator_from_datum_forward(compressed_data, element_type);
+
+	switch (element_type)
 	{
 		case FLOAT8OID:
 		case INT8OID:
-			return gorilla_decompress_all_uint64;
+			return gorilla_decompress_all_uint64(iter);
 		case FLOAT4OID:
 		case INT4OID:
-			return gorilla_decompress_all_uint32;
+			return gorilla_decompress_all_uint32(iter);
 		case INT2OID:
-			return gorilla_decompress_all_uint16;
+			return gorilla_decompress_all_uint16(iter);
 		default:
-			elog(ERROR, "type oid %d is not supported for gorilla decompression", type);
+			elog(ERROR, "type oid %d is not supported for gorilla decompression", element_type);
 			return NULL;
 	}
 }

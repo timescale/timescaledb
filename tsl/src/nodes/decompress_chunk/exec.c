@@ -61,10 +61,11 @@ typedef struct DecompressChunkColumnState
 			bool isnull;
 			int count;
 		} segmentby;
+
 		struct
 		{
 			DecompressionIterator *iterator;
-			ArrowArray data;
+			ArrowArray *data;
 		} compressed;
 	};
 } DecompressChunkColumnState;
@@ -303,6 +304,80 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 													 ALLOCSET_DEFAULT_SIZES);
 }
 
+static inline void
+datum_to_arrow(Datum datum, void *buffer, int row_index, Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case BOOLOID:
+			((int8 *) buffer)[row_index] = DatumGetBool(datum);
+			break;
+		case CHAROID:
+			((int8 *) buffer)[row_index] = DatumGetChar(datum);
+			break;
+		case INT2OID:
+			((int16 *) buffer)[row_index] = DatumGetInt16(datum);
+			break;
+		case INT4OID:
+			((int32 *) buffer)[row_index] = DatumGetInt32(datum);
+			break;
+		case INT8OID:
+			((int64 *) buffer)[row_index] = DatumGetInt64(datum);
+			break;
+		case FLOAT4OID:
+			((float4 *) buffer)[row_index] = DatumGetFloat4(datum);
+			break;
+		case FLOAT8OID:
+			((float8 *) buffer)[row_index] = DatumGetFloat8(datum);
+			break;
+		case DATEOID:
+			((int32 *) buffer)[row_index] = DatumGetDateADT(datum);
+			break;
+		case TIMESTAMPTZOID:
+			((int64 *) buffer)[row_index] = DatumGetTimestampTz(datum);
+			break;
+		case TIMESTAMPOID:
+			((int64 *) buffer)[row_index] = DatumGetTimestamp(datum);
+			break;
+		default:
+			elog(ERROR, "cannot convert datum with oid %d to arrow type", typeoid);
+	}
+}
+
+/* For experiments. */
+static pg_attribute_always_inline ArrowArray *
+default_decompress_all_forward_direction(
+	struct DecompressionIterator *iterator,
+	DecompressResult (*try_next_impl)(struct DecompressionIterator *))
+{
+	Assert(iterator->forward);
+	ArrowArray *result = palloc0(sizeof(ArrowArray));
+
+	int current_row = 0;
+	int typlen = get_typlen(iterator->element_type);
+	Assert(typlen > 0);
+	uint64 *validity_bitmap =
+		palloc0(sizeof(uint64) * ((GLOBAL_MAX_ROWS_PER_COMPRESSION + 64 - 1) / 64));
+	void *values = palloc(typlen * GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	for (DecompressResult res = try_next_impl(iterator); !res.is_done;
+		 res = try_next_impl(iterator))
+	{
+		arrow_validity_bitmap_set(validity_bitmap, current_row, !res.is_null);
+		datum_to_arrow(res.val, values, current_row, iterator->element_type);
+		current_row++;
+	}
+
+	result->n_buffers = 2;
+	result->buffers = palloc(sizeof(void *) * 2);
+	result->buffers[0] = validity_bitmap;
+	result->buffers[1] = values;
+	result->length = current_row;
+	result->null_count = -1;
+
+	return result;
+}
+
+
 static void
 initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				 TupleTableSlot *decompressed_slot)
@@ -324,41 +399,12 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 		{
 			case COMPRESSED_COLUMN:
 			{
-				column->compressed.data.length = 0;
+				column->compressed.data = NULL;
 				column->compressed.iterator = NULL;
 
 				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
-				if (!isnull)
-				{
-					CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 
-					column->compressed.iterator =
-						tsl_get_decompression_iterator_init(header->compression_algorithm,
-															state->reverse)(PointerGetDatum(header),
-																			column->typid);
-
-					Assert(column->compressed.iterator != NULL);
-
-					if (column->compressed.iterator->decompress_all_forward_direction)
-					{
-						column->compressed.data =
-							column->compressed.iterator->decompress_all_forward_direction(
-								column->compressed.iterator);
-
-						Assert(column->compressed.data.length > 0);
-						if (state->total_rows == 0)
-						{
-							state->total_rows = column->compressed.data.length;
-						}
-						else if (state->total_rows != column->compressed.data.length)
-						{
-							elog(ERROR, "compressed column out of sync with batch counter");
-						}
-
-						column->compressed.iterator = NULL;
-					}
-				}
-				else
+				if (isnull)
 				{
 					column->compressed.iterator = NULL;
 					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
@@ -366,7 +412,49 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 						getmissingattr(decompressed_slot->tts_tupleDescriptor,
 									   attr + 1,
 									   &decompressed_slot->tts_isnull[attr]);
+					break;
 				}
+
+				/* Decompress the entire batch if it is supported. */
+				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
+
+				column->compressed.data = tsl_try_decompress_all(header->compression_algorithm,
+																 PointerGetDatum(header),
+																 column->typid);
+
+				if (!column->compressed.data && header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA)
+				{
+					/* Just some experimental stuff. */
+					DecompressionIterator *iterator =
+					tsl_get_decompression_iterator_init(header->compression_algorithm,
+														/* reverse = */ false)(PointerGetDatum(header),
+																		column->typid);
+					column->compressed.data = default_decompress_all_forward_direction(
+						iterator, iterator->try_next);
+				}
+
+				if (column->compressed.data)
+				{
+					Assert(column->compressed.data->length > 0);
+					if (state->total_rows == 0)
+					{
+						state->total_rows = column->compressed.data->length;
+					}
+					else if (state->total_rows != column->compressed.data->length)
+					{
+						elog(ERROR, "compressed column out of sync with batch counter");
+					}
+
+					column->compressed.iterator = NULL;
+
+					break;
+				}
+
+				/* As a fallback, decompress row-by-row. */
+				column->compressed.iterator =
+					tsl_get_decompression_iterator_init(header->compression_algorithm,
+														state->reverse)(PointerGetDatum(header),
+																		column->typid);
 
 				break;
 			}
@@ -451,83 +539,6 @@ decompress_chunk_end(CustomScanState *node)
 	MemoryContextReset(((DecompressChunkState *) node)->per_batch_context);
 	ExecEndNode(linitial(node->custom_ps));
 }
-
-/*
-
-static Oid
-arrow_type_to_postgres(char *type)
-{
-	if (strcmp(type, "n") == 0)
-	{
-		return UNKNOWNOID;
-	}
-	else if (strcmp(type, "b") == 0)
-	{
-		return BOOLOID;
-	}
-	else if (strcmp(type, "c") == 0)
-	{
-		return CHAROID;
-	}
-	else if (strcmp(type, "s") == 0)
-	{
-		return INT2OID;
-	}
-	else if (strcmp(type, "i") == 0)
-	{
-		return INT4OID;
-	}
-	else if (strcmp(type, "l") == 0)
-	{
-		return INT8OID;
-	}
-	else if (strcmp(type, "f") == 0)
-	{
-		return FLOAT4OID;
-	}
-	else if (strcmp(type, "g") == 0)
-	{
-		return FLOAT8OID;
-	}
-	else
-	{
-		elog(ERROR, "arrow type %s is not supported", type);
-		return InvalidOid;
-	}
-}
-
-static char*
-postgres_type_to_arrow(Oid oid)
-{
-	switch (oid)
-	{
-		case BOOLOID:
-			return "b";
-		case CHAROID:
-			return "c";
-		case INT2OID:
-			return "s";
-		case INT4OID:
-			return "i";
-		case INT8OID:
-			return "l";
-		case FLOAT4OID:
-			return "f";
-		case FLOAT8OID:
-			return "g";
-		case DATEOID:
-			return "tdD";
-		case TIMESTAMPTZOID:
-			return "ttu:UTC";
-		case TIMESTAMPOID:
-			return "ttu";
-		default:
-			elog(ERROR, "cannot convert type oid %d to arrow", oid);
-			return NULL;
-	}
-}
-
-*/
 
 static Datum
 arrow_to_datum(const void *buffer, int row_index, Oid typeoid)
@@ -628,17 +639,18 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 			const AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
-			if (column->compressed.data.length > 0)
+			if (column->compressed.data)
 			{
 				Assert(column->compressed.iterator == NULL);
 
 				const int row_index = state->reverse ? state->total_rows - state->current_row - 1 :
 													   state->current_row;
+				Assert(row_index < column->compressed.data->length);
 				/* FIXME add code for passing float8 by reference on 32-bit systems. */
 				slot->tts_isnull[attr] =
-					!arrow_validity_bitmap_get(column->compressed.data.buffers[0], row_index);
+					!arrow_validity_bitmap_get(column->compressed.data->buffers[0], row_index);
 				slot->tts_values[attr] =
-					arrow_to_datum(column->compressed.data.buffers[1], row_index, column->typid);
+					arrow_to_datum(column->compressed.data->buffers[1], row_index, column->typid);
 			}
 			else if (column->compressed.iterator != NULL)
 			{
