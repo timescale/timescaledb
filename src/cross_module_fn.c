@@ -402,6 +402,13 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(ts_cm_functions != &ts_cm_functions_default);
 }
 
+static void
+mn_get_foreign_join_path_default_fn_pg_community(PlannerInfo *root, RelOptInfo *joinrel,
+												 RelOptInfo *outerrel, RelOptInfo *innerrel,
+												 JoinType jointype, JoinPathExtraData *extra)
+{
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -555,6 +562,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
 	.health_check = error_no_default_fn_pg_community,
+	.mn_get_foreign_join_paths = mn_get_foreign_join_path_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

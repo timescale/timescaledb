@@ -11,6 +11,7 @@
 #include <foreign/fdwapi.h>
 
 #include "hypertable.h"
+#include "import/ht_hypertable_modify.h"
 
 typedef struct HypertableModifyPath
 {
@@ -33,5 +34,10 @@ extern void ts_hypertable_modify_fixup_tlist(Plan *plan);
 extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
 											  Hypertable *ht, RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
+
+#if PG14_GE
+extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
+								  TupleTableSlot *slot, bool canSetTag);
+#endif
 
 #endif /* TIMESCALEDB_HYPERTABLE_MODIFY_H */

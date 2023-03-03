@@ -919,8 +919,26 @@ remote_connection_get_result_error(const PGresult *res, TSConnectionError *err)
 	fill_result_error(err, ERRCODE_CONNECTION_EXCEPTION, "", res);
 }
 
+static long
+timeout_diff_ms(TimestampTz endtime)
+{
+	TimestampTz now;
+	long secs;
+	int microsecs;
+
+	if (endtime == TS_NO_TIMEOUT)
+		return -1;
+
+	now = GetCurrentTimestamp();
+	if (now >= endtime)
+		return 0;
+
+	TimestampDifference(now, endtime, &secs, &microsecs);
+	return secs * 1000 + (microsecs / 1000);
+}
+
 PGresult *
-remote_connection_get_result(const TSConnection *conn)
+remote_connection_get_result(const TSConnection *conn, TimestampTz endtime)
 {
 	PGresult *pgres = NULL;
 	int busy = 1;
@@ -933,11 +951,23 @@ remote_connection_get_result(const TSConnection *conn)
 
 		if (busy == 1)
 		{
-			/* Busy, wait for readable */
+			uint32 events;
 			WaitEvent event;
+			long timeout_ms;
+			int ret;
 
-			ModifyWaitEvent(conn->wes, conn->sockeventpos, WL_SOCKET_READABLE, NULL);
-			WaitEventSetWait(conn->wes, -1, &event, 1, PG_WAIT_EXTENSION);
+			events = WL_SOCKET_READABLE;
+			if (endtime != TS_NO_TIMEOUT)
+				events |= WL_TIMEOUT;
+			timeout_ms = timeout_diff_ms(endtime);
+
+			/* Busy, wait for readable */
+			ModifyWaitEvent(conn->wes, conn->sockeventpos, events, NULL);
+			ret = WaitEventSetWait(conn->wes, timeout_ms, &event, 1, PG_WAIT_EXTENSION);
+
+			/* Timeout */
+			if (ret == 0)
+				break;
 
 			if (event.events & WL_LATCH_SET)
 			{
@@ -983,7 +1013,7 @@ remote_connection_get_result(const TSConnection *conn)
  * string.
  */
 PGresult *
-remote_connection_exec(TSConnection *conn, const char *cmd)
+remote_connection_exec_timeout(TSConnection *conn, const char *cmd, TimestampTz endtime)
 {
 	WaitEvent event;
 	PGresult *res = NULL;
@@ -999,11 +1029,23 @@ remote_connection_exec(TSConnection *conn, const char *cmd)
 
 	do
 	{
+		uint32 events;
+		long timeout_ms;
+
 		CHECK_FOR_INTERRUPTS();
 
+		events = WL_SOCKET_WRITEABLE;
+		if (endtime != TS_NO_TIMEOUT)
+			events |= WL_TIMEOUT;
+		timeout_ms = timeout_diff_ms(endtime);
+
 		/* Wait for writable socket in outer loop */
-		ModifyWaitEvent(conn->wes, conn->sockeventpos, WL_SOCKET_WRITEABLE, NULL);
-		WaitEventSetWait(conn->wes, -1, &event, 1, PG_WAIT_EXTENSION);
+		ModifyWaitEvent(conn->wes, conn->sockeventpos, events, NULL);
+		ret = WaitEventSetWait(conn->wes, timeout_ms, &event, 1, PG_WAIT_EXTENSION);
+
+		/* Timeout */
+		if (ret == 0)
+			break;
 
 		if (event.events & WL_LATCH_SET)
 		{
@@ -1034,7 +1076,7 @@ remote_connection_exec(TSConnection *conn, const char *cmd)
 			 * concactinated, but that is not possible here due to lack of
 			 * access to internals. PG14 handles that automatically, however.
 			 */
-			while ((res = remote_connection_get_result(conn)) != NULL)
+			while ((res = remote_connection_get_result(conn, endtime)) != NULL)
 			{
 				if (last_result)
 				{
@@ -1083,6 +1125,12 @@ remote_connection_exec(TSConnection *conn, const char *cmd)
 	}
 
 	return res;
+}
+
+PGresult *
+remote_connection_exec(TSConnection *conn, const char *cmd)
+{
+	return remote_connection_exec_timeout(conn, cmd, TS_NO_TIMEOUT);
 }
 
 /*
@@ -1522,7 +1570,8 @@ setup_full_connection_options(List *connection_options, const char ***all_keywor
  * an error message is optionally returned via the "errmsg" parameter.
  */
 TSConnection *
-remote_connection_open(const char *node_name, List *connection_options, char **errmsg)
+remote_connection_open(const char *node_name, List *connection_options, TimestampTz endtime,
+					   char **errmsg)
 {
 	PGconn *pg_conn = NULL;
 	TSConnection *ts_conn = NULL;
@@ -1553,6 +1602,8 @@ remote_connection_open(const char *node_name, List *connection_options, char **e
 
 	do
 	{
+		long timeout_ms;
+		int events;
 		int io_flag;
 		int rc;
 
@@ -1565,6 +1616,14 @@ remote_connection_open(const char *node_name, List *connection_options, char **e
 #endif
 		else
 			io_flag = WL_SOCKET_WRITEABLE;
+
+		if (endtime == TS_NO_TIMEOUT)
+			events = io_flag;
+		else
+			events = io_flag | WL_TIMEOUT;
+
+		timeout_ms = timeout_diff_ms(endtime);
+
 		/*
 		 * Wait for latch or socket event. Note that it is not possible to
 		 * reuse a WaitEventSet using the same socket file descriptor in each
@@ -1574,10 +1633,17 @@ remote_connection_open(const char *node_name, List *connection_options, char **e
 		 * correct file descriptor (socket) with PQsocket().
 		 */
 		rc = WaitLatchOrSocket(MyLatch,
-							   WL_EXIT_ON_PM_DEATH | WL_LATCH_SET | io_flag,
+							   WL_EXIT_ON_PM_DEATH | WL_LATCH_SET | events,
 							   PQsocket(pg_conn),
-							   0,
+							   timeout_ms,
 							   PG_WAIT_EXTENSION);
+
+		if (rc & WL_TIMEOUT)
+		{
+			finish_connection(pg_conn, errmsg);
+			return NULL;
+		}
+
 		if (rc & WL_LATCH_SET)
 		{
 			ResetLatch(MyLatch);
@@ -1623,7 +1689,7 @@ TSConnection *
 remote_connection_open_session(const char *node_name, List *connection_options, bool set_dist_id)
 {
 	char *err = NULL;
-	TSConnection *conn = remote_connection_open(node_name, connection_options, &err);
+	TSConnection *conn = remote_connection_open(node_name, connection_options, TS_NO_TIMEOUT, &err);
 
 	if (NULL == conn)
 		ereport(ERROR,
@@ -1858,7 +1924,7 @@ remote_connection_get_connstr(const char *node_name)
 #define PING_QUERY "SELECT 1"
 
 bool
-remote_connection_ping(const char *node_name)
+remote_connection_ping(const char *node_name, TimestampTz endtime)
 {
 	Oid server_id = get_foreign_server_oid(node_name, false);
 	ForeignServer *server = GetForeignServer(server_id);
@@ -1874,14 +1940,14 @@ remote_connection_ping(const char *node_name)
 	}
 
 	connection_options = remote_connection_prepare_auth_options(server, GetUserId());
-	conn = remote_connection_open(server->servername, connection_options, NULL);
+	conn = remote_connection_open(server->servername, connection_options, endtime, NULL);
 
 	if (NULL == conn)
 		return false;
 
 	if (PQstatus(conn->pg_conn) == CONNECTION_OK)
 	{
-		PGresult *res = remote_connection_exec(conn, PING_QUERY);
+		PGresult *res = remote_connection_exec_timeout(conn, PING_QUERY, endtime);
 		success = (PQresultStatus(res) == PGRES_TUPLES_OK);
 	}
 

@@ -130,7 +130,7 @@ ContinuousAggIsFinalized(const ContinuousAgg *cagg)
 }
 
 static inline bool
-ContinuousAggIsNested(const ContinuousAgg *cagg)
+ContinuousAggIsHierarchical(const ContinuousAgg *cagg)
 {
 	return (cagg->data.parent_mat_hypertable_id != INVALID_HYPERTABLE_ID);
 }

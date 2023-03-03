@@ -89,15 +89,20 @@ jobs:
     - name: Build extension
       run: |
         BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
-        if [[ "${{matrix.test}}" == *backward ]]; then
-          # Alpine v3.17 updated its default libssl version to 3.0 but the older
-          # images use 1.0. Ensure that the builder image uses the same libssl version
-          # as the one used by the older test image by using Alpine 3.16.
-          BUILDER_IMAGE+="3.16"
+
+        # Recent versions of alpine have OpenSSL 3 as the
+        # default version which is unfortunately not packaged
+        # for the earliest versions we check against in this
+        # test. So we pin the version we compile against to
+        # OpenSSL 1.1 in the backwards test.
+        if [[ "${{ matrix.test }}" == *backward ]]; then
+          EXTRA_PKGS="openssl1.1-compat-dev"
+        else
+          EXTRA_PKGS="openssl-dev"
         fi
 
-        docker run -i --rm -v $(pwd):/mnt ${BUILDER_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev openssl-dev git > /dev/null
+        docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${BUILDER_IMAGE} bash <<"EOF"
+          apk add cmake gcc make build-base krb5-dev git ${EXTRA_PKGS}
           git config --global --add safe.directory /mnt
           cd /mnt
           BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
@@ -110,15 +115,15 @@ jobs:
     - name: Run tests
       run: |
         TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
-        if [[ "${{matrix.test}}" == *forward ]]; then
-          # Alpine v3.17 updated its default libssl version to 3.0 but the older
-          # images use 1.0. Ensure that the test image uses the same libssl version
-          # as the one used by the older build image by using Alpine 3.16.
-          TEST_IMAGE+="3.16"
+
+        if [[ "${{ matrix.test }}" == *backward ]]; then
+          EXTRA_PKGS="openssl-dev"
+        else
+          EXTRA_PKGS="openssl1.1-compat-dev"
         fi
 
-        docker run -i --rm -v $(pwd):/mnt ${TEST_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev openssl-dev sudo > /dev/null
+        docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${TEST_IMAGE} bash <<"EOF"
+          apk add cmake gcc make build-base krb5-dev sudo ${EXTRA_PKGS}
           cd /mnt
           cp build_abi/install_ext/* `pg_config --sharedir`/extension/
           cp build_abi/install_lib/* `pg_config --pkglibdir`

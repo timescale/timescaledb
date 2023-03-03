@@ -43,8 +43,12 @@ remove_containers() {
     docker rm -vf ${CONTAINER_CLEAN_RESTORE} 2>/dev/null
     docker rm -vf ${CONTAINER_UPDATED}  2>/dev/null
     docker rm -vf ${CONTAINER_CLEAN_RERUN} 2>/dev/null
-    docker volume rm -f ${CLEAN_VOLUME} 2>/dev/null
-    docker volume rm -f ${UPDATE_VOLUME} 2>/dev/null
+    if [[ -n "${CLEAN_VOLUME}" ]]; then
+	docker volume rm -f ${CLEAN_VOLUME} 2>/dev/null
+    fi
+    if [[ -n "${UPDATE_VOLUME}" ]]; then
+	docker volume rm -f ${UPDATE_VOLUME} 2>/dev/null
+    fi
 }
 
 cleanup() {
@@ -135,7 +139,7 @@ docker_run_vol() {
 wait_for_pg() {
     set +e
     for _ in {1..20}; do
-        sleep 0.5
+        sleep 1
 
         if docker_exec $1 "pg_isready -U postgres"
         then
@@ -143,7 +147,7 @@ wait_for_pg() {
             # ideal. Apperently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
             # queries
-            sleep 0.2
+            sleep 1
             set -e
             return 0
         fi

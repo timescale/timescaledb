@@ -110,6 +110,7 @@ void _planner_fini(void);
 
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
+static set_join_pathlist_hook_type prev_set_join_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
 static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sortcl,
@@ -1662,13 +1663,36 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 	}
 }
 
+/* Register our join pushdown hook. Becuase for PostgreSQL the tables we are operating
+ * on are local tables. So, the FDW hooks are not called. Register our join path
+ * generation as a generic planer hook.
+ */
+
+static void
+timescaledb_set_join_pathlist_hook(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
+								   RelOptInfo *innerrel, JoinType jointype,
+								   JoinPathExtraData *extra)
+{
+	/* Left table has to be a distributed hypertable */
+	TimescaleDBPrivate *outerrel_private = outerrel->fdw_private;
+	if (outerrel_private != NULL && outerrel_private->fdw_relation_info != NULL)
+		ts_cm_functions
+			->mn_get_foreign_join_paths(root, joinrel, outerrel, innerrel, jointype, extra);
+
+	/* Call next hook in chain */
+	if (prev_set_join_pathlist_hook != NULL)
+		(*prev_set_join_pathlist_hook)(root, joinrel, outerrel, innerrel, jointype, extra);
+}
+
 void
 _planner_init(void)
 {
 	prev_planner_hook = planner_hook;
 	planner_hook = timescaledb_planner;
 	prev_set_rel_pathlist_hook = set_rel_pathlist_hook;
+	prev_set_join_pathlist_hook = set_join_pathlist_hook;
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
+	set_join_pathlist_hook = timescaledb_set_join_pathlist_hook;
 
 	prev_get_relation_info_hook = get_relation_info_hook;
 	get_relation_info_hook = timescaledb_get_relation_info_hook;
@@ -1682,6 +1706,7 @@ _planner_fini(void)
 {
 	planner_hook = prev_planner_hook;
 	set_rel_pathlist_hook = prev_set_rel_pathlist_hook;
+	set_join_pathlist_hook = prev_set_join_pathlist_hook;
 	get_relation_info_hook = prev_get_relation_info_hook;
 	create_upper_paths_hook = prev_create_upper_paths_hook;
 }
