@@ -516,7 +516,7 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 	pg_unreachable();
 }
 
-static DecompressResultInternal
+static pg_attribute_always_inline DecompressResultInternal
 delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompressionIterator *iter)
 {
 	Simple8bRleDecompressResult result;
@@ -569,6 +569,51 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 								 iter->element_type);
 }
 
+/* Functions for bulk decompression. */
+#define ELEMENT_TYPE uint8
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint16
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint32
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint64
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+ArrowArray *
+delta_delta_decompress_all_forward_direction(Datum compressed_data, Oid element_type)
+{
+	DecompressionIterator *iter =
+		delta_delta_decompression_iterator_from_datum_forward(compressed_data, element_type);
+
+	switch (element_type)
+	{
+		case FLOAT8OID:
+		case INT8OID:
+		case TIMESTAMPTZOID:
+		case TIMESTAMPOID:
+			return delta_delta_decompress_all_uint64(iter);
+		case FLOAT4OID:
+		case INT4OID:
+		case DATEOID:
+			return delta_delta_decompress_all_uint32(iter);
+		case INT2OID:
+			return delta_delta_decompress_all_uint16(iter);
+		case BOOLOID:
+			return delta_delta_decompress_all_uint8(iter);
+		default:
+			elog(ERROR, "type oid %d is not supported for deltadelta decompression", element_type);
+			return NULL;
+	}
+}
+
+/* Functions for reverse iterator. */
 static DecompressResultInternal
 delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompressionIterator *iter)
 {
@@ -688,7 +733,7 @@ deltadelta_compressed_recv(StringInfo buffer)
 /**********************************************************************************/
 /**********************************************************************************/
 
-static inline uint64
+static pg_attribute_always_inline uint64
 zig_zag_encode(uint64 value)
 {
 	// (((uint64)value) << 1) ^ (uint64)(value >> 63);
@@ -698,7 +743,7 @@ zig_zag_encode(uint64 value)
 	return (value << 1) ^ (((int64) value) < 0 ? 0xFFFFFFFFFFFFFFFFull : 0);
 }
 
-static inline uint64
+static pg_attribute_always_inline uint64
 zig_zag_decode(uint64 value)
 {
 	/* ZigZag turns negative numbers into odd ones, and positive numbers into even ones*/

@@ -1,3 +1,9 @@
+/*
+ * This file and its contents are licensed under the Timescale License.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-TIMESCALE for a copy of the license.
+ */
+
 #define FUNCTION_NAME_HELPER(X) gorilla_decompress_all_##X
 #define FUNCTION_NAME(X) FUNCTION_NAME_HELPER(X)
 
