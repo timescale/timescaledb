@@ -30,5 +30,6 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const CaggRefreshCallContext callctx,
 											const bool start_isnull, const bool end_isnull);
+extern int process_invalidation_logs(const ContinuousAgg *cagg, InternalTimeRange *refresh_window);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_REFRESH_H */

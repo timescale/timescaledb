@@ -81,7 +81,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
  *
  * Serialized data is used as an input of the following procedures:
  *
- * - _timescaledb_internal.invalidation_process_hypertable_log()
+ * - _timescaledb_internal.move_invalidation_logs_from_htlogs_to_cagglogs()
  * - _timescaledb_internal.invalidation_process_cagg_log()
  *
  * See bucket_functions[] argument.

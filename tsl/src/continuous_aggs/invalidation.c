@@ -1078,21 +1078,90 @@ invalidation_state_cleanup(const CaggInvalidationState *state)
 	MemoryContextDelete(state->per_tuple_mctx);
 }
 
-void
-invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id, Oid dimtype,
-									const CaggsInfo *all_caggs)
-{
-	CaggInvalidationState state;
+#define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 7
+#define INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME "invalidation_process_hypertable_log"
 
-	invalidation_state_init(&state, mat_hypertable_id, raw_hypertable_id, dimtype, all_caggs);
-	move_invalidations_from_hyper_to_cagg_log(&state);
-	invalidation_state_cleanup(&state);
+void
+move_invalidation_logs_from_htlogs_to_cagglogs(int32 mat_hypertable_id, int32 raw_hypertable_id,
+											   Oid dimtype, const CaggsInfo *all_caggs,
+											   bool raw_ht_distributed)
+{
+	if (raw_ht_distributed)
+	{
+		Oid func_oid;
+		ArrayType *mat_hypertable_ids;
+		ArrayType *bucket_widths;
+		ArrayType *bucket_functions;
+		LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS);
+		FmgrInfo flinfo;
+		unsigned int i;
+
+		ts_create_arrays_from_caggs_info(all_caggs,
+										 &mat_hypertable_ids,
+										 &bucket_widths,
+										 &bucket_functions);
+
+		static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
+			INT4OID, INT4OID, REGTYPEOID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID
+		};
+		List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+									 makeString(INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME));
+
+		/*
+		 * Note that we have to explicitly specify the amount of arguments in this
+		 * case, because there are several overloaded versions of
+		 * move_invalidation_logs_from_htlogs_to_cagglogs().
+		 */
+		func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
+		Assert(OidIsValid(func_oid));
+
+		fmgr_info(func_oid, &flinfo);
+		InitFunctionCallInfoData(*fcinfo,
+								 &flinfo,
+								 INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS,
+								 InvalidOid,
+								 NULL,
+								 NULL);
+
+		for (i = 0; i < INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS; ++i)
+		{
+			FC_NULL(fcinfo, i) = false;
+		}
+		FC_ARG(fcinfo, 0) = Int32GetDatum(mat_hypertable_id);
+		FC_ARG(fcinfo, 1) = Int32GetDatum(raw_hypertable_id);
+		FC_ARG(fcinfo, 2) = ObjectIdGetDatum(dimtype);
+		FC_ARG(fcinfo, 3) = PointerGetDatum(mat_hypertable_ids);
+		FC_ARG(fcinfo, 4) = PointerGetDatum(bucket_widths);
+		FC_ARG(fcinfo, 5) = PointerGetDatum(construct_empty_array(INT8OID));
+		FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_functions);
+		/* Check for null result, since caller is clearly not expecting one */
+		if (fcinfo->isnull)
+			elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
+
+		Hypertable *ht = ts_hypertable_get_by_id(raw_hypertable_id);
+		if (!ht || !hypertable_is_distributed(ht))
+			elog(ERROR, "function was not provided with a valid distributed hypertable id");
+
+		DistCmdResult *result;
+		List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
+		result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_node_list);
+		if (result)
+			ts_dist_cmd_close_response(result);
+	}
+	else
+	{
+		CaggInvalidationState state;
+
+		invalidation_state_init(&state, mat_hypertable_id, raw_hypertable_id, dimtype, all_caggs);
+		move_invalidations_from_hyper_to_cagg_log(&state);
+		invalidation_state_cleanup(&state);
+	}
 }
 
 /*
  * Generates the default bucket_functions[] argument for the following functions:
  *
- * - _timescaledb_internal.invalidation_process_hypertable_log()
+ * - _timescaledb_internal.move_invalidation_logs_from_htlogs_to_cagglogs()
  * - _timescaledb_internal.invalidation_process_cagg_log()
  *
  * Users are expected to have the same or higher version of TimescaleDB on the
@@ -1132,10 +1201,12 @@ bucket_functions_default_argument(int ndim)
  * @param bucket_functions (Optional) The array of serialized information about bucket functions.
  */
 Datum
-tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
+tsl_move_invalidation_logs_from_htlogs_to_cagglogs(PG_FUNCTION_ARGS)
 {
 	int32 mat_hypertable_id = PG_GETARG_INT32(0);
 	int32 raw_hypertable_id = PG_GETARG_INT32(1);
+	Hypertable *ht = ts_hypertable_get_by_id(raw_hypertable_id);
+	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
 	Oid dimtype = PG_GETARG_OID(2);
 	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(3);
 	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(4);
@@ -1149,78 +1220,12 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 									   bucket_functions,
 									   &all_caggs_info);
 
-	invalidation_process_hypertable_log(mat_hypertable_id,
-										raw_hypertable_id,
-										dimtype,
-										&all_caggs_info);
+	move_invalidation_logs_from_htlogs_to_cagglogs(mat_hypertable_id,
+												   raw_hypertable_id,
+												   dimtype,
+												   &all_caggs_info,
+												   is_raw_ht_distributed);
 	PG_RETURN_VOID();
-}
-
-#define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 7
-#define INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME "invalidation_process_hypertable_log"
-
-void
-remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-										   Oid dimtype, const CaggsInfo *all_caggs)
-{
-	Oid func_oid;
-	ArrayType *mat_hypertable_ids;
-	ArrayType *bucket_widths;
-	ArrayType *bucket_functions;
-	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS);
-	FmgrInfo flinfo;
-	unsigned int i;
-
-	ts_create_arrays_from_caggs_info(all_caggs,
-									 &mat_hypertable_ids,
-									 &bucket_widths,
-									 &bucket_functions);
-
-	static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
-		INT4OID, INT4OID, REGTYPEOID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID
-	};
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME));
-
-	/*
-	 * Note that we have to explicitly specify the amount of arguments in this
-	 * case, because there are several overloaded versions of invalidation_process_hypertable_log().
-	 */
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(OidIsValid(func_oid));
-
-	fmgr_info(func_oid, &flinfo);
-	InitFunctionCallInfoData(*fcinfo,
-							 &flinfo,
-							 INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS,
-							 InvalidOid,
-							 NULL,
-							 NULL);
-
-	for (i = 0; i < INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS; ++i)
-	{
-		FC_NULL(fcinfo, i) = false;
-	}
-	FC_ARG(fcinfo, 0) = Int32GetDatum(mat_hypertable_id);
-	FC_ARG(fcinfo, 1) = Int32GetDatum(raw_hypertable_id);
-	FC_ARG(fcinfo, 2) = ObjectIdGetDatum(dimtype);
-	FC_ARG(fcinfo, 3) = PointerGetDatum(mat_hypertable_ids);
-	FC_ARG(fcinfo, 4) = PointerGetDatum(bucket_widths);
-	FC_ARG(fcinfo, 5) = PointerGetDatum(construct_empty_array(INT8OID));
-	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_functions);
-	/* Check for null result, since caller is clearly not expecting one */
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	Hypertable *ht = ts_hypertable_get_by_id(raw_hypertable_id);
-	if (!ht || !hypertable_is_distributed(ht))
-		elog(ERROR, "function was not provided with a valid distributed hypertable id");
-
-	DistCmdResult *result;
-	List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_node_list);
-	if (result)
-		ts_dist_cmd_close_response(result);
 }
 
 InvalidationStore *

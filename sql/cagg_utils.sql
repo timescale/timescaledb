@@ -54,16 +54,16 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigg
 -- max_bucket_widths - (Deprecated) This argument is ignored and is present only
 --                     for backward compatibility.
 -- bucket_functions - (Optional) The array of serialized information about bucket functions
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.move_invalidation_logs_from_htlogs_to_cagglogs(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
     mat_hypertable_ids INTEGER[],
     bucket_widths BIGINT[],
     max_bucket_widths BIGINT[]
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_process_hypertable_log' LANGUAGE C STRICT VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_invalidation_logs_from_htlogs_to_cagglogs' LANGUAGE C STRICT VOLATILE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.move_invalidation_logs_from_htlogs_to_cagglogs(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
@@ -71,7 +71,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
     bucket_widths BIGINT[],
     max_bucket_widths BIGINT[],
     bucket_functions TEXT[]
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_process_hypertable_log' LANGUAGE C STRICT VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_invalidation_logs_from_htlogs_to_cagglogs' LANGUAGE C STRICT VOLATILE;
 
 -- Processes the materialization invalidation log in a data node for the CAGG being refreshed that
 -- belongs to the distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.

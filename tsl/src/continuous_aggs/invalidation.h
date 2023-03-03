@@ -49,12 +49,12 @@ void remote_invalidation_log_add_entry(const Hypertable *raw_ht,
 									   ContinuousAggHypertableStatus caggstatus, int32 entry_id,
 									   int64 start, int64 end);
 
-extern void invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-												Oid dimtype, const CaggsInfo *all_caggs_info);
-extern void remote_invalidation_process_hypertable_log(int32 mat_hypertable_id,
-													   int32 raw_hypertable_id, Oid dimtype,
-													   const CaggsInfo *all_caggs);
-extern Datum tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS);
+extern void move_invalidation_logs_from_htlogs_to_cagglogs(int32 mat_hypertable_id,
+														   int32 raw_hypertable_id, Oid dimtype,
+														   const CaggsInfo *all_caggs_info,
+														   bool raw_ht_distributed);
+extern Datum
+tsl_move_invalidation_logs_from_htlogs_to_cagglogs(PG_FUNCTION_ARGS);
 
 extern InvalidationStore *invalidation_process_cagg_log(
 	int32 mat_hypertable_id, int32 raw_hypertable_id, const InternalTimeRange *refresh_window,

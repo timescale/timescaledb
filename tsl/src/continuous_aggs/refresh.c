@@ -705,13 +705,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const CaggRefreshCallContext callctx, const bool start_isnull,
 								const bool end_isnull)
 {
-	Catalog *catalog = ts_catalog_get();
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
-	int64 computed_invalidation_threshold;
-	int64 invalidation_threshold;
-	bool is_raw_ht_distributed;
-	int rc;
+	int rc, res = 0;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
 	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
@@ -738,9 +734,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * still take a long time and it is probably best for consistency to always
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
-
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	is_raw_ht_distributed = hypertable_is_distributed(ht);
 
 	/* No bucketing when open ended */
 	if (!(start_isnull && end_isnull))
@@ -773,9 +766,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 					   &refresh_window,
 					   "refreshing continuous aggregate");
 
-	/* Perform the refresh across two transactions.
+	/*
+	 * Perform the refresh across two transactions.
 	 *
-	 * The first transaction moves the invalidation threshold (if needed) and
+	 * The first transaction happens in the function process_invalidation_logs
+	 * where it moves the invalidation threshold (if needed) and
 	 * copies over invalidations from the hypertable log to the cagg
 	 * invalidation log. Doing the threshold and copying as part of the first
 	 * transaction ensures that the threshold and new invalidations will be
@@ -789,56 +784,14 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * serializes around a lock on the materialized hypertable for the
 	 * continuous aggregate that gets refreshed.
 	 */
-	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-					AccessExclusiveLock);
 
-	/* Compute new invalidation threshold. Note that this computation caps the
-	 * threshold at the end of the last bucket that holds data in the
-	 * underlying hypertable. */
-	computed_invalidation_threshold = invalidation_threshold_compute(cagg, &refresh_window);
-
-	/* Set the new invalidation threshold. Note that this only updates the
-	 * threshold if the new value is greater than the old one. Otherwise, the
-	 * existing threshold is returned. */
-	invalidation_threshold = invalidation_threshold_set_or_get(cagg->data.raw_hypertable_id,
-															   computed_invalidation_threshold);
-
-	/* We must also cap the refresh window at the invalidation threshold. If
-	 * we process invalidations after the threshold, the continuous aggregates
-	 * won't be refreshed when the threshold is moved forward in the
-	 * future. The invalidation threshold should already be aligned on bucket
-	 * boundary. */
-	if (refresh_window.end > invalidation_threshold)
-		refresh_window.end = invalidation_threshold;
-
-	/* Capping the end might have made the window 0, or negative, so
-	 * nothing to refresh in that case */
-	if (refresh_window.start >= refresh_window.end)
+	res = process_invalidation_logs(cagg, &refresh_window);
+	if (res < 0)
 	{
 		emit_up_to_date_notice(cagg, callctx);
 
 		if ((rc = SPI_finish()) != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
-
-		return;
-	}
-
-	/* Process invalidations in the hypertable invalidation log */
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	if (is_raw_ht_distributed)
-	{
-		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-												   cagg->data.raw_hypertable_id,
-												   refresh_window.type,
-												   &all_caggs_info);
-	}
-	else
-	{
-		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-											cagg->data.raw_hypertable_id,
-											refresh_window.type,
-											&all_caggs_info);
 	}
 
 	/* Commit and Start a new transaction */
@@ -851,4 +804,66 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	if ((rc = SPI_finish()) != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+}
+
+/*
+ * This function is responsible for the complete processing of the invalidation logs
+ * required for the purpose of refreshing a continuous aggregate. These steps are:
+ * 1. Compute invalidation threshold
+ * 2. Set new invalidation threshold, if required
+ * 3. Moving hypertable logs to CAgg logs
+ * This function returns the invalidation threshold, if it is updated then new
+ * otherwise old one.
+ */
+int
+process_invalidation_logs(const ContinuousAgg *cagg, InternalTimeRange *refresh_window)
+{
+	int64 computed_invalidation_threshold, new_invalidation_threshold;
+	Catalog *catalog = ts_catalog_get();
+	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
+
+	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+					AccessExclusiveLock);
+	/*
+	 * Compute new invalidation threshold. Note that this computation caps the
+	 * threshold at the end of the last bucket that holds data in the
+	 * underlying hypertable.
+	 */
+	computed_invalidation_threshold = invalidation_threshold_compute(cagg, refresh_window);
+
+	/*
+	 * Set the new invalidation threshold. Note that this only updates the
+	 * threshold if the new value is greater than the old one. Otherwise, the
+	 * existing threshold is returned.
+	 */
+	new_invalidation_threshold = invalidation_threshold_set_or_get(cagg->data.raw_hypertable_id,
+																   computed_invalidation_threshold);
+
+	/*
+	 * We must also cap the refresh window at the invalidation threshold. If
+	 * we process invalidations after the threshold, the continuous aggregates
+	 * won't be refreshed when the threshold is moved forward in the
+	 * future. The invalidation threshold should already be aligned on bucket
+	 * boundary.
+	 */
+	if (refresh_window->end > new_invalidation_threshold)
+		refresh_window->end = new_invalidation_threshold;
+
+	/*
+	 * Capping the end might have made the window 0, or negative, so
+	 * nothing to refresh in that case.
+	 */
+	if (refresh_window->start >= refresh_window->end)
+		return -1;
+
+	/* Move invalidation logs from hypertable to CAgg logs. */
+	const CaggsInfo all_caggs_info =
+		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
+	move_invalidation_logs_from_htlogs_to_cagglogs(cagg->data.mat_hypertable_id,
+												   cagg->data.raw_hypertable_id,
+												   refresh_window->type,
+												   &all_caggs_info,
+												   is_raw_ht_distributed);
+	return 1;
 }

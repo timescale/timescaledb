@@ -122,7 +122,7 @@ typedef struct CrossModuleFunctions
 										   ContinuousAggHypertableStatus caggstatus);
 	PGFunction drop_dist_ht_invalidation_trigger;
 	void (*remote_drop_dist_ht_invalidation_trigger)(int32 raw_hypertable_id);
-	PGFunction invalidation_process_hypertable_log;
+	PGFunction move_invalidation_logs_from_htlogs_to_cagglogs;
 	PGFunction invalidation_process_cagg_log;
 	PGFunction cagg_try_repair;
 

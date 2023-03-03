@@ -159,7 +159,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_invalidation_log_delete = remote_invalidation_log_delete,
 	.drop_dist_ht_invalidation_trigger = tsl_drop_dist_ht_invalidation_trigger,
 	.remote_drop_dist_ht_invalidation_trigger = remote_drop_dist_ht_invalidation_trigger,
-	.invalidation_process_hypertable_log = tsl_invalidation_process_hypertable_log,
+	.move_invalidation_logs_from_htlogs_to_cagglogs =
+		tsl_move_invalidation_logs_from_htlogs_to_cagglogs,
 	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
