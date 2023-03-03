@@ -1,11 +1,13 @@
 # Run regression tests under memory sanitizer
 name: Sanitizer test
 "on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
   push:
     branches:
       - main
       - prerelease_test
-  pull_request:
 
 env:
   name: "Sanitizer"
