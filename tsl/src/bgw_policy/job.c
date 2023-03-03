@@ -597,6 +597,7 @@ job_execute(BgwJob *job)
 		portal->visible = false;
 		portal->resowner = CurrentResourceOwner;
 		ActivePortal = portal;
+		PortalContext = portal->portalContext;
 
 		StartTransactionCommand();
 #if (PG12 && PG_VERSION_NUM >= 120008) || (PG13 && PG_VERSION_NUM >= 130004) || PG14_GE
@@ -670,6 +671,7 @@ job_execute(BgwJob *job)
 		CommitTransactionCommand();
 		PortalDrop(portal, false);
 		ActivePortal = NULL;
+		PortalContext = NULL;
 	}
 
 	return true;

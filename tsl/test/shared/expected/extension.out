@@ -110,7 +110,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.main_table_from_hypertable(integer)
  _timescaledb_internal.materialization_invalidation_log_delete(integer)
  _timescaledb_internal.partialize_agg(anyelement)
- _timescaledb_internal.ping_data_node(name)
+ _timescaledb_internal.ping_data_node(name,interval)
  _timescaledb_internal.policy_compression(integer,jsonb)
  _timescaledb_internal.policy_compression_check(jsonb)
  _timescaledb_internal.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean)

@@ -122,7 +122,11 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 	if (dimtype != DIMENSION_TYPE_CLOSED && dimtype != DIMENSION_TYPE_OPEN)
 		elog(ERROR, "invalid dimension type %u", dimtype);
 
-	funcoid = ts_lookup_proc_filtered(pf->schema, pf->name, &pf->rettype, filter, &argtype);
+	funcoid = ts_lookup_proc_filtered(NameStr(pf->schema),
+									  NameStr(pf->name),
+									  &pf->rettype,
+									  filter,
+									  &argtype);
 
 	if (!OidIsValid(funcoid))
 	{
@@ -145,7 +149,7 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 List *
 ts_partitioning_func_qualified_name(PartitioningFunc *pf)
 {
-	return list_make2(makeString(pf->schema), makeString(pf->name));
+	return list_make2(makeString(NameStr(pf->schema)), makeString(NameStr(pf->name)));
 }
 
 static Oid
@@ -184,16 +188,16 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 				 errmsg("partitioning function information cannot be null")));
 
 	pinfo = palloc0(sizeof(PartitioningInfo));
-	strlcpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
-	strlcpy(pinfo->column, partcol, NAMEDATALEN);
-	pinfo->column_attnum = get_attnum(relid, pinfo->column);
+	namestrcpy(&pinfo->partfunc.name, partfunc);
+	namestrcpy(&pinfo->column, partcol);
+	pinfo->column_attnum = get_attnum(relid, NameStr(pinfo->column));
 	pinfo->dimtype = dimtype;
 
 	/* handle the case that the attribute has been dropped */
 	if (pinfo->column_attnum == InvalidAttrNumber)
 		return NULL;
 
-	strlcpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
+	namestrcpy(&pinfo->partfunc.schema, schema);
 
 	/* Lookup the type cache entry to access the hash function for the type */
 	columntype = get_atttype(relid, pinfo->column_attnum);
@@ -250,8 +254,8 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation, Datum value)
 	if (fcinfo->isnull)
 		elog(ERROR,
 			 "partitioning function \"%s.%s\" returned NULL",
-			 pinfo->partfunc.schema,
-			 pinfo->partfunc.name);
+			 NameStr(pinfo->partfunc.schema),
+			 NameStr(pinfo->partfunc.name));
 
 	return result;
 }

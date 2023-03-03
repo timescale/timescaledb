@@ -253,7 +253,7 @@ TSCopyCreateNewInsertBufferHashMap()
 		.hcxt = CurrentMemoryContext,
 	};
 
-	return hash_create("", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
+	return hash_create("COPY insert buffer", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 }
 
 /*
