@@ -19,6 +19,8 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/jsonb.h>
@@ -1775,6 +1777,7 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	 * This chunk might have this data node as primary, change that association
 	 * if so. Then delete the chunk_id and node_name association.
 	 */
+	LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
 	chunk_update_foreign_server_if_needed(chunk, serverid, false);
 	ts_chunk_data_node_delete_by_chunk_id_and_node_name(chunk->fd.id, node_name);
 }
