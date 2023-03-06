@@ -9,6 +9,8 @@
 #include <nodes/plannodes.h>
 #include <commands/explain.h>
 #include <foreign/fdwapi.h>
+#include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/rel.h>
 #include <fmgr.h>
 #include <miscadmin.h>
@@ -452,6 +454,8 @@ fdw_chunk_update_stale_metadata(TsFdwModifyState *fmstate)
 		/* get filtered list */
 		List *serveroids = get_chunk_data_nodes(rel->rd_id);
 		ListCell *lc;
+		bool chunk_is_locked = false;
+
 		Assert(list_length(serveroids) == fmstate->num_data_nodes);
 
 		all_data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, CurrentMemoryContext);
@@ -471,6 +475,12 @@ fdw_chunk_update_stale_metadata(TsFdwModifyState *fmstate)
 			if (!list_member_oid(serveroids, cdn->foreign_server_oid) &&
 				!list_member_oid(fmstate->stale_data_nodes, cdn->foreign_server_oid))
 			{
+				if (!chunk_is_locked)
+				{
+					LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
+					chunk_is_locked = true;
+				}
+
 				chunk_update_foreign_server_if_needed(chunk, cdn->foreign_server_oid, false);
 				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																	NameStr(cdn->fd.node_name));
