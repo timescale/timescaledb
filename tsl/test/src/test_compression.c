@@ -319,42 +319,106 @@ test_gorilla_float()
 	TestAssertInt64Eq(i, 0);
 }
 
+static uint64_t
+hash64(uint64_t x)
+{
+	x ^= x >> 30;
+	x *= 0xbf58476d1ce4e5b9U;
+	x ^= x >> 27;
+	x *= 0x94d049bb133111ebU;
+	x ^= x >> 31;
+	return x;
+}
+
 static void
-test_gorilla_double()
+test_gorilla_double(bool have_nulls, bool have_random)
 {
 	GorillaCompressor *compressor = gorilla_compressor_alloc();
 	GorillaCompressed *compressed;
-	DecompressionIterator *iter;
-	double i;
-	for (i = 0.0; i < 1015.0; i++)
-		gorilla_compressor_append_value(compressor, double_get_bits(i));
+
+	double values[1015];
+	bool nulls[1015];
+	for (int i = 0; i < 1015; i++)
+	{
+		if (have_random)
+		{
+			values[i] = (hash64(i) / (double) UINT64_MAX) * 100.;
+		}
+		else
+		{
+			values[i] = i;
+		}
+
+		if (have_nulls && i % 29 == 0)
+		{
+			nulls[i] = true;
+		}
+		else
+		{
+			nulls[i] = false;
+		}
+
+		if (nulls[i])
+		{
+			gorilla_compressor_append_null(compressor);
+		}
+		else
+		{
+			gorilla_compressor_append_value(compressor, double_get_bits(values[i]));
+		}
+	}
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1200);
-
-	i = 0;
-	iter =
-		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT8OID);
-	for (DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter); !r.is_done;
-		 r = gorilla_decompression_iterator_try_next_forward(iter))
+	if (!have_nulls && !have_random)
 	{
-		TestAssertTrue(!r.is_null);
-		TestAssertDoubleEq(DatumGetFloat8(r.val), i);
-		i += 1.0;
+		TestAssertInt64Eq(VARSIZE(compressed), 1200);
 	}
-	TestAssertInt64Eq(i, 1015);
 
+	/* Forward decompression. */
+	DecompressionIterator *iter =
+		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT8OID);
+	ArrowArray *bulk_result = gorilla_decompress_all_forward_direction(PointerGetDatum(compressed),
+		FLOAT8OID);
+	for (int i = 0; i < 1015; i++)
+	{
+		DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+			TestAssertTrue(!arrow_validity_bitmap_get(bulk_result->buffers[0], i));
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(arrow_validity_bitmap_get(bulk_result->buffers[0], i));
+			TestAssertTrue(values[i] == DatumGetFloat8(r.val));
+			TestAssertTrue(values[i] == ((double *) bulk_result->buffers[1])[i]);
+		}
+	}
+	DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
+	TestAssertTrue(r.is_done);
+
+	/* Reverse decompression. */
 	iter =
 		gorilla_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), FLOAT8OID);
-	for (DecompressResult r = gorilla_decompression_iterator_try_next_reverse(iter); !r.is_done;
-		 r = gorilla_decompression_iterator_try_next_reverse(iter))
+	for (int i = 1015 - 1; i >= 0; i--)
 	{
-		TestAssertTrue(!r.is_null);
-		TestAssertDoubleEq(DatumGetFloat8(r.val), i - 1);
-		i -= 1;
+		DecompressResult r = gorilla_decompression_iterator_try_next_reverse(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(values[i] == DatumGetFloat8(r.val));
+		}
 	}
-	TestAssertInt64Eq(i, 0);
+	r = gorilla_decompression_iterator_try_next_reverse(iter);
+	TestAssertTrue(r.is_done);
 }
 
 static void
@@ -418,6 +482,93 @@ test_delta2()
 	TestAssertInt64Eq(i, 1015);
 }
 
+static void
+test_delta3(bool have_nulls, bool have_random)
+{
+	DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+	Datum compressed;
+
+	int64 values[1015];
+	bool nulls[1015];
+	for (int i = 0; i < 1015; i++)
+	{
+		if (have_random)
+		{
+			values[i] = hash64(i);
+		}
+		else
+		{
+			values[i] = i;
+		}
+
+		if (have_nulls && i % 29 == 0)
+		{
+			nulls[i] = true;
+		}
+		else
+		{
+			nulls[i] = false;
+		}
+
+		if (nulls[i])
+		{
+			delta_delta_compressor_append_null(compressor);
+		}
+		else
+		{
+			delta_delta_compressor_append_value(compressor, values[i]);
+		}
+	}
+
+	compressed = PointerGetDatum(delta_delta_compressor_finish(compressor));
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	/* Forward decompression. */
+	DecompressionIterator *iter =
+		delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), INT8OID);
+	ArrowArray *bulk_result = delta_delta_decompress_all_forward_direction(PointerGetDatum(compressed),
+		INT8OID);
+	for (int i = 0; i < 1015; i++)
+	{
+		DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+			TestAssertTrue(!arrow_validity_bitmap_get(bulk_result->buffers[0], i));
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(arrow_validity_bitmap_get(bulk_result->buffers[0], i));
+			TestAssertTrue(values[i] == DatumGetInt64(r.val));
+			TestAssertTrue(values[i] == ((int64_t *) bulk_result->buffers[1])[i]);
+		}
+	}
+	DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
+	TestAssertTrue(r.is_done);
+
+	/* Reverse decompression. */
+	iter =
+		delta_delta_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), INT8OID);
+	for (int i = 1015 - 1; i >= 0; i--)
+	{
+		DecompressResult r = delta_delta_decompression_iterator_try_next_reverse(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(values[i] == DatumGetInt64(r.val));
+		}
+	}
+	r = delta_delta_decompression_iterator_try_next_reverse(iter);
+	TestAssertTrue(r.is_done);
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
@@ -427,9 +578,16 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_string_dictionary();
 	test_gorilla_int();
 	test_gorilla_float();
-	test_gorilla_double();
+	test_gorilla_double(/* nulls = */ false, /* random = */ false);
+	test_gorilla_double(/* nulls = */ false, /* random = */ true);
+	test_gorilla_double(/* nulls = */ true, /* random = */ false);
+	test_gorilla_double(/* nulls = */ true, /* random = */ true);
 	test_delta();
 	test_delta2();
+	test_delta3(/* nulls = */ false, /* random = */ false);
+	test_delta3(/* nulls = */ false, /* random = */ true);
+	test_delta3(/* nulls = */ true, /* random = */ false);
+	test_delta3(/* nulls = */ true, /* random = */ true);
 	PG_RETURN_VOID();
 }
 
