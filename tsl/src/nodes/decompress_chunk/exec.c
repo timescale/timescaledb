@@ -71,6 +71,7 @@ typedef struct DecompressChunkState
 {
 	CustomScanState csstate;
 	List *decompression_map;
+	List *is_segmentby_column;
 	int num_columns;
 	DecompressChunkColumnState *columns;
 
@@ -78,7 +79,6 @@ typedef struct DecompressChunkState
 	bool reverse;
 	int hypertable_id;
 	Oid chunk_relid;
-	List *hypertable_compression_info;
 	int counter;
 	MemoryContext per_batch_context;
 } DecompressChunkState;
@@ -111,6 +111,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	state->chunk_relid = lsecond_int(settings);
 	state->reverse = lthird_int(settings);
 	state->decompression_map = lsecond(cscan->custom_private);
+	state->is_segmentby_column = lthird(cscan->custom_private);
 
 	return (Node *) state;
 }
@@ -127,7 +128,6 @@ initialize_column_state(DecompressChunkState *state)
 {
 	ScanState *ss = (ScanState *) state;
 	TupleDesc desc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
-	ListCell *lc;
 
 	if (list_length(state->decompression_map) == 0)
 	{
@@ -139,11 +139,13 @@ initialize_column_state(DecompressChunkState *state)
 
 	AttrNumber next_compressed_scan_attno = 0;
 	state->num_columns = 0;
-	foreach (lc, state->decompression_map)
+	ListCell *dest_cell;
+	ListCell *is_segmentby_cell;
+	forboth (dest_cell, state->decompression_map, is_segmentby_cell, state->is_segmentby_column)
 	{
 		next_compressed_scan_attno++;
 
-		AttrNumber output_attno = lfirst_int(lc);
+		AttrNumber output_attno = lfirst_int(dest_cell);
 		if (output_attno == 0)
 		{
 			/* We are asked not to decompress this column, skip it. */
@@ -161,13 +163,10 @@ initialize_column_state(DecompressChunkState *state)
 			/* normal column that is also present in uncompressed chunk */
 			Form_pg_attribute attribute =
 				TupleDescAttr(desc, AttrNumberGetAttrOffset(output_attno));
-			FormData_hypertable_compression *ht_info =
-				get_column_compressioninfo(state->hypertable_compression_info,
-										   NameStr(attribute->attname));
 
 			column->typid = attribute->atttypid;
 
-			if (ht_info->segmentby_column_index > 0)
+			if (lfirst_int(is_segmentby_cell))
 				column->type = SEGMENTBY_COLUMN;
 			else
 				column->type = COMPRESSED_COLUMN;
@@ -288,8 +287,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 		}
 	}
-
-	state->hypertable_compression_info = ts_hypertable_compression_get(state->hypertable_id);
 
 	initialize_column_state(state);
 
