@@ -1,0 +1,57 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_init s1_set_unavailable s3_lock_enable s1_insert s2_insert s3_lock_release s1_set_available
+node_name  
+-----------
+data_node_1
+(1 row)
+
+node_name  
+-----------
+data_node_2
+(1 row)
+
+node_name  
+-----------
+data_node_3
+(1 row)
+
+node_name  
+-----------
+data_node_4
+(1 row)
+
+created
+-------
+t      
+(1 row)
+
+step s1_init: INSERT INTO metric1(ts, val, dev_id) SELECT s.*, 3.14, d.* FROM generate_series('2021-08-17 00:00:00'::timestamp, '2021-08-17 00:00:59'::timestamp, '1 s'::interval) s CROSS JOIN generate_series(1, 500) d;
+step s1_set_unavailable: SELECT alter_data_node('data_node_4', available=>false);
+alter_data_node                       
+--------------------------------------
+(data_node_4,localhost,55432,cdha_4,f)
+(1 row)
+
+step s3_lock_enable: SELECT debug_waitpoint_enable('chunk_data_node_delete');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_insert: INSERT INTO metric1(ts, val, dev_id) SELECT s.*, 3.14, d.* FROM generate_series('2021-08-17 00:01:00'::timestamp, '2021-08-17 00:01:59'::timestamp, '1 s'::interval) s CROSS JOIN generate_series(1, 249) d; <waiting ...>
+step s2_insert: INSERT INTO metric1(ts, val, dev_id) SELECT s.*, 3.14, d.* FROM generate_series('2021-08-17 00:01:00'::timestamp, '2021-08-17 00:01:59'::timestamp, '1 s'::interval) s CROSS JOIN generate_series(250, 499) d; <waiting ...>
+step s3_lock_release: SELECT debug_waitpoint_release('chunk_data_node_delete');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_insert: <... completed>
+step s2_insert: <... completed>
+step s1_set_available: SELECT alter_data_node('data_node_4', available=>true);
+alter_data_node                       
+--------------------------------------
+(data_node_4,localhost,55432,cdha_4,t)
+(1 row)
+
