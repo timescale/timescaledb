@@ -23,6 +23,7 @@
 #include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
+#include <storage/lmgr.h>
 
 #include "compat/compat.h"
 #include "errors.h"
@@ -596,7 +597,12 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 												 chunk->fd.status,
 												 CHUNK_INSERT,
 												 true);
+	elog(WARNING, "BEFORE chunk_catalog_lock_row_in_mode");
 
+	/* lock the catalog row for this chunk */
+	chunk_catalog_lock_row_in_mode(chunk->fd.id, LockTupleExclusive, AccessShareLock, SCANNER_F_KEEPLOCK);
+
+	elog(WARNING, "AFTER chunk_catalog_lock_row_in_mode");
 	if (has_compressed_chunk && onconflict_action != ONCONFLICT_NONE)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -739,6 +745,9 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 
 	if (state->chunk_compressed && !state->chunk_partial)
 	{
+		// release the Share lock on the catalog row by doing an UnlockRelationOid
+		Catalog *catalog = ts_catalog_get();
+		UnlockRelationOid(catalog_get_table_id(catalog, CHUNK), AccessShareLock);
 		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		ts_chunk_set_partial(chunk);

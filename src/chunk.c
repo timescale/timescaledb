@@ -66,6 +66,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/hypertable_data_node.h"
 #include "utils.h"
+#include <unistd.h>
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
@@ -2334,7 +2335,7 @@ ts_chunk_copy(const Chunk *chunk)
 	return copy;
 }
 
-static int
+int
 chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_func filter,
 					tuple_found_func tuple_found, void *data, int limit, ScanDirection scandir,
 					LOCKMODE lockmode, MemoryContext mctx)
@@ -3467,8 +3468,8 @@ chunk_update_status_internal(FormData_chunk *form)
  * All callers who want to update chunk status should call this function so that locks
  * are acquired correctly.
  */
-static bool
-chunk_update_status(FormData_chunk *form)
+bool
+chunk_update_status(FormData_chunk *form, int scanflags)
 {
 	int32 chunk_id = form->id;
 	int32 new_status = form->status;
@@ -3479,6 +3480,7 @@ chunk_update_status(FormData_chunk *form)
 		.lockmode = LockTupleExclusive,
 	};
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
+	iterator.ctx.flags |= scanflags;
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	iterator.ctx.tuplock = &scantuplock;
 
@@ -3506,7 +3508,7 @@ chunk_update_status(FormData_chunk *form)
 		Assert(!dropped_isnull);
 		status = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_status, &status_isnull));
 		Assert(!status_isnull);
-		if (!dropped && status != new_status)
+		if (!dropped && (status != new_status))
 		{
 			success = chunk_update_status_internal(form); // get RowExclusiveLock and update here
 		}
@@ -3568,7 +3570,7 @@ bool
 ts_chunk_unset_frozen(Chunk *chunk)
 {
 #if PG14_GE
-	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN);
+	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN, 0);
 #else
 	elog(ERROR, "freeze chunk supported only for PG14 or greater");
 	return false;
@@ -3590,8 +3592,9 @@ ts_chunk_is_frozen(Chunk *chunk)
 /* only caller is ts_chunk_unset_frozen. This code is in PG14 block as we run into
  * defined but unsed error in CI/CD builds for PG < 14.
  */
-static bool
-ts_chunk_clear_status(Chunk *chunk, int32 status)
+bool
+ts_chunk_clear_status(Chunk *chunk, int32 status,
+					  int32 scanflags) static bool ts_chunk_clear_status(Chunk *chunk, int32 status)
 {
 	/* only frozen status can be cleared for a frozen chunk */
 	if (status != CHUNK_STATUS_FROZEN && ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
@@ -3607,7 +3610,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 	}
 	uint32 mstatus = ts_clear_flags_32(chunk->fd.status, status);
 	chunk->fd.status = mstatus;
-	return chunk_update_status(&chunk->fd);
+	return chunk_update_status(&chunk->fd, scanflags);
 }
 #endif
 
@@ -3627,7 +3630,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	}
 	uint32 mstatus = ts_set_flags_32(chunk->fd.status, status);
 	chunk->fd.status = mstatus;
-	return chunk_update_status(&chunk->fd);
+	return chunk_update_status(&chunk->fd, 0);
 }
 
 /*
@@ -4873,4 +4876,92 @@ ts_chunk_get_osm_chunk_id(int hypertable_id)
 	}
 
 	return chunk_id;
+}
+
+static bool
+chunk_catalog_lock_row_in_mode_internal(int32 id, LockTupleMode tuplockmode, LOCKMODE iterlockmode, int scanflags)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, id);
+
+	Catalog *catalog = ts_catalog_get();
+
+	ScanTupLock scantuplock = {
+		.lockmode = tuplockmode,
+	};
+
+	ScannerCtx ctx = {
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
+		.nkeys = 1,
+		.data = NULL,
+		.scankey = scankey,
+		.filter = NULL,
+		.tuple_found = NULL,
+		.limit = 0,
+		.lockmode = iterlockmode,
+		.scandirection = ForwardScanDirection,
+		.result_mctx = CurrentMemoryContext,
+		.tuplock = &scantuplock,
+	};
+
+	return (ts_scanner_scan(&ctx) > 0);
+}
+
+bool
+chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMODE iterlockmode, int scanflags)
+{
+	bool success = false, dropped = false;
+	/* lock the chunk tuple for update. Block till we get exclusivetuplelock */
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = tuplockmode,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, iterlockmode, CurrentMemoryContext);
+	iterator.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE; // no
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+
+	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool dropped_isnull;
+
+		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
+		Assert(!dropped_isnull);
+		if (!dropped)
+		{
+			success =
+				chunk_catalog_lock_row_in_mode_internal(chunk_id,
+														tuplockmode,
+														iterlockmode, scanflags); // get RowExclusiveLock and update here
+		}
+		elog(WARNING,
+			 "IN %s, chunk_catalog_lock_row_in_mode_internal returned %d",
+			 __func__,
+			 success);
+	}
+	elog(WARNING, "before closing the iterator, gonna sleep for 3min");
+	// sleep(3 * 60);
+	ts_scan_iterator_close(&iterator);
+	if (dropped)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("attempt to lock dropped chunk %d", chunk_id)));
+	return success;
 }

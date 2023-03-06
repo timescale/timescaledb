@@ -238,6 +238,11 @@ int ts_chunk_get_osm_chunk_id(int hypertable_id);
 extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk,
 													int32 dimension_id);
 
+extern TSDLLEXPORT int chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys,
+										   tuple_filter_func filter, tuple_found_func tuple_found,
+										   void *data, int limit, ScanDirection scandir,
+										   LOCKMODE lockmode, MemoryContext mctx);
+
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
 											 table_name,                                           \
@@ -264,5 +269,15 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *m
 		Assert((chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints);      \
 		Assert((chunk)->relkind == RELKIND_RELATION || (chunk)->relkind == RELKIND_FOREIGN_TABLE); \
 	} while (0)
+
+extern TSDLLEXPORT bool ts_chunk_clear_status(Chunk *chunk, int32 status, int32 scanflags);
+
+extern TSDLLEXPORT bool chunk_update_status(FormData_chunk *chunk, int scanflags);
+
+extern TSDLLEXPORT bool chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMODE iterlockmode,
+													   int scanflags);
+
+extern TSDLLEXPORT ScanIterator chunk_catalog_iterator_lock_row_in_mode(int32 chunk_id,
+																		LockTupleMode lockmode);
 
 #endif /* TIMESCALEDB_CHUNK_H */
