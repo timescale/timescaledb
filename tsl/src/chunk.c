@@ -773,6 +773,7 @@ void
 chunk_update_stale_metadata(Chunk *new_chunk, List *chunk_data_nodes)
 {
 	List *serveroids = NIL, *removeoids = NIL;
+	bool locked = false;
 	ChunkDataNode *cdn;
 	ListCell *lc;
 
@@ -807,6 +808,13 @@ chunk_update_stale_metadata(Chunk *new_chunk, List *chunk_data_nodes)
 		 */
 		if (!list_member_oid(serveroids, cdn->foreign_server_oid))
 		{
+			if (!locked)
+			{
+				LockRelationOid(ts_catalog_get()->tables[CHUNK_DATA_NODE].id,
+								ShareUpdateExclusiveLock);
+				locked = true;
+			}
+
 			chunk_update_foreign_server_if_needed(new_chunk, cdn->foreign_server_oid, false);
 			ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																NameStr(cdn->fd.node_name));
