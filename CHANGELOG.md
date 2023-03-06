@@ -13,6 +13,7 @@ accidentally triggering the load of a previous DB version.**
 * #5317 Fix some incorrect memory handling
 * #5367 Rename columns in old-style continuous aggregates
 * #5384 Fix Hierarchical Continuous Aggregates chunk_interval_size
+* #5153 Fix concurrent locking with chunk_data_node table
 
 **Thanks**
 * @Medvecrab for discovering an issue with copying NameData when forming heap tuples.

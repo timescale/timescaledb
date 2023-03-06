@@ -32,10 +32,11 @@ setup
 
 	CREATE TABLE IF NOT EXISTS disttable(time timestamptz NOT NULL, device int, temp float);
 }
+setup { SELECT true AS delete_data_node FROM delete_data_node('data_node_4', if_exists => true); }
 setup { SELECT node_name FROM add_data_node('data_node_1', host => 'localhost', database => 'cdrp_1', if_not_exists => true); }
 setup { SELECT node_name FROM add_data_node('data_node_2', host => 'localhost', database => 'cdrp_2', if_not_exists => true); }
 setup { SELECT node_name FROM add_data_node('data_node_3', host => 'localhost', database => 'cdrp_3', if_not_exists => true); }
-setup { SELECT created FROM create_distributed_hypertable('disttable', 'time', 'device'); }
+setup { SELECT created FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => ARRAY['data_node_1', 'data_node_2', 'data_node_3']); }
 
 teardown
 {
@@ -63,8 +64,6 @@ step "s2_create_dist_rp" { SELECT restore_point > pg_lsn('0/0') as valid_lsn FRO
 step "s2_insert"         { INSERT INTO disttable VALUES ('2019-08-02 10:45', 0, 0.0); }
 step "s2_begin"          { BEGIN; }
 step "s2_commit"         { COMMIT; }
-step "s2_add_dn"         { SELECT node_name FROM add_data_node('data_node_4', host => 'localhost', database => 'cdrp_4'); }
-step "s2_del_dn"         { SELECT * FROM delete_data_node('data_node_4'); }
 step "s2_create_dist_ht" {
 	CREATE TABLE disttable2(time timestamptz NOT NULL, device int, temp float);
 	SELECT created FROM create_distributed_hypertable('disttable2', 'time', 'device');
@@ -85,7 +84,6 @@ step "s3_lock_count"    {
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 }
-step "s3_lock_count_fs" { SELECT foreign_server_locks() as foreign_server_locks; }
 
 # case 1: new transaction DML/commit during the create_distributed_restore_point()
 permutation "s3_lock_enable" "s1_create_dist_rp" "s2_insert" "s3_lock_count" "s3_lock_release"
@@ -104,9 +102,3 @@ permutation "s3_lock_enable" "s1_create_dist_rp" "s2_create_dist_ht" "s3_lock_co
 
 # case 6: concurrent DDL/commit during the create_distributed_restore_point()
 permutation "s3_lock_enable" "s1_create_dist_rp" "s2_drop_dist_ht" "s3_lock_count" "s3_lock_release"
-
-# case 7: concurrent add_data_node() during the create_distributed_restore_point()
-permutation "s3_lock_enable" "s1_create_dist_rp" "s2_add_dn" "s3_lock_count" "s3_lock_count_fs" "s3_lock_release" "s3_lock_count_fs"
-
-# case 8: concurrent delete_data_node() during the create_distributed_restore_point()
-permutation "s3_lock_enable" "s1_create_dist_rp" "s2_del_dn" "s3_lock_count" "s3_lock_release"
