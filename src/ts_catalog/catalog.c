@@ -709,18 +709,6 @@ ts_catalog_delete_tid(Relation rel, ItemPointer tid)
 	CommandCounterIncrement();
 }
 
-void
-ts_catalog_delete_only(Relation rel, HeapTuple tuple)
-{
-	ts_catalog_delete_tid_only(rel, &tuple->t_self);
-}
-
-void
-ts_catalog_delete(Relation rel, HeapTuple tuple)
-{
-	ts_catalog_delete_tid(rel, &tuple->t_self);
-}
-
 /*
  * Invalidate TimescaleDB catalog caches.
  *
