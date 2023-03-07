@@ -19,6 +19,7 @@
 #include "adts/bit_array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 
 /*
  * Gorilla compressed data is stored as
@@ -101,12 +102,12 @@ typedef struct GorillaDecompressionIterator
 {
 	DecompressionIterator base;
 	CompressedGorillaData gorilla_data;
-	Simple8bRleDecompressionIterator tag0s;
-	Simple8bRleDecompressionIterator tag1s;
+	Simple8bRleBitmap tag0s;
+	Simple8bRleBitmap tag1s;
 	BitArrayIterator leading_zeros;
 	Simple8bRleDecompressionIterator num_bits_used;
 	BitArrayIterator xors;
-	Simple8bRleDecompressionIterator nulls;
+	Simple8bRleBitmap nulls;
 	uint64 prev_val;
 	uint8 prev_leading_zeroes;
 	uint8 prev_xor_bits_used;
@@ -517,8 +518,8 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->prev_xor_bits_used = 0;
 	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
 
-	simple8brle_decompression_iterator_init_forward(&iterator->tag0s, iterator->gorilla_data.tag0s);
-	simple8brle_decompression_iterator_init_forward(&iterator->tag1s, iterator->gorilla_data.tag1s);
+	iterator->tag0s = simple8brle_decompress_bitmap(iterator->gorilla_data.tag0s);
+	iterator->tag1s = simple8brle_decompress_bitmap(iterator->gorilla_data.tag1s);
 	bit_array_iterator_init(&iterator->leading_zeros, &iterator->gorilla_data.leading_zeros);
 	simple8brle_decompression_iterator_init_forward(&iterator->num_bits_used,
 													iterator->gorilla_data.num_bits_used_per_xor);
@@ -526,8 +527,7 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 
 	iterator->has_nulls = iterator->gorilla_data.nulls != NULL;
 	if (iterator->has_nulls)
-		simple8brle_decompression_iterator_init_forward(&iterator->nulls,
-														iterator->gorilla_data.nulls);
+		iterator->nulls = simple8brle_decompress_bitmap(iterator->gorilla_data.nulls);
 
 	return &iterator->base;
 }
@@ -581,7 +581,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 	if (iter->has_nulls)
 	{
 		Simple8bRleDecompressResult null =
-			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
+			simple8brle_bitmap_get_next(&iter->nulls);
 		/* Could slightly improve performance here by not returning a tail of non-null bits */
 		if (null.is_done)
 			return (DecompressResultInternal){
@@ -597,7 +597,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		}
 	}
 
-	tag0 = simple8brle_decompression_iterator_try_next_forward(&iter->tag0s);
+	tag0 = simple8brle_bitmap_get_next(&iter->tag0s);
 	/* if we don't have a null bitset, this will determine when we're done */
 	if (tag0.is_done)
 		return (DecompressResultInternal){
@@ -609,7 +609,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 			.val = iter->prev_val,
 		};
 
-	tag1 = simple8brle_decompression_iterator_try_next_forward(&iter->tag1s);
+	tag1 = simple8brle_bitmap_get_next(&iter->tag1s);
 	Assert(!tag1.is_done);
 
 	if (tag1.val != 0)
@@ -671,12 +671,10 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 	iter->base.forward = false;
 	iter->base.element_type = element_type;
 	iter->base.try_next = gorilla_decompression_iterator_try_next_reverse;
-	/* FIXME: "unpack all" needs forward bit iterators, so we can't use it with
-	 * reverse init. Need different interfaces. */
 	compressed_gorilla_data_init_from_datum(&iter->gorilla_data, gorilla_compressed);
 
-	simple8brle_decompression_iterator_init_reverse(&iter->tag0s, iter->gorilla_data.tag0s);
-	simple8brle_decompression_iterator_init_reverse(&iter->tag1s, iter->gorilla_data.tag1s);
+	iter->tag0s = simple8brle_decompress_bitmap(iter->gorilla_data.tag0s);
+	iter->tag1s = simple8brle_decompress_bitmap(iter->gorilla_data.tag1s);
 	bit_array_iterator_init_rev(&iter->leading_zeros, &iter->gorilla_data.leading_zeros);
 	simple8brle_decompression_iterator_init_reverse(&iter->num_bits_used,
 													iter->gorilla_data.num_bits_used_per_xor);
@@ -684,7 +682,7 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 
 	iter->has_nulls = iter->gorilla_data.nulls != NULL;
 	if (iter->has_nulls)
-		simple8brle_decompression_iterator_init_reverse(&iter->nulls, iter->gorilla_data.nulls);
+		iter->nulls = simple8brle_decompress_bitmap(iter->gorilla_data.nulls);
 
 	/* we need to know how many bits are used, even if the last value didn't store them */
 	iter->prev_leading_zeroes =
@@ -707,7 +705,7 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 	if (iter->has_nulls)
 	{
 		Simple8bRleDecompressResult null =
-			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
+			simple8brle_bitmap_get_next_reverse(&iter->nulls);
 
 		if (null.is_done)
 			return (DecompressResultInternal){
@@ -725,7 +723,7 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 
 	val = iter->prev_val;
 
-	tag0 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag0s);
+	tag0 = simple8brle_bitmap_get_next_reverse(&iter->tag0s);
 	/* if we don't have a null bitset, this will determine when we're done */
 	if (tag0.is_done)
 		return (DecompressResultInternal){
@@ -743,7 +741,7 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 		xor <<= 64 - (iter->prev_leading_zeroes + iter->prev_xor_bits_used);
 	iter->prev_val ^= xor;
 
-	tag1 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag1s);
+	tag1 = simple8brle_bitmap_get_next_reverse(&iter->tag1s);
 
 	if (tag1.val != 0)
 	{

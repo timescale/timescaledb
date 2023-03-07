@@ -15,7 +15,7 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 
 	const int n_total = iter->has_nulls ? iter->nulls.num_elements : iter->tag0s.num_elements;
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	Assert(iter->tag0s.num_elements_returned == 0);
+	Assert(iter->tag0s.current_element == 0);
 
 	uint64 *restrict validity_bitmap = palloc0(sizeof(uint64) * ((n_total + 64 - 1) / 64));
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total);
@@ -25,7 +25,7 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 	uint8_t prev_leading_zeros = 0;
 	for (int i = 0; i < n_total; i++)
 	{
-		if (iter->has_nulls && iter->nulls.decompressed_values[i])
+		if (iter->has_nulls && bitmap_get(iter->nulls.bitmap, i))
 		{
 			/* Placeholder. */
 			decompressed_values[i] = 0;
@@ -34,7 +34,7 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 		}
 
 		const Simple8bRleDecompressResult tag0 =
-			simple8brle_decompression_iterator_try_next_forward(&iter->tag0s);
+			simple8brle_bitmap_get_next(&iter->tag0s);
 		Assert(!tag0.is_done);
 
 		if (tag0.val == 0)
@@ -50,7 +50,7 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 		}
 
 		const Simple8bRleDecompressResult tag1 =
-			simple8brle_decompression_iterator_try_next_forward(&iter->tag1s);
+			simple8brle_bitmap_get_next(&iter->tag1s);
 		Assert(!tag1.is_done);
 
 		if (tag1.val != 0)
