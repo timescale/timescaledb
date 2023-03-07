@@ -1,3 +1,11 @@
+/*
+ * This file and its contents are licensed under the Timescale License.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-TIMESCALE for a copy of the license.
+ *
+ * This is a specialization of Simple8bRLE decoder for bitmaps, i.e. where the
+ * elements are only 0 and 1.
+ */
 #include "compression/simple8b_rle.h"
 #pragma once
 
@@ -51,7 +59,10 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	const uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
-	/* Decompress all the rows in one go for better throughput. */
+	/*
+	 * Decompress all the rows in one go for better throughput. Add 64 bytes of
+	 * padding on the right so that we can simplify the decompression loop.
+	 */
 	char *restrict bitmap = palloc(((num_elements + 63) / 64 + 1) * 64);
 	uint32 decompressed_index = 0;
 	const uint32 num_blocks = compressed->num_blocks;
@@ -64,7 +75,6 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 		const uint64 selector_mask = 0xFULL << selector_shift;
 		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
 		Assert(selector_value < 16);
-		Assert(selector_value == 1 || selector_value == 15);
 
 		const uint64 block_data = compressed_data[block_index];
 
@@ -88,7 +98,7 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			/*
 			 * Bit-packed block. Since this is a bitmap, this block has 64 bits
 			 * packed. The last block might contain less than maximal possible
-			 * number of elements, but we have 64 bytes of padding there
+			 * number of elements, but we have 64 bytes of padding on the right
 			 * so we don't care.
 			 */
 			Assert(selector_value == 1);
