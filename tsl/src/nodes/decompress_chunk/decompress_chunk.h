@@ -49,6 +49,13 @@ typedef struct DecompressChunkPath
 	 * uncompressed chunk, but are still used for decompression.
 	 */
 	List *decompression_map;
+
+	/*
+	 * Whether a targetlist entry is a segmentby column. Parallel to the above
+	 * list.
+	 */
+	List *is_segmentby_column;
+
 	List *compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;
