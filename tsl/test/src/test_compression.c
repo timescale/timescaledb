@@ -319,8 +319,8 @@ test_gorilla_float()
 	TestAssertInt64Eq(i, 0);
 }
 
-static uint64_t
-test_hash64(uint64_t x)
+static uint64
+test_hash64(uint64 x)
 {
 	x ^= x >> 30;
 	x *= 0xbf58476d1ce4e5b9U;
