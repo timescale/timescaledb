@@ -429,7 +429,9 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != CHUNK_SIZING_FUNC_NARGS)
 		elog(ERROR, "invalid number of arguments");
 
-	Assert(chunk_target_size_bytes >= 0);
+	if (chunk_target_size_bytes < 0)
+		elog(ERROR, "chunk_target_size must be positive");
+
 	elog(DEBUG1, "[adaptive] chunk_target_size_bytes=" UINT64_FORMAT, chunk_target_size_bytes);
 
 	hypertable_id = ts_dimension_get_hypertable_id(dimension_id);
