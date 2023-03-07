@@ -22,6 +22,7 @@
 
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 
 static uint64 zig_zag_encode(uint64 value);
 static uint64 zig_zag_decode(uint64 value);
@@ -56,7 +57,7 @@ typedef struct DeltaDeltaDecompressionIterator
 	uint64 prev_val;
 	uint64 prev_delta;
 	Simple8bRleDecompressionIterator delta_deltas;
-	Simple8bRleDecompressionIterator nulls;
+	Simple8bRleBitmap nulls;
 	bool has_nulls;
 } DeltaDeltaDecompressionIterator;
 
@@ -430,7 +431,7 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&data);
-		simple8brle_decompression_iterator_init_forward(&iter->nulls, nulls);
+		iter->nulls = simple8brle_decompress_bitmap(nulls);
 	}
 }
 
@@ -461,7 +462,7 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&data);
-		simple8brle_decompression_iterator_init_reverse(&iter->nulls, nulls);
+		iter->nulls = simple8brle_decompress_bitmap(nulls);
 	}
 }
 
@@ -525,7 +526,7 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 	if (iter->has_nulls)
 	{
 		Simple8bRleDecompressResult result =
-			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
+			simple8brle_bitmap_get_next(&iter->nulls);
 		if (result.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,
@@ -623,7 +624,7 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 	if (iter->has_nulls)
 	{
 		Simple8bRleDecompressResult result =
-			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
+			simple8brle_bitmap_get_next_reverse(&iter->nulls);
 		if (result.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,

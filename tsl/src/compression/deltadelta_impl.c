@@ -26,12 +26,17 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 	uint64 prev_delta = 0;
 	for (int i = 0; i < n_total; i++)
 	{
-		if (iter->has_nulls && iter->nulls.decompressed_values[i])
+		if (iter->has_nulls)
 		{
-			/* Null value. */
-			decompressed_values[i] = 0;
-			arrow_validity_bitmap_set(validity_bitmap, i, false);
-			continue;
+			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next(&iter->nulls);
+			Assert(!res.is_done);
+			if (res.val)
+			{
+				/* Null. */
+				decompressed_values[i] = 0;
+				arrow_validity_bitmap_set(validity_bitmap, i, false);
+				continue;
+			}
 		}
 
 		/*

@@ -25,12 +25,17 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 	uint8_t prev_leading_zeros = 0;
 	for (int i = 0; i < n_total; i++)
 	{
-		if (iter->has_nulls && bitmap_get(iter->nulls.bitmap, i))
+		if (iter->has_nulls)
 		{
-			/* Placeholder. */
-			decompressed_values[i] = 0;
-			arrow_validity_bitmap_set(validity_bitmap, i, false);
-			continue;
+			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next(&iter->nulls);
+			Assert(!res.is_done);
+			if (res.val)
+			{
+				/* Null. */
+				decompressed_values[i] = 0;
+				arrow_validity_bitmap_set(validity_bitmap, i, false);
+				continue;
+			}
 		}
 
 		const Simple8bRleDecompressResult tag0 =
