@@ -320,7 +320,7 @@ test_gorilla_float()
 }
 
 static uint64_t
-hash64(uint64_t x)
+test_hash64(uint64_t x)
 {
 	x ^= x >> 30;
 	x *= 0xbf58476d1ce4e5b9U;
@@ -342,7 +342,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	{
 		if (have_random)
 		{
-			values[i] = (hash64(i) / (double) UINT64_MAX) * 100.;
+			values[i] = (test_hash64(i) / (double) UINT64_MAX) * 100.;
 		}
 		else
 		{
@@ -494,7 +494,7 @@ test_delta3(bool have_nulls, bool have_random)
 	{
 		if (have_random)
 		{
-			values[i] = hash64(i);
+			values[i] = test_hash64(i);
 		}
 		else
 		{
