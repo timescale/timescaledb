@@ -17,8 +17,9 @@
 #include <utils/relcache.h>
 #include <utils/timestamp.h>
 
+/* Normal compression uses 1k rows, but the regression tests use up to 1015. */
 #ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1020
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
 #endif
 
 /*

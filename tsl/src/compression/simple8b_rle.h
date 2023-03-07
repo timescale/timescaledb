@@ -61,11 +61,6 @@
 #define SIMPLE8B_BIT_LENGTH   ((uint8[]){ 0,  1,  2,  3,  4,  5,  6, 7, 8, 10, 12, 16, 21, 32, 64, 36 })
 /* clang-format on */
 
-/* Normal compression uses 1k rows, but the regression tests use up to 1020. */
-#ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1020
-#endif
-
 /********************
  ***  Public API  ***
  ********************/
