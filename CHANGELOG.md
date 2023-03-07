@@ -4,6 +4,20 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Features**
+* #5212 Allow pushdown of reference table joins
+* #5312 Add timeout support to the ping_data_node()
+* #5361 Add parallel support for partialize_agg()
+
+**Bugfixes**
+* #5396 Fix SEGMENTBY columns predicates to be pushed down
+* #5410 Fix file trailer handling in the COPY fetcher 
+
+**Thanks**
+* @nikolaps for reporting an issue with the COPY fetcher
+
 ## 2.10.1 (2023-03-07)
 
 This release contains bug fixes since the 2.10.0 release.

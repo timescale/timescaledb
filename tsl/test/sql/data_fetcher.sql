@@ -31,6 +31,18 @@ INSERT INTO disttable
 SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random() * 10
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-02'::timestamptz, '1 second') as t;
 
+-- This table contains the content for precisely one batch of the copy fetcher. The fetch_size
+-- will be set to 100 below and this table contains 99 tuples and the last element on the first
+-- copy batch is the file trailer (#5323).
+CREATE table one_batch(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
+SELECT create_distributed_hypertable('one_batch', 'ts');
+INSERT INTO one_batch SELECT '2023-01-01'::timestamptz AS time, sensor_id, random() AS value FROM generate_series(1, 99, 1) AS g1(sensor_id) ORDER BY time;
+
+-- Same but for the DEFAULT_FDW_FETCH_SIZE (10000)
+CREATE table one_batch_default(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
+SELECT create_distributed_hypertable('one_batch_default', 'ts');
+INSERT INTO one_batch_default SELECT '2023-01-01'::timestamptz AS time, sensor_id, random() AS value FROM generate_series(1, 9999, 1) AS g1(sensor_id) ORDER BY time;
+
 SET client_min_messages TO error;
 
 -- Set a smaller fetch size to ensure that the result is split into
