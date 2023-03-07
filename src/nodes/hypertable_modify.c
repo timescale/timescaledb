@@ -947,8 +947,8 @@ ExecModifyTable(PlanState *pstate)
 								  tupleid,
 								  oldtuple,
 								  true,
-								  false,
 								  node->canSetTag,
+								  false,
 								  NULL,
 								  NULL);
 				break;
