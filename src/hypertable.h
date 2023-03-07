@@ -133,7 +133,7 @@ extern int ts_hypertable_reset_associated_schema_name(const char *associated_sch
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
 extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_for_point(const Hypertable *h,
-															 const Point *point);
+															 const Point *point, int flags);
 extern TSDLLEXPORT Chunk *ts_hypertable_create_chunk_for_point(const Hypertable *h,
 															   const Point *point, bool *found);
 extern Oid ts_hypertable_relid(RangeVar *rv);

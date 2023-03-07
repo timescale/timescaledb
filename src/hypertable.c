@@ -1090,7 +1090,7 @@ ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point, bo
  * Leaks memory, so call in a short-lived context.
  */
 Chunk *
-ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point)
+ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, int flags)
 {
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
 	if (chunk != NULL)
@@ -1098,7 +1098,7 @@ ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point)
 		return chunk;
 	}
 
-	chunk = ts_chunk_find_for_point(h, point);
+	chunk = ts_chunk_find_for_point(h, point, flags);
 	if (chunk == NULL)
 	{
 		return NULL;

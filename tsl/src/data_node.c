@@ -1156,7 +1156,7 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			foreach (cs_lc, chunk_data_nodes)
 			{
 				ChunkDataNode *cdn = lfirst(cs_lc);
-				const Chunk *chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
+				const Chunk *chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true, 0);
 				chunk_update_foreign_server_if_needed(chunk, cdn->foreign_server_oid, false);
 				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																	NameStr(cdn->fd.node_name));
@@ -1516,7 +1516,7 @@ switch_data_node_on_chunks(const ForeignServer *datanode, bool available)
 
 		Assert(!isnull);
 
-		const Chunk *chunk = ts_chunk_get_by_id(DatumGetInt32(chunk_id), true);
+		const Chunk *chunk = ts_chunk_get_by_id(DatumGetInt32(chunk_id), true, 0);
 		if (!chunk_update_foreign_server_if_needed(chunk, datanode->serverid, available))
 			failed_update_count++;
 	}

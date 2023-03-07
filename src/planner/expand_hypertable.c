@@ -1039,7 +1039,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 		if (!isnull)
 		{
 			int32 chunk_id = DatumGetInt32(elem);
-			Chunk *chunk = ts_chunk_get_by_id(chunk_id, false);
+			Chunk *chunk = ts_chunk_get_by_id(chunk_id, false, 0);
 
 			if (chunk == NULL)
 				ereport(ERROR, (errmsg("chunk id %d not found", chunk_id)));

@@ -119,8 +119,8 @@ step "RC1" {
 #if insert in progress, compress  is blocked
 permutation "LockChunk1" "I1" "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1"
 
-# #Compress in progress, insert is blocked
-# permutation "LockChunk1" "C1" "I1" "UnlockChunk" "Cc" "Ic"
+#Compress in progress, insert is blocked
+permutation "LockChunk1" "C1" "I1" "UnlockChunk" "Cc" "Ic"
 
 # #if ddl in progress, compress_chunk blocked
 # permutation "LockChunk1" "A1" "C1" "UnlockChunk" "Cc" "A2"

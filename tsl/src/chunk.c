@@ -732,7 +732,7 @@ ts_chunk_drop_stale_chunks(const char *node_name, ArrayType *chunks_array)
 		htcache = ts_hypertable_cache_pin();
 		foreach (lc, dn_chunk_id_list_stale)
 		{
-			const Chunk *chunk = ts_chunk_get_by_id(lfirst_int(lc), false);
+			const Chunk *chunk = ts_chunk_get_by_id(lfirst_int(lc), false, 0);
 			Hypertable *ht;
 
 			/* chunk might be already dropped by previous drop, if the chunk was compressed */

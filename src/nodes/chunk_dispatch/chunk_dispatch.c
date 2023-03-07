@@ -91,7 +91,13 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * where the chunk already exists.
 		 */
 		bool found;
-		Chunk *chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
+		// elog(WARNING, "BEFORE chunk_catalog_lock_row_in_mode");
+
+		// /* lock the catalog row for this chunk */
+		// chunk_catalog_lock_row_in_mode(chunk->fd.id, LockTupleExclusive, AccessShareLock, SCANNER_F_KEEPLOCK);
+
+		// elog(WARNING, "AFTER chunk_catalog_lock_row_in_mode");
+		Chunk *chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point, SCANNER_F_KEEPLOCK);
 
 #if PG14_GE
 		/*

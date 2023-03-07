@@ -1434,7 +1434,7 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 
 	/* chunk_collides only returned a stub, so we need to lookup the full
 	 * chunk. */
-	chunk = ts_chunk_get_by_id(stub->id, true);
+	chunk = ts_chunk_get_by_id(stub->id, true, 0);
 
 	if (NULL != created)
 		*created = false;
@@ -1451,7 +1451,7 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
  * for share. NULL if not found.
  */
 Chunk *
-ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
+ts_chunk_find_for_point(const Hypertable *ht, const Point *p, int flags)
 {
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
 	if (chunk_id == 0)
@@ -1460,7 +1460,7 @@ ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
 	}
 
 	/* The chunk might be dropped, so we don't fail if we haven't found it. */
-	return ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
+	return ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false, flags);
 }
 
 /*
@@ -1490,7 +1490,7 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	if (chunk_id != 0)
 	{
 		/* The chunk might be dropped, so we don't fail if we haven't found it. */
-		Chunk *chunk = ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
+		Chunk *chunk = ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false, 0);
 		if (chunk != NULL)
 		{
 			/*
@@ -2338,7 +2338,7 @@ ts_chunk_copy(const Chunk *chunk)
 int
 chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_func filter,
 					tuple_found_func tuple_found, void *data, int limit, ScanDirection scandir,
-					LOCKMODE lockmode, MemoryContext mctx)
+					LOCKMODE lockmode, MemoryContext mctx, int flags)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx ctx = {
@@ -2353,6 +2353,7 @@ chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_
 		.lockmode = lockmode,
 		.scandirection = scandir,
 		.result_mctx = mctx,
+		.flags = flags,
 	};
 
 	return ts_scanner_scan(&ctx);
@@ -2421,7 +2422,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 		for (j = 0; j < ccs->num_constraints; j++)
 		{
 			ChunkConstraint *cc = &ccs->constraints[j];
-			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
+			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false, 0);
 			MemoryContext old;
 			ScanIterator it;
 
@@ -2460,7 +2461,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 
 static Chunk *
 chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mctx,
-				bool fail_if_not_found, const DisplayKeyData displaykey[])
+				bool fail_if_not_found, const DisplayKeyData displaykey[], int flags)
 {
 	ChunkStubScanCtx stubctx = { 0 };
 	Chunk *chunk;
@@ -2475,7 +2476,9 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 									1,
 									ForwardScanDirection,
 									AccessShareLock,
-									mctx);
+									mctx,
+									flags);
+
 	Assert(num_found == 0 || (num_found == 1 && !stubctx.is_dropped));
 	chunk = stubctx.chunk;
 
@@ -2558,7 +2561,8 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 						   2,
 						   mctx,
 						   fail_if_not_found,
-						   displaykey);
+						   displaykey,
+						   0);
 }
 
 Chunk *
@@ -2609,7 +2613,7 @@ DatumGetInt32AsString(Datum datum)
 }
 
 Chunk *
-ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
+ts_chunk_get_by_id(int32 id, bool fail_if_not_found, int flags)
 {
 	ScanKeyData scankey[1];
 	static const DisplayKeyData displaykey[1] = {
@@ -2626,7 +2630,8 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 						   1,
 						   CurrentMemoryContext,
 						   fail_if_not_found,
-						   displaykey);
+						   displaykey,
+						   flags);
 }
 
 /*
@@ -2656,7 +2661,8 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 							   0,
 							   ForwardScanDirection,
 							   AccessShareLock,
-							   CurrentMemoryContext);
+							   CurrentMemoryContext,
+							   0);
 }
 
 /*
@@ -3026,7 +3032,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
+		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false, 0);
 
 		/* The chunk may have been delete by a CASCADE */
 		if (compressed_chunk != NULL)
@@ -3228,7 +3234,7 @@ ts_chunk_get_compressed_chunk_parent(const Chunk *chunk)
 	}
 
 	if (OidIsValid(parent_id))
-		return ts_chunk_get_by_id(parent_id, true);
+		return ts_chunk_get_by_id(parent_id, true, 0);
 
 	return NULL;
 }
@@ -3434,7 +3440,8 @@ chunk_update_form(FormData_chunk *form)
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+							   CurrentMemoryContext,
+							   0) > 0;
 }
 
 /* update the status flag for chunk. Should not be called directly
@@ -3457,7 +3464,8 @@ chunk_update_status_internal(FormData_chunk *form)
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+							   CurrentMemoryContext,
+							   0) > 0;
 }
 
 /* status update is done in 2 steps.
@@ -3704,7 +3712,8 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+							   CurrentMemoryContext,
+							   0) > 0;
 }
 
 /*Assume permissions are already checked */
@@ -3727,7 +3736,8 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+							   CurrentMemoryContext,
+							   0) > 0;
 }
 
 /* Used as a tuple found function */
@@ -4964,4 +4974,12 @@ chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMO
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("attempt to lock dropped chunk %d", chunk_id)));
 	return success;
+}
+
+void chunk_catalog_unlock_row_in_mode(LOCKMODE iterlockmode)
+{
+	Catalog *catalog = ts_catalog_get();
+	// UnlockRelationOid(catalog_get_table_id(catalog, CHUNK), AccessShareLock); // this doesn't seem to work
+	Relation chunk_catalog_rel = relation_open(catalog_get_table_id(catalog, CHUNK), iterlockmode);
+	relation_close(chunk_catalog_rel, iterlockmode);
 }

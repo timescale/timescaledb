@@ -1635,7 +1635,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 			foreach (lc, chunk_id_list)
 			{
 				int32 chunk_id = lfirst_int(lc);
-				Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+				Chunk *chunk = ts_chunk_get_by_id(chunk_id, true, 0);
 				ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
 															   chunk->fd.id,
 															   slice->fd.id,

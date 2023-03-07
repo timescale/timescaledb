@@ -228,7 +228,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	 * function should translate this to the Oid of the index on the specific
 	 * chunk.
 	 */
-	chunk = ts_chunk_get_by_id(chunk_id, false);
+	chunk = ts_chunk_get_by_id(chunk_id, false, 0);
 	elog(DEBUG1, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
 	reorder_chunk(chunk->table_id, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
 	elog(DEBUG1,
@@ -525,7 +525,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		CommitTransactionCommand();
 		StartTransactionCommand();
 		int32 chunkid = lfirst_int(lc);
-		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
+		Chunk *chunk = ts_chunk_get_by_id(chunkid, true, 0);
 		if (!chunk || !ts_chunk_is_unordered(chunk))
 			continue;
 		if (distributed)

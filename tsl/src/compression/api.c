@@ -314,7 +314,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		p->coordinates[p->num_coords++] = current_chunk->cube->slices[i]->fd.range_start;
 	}
 
-	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p);
+	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p, SCANNER_F_NOFLAGS);
 
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.
@@ -412,6 +412,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	hcache = ts_hypertable_cache_pin();
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
 
+	/* lock tuple in catalog */
+	chunk_catalog_lock_row_in_mode(cxt.srcht_chunk->fd.id, LockTupleExclusive, RowExclusiveLock , SCANNER_F_KEEPLOCK);
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
@@ -454,7 +456,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	else
 	{
 		/* use an existing compressed chunk to compress into */
-		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
+		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true, 0);
 		result_chunk_id = mergable_chunk->table_id;
 	}
 	/* convert list to array of pointers for compress_chunk */
@@ -572,7 +574,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 												 uncompressed_chunk->fd.status,
 												 CHUNK_DECOMPRESS,
 												 true);
-	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true, 0);
 
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);

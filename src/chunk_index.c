@@ -511,7 +511,7 @@ chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
+	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true, 0);
 	Oid nspoid_chunk = get_rel_namespace(chunk->table_id);
 	Oid nspoid_hyper = get_rel_namespace(chunk->hypertable_relid);
 
@@ -689,7 +689,7 @@ chunk_index_name_and_schema_filter(const TupleInfo *ti, void *data)
 
 	if (namestrcmp(&chunk_index->index_name, cid->index_name) == 0)
 	{
-		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, false);
+		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, false, 0);
 
 		if (NULL != chunk && namestrcmp(&chunk->fd.schema_name, cid->schema) == 0)
 		{
@@ -893,7 +893,7 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 		 * If the renaming is for a hypertable index, we also rename all
 		 * corresponding chunk indexes
 		 */
-		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
+		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true, 0);
 		Oid chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
 		const char *chunk_index_name =
 			chunk_index_choose_name(NameStr(chunk->fd.table_name), info->newname, chunk_schemaoid);

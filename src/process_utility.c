@@ -808,7 +808,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	 */
 	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
-		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true, 0);
 		ChunkPair *cp = palloc(sizeof(ChunkPair));
 		cp->uncompressed_relid = chunk_relid;
 		cp->compressed_relid = comp_chunk->table_id;
@@ -1185,7 +1185,7 @@ process_truncate(ProcessUtilityArgs *args)
 						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
 							Chunk *compressed_chunk =
-								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false, 0);
 							if (compressed_chunk != NULL)
 							{
 								/* Create list item into the same context of the list. */
@@ -1308,7 +1308,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			 *  it would be blocked if there are dependent objects */
 			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 			{
-				Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+				Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false, 0);
 				/* The chunk may have been delete by a CASCADE */
 				if (compressed_chunk != NULL)
 					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
@@ -3307,7 +3307,7 @@ process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
 	/* set tablespace for compressed chunk */
 	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true, 0);
 
 		AlterTableInternal(compressed_chunk->table_id, list_make1(cmd), false);
 	}

@@ -176,7 +176,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 	/* If chunk is compressed move it by altering tablespace on both chunks */
 	if (OidIsValid(chunk->fd.compressed_chunk_id))
 	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true, 0);
 		AlterTableCmd cmd = { .type = T_AlterTableCmd,
 							  .subtype = AT_SetTableSpace,
 							  .name = get_tablespace_name(destination_tablespace) };

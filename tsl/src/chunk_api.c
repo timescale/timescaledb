@@ -1164,7 +1164,7 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 	cdn = ts_chunk_data_node_scan_by_remote_chunk_id_and_node_name(chunk_id,
 																   node_name,
 																   CurrentMemoryContext);
-	chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
+	chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true, 0);
 	col_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_colstats_column_id)]);
 	nullfract = DatumGetFloat4(values[AttrNumberGetAttrOffset(Anum_chunk_colstats_nullfrac)]);
 	width = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_colstats_width)]);
@@ -1321,7 +1321,7 @@ chunk_process_remote_relstats_row(TupleFactory *tf, TupleDesc tupdesc, PGresult 
 	cdn = ts_chunk_data_node_scan_by_remote_chunk_id_and_node_name(chunk_id,
 																   node_name,
 																   CurrentMemoryContext);
-	chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
+	chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true, 0);
 	num_pages = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_pages)]);
 	num_tuples = DatumGetFloat4(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_tuples)]);
 	num_allvisible =

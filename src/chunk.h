@@ -144,7 +144,7 @@ typedef struct DisplayKeyData
 } DisplayKeyData;
 
 extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
-extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p);
+extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p, int flags);
 extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found,
 										const char *schema, const char *prefix);
 List *ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs);
@@ -160,7 +160,7 @@ extern TSDLLEXPORT void ts_chunk_insert_lock(const Chunk *chunk, LOCKMODE lock);
 
 extern TSDLLEXPORT Oid ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht,
 											 const char *tablespacename);
-extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, bool fail_if_not_found);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, bool fail_if_not_found, int flags);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
@@ -241,7 +241,7 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *m
 extern TSDLLEXPORT int chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys,
 										   tuple_filter_func filter, tuple_found_func tuple_found,
 										   void *data, int limit, ScanDirection scandir,
-										   LOCKMODE lockmode, MemoryContext mctx);
+										   LOCKMODE lockmode, MemoryContext mctx, int flags);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
@@ -277,7 +277,6 @@ extern TSDLLEXPORT bool chunk_update_status(FormData_chunk *chunk, int scanflags
 extern TSDLLEXPORT bool chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMODE iterlockmode,
 													   int scanflags);
 
-extern TSDLLEXPORT ScanIterator chunk_catalog_iterator_lock_row_in_mode(int32 chunk_id,
-																		LockTupleMode lockmode);
+extern TSDLLEXPORT void chunk_catalog_unlock_row_in_mode(LOCKMODE iterlockmode);
 
 #endif /* TIMESCALEDB_CHUNK_H */

@@ -1351,7 +1351,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		Point *point = context->batch_points[row_in_batch];
 		bool found;
 
-		Chunk *chunk = ts_hypertable_find_chunk_for_point(ht, point);
+		Chunk *chunk = ts_hypertable_find_chunk_for_point(ht, point, SCANNER_F_NOFLAGS);
 		if (chunk == NULL)
 		{
 			if (!did_end_copy)

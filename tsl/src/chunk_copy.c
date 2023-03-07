@@ -1197,7 +1197,7 @@ chunk_copy_operation_get(const char *operation_id)
 	if (cc)
 	{
 		cc->mcxt = mcxt;
-		cc->chunk = ts_chunk_get_by_id(cc->fd.chunk_id, true);
+		cc->chunk = ts_chunk_get_by_id(cc->fd.chunk_id, true, 0);
 		cc->stage = NULL;
 
 		/* No other sanity checks need to be performed since they were done earlier */
