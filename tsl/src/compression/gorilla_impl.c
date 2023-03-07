@@ -17,9 +17,28 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	Assert(iter->tag0s.current_element == 0);
 
-	uint64 *restrict validity_bitmap = palloc0(sizeof(uint64) * ((n_total + 64 - 1) / 64));
+	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
+	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total);
 
+	/* Fill the nulls bitmap separately, for simpler loops and more data access locality. */
+	if (iter->has_nulls)
+	{
+		for (int i = 0; i < n_total; i++)
+		{
+			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next(&iter->nulls);
+			Assert(!res.is_done);
+			arrow_validity_bitmap_set(validity_bitmap, i, !res.val);
+		}
+
+		simple8brle_bitmap_rewind(&iter->nulls);
+	}
+	else
+	{
+		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+	}
+
+	/* Now fill the data. */
 	ELEMENT_TYPE prev_value = 0;
 	uint8_t prev_xor_bits_used = 0;
 	uint8_t prev_leading_zeros = 0;
@@ -31,22 +50,17 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 			Assert(!res.is_done);
 			if (res.val)
 			{
-				/* Null. */
-				decompressed_values[i] = 0;
-				arrow_validity_bitmap_set(validity_bitmap, i, false);
 				continue;
 			}
 		}
 
-		const Simple8bRleDecompressResult tag0 =
-			simple8brle_bitmap_get_next(&iter->tag0s);
+		const Simple8bRleDecompressResult tag0 = simple8brle_bitmap_get_next(&iter->tag0s);
 		Assert(!tag0.is_done);
 
 		if (tag0.val == 0)
 		{
 			Assert(i > 0);
 			decompressed_values[i] = prev_value;
-			arrow_validity_bitmap_set(validity_bitmap, i, true);
 			continue;
 		}
 		else
@@ -54,8 +68,7 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 			Assert(tag0.val == 1);
 		}
 
-		const Simple8bRleDecompressResult tag1 =
-			simple8brle_bitmap_get_next(&iter->tag1s);
+		const Simple8bRleDecompressResult tag1 = simple8brle_bitmap_get_next(&iter->tag1s);
 		Assert(!tag1.is_done);
 
 		if (tag1.val != 0)
@@ -77,7 +90,6 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 		prev_value ^= xored_value;
 
 		decompressed_values[i] = prev_value;
-		arrow_validity_bitmap_set(validity_bitmap, i, true);
 	}
 
 	ArrowArray *result = palloc0(sizeof(ArrowArray));

@@ -33,7 +33,8 @@ static void bit_array_append(BitArray *array, uint8 num_bits, uint64 bits);
 
 static void bit_array_iterator_init(BitArrayIterator *iter, const BitArray *array);
 /* return next num_bits from the iterator; must have been written as num_bits */
-static uint64 bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits);
+pg_attribute_always_inline static uint64 bit_array_iter_next(BitArrayIterator *iter,
+															 uint8 num_bits);
 static void bit_array_iterator_init_rev(BitArrayIterator *iter, const BitArray *array);
 /* return last num_bits in forward-order (not reverse-order); must have been written as num_bits */
 static uint64 bit_array_iter_next_rev(BitArrayIterator *iter, uint8 num_bits);

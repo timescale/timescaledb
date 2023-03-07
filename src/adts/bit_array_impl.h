@@ -244,7 +244,7 @@ bit_array_iterator_init(BitArrayIterator *iter, const BitArray *array)
 	};
 }
 
-static inline uint64
+pg_attribute_always_inline static uint64
 bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 {
 	uint8 bits_remaining_in_current_bucket;

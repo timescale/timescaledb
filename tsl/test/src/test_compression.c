@@ -378,8 +378,8 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	/* Forward decompression. */
 	DecompressionIterator *iter =
 		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT8OID);
-	ArrowArray *bulk_result = gorilla_decompress_all_forward_direction(PointerGetDatum(compressed),
-		FLOAT8OID);
+	ArrowArray *bulk_result =
+		gorilla_decompress_all_forward_direction(PointerGetDatum(compressed), FLOAT8OID);
 	for (int i = 0; i < 1015; i++)
 	{
 		DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
@@ -526,8 +526,8 @@ test_delta3(bool have_nulls, bool have_random)
 	/* Forward decompression. */
 	DecompressionIterator *iter =
 		delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), INT8OID);
-	ArrowArray *bulk_result = delta_delta_decompress_all_forward_direction(PointerGetDatum(compressed),
-		INT8OID);
+	ArrowArray *bulk_result =
+		delta_delta_decompress_all_forward_direction(PointerGetDatum(compressed), INT8OID);
 	for (int i = 0; i < 1015; i++)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
@@ -578,16 +578,16 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_string_dictionary();
 	test_gorilla_int();
 	test_gorilla_float();
-	test_gorilla_double(/* nulls = */ false, /* random = */ false);
-	test_gorilla_double(/* nulls = */ false, /* random = */ true);
-	test_gorilla_double(/* nulls = */ true, /* random = */ false);
-	test_gorilla_double(/* nulls = */ true, /* random = */ true);
+	test_gorilla_double(/* have_nulls = */ false, /* have_random = */ false);
+	test_gorilla_double(/* have_nulls = */ false, /* have_random = */ true);
+	test_gorilla_double(/* have_nulls = */ true, /* have_random = */ false);
+	test_gorilla_double(/* have_nulls = */ true, /* have_random = */ true);
 	test_delta();
 	test_delta2();
-	test_delta3(/* nulls = */ false, /* random = */ false);
-	test_delta3(/* nulls = */ false, /* random = */ true);
-	test_delta3(/* nulls = */ true, /* random = */ false);
-	test_delta3(/* nulls = */ true, /* random = */ true);
+	test_delta3(/* have_nulls = */ false, /* have_random = */ false);
+	test_delta3(/* have_nulls = */ false, /* have_random = */ true);
+	test_delta3(/* have_nulls = */ true, /* have_random = */ false);
+	test_delta3(/* have_nulls = */ true, /* have_random = */ true);
 	PG_RETURN_VOID();
 }
 

@@ -580,8 +580,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 
 	if (iter->has_nulls)
 	{
-		Simple8bRleDecompressResult null =
-			simple8brle_bitmap_get_next(&iter->nulls);
+		Simple8bRleDecompressResult null = simple8brle_bitmap_get_next(&iter->nulls);
 		/* Could slightly improve performance here by not returning a tail of non-null bits */
 		if (null.is_done)
 			return (DecompressResultInternal){
@@ -704,8 +703,7 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 
 	if (iter->has_nulls)
 	{
-		Simple8bRleDecompressResult null =
-			simple8brle_bitmap_get_next_reverse(&iter->nulls);
+		Simple8bRleDecompressResult null = simple8brle_bitmap_get_next_reverse(&iter->nulls);
 
 		if (null.is_done)
 			return (DecompressResultInternal){

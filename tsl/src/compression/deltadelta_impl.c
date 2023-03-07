@@ -18,9 +18,28 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	Assert(iter->delta_deltas.num_elements_returned == 0);
 
-	uint64 *restrict validity_bitmap = palloc0(sizeof(uint64) * ((n_total + 64 - 1) / 64));
+	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
+	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total);
 
+	/* Fill the nulls bitmap separately, for simpler loops and more data access locality. */
+	if (iter->has_nulls)
+	{
+		for (int i = 0; i < n_total; i++)
+		{
+			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next(&iter->nulls);
+			Assert(!res.is_done);
+			arrow_validity_bitmap_set(validity_bitmap, i, !res.val);
+		}
+
+		simple8brle_bitmap_rewind(&iter->nulls);
+	}
+	else
+	{
+		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+	}
+
+	/* Now fill the data. */
 	uint64 prev_val = 0;
 	uint64 prev_delta = 0;
 	for (int i = 0; i < n_total; i++)
@@ -33,7 +52,6 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 			{
 				/* Null. */
 				decompressed_values[i] = 0;
-				arrow_validity_bitmap_set(validity_bitmap, i, false);
 				continue;
 			}
 		}
@@ -51,7 +69,6 @@ FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
 		prev_val += prev_delta;
 
 		decompressed_values[i] = prev_val;
-		arrow_validity_bitmap_set(validity_bitmap, i, true);
 	}
 
 	ArrowArray *result = palloc0(sizeof(ArrowArray));

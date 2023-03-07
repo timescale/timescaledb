@@ -57,7 +57,8 @@
 #define SIMPLE8B_MAX_VALUES_PER_SLOT 64
 
 /* clang-format off */
-#define SIMPLE8B_NUM_ELEMENTS ((uint8[]){ 0, 64, 32, 21, 16, 12, 10, 9, 8,  6,  5,  4,  3,  2,  1 })
+/* selector value:                        0,  1,  2,  3,  4,  5,  6, 7, 8,  9, 10, 11, 12, 13, 14, RLE */
+#define SIMPLE8B_NUM_ELEMENTS ((uint8[]){ 0, 64, 32, 21, 16, 12, 10, 9, 8,  6,  5,  4,  3,  2,  1, 0  })
 #define SIMPLE8B_BIT_LENGTH   ((uint8[]){ 0,  1,  2,  3,  4,  5,  6, 7, 8, 10, 12, 16, 21, 32, 64, 36 })
 /* clang-format on */
 
@@ -543,20 +544,23 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 	uint32 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 
+	const uint32 n_total_values = compressed->num_elements;
+
 	*iter = (Simple8bRleDecompressionIterator){
 		.compressed_data = compressed->slots + num_selector_slots,
 		.current_compressed_pos = 0,
 		.current_in_compressed_pos = 0,
-		.num_elements = compressed->num_elements,
+		.num_elements = n_total_values,
 		.num_elements_returned = 0,
-		.decompressed_values = palloc(sizeof(uint64) * GLOBAL_MAX_ROWS_PER_COMPRESSION),
+		.decompressed_values = palloc(sizeof(uint64) * (n_total_values + 63)),
 	};
 
 	// Decompress all.
 	Assert(iter->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	uint64 *restrict decompressed_values = iter->decompressed_values;
-	const uint32 n_total_values = iter->num_elements;
 	uint32 decompressed_index = 0;
+
+	// static int blocks[16] = {0};
 
 	for (uint32 block_index = 0; block_index < compressed->num_blocks; block_index++)
 	{
@@ -567,40 +571,123 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		const uint64 selector_mask = 0xFULL << selector_shift;
 		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
 		Assert(selector_value < 16);
+		Assert(selector_value != 0);
+
+		//		blocks[0]++;
+		//		blocks[selector_value]++;
 
 		const uint64 block_data = iter->compressed_data[block_index];
 
-		if (simple8brle_selector_is_rle(selector_value))
+		if (unlikely(simple8brle_selector_is_rle(selector_value)))
 		{
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
+			Assert(decompressed_index + n_block_values <= n_total_values);
+
 			const uint64 repeated_value = simple8brle_rledata_value(block_data);
 			for (int i = 0; i < n_block_values; i++)
 			{
 				decompressed_values[decompressed_index + i] = repeated_value;
 			}
+
 			decompressed_index += n_block_values;
-			Assert(decompressed_index <= n_total_values);
 		}
 		else
 		{
-			// Might have partial last block.
-			const int n_block_values =
-				Min(SIMPLE8B_NUM_ELEMENTS[selector_value], n_total_values - decompressed_index);
-			Assert(n_block_values == SIMPLE8B_NUM_ELEMENTS[selector_value] ||
-				   block_index == compressed->num_blocks - 1);
+#define ITERATION                                                                                  \
+	/*                                                                                             \
+	 * The last block might have less values than normal, but we have                              \
+	 * padding at the end so we can unpack them all always for simpler                             \
+	 * code.                                                                                       \
+	 */                                                                                            \
+	const int n_block_values = SIMPLE8B_NUM_ELEMENTS[selector_value];                              \
+	const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[selector_value];                             \
+	const uint64 bitmask = simple8brle_selector_get_bitmask(selector_value);                       \
+                                                                                                   \
+	for (int i = 0; i < n_block_values; i++)                                                       \
+	{                                                                                              \
+		const uint64 value = (block_data >> (bits_per_value * i)) & bitmask;                       \
+		decompressed_values[decompressed_index + i] = value;                                       \
+	}                                                                                              \
+	decompressed_index += n_block_values;                                                          \
+	break;
 
-			const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[selector_value];
-
-			for (int i = 0; i < n_block_values; i++)
+			switch (selector_value)
 			{
-				const uint64 value = (block_data >> (bits_per_value * i)) &
-									 simple8brle_selector_get_bitmask(selector_value);
-				decompressed_values[decompressed_index + i] = value;
+				case 1:
+				{
+					ITERATION
+				}
+				case 2:
+				{
+					ITERATION
+				}
+				case 3:
+				{
+					ITERATION
+				}
+				case 4:
+				{
+					ITERATION
+				}
+				case 5:
+				{
+					ITERATION
+				}
+				case 6:
+				{
+					ITERATION
+				}
+				case 7:
+				{
+					ITERATION
+				}
+				case 8:
+				{
+					ITERATION
+				}
+				case 9:
+				{
+					ITERATION
+				}
+				case 10:
+				{
+					ITERATION
+				}
+				case 11:
+				{
+					ITERATION
+				}
+				case 12:
+				{
+					ITERATION
+				}
+				case 13:
+				{
+					ITERATION
+				}
+				case 14:
+				{
+					ITERATION
+				}
+				default:
+					Assert(false);
 			}
-			decompressed_index += n_block_values;
-			Assert(decompressed_index <= n_total_values);
+#undef ITERATION
 		}
 	}
+	Assert(decompressed_index >= n_total_values);
+
+	//  mybt();
+	//	for (int i = 0; i < 16; i++)
+	//	{
+	//		fprintf(stderr, " %6d", i);
+	//	}
+	//	fprintf(stderr, "\n");
+	//	for (int i = 0; i < 16; i++)
+	//	{
+	//		fprintf(stderr, " %6d", blocks[i]);
+	//	}
+	//	fprintf(stderr, "\n\n");
 }
 
 static void
@@ -774,7 +861,14 @@ simple8brle_selector_is_rle(uint8 selector)
 static pg_attribute_always_inline uint32
 simple8brle_rledata_repeatcount(uint64 rledata)
 {
-	return (uint32) ((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
+	uint32 result = ((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
+	/*
+	 * Truncate the length as a precaution against corrupt data. We know
+	 * it can't be more than max length of compression segment.
+	 */
+	const int mask = 1024 - 1;
+	Assert((mask & GLOBAL_MAX_ROWS_PER_COMPRESSION) == GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	return result & mask;
 }
 
 static pg_attribute_always_inline uint64

@@ -156,7 +156,6 @@ deltadelta_compressor_append_null_value(Compressor *compressor)
 	delta_delta_compressor_append_null(extended->internal);
 }
 
-
 static void *
 deltadelta_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -525,8 +524,7 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 	/* check for a null value */
 	if (iter->has_nulls)
 	{
-		Simple8bRleDecompressResult result =
-			simple8brle_bitmap_get_next(&iter->nulls);
+		Simple8bRleDecompressResult result = simple8brle_bitmap_get_next(&iter->nulls);
 		if (result.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,
@@ -623,8 +621,7 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 	/* check for a null value */
 	if (iter->has_nulls)
 	{
-		Simple8bRleDecompressResult result =
-			simple8brle_bitmap_get_next_reverse(&iter->nulls);
+		Simple8bRleDecompressResult result = simple8brle_bitmap_get_next_reverse(&iter->nulls);
 		if (result.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,

@@ -12,31 +12,38 @@
 typedef struct Simple8bRleBitmap
 {
 	char *bitmap;
-	int current_element;
-	int num_elements;
+	uint16 current_element;
+	uint16 num_elements;
 } Simple8bRleBitmap;
 
-static Simple8bRleDecompressResult pg_attribute_always_inline
+pg_attribute_always_inline static Simple8bRleDecompressResult
 simple8brle_bitmap_get_next(Simple8bRleBitmap *bitmap)
 {
 	if (bitmap->current_element >= bitmap->num_elements)
 	{
-		return (Simple8bRleDecompressResult) { .is_done = true };
+		return (Simple8bRleDecompressResult){ .is_done = true };
 	}
 
-	return (Simple8bRleDecompressResult) { .val = bitmap->bitmap[bitmap->current_element++] };
+	return (Simple8bRleDecompressResult){ .val = bitmap->bitmap[bitmap->current_element++] };
 }
 
-static Simple8bRleDecompressResult pg_attribute_always_inline __attribute__((unused))
+pg_attribute_always_inline static Simple8bRleDecompressResult
 simple8brle_bitmap_get_next_reverse(Simple8bRleBitmap *bitmap)
 {
 	if (bitmap->current_element >= bitmap->num_elements)
 	{
-		return (Simple8bRleDecompressResult) { .is_done = true };
+		return (Simple8bRleDecompressResult){ .is_done = true };
 	}
 
-	return (Simple8bRleDecompressResult) { .val = bitmap->bitmap[
-		bitmap->num_elements - 1 - bitmap->current_element++] };
+	return (Simple8bRleDecompressResult){
+		.val = bitmap->bitmap[bitmap->num_elements - 1 - bitmap->current_element++]
+	};
+}
+
+pg_attribute_always_inline static void
+simple8brle_bitmap_rewind(Simple8bRleBitmap *bitmap)
+{
+	bitmap->current_element = 0;
 }
 
 static Simple8bRleBitmap
@@ -56,8 +63,11 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			 GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	}
 
-	const uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
+	const uint32 num_selector_slots =
+		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
+
+	// int blocks[16] = {0};
 
 	/*
 	 * Decompress all the rows in one go for better throughput. Add 64 bytes of
@@ -75,6 +85,8 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 		const uint64 selector_mask = 0xFULL << selector_shift;
 		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
 		Assert(selector_value < 16);
+
+		//		blocks[selector_value]++;
 
 		const uint64 block_data = compressed_data[block_index];
 
@@ -114,7 +126,10 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 		}
 	}
 
+	//	mybt();
+	//	fprintf(stderr, "   1  15\n");
+	//	fprintf(stderr, " %3d %3d\n\n", blocks[1], blocks[15]);
+
 	result.bitmap = bitmap;
 	return result;
 }
-

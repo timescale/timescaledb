@@ -82,8 +82,8 @@ typedef struct DecompressChunkState
 	bool reverse;
 	int hypertable_id;
 	Oid chunk_relid;
-	int total_rows;
-	int current_row;
+	int total_batch_rows;
+	int current_batch_row;
 	MemoryContext per_batch_context;
 } DecompressChunkState;
 
@@ -384,8 +384,8 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 	MemoryContext old_context = MemoryContextSwitchTo(state->per_batch_context);
 	MemoryContextReset(state->per_batch_context);
 
-	state->total_rows = 0;
-	state->current_row = 0;
+	state->total_batch_rows = 0;
+	state->current_batch_row = 0;
 
 	for (i = 0; i < state->num_columns; i++)
 	{
@@ -434,11 +434,11 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				if (column->compressed.data)
 				{
 					Assert(column->compressed.data->length > 0);
-					if (state->total_rows == 0)
+					if (state->total_batch_rows == 0)
 					{
-						state->total_rows = column->compressed.data->length;
+						state->total_batch_rows = column->compressed.data->length;
 					}
-					else if (state->total_rows != column->compressed.data->length)
+					else if (state->total_batch_rows != column->compressed.data->length)
 					{
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
@@ -469,11 +469,11 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
 				int count_value = DatumGetInt32(value);
 				Assert(count_value > 0);
-				if (state->total_rows == 0)
+				if (state->total_batch_rows == 0)
 				{
-					state->total_rows = count_value;
+					state->total_batch_rows = count_value;
 				}
-				else if (state->total_rows != count_value)
+				else if (state->total_batch_rows != count_value)
 				{
 					elog(ERROR, "compressed column out of sync with batch counter");
 				}
@@ -490,6 +490,8 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 	}
 	state->initialized = true;
 	MemoryContextSwitchTo(old_context);
+
+	// fprintf(stderr, "initialized new batch with %d rows\n", state->total_batch_rows);
 }
 
 static TupleTableSlot *
@@ -579,7 +581,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 	while (true)
 	{
-		if (state->initialized && state->current_row >= state->total_rows)
+		if (state->initialized && state->current_batch_row >= state->total_batch_rows)
 		{
 			/*
 			 * Reached end of batch. Check that the columns that we're decompressing
@@ -624,8 +626,8 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 		}
 
 		Assert(state->initialized);
-		Assert(state->total_rows > 0);
-		Assert(state->current_row < state->total_rows);
+		Assert(state->total_batch_rows > 0);
+		Assert(state->current_batch_row < state->total_batch_rows);
 
 		for (int i = 0; i < state->num_columns; i++)
 		{
@@ -641,8 +643,9 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 			{
 				Assert(column->compressed.iterator == NULL);
 
-				const int row_index = state->reverse ? state->total_rows - state->current_row - 1 :
-													   state->current_row;
+				const int row_index = state->reverse ?
+										  state->total_batch_rows - state->current_batch_row - 1 :
+										  state->current_batch_row;
 				Assert(row_index < column->compressed.data->length);
 				/* FIXME add code for passing float8 by reference on 32-bit systems. */
 				slot->tts_isnull[attr] =
@@ -676,7 +679,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 			ExecStoreVirtualTuple(slot);
 		}
 
-		state->current_row++;
+		state->current_batch_row++;
 		return slot;
 	}
 }
