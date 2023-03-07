@@ -41,6 +41,26 @@ SELECT setseed(1);
 INSERT INTO disttable
 SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random() * 10
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-02'::timestamptz, '1 second') as t;
+-- This table contains the content for precisely one batch of the copy fetcher. The fetch_size
+-- will be set to 100 below and this table contains 99 tuples and the last element on the first
+-- copy batch is the file trailer (#5323).
+CREATE table one_batch(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
+SELECT create_distributed_hypertable('one_batch', 'ts');
+ create_distributed_hypertable 
+-------------------------------
+ (2,public,one_batch,t)
+(1 row)
+
+INSERT INTO one_batch SELECT '2023-01-01'::timestamptz AS time, sensor_id, random() AS value FROM generate_series(1, 99, 1) AS g1(sensor_id) ORDER BY time;
+-- Same but for the DEFAULT_FDW_FETCH_SIZE (10000)
+CREATE table one_batch_default(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
+SELECT create_distributed_hypertable('one_batch_default', 'ts');
+ create_distributed_hypertable  
+--------------------------------
+ (3,public,one_batch_default,t)
+(1 row)
+
+INSERT INTO one_batch_default SELECT '2023-01-01'::timestamptz AS time, sensor_id, random() AS value FROM generate_series(1, 9999, 1) AS g1(sensor_id) ORDER BY time;
 SET client_min_messages TO error;
 -- Set a smaller fetch size to ensure that the result is split into
 -- mutliple batches.
@@ -59,6 +79,10 @@ SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
 FROM disttable
 GROUP BY 1,2
 ORDER BY 1,2;
+-- Test for #5323 - ensure that no NULL tuples are generated
+-- if the last element of the batch is the file trailer.
+SELECT count(*), count(value) FROM one_batch;
+SELECT count(*), count(value) FROM one_batch_default;
 \o
 \set ON_ERROR_STOP 1
 -- run queries using cursor fetcher
@@ -74,6 +98,10 @@ SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
 FROM disttable
 GROUP BY 1,2
 ORDER BY 1,2;
+-- Test for #5323 - ensure that no NULL tuples are generated
+-- if the last element of the batch is the file trailer.
+SELECT count(*), count(value) FROM one_batch;
+SELECT count(*), count(value) FROM one_batch_default;
 \o
 -- compare results
 :DIFF_CMD

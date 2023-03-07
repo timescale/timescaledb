@@ -334,6 +334,50 @@ copy_fetcher_read_fetch_response(CopyFetcher *fetcher)
 }
 
 /*
+ * Read the next data from the connection and store the data in copy_data.
+ * If no data can be read return false, or throw an error, otherwise
+ * return true.
+ */
+static bool
+copy_fetcher_read_data(CopyFetcher *fetcher, PGconn *conn, char *volatile *dataptr,
+					   StringInfoData *copy_data)
+{
+	copy_data->len = PQgetCopyData(conn,
+								   &copy_data->data,
+								   /* async = */ false);
+
+	/* Set dataptr to ensure data is freed with PQfreemem() in
+	 * PG_CATCH() clause in case error is thrown. */
+	*dataptr = copy_data->data;
+
+	if (copy_data->len == -1)
+	{
+		/* Note: it is possible to get EOF without having received the
+		 * file trailer in case there's e.g., a remote error. */
+		fetcher->state.eof = true;
+
+		/* Should read final result with PQgetResult() until it
+		 * returns NULL. This happens later in end_copy. */
+		return false;
+	}
+	else if (copy_data->len == -2)
+	{
+		/*
+		 * Error. The docs say: consult PQerrorMessage() for the reason.
+		 * remote_connection_elog() will do this for us.
+		 */
+		remote_connection_elog(fetcher->state.conn, ERROR);
+
+		/* remote_connection_elog should raise an ERROR */
+		pg_unreachable();
+	}
+
+	copy_data->maxlen = copy_data->len;
+
+	return true;
+}
+
+/*
  * Process response for ongoing async request
  */
 static int
@@ -378,34 +422,12 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 			MemoryContextSwitchTo(fetcher->state.req_mctx);
 
 			StringInfoData copy_data = { 0 };
+			bool tuple_read = copy_fetcher_read_data(fetcher, conn, &dataptr, &copy_data);
 
-			copy_data.len = PQgetCopyData(conn,
-										  &copy_data.data,
-										  /* async = */ false);
-
-			/* Set dataptr to ensure data is freed with PQfreemem() in
-			 * PG_CATCH() clause in case error is thrown. */
-			dataptr = copy_data.data;
-
-			if (copy_data.len == -1)
-			{
-				/* Note: it is possible to get EOF without having received the
-				 * file trailer in case there's e.g., a remote error. */
-				fetcher->state.eof = true;
-				/* Should read final result with PQgetResult() until it
-				 * returns NULL. This happens below. */
+			/* Were we able to fetch new data? */
+			if (!tuple_read)
 				break;
-			}
-			else if (copy_data.len == -2)
-			{
-				/*
-				 * Error. The docs say: consult PQerrorMessage() for the reason.
-				 * remote_connection_elog() will do this for us.
-				 */
-				remote_connection_elog(fetcher->state.conn, ERROR);
-			}
 
-			copy_data.maxlen = copy_data.len;
 			Assert(copy_data.cursor == 0);
 
 			if (fetcher->state.batch_count == 0 && row == 0)
@@ -432,7 +454,16 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 				/* Next PQgetCopyData() should return -1, indicating EOF and
 				 * that the remote side ended the copy. The final result
 				 * (PGRES_COMMAND_OK) should then be read with
-				 * PQgetResult(). */
+				 * PQgetResult().
+				 *
+				 * Perform a PQgetCopyData directly in this branch because
+				 * if row = state.fetch_size - 1 (i.e., file_trailer is the last
+				 * tuple of the batch), the for loop will not executed
+				 * and PQgetCopyData will never be called.
+				 */
+				tuple_read = copy_fetcher_read_data(fetcher, conn, &dataptr, &copy_data);
+				Assert(tuple_read == false);
+				break;
 			}
 			else
 			{
@@ -510,15 +541,14 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 			dataptr = NULL;
 		}
 
-		/* Don't count the file trailer as a row if this was the last batch */
-		fetcher->state.num_tuples = fetcher->file_trailer_received ? row - 1 : row;
+		fetcher->state.num_tuples = row;
 		fetcher->state.next_tuple_idx = 0;
 
 		/* Must be EOF if we didn't get as many tuples as we asked for. */
+#ifdef USE_ASSERT_CHECKING
 		if (fetcher->state.num_tuples < fetcher->state.fetch_size)
-		{
 			Assert(fetcher->state.eof);
-		}
+#endif
 
 		fetcher->state.batch_count++;
 
