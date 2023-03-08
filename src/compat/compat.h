@@ -759,8 +759,8 @@ pg_strtoint64(const char *str)
 						 is_crosspart_update)
 #endif
 
-#if PG13_GE
-#ifndef PG_HAVE_RELATION_GET_SMGR
+#if (PG12 && PG_VERSION_NUM < 120014) || (PG13 && PG_VERSION_NUM < 130010) ||                      \
+	(PG14 && PG_VERSION_NUM < 140007)
 #include <storage/smgr.h>
 /*
  * RelationGetSmgr
@@ -786,7 +786,6 @@ RelationGetSmgr(Relation rel)
 		smgrsetowner(&(rel->rd_smgr), smgropen(rel->rd_node, rel->rd_backend));
 	return rel->rd_smgr;
 }
-#endif
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */
