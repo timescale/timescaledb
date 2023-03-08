@@ -277,6 +277,6 @@ extern TSDLLEXPORT bool chunk_update_status(FormData_chunk *chunk, int scanflags
 extern TSDLLEXPORT bool chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMODE iterlockmode,
 													   int scanflags);
 
-extern TSDLLEXPORT void chunk_catalog_unlock_row_in_mode(LOCKMODE iterlockmode);
+extern TSDLLEXPORT void chunk_catalog_unlock_row_in_mode(Relation catalog_chunk_rel, int32 chunk_id, LockTupleMode tuplockmode, LOCKMODE iterlockmode, int scanflags);
 
 #endif /* TIMESCALEDB_CHUNK_H */

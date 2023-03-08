@@ -122,26 +122,26 @@ permutation "LockChunk1" "I1" "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1"
 #Compress in progress, insert is blocked
 permutation "LockChunk1" "C1" "I1" "UnlockChunk" "Cc" "Ic"
 
-# #if ddl in progress, compress_chunk blocked
-# permutation "LockChunk1" "A1" "C1" "UnlockChunk" "Cc" "A2"
-# permutation "LockChunk1" "A1" "C1" "UnlockChunk" "A2" "Cc"
+#if ddl in progress, compress_chunk blocked
+permutation "LockChunk1" "A1" "C1" "UnlockChunk" "Cc" "A2"
+permutation "LockChunk1" "A1" "C1" "UnlockChunk" "A2" "Cc"
 
-# #concurrent compress/deocmpress on same chunk errors
-# permutation "LockChunk1" "C1" "D1" "UnlockChunk" "Cc" "Dc"
+#concurrent compress/deocmpress on same chunk errors
+permutation "LockChunk1" "C1" "D1" "UnlockChunk" "Cc" "Dc"
 
-# #concurrent compress and select should execute concurrently
-# permutation "LockChunk1" "C1" "S1" "UnlockChunk" "Cc" "SH"
-# permutation "LockChunk1" "C1" "S1" "UnlockChunk" "SH" "Cc"
+#concurrent compress and select should execute concurrently
+permutation "LockChunk1" "C1" "S1" "UnlockChunk" "Cc" "SH"
+permutation "LockChunk1" "C1" "S1" "UnlockChunk" "SH" "Cc"
 
-# #concurrent inserts into compressed chunk will wait to update chunk status
-# # and not error out.
-# permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat"
+#concurrent inserts into compressed chunk will wait to update chunk status
+# and not error out.
+permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat"
 
-# # Testing concurrent recompress and insert.
-# #
-# # Insert will succeed after first phase of recompress completes.
-# #
-# # - First compress chunk and insert into chunk
-# # - Then start concurrent processes both recompress_chunk and insert
-# # - Wait for lock on the chunk.
-# permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "INc" "SH"
+# Testing concurrent recompress and insert.
+#
+# Insert will succeed after first phase of recompress completes.
+#
+# - First compress chunk and insert into chunk
+# - Then start concurrent processes both recompress_chunk and insert
+# - Wait for lock on the chunk.
+permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "INc" "SH"

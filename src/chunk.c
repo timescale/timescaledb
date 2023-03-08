@@ -2338,9 +2338,14 @@ ts_chunk_copy(const Chunk *chunk)
 int
 chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_func filter,
 					tuple_found_func tuple_found, void *data, int limit, ScanDirection scandir,
-					LOCKMODE lockmode, MemoryContext mctx, int flags)
+					LOCKMODE lockmode, MemoryContext mctx, int scanflags)
 {
 	Catalog *catalog = ts_catalog_get();
+
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleShare,
+	};
+
 	ScannerCtx ctx = {
 		.table = catalog_get_table_id(catalog, CHUNK),
 		.index = catalog_get_index(catalog, CHUNK, indexid),
@@ -2353,8 +2358,13 @@ chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_
 		.lockmode = lockmode,
 		.scandirection = scandir,
 		.result_mctx = mctx,
-		.flags = flags,
+		.flags = scanflags,
 	};
+
+	if (scanflags == SCANNER_F_KEEPLOCK)
+	{
+		ctx.tuplock = &tuplock;
+	}
 
 	return ts_scanner_scan(&ctx);
 }
@@ -4961,12 +4971,12 @@ chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMO
 														tuplockmode,
 														iterlockmode, scanflags); // get RowExclusiveLock and update here
 		}
-		elog(WARNING,
-			 "IN %s, chunk_catalog_lock_row_in_mode_internal returned %d",
-			 __func__,
-			 success);
+		// elog(WARNING,
+		// 	 "IN %s, chunk_catalog_lock_row_in_mode_internal returned %d",
+		// 	 __func__,
+		// 	 success);
 	}
-	elog(WARNING, "before closing the iterator, gonna sleep for 3min");
+	// elog(WARNING, "before closing the iterator, gonna sleep for 3min");
 	// sleep(3 * 60);
 	ts_scan_iterator_close(&iterator);
 	if (dropped)
@@ -4976,10 +4986,59 @@ chunk_catalog_lock_row_in_mode(int32 chunk_id, LockTupleMode tuplockmode, LOCKMO
 	return success;
 }
 
-void chunk_catalog_unlock_row_in_mode(LOCKMODE iterlockmode)
+
+void
+chunk_catalog_unlock_row_in_mode(Relation catalog_chunk_rel, int32 chunk_id, LockTupleMode tuplockmode, LOCKMODE iterlockmode, int scanflags)
 {
-	Catalog *catalog = ts_catalog_get();
-	// UnlockRelationOid(catalog_get_table_id(catalog, CHUNK), AccessShareLock); // this doesn't seem to work
-	Relation chunk_catalog_rel = relation_open(catalog_get_table_id(catalog, CHUNK), iterlockmode);
-	relation_close(chunk_catalog_rel, iterlockmode);
+	bool dropped = false;
+	/* lock the chunk tuple for update. Block till we get exclusivetuplelock */
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleShare,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, iterlockmode, CurrentMemoryContext);
+	iterator.ctx.flags |= scanflags; // no
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+
+	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool dropped_isnull;
+
+		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
+		Assert(!dropped_isnull);
+		if (!dropped)
+		{
+			UnlockTuple(catalog_chunk_rel, &(ti->slot->tts_tid), RowShareLock);
+		}
+	}
+
+	ts_scan_iterator_close(&iterator);
+	if (dropped)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("attempt to lock dropped chunk %d", chunk_id)));
 }
+
+// void chunk_catalog_unlock_row_in_mode(LOCKMODE iterlockmode)
+// {
+// 	Catalog *catalog = ts_catalog_get();
+// 	// UnlockRelationOid(catalog_get_table_id(catalog, CHUNK), AccessShareLock); // this doesn't seem to work
+// 	Relation chunk_catalog_rel = relation_open(catalog_get_table_id(catalog, CHUNK), iterlockmode);
+// 	relation_close(chunk_catalog_rel, iterlockmode);
+// }
