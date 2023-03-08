@@ -46,8 +46,14 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	BitArrayIterator xors_iterator;
 	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
 
-	/* Now fill the data w/o nulls. */
-	Simple8bRleDecompressResult num_xor_bits;
+	/*
+	 * Now fill the data w/o nulls.
+	 *
+	 * The init value of num_xor_bits is to ward off the clang-tidy false
+	 * positive. clang-tidy doesn't understand it will be re-initialized on the
+	 * first step.
+	 */
+	Simple8bRleDecompressResult num_xor_bits = { .val = 64 };
 	ELEMENT_TYPE prev = 0;
 	uint8_t prev_leading_zeros = 0;
 	for (int i = 0; i < n_notnull; i++)
@@ -57,6 +63,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		if (tag0.val == 0)
 		{
 			/* Repeat previous value. */
+			Assert(i > 0);
 			decompressed_values[i] = prev;
 			continue;
 		}
@@ -72,6 +79,10 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 
 			prev_leading_zeros =
 				bit_array_iter_next(&leading_zeros_iterator, BITS_PER_LEADING_ZEROS);
+		}
+		else
+		{
+			Assert(i > 0);
 		}
 
 		/* Reuse previous bit widths. */

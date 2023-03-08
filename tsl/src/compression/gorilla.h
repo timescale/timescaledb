@@ -87,8 +87,7 @@ extern DecompressionIterator *
 gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid element_type);
 extern DecompressResult
 gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter);
-extern ArrowArray *gorilla_decompress_all_forward_direction(Datum compressed_data,
-															Oid element_type);
+extern ArrowArray *gorilla_decompress_all_forward_direction(Datum datum, Oid element_type);
 
 extern void gorilla_compressed_send(CompressedDataHeader *header, StringInfo buffer);
 extern Datum gorilla_compressed_recv(StringInfo buf);
