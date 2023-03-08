@@ -8,23 +8,20 @@
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
 static ArrowArray *
-FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_base)
+FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *gorilla_data)
 {
-	Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_GORILLA);
-	GorillaDecompressionIterator *iter = (GorillaDecompressionIterator *) iter_base;
-
-	const bool has_nulls = iter->has_nulls;
-	const int n_total = has_nulls ? iter->nulls.num_elements : iter->tag0s.num_elements;
+	const bool has_nulls = gorilla_data->nulls != NULL;
+	const int n_total =
+		has_nulls ? gorilla_data->nulls->num_elements : gorilla_data->tag0s->num_elements;
 	const int n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const int n_notnull = iter->tag0s.num_elements;
+	const int n_notnull = gorilla_data->tag0s->num_elements;
 	const int n_notnull_padded =
 		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	Assert(iter->tag0s.current_element == 0);
 
 	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
@@ -33,14 +30,23 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_
 	/* All data valid by default, we will fill in the nulls later. */
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 
-	BitArray leading_zeros_bitarray = iter->gorilla_data.leading_zeros;
+	/* Unpack the basic compressed data parts. */
+	Simple8bRleBitmap tag0s = simple8brle_decompress_bitmap(gorilla_data->tag0s);
+	Simple8bRleBitmap tag1s = simple8brle_decompress_bitmap(gorilla_data->tag1s);
+
+	BitArray leading_zeros_bitarray = gorilla_data->leading_zeros;
 	BitArrayIterator leading_zeros_iterator;
 	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
 
+	Simple8bRleDecompressionIterator num_bits_used;
+	simple8brle_decompression_iterator_init_forward(&num_bits_used,
+													gorilla_data->num_bits_used_per_xor);
+
+	BitArray xors_bitarray = gorilla_data->xors;
+	BitArrayIterator xors_iterator;
+	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
+
 	/* Now fill the data w/o nulls. */
-	Simple8bRleBitmap tag0s = iter->tag0s;
-	Simple8bRleBitmap tag1s = iter->tag1s;
-	Simple8bRleDecompressionIterator num_bits_used = iter->num_bits_used;
 	Simple8bRleDecompressResult num_xor_bits;
 	ELEMENT_TYPE prev = 0;
 	uint8_t prev_leading_zeros = 0;
@@ -51,8 +57,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_
 		if (tag0.val == 0)
 		{
 			/* Repeat previous value. */
-			decompressed_values[i] = 0;
-			break;
+			decompressed_values[i] = prev;
+			continue;
 		}
 
 		Simple8bRleDecompressResult tag1 = simple8brle_bitmap_get_next(&tag1s);
@@ -69,7 +75,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_
 		}
 
 		/* Reuse previous bit widths. */
-		prev ^= bit_array_iter_next(&iter->xors, num_xor_bits.val)
+		prev ^= bit_array_iter_next(&xors_iterator, num_xor_bits.val)
 				<< (64 - (prev_leading_zeros + num_xor_bits.val));
 		decompressed_values[i] = prev;
 	}
@@ -78,15 +84,13 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_
 	/* Now move the data to account for nulls, and fill the validity bitmap. */
 	if (has_nulls)
 	{
-		simple8brle_bitmap_rewind(&iter->nulls);
+		Simple8bRleBitmap nulls = simple8brle_decompress_bitmap(gorilla_data->nulls);
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 
-			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next_reverse(&iter->nulls);
-			Assert(!res.is_done);
-			if (res.val)
+			if (nulls.bitmap[i])
 			{
 				decompressed_values[i] = 0;
 				arrow_validity_bitmap_set(validity_bitmap, i, false);

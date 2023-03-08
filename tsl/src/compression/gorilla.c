@@ -789,21 +789,21 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 #undef ELEMENT_TYPE
 
 ArrowArray *
-gorilla_decompress_all_forward_direction(Datum compressed_data, Oid element_type)
+gorilla_decompress_all_forward_direction(Datum datum, Oid element_type)
 {
-	DecompressionIterator *iter =
-		gorilla_decompression_iterator_from_datum_forward(compressed_data, element_type);
+	CompressedGorillaData gorilla_data;
+	compressed_gorilla_data_init_from_datum(&gorilla_data, datum);
 
 	switch (element_type)
 	{
 		case FLOAT8OID:
 		case INT8OID:
-			return gorilla_decompress_all_uint64(iter);
+			return gorilla_decompress_all_uint64(&gorilla_data);
 		case FLOAT4OID:
 		case INT4OID:
-			return gorilla_decompress_all_uint32(iter);
+			return gorilla_decompress_all_uint32(&gorilla_data);
 		case INT2OID:
-			return gorilla_decompress_all_uint16(iter);
+			return gorilla_decompress_all_uint16(&gorilla_data);
 		default:
 			elog(ERROR, "type oid %d is not supported for gorilla decompression", element_type);
 			return NULL;

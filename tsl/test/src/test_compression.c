@@ -342,7 +342,18 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	{
 		if (have_random)
 		{
-			values[i] = (test_hash64(i) / (double) UINT64_MAX) * 100.;
+			/* Also add some stretches of equal numbers. */
+			int base = i;
+			if (i % 37 < 3)
+			{
+				base = 1;
+			}
+			else if (i % 53 < 2)
+			{
+				base = 2;
+			}
+
+			values[i] = (test_hash64(base) / (double) UINT64_MAX) * 100.;
 		}
 		else
 		{
@@ -494,7 +505,18 @@ test_delta3(bool have_nulls, bool have_random)
 	{
 		if (have_random)
 		{
-			values[i] = test_hash64(i);
+			/* Also add some stretches of equal numbers. */
+			int base = i;
+			if (i % 37 < 4)
+			{
+				base = 1;
+			}
+			else if (i % 53 < 2)
+			{
+				base = 2;
+			}
+
+			values[i] = test_hash64(base);
 		}
 		else
 		{
