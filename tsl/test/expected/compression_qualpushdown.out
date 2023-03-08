@@ -262,3 +262,83 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::cha
          Filter: ((dev_vc)::bpchar = 'varchar   '::character(10))
 (4 rows)
 
+-- github issue #5286
+CREATE TABLE deleteme AS
+    SELECT generate_series AS timestamp, 1 AS segment, 0 AS data
+        FROM generate_series('2008-03-01 00:00'::timestamp with time zone,
+                             '2008-03-04 12:00', '1 second');
+SELECT create_hypertable('deleteme', 'timestamp', migrate_data => true);
+NOTICE:  adding not-null constraint to column "timestamp"
+NOTICE:  migrating data to chunks
+   create_hypertable   
+-----------------------
+ (7,public,deleteme,t)
+(1 row)
+
+ALTER TABLE deleteme SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'segment'
+);
+SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_8_chunk
+(1 row)
+
+EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Aggregate
+   ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
+         ->  Seq Scan on compress_hyper_8_9_chunk
+               Filter: ((segment)::text ~~ '%4%'::text)
+(4 rows)
+
+EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Aggregate
+   ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
+         ->  Seq Scan on compress_hyper_8_9_chunk
+               Filter: ('4'::text = (segment)::text)
+(4 rows)
+
+CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
+SELECT create_hypertable('deleteme_with_bytea', 'time', chunk_time_interval => 1000000);
+        create_hypertable         
+----------------------------------
+ (9,public,deleteme_with_bytea,t)
+(1 row)
+
+INSERT INTO deleteme_with_bytea(time, bdata) VALUES (1001, E'\\x');
+INSERT INTO deleteme_with_bytea(time, bdata) VALUES (1001, NULL);
+ALTER TABLE deleteme_with_bytea SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'bdata'
+);
+SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_10_chunk
+(1 row)
+
+EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Result
+   ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
+         ->  Index Scan using compress_hyper_10_11_chunk__compressed_hypertable_10_bdata__ts_ on compress_hyper_10_11_chunk
+               Index Cond: (bdata = '\x'::bytea)
+(4 rows)
+
+EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
+                        QUERY PLAN                        
+----------------------------------------------------------
+ Result
+   ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
+         ->  Seq Scan on compress_hyper_10_11_chunk
+               Filter: ((bdata)::text = '123'::text)
+(4 rows)
+
+DROP table deleteme;
+DROP table deleteme_with_bytea;

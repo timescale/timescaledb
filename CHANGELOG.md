@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #5312 Add timeout support to the ping_data_node()
 
 **Bugfixes**
+* #5396 Fix SEGMENTBY columns predicates to be pushed down
 
 ## 2.10.1 (2023-03-07)
 
@@ -2774,4 +2775,3 @@ the next release.
 * [72f754a] use PostgreSQL's own `hash_any` function as default partfunc (thanks @robin900)
 * [39f4c0f] Remove sample data instructions and point to docs site
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
-
