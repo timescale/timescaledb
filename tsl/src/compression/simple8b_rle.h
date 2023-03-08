@@ -545,6 +545,7 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 
 	const uint32 n_total_values = compressed->num_elements;
+	const uint32 num_blocks = compressed->num_blocks;
 
 	*iter = (Simple8bRleDecompressionIterator){
 		.compressed_data = compressed->slots + num_selector_slots,
@@ -562,22 +563,36 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 
 	// static int blocks[16] = {0};
 
-	for (uint32 block_index = 0; block_index < compressed->num_blocks; block_index++)
+	/*
+	 * Unpack the selector slots to get the selector values. Best done separately,
+	 * so that this loop can be vectorized.
+	 */
+	Assert(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	uint8 selector_values[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	const uint64 *restrict slots = compressed->slots;
+	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
 		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const uint64 slot_value = compressed->slots[selector_slot];
+		const uint64 slot_value = slots[selector_slot];
 		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
 		const uint64 selector_mask = 0xFULL << selector_shift;
 		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
 		Assert(selector_value < 16);
 		Assert(selector_value != 0);
+		selector_values[block_index] = selector_value;
+	}
 
-		//		blocks[0]++;
-		//		blocks[selector_value]++;
+	/*
+	 * Now decompress the individual blocks.
+	 */
+	const uint64 *restrict blocks = iter->compressed_data;
+	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
+	{
+		const int selector_value = selector_values[block_index];
+		const uint64 block_data = blocks[block_index];
 
-		const uint64 block_data = iter->compressed_data[block_index];
-
+		/* We don't see RLE blocks so often in the real data, <1% of blocks. */
 		if (unlikely(simple8brle_selector_is_rle(selector_value)))
 		{
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
@@ -593,7 +608,9 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		}
 		else
 		{
-#define ITERATION                                                                                  \
+			/* Bit-packed blocks. Generate separate code for each block type. */
+
+#define UNPACK_BLOCK                                                                                  \
 	/*                                                                                             \
 	 * The last block might have less values than normal, but we have                              \
 	 * padding at the end so we can unpack them all always for simpler                             \
@@ -611,68 +628,72 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 	decompressed_index += n_block_values;                                                          \
 	break;
 
+			/*
+			 * FIXME reconsider if we need this switch? It's compiled to some
+			 * pretty crazy computed jump.
+			 */
 			switch (selector_value)
 			{
 				case 1:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 2:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 3:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 4:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 5:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 6:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 7:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 8:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 9:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 10:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 11:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 12:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 13:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				case 14:
 				{
-					ITERATION
+					UNPACK_BLOCK
 				}
 				default:
 					Assert(false);
 			}
-#undef ITERATION
+#undef UNPACK_BLOCK
 		}
 	}
 	Assert(decompressed_index >= n_total_values);
@@ -707,16 +728,12 @@ simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator
 static Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIterator *iter)
 {
-	if (iter->num_elements_returned >= iter->num_elements)
-	{
-		return (Simple8bRleDecompressResult){
-			.is_done = true,
-		};
-	}
-
-	return (Simple8bRleDecompressResult){
-		.val = iter->decompressed_values[iter->num_elements_returned++]
-	};
+	Simple8bRleDecompressResult res;
+	/* We have some padding so it's OK to overrun. */
+	res.val = iter->decompressed_values[iter->num_elements_returned];
+	res.is_done = iter->num_elements_returned >= iter->num_elements;
+	iter->num_elements_returned++;
+	return res;
 }
 
 static Simple8bRleDecompressResult
@@ -881,8 +898,10 @@ static pg_attribute_always_inline uint64
 simple8brle_selector_get_bitmask(uint8 selector)
 {
 	uint8 bitLen = SIMPLE8B_BIT_LENGTH[selector];
-	/* note: left shift by 64 bits is UB */
-	return bitLen < 64 ? (1ULL << bitLen) - 1 : PG_UINT64_MAX;
+	Assert(bitLen != 0);
+	uint64 result = ((-1ULL) >> (64 - bitLen));
+	Assert(result == (bitLen < 64 ? (1ULL << bitLen) - 1 : PG_UINT64_MAX));
+	return result;
 }
 
 static pg_attribute_always_inline uint32

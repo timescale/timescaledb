@@ -4,73 +4,143 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#define FUNCTION_NAME_HELPER(X) delta_delta_decompress_all_##X
-#define FUNCTION_NAME(X) FUNCTION_NAME_HELPER(X)
+#define FUNCTION_NAME_HELPER(X, Y) X##_##Y
+#define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
+
+#define INNER_SIZE 8
+
+pg_attribute_always_inline static void FUNCTION_NAME(prefix_sum_per_segment, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n)
+{
+	const int logn = 31 - __builtin_clz(INNER_SIZE);
+
+	Assert(n % INNER_SIZE == 0);
+	for (int segment = 0; segment < n; segment += INNER_SIZE)
+	{
+		for (int l = 0; l < logn; l++)
+		{
+			ELEMENT_TYPE accu[INNER_SIZE] = {0};
+
+#define LOOP \
+			for (int i = 0; i < INNER_SIZE; i++) accu[i] = a[segment + i]; \
+			for (int i = INNER_SIZE - 1; i >= 0; i--) accu[i] = (i >= (1 << l)) ? accu[i - (1 << l)] : 0; \
+			for (int i = 0; i < INNER_SIZE; i++) a[segment + i] += accu[i]; \
+			break;
+
+			switch (l)
+			{
+				case 0: { LOOP }
+				case 1: { LOOP }
+				case 2: { LOOP }
+				case 3: { LOOP }
+				default: Assert(false);
+			}
+#undef LOOP
+		}
+	}
+}
+
+pg_attribute_always_inline static void FUNCTION_NAME(prefix_sum_accumulate, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n)
+{
+	Assert(n % INNER_SIZE == 0);
+	for (int segment = INNER_SIZE; segment < n; segment += INNER_SIZE)
+	{
+		ELEMENT_TYPE accu[INNER_SIZE];
+		for (int i = 0; i < INNER_SIZE; i++)
+		{
+			accu[i] = a[segment - 1];
+		}
+
+		for (int i = 0; i < INNER_SIZE; i++)
+		{
+			a[segment + i] += accu[i];
+		}
+	}
+}
+
+void FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n);
+
+void FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n)
+{
+	FUNCTION_NAME(prefix_sum_per_segment, ELEMENT_TYPE)(a, n);
+	FUNCTION_NAME(prefix_sum_accumulate, ELEMENT_TYPE)(a, n);
+}
 
 static ArrowArray *
-FUNCTION_NAME(ELEMENT_TYPE)(DecompressionIterator *iter_base)
+FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_base)
 {
 	Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
 	DeltaDeltaDecompressionIterator *iter = (DeltaDeltaDecompressionIterator *) iter_base;
 
-	const int n_total =
-		iter->has_nulls ? iter->nulls.num_elements : iter->delta_deltas.num_elements;
+	const bool has_nulls = iter->has_nulls;
+	const int n_total = has_nulls ? iter->nulls.num_elements : iter->delta_deltas.num_elements;
+	const int n_total_padded = ((n_total * sizeof(ELEMENT_TYPE) + 63) / 64 ) * 64 / sizeof(ELEMENT_TYPE);
+	const int n_notnull = iter->delta_deltas.num_elements;
+	const int n_notnull_padded = ((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64 ) * 64 / sizeof(ELEMENT_TYPE);
+	Assert(n_total_padded >= n_total);
+	Assert(n_notnull_padded >= n_notnull);
+	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	Assert(iter->delta_deltas.num_elements_returned == 0);
 
 	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
-	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total);
+	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 
-	/* Fill the nulls bitmap separately, for simpler loops and more data access locality. */
-	if (iter->has_nulls)
+	/* All data valid by default, we will fill in the nulls later. */
+	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
+	/* Now fill the data w/o nulls. */
+	ELEMENT_TYPE current_delta = 0;
+	ELEMENT_TYPE current_element = 0;
+	Assert(n_notnull_padded % INNER_SIZE == 0);
+	uint64_t *restrict source = iter->delta_deltas.decompressed_values;
+	for (int outer = 0; outer < n_notnull_padded; outer+= INNER_SIZE)
 	{
-		for (int i = 0; i < n_total; i++)
+		for (int inner = 0; inner < INNER_SIZE; inner++)
 		{
-			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next(&iter->nulls);
-			Assert(!res.is_done);
-			arrow_validity_bitmap_set(validity_bitmap, i, !res.val);
+			/*
+			 * Manual unrolling speeds up this function by about 10%, but my
+			 * attempts to get clang to vectorize the double-prefix-sum part
+			 * have failed. Also tried prefix sum from here:
+			 * https://en.algorithmica.org/hpc/algorithms/prefix/
+			 * Only makes it slower.
+			 */
+			current_delta += zig_zag_decode(source[outer + inner]);
+			current_element += current_delta;
+			decompressed_values[outer + inner] = current_element;
 		}
+	}
 
+//	FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(decompressed_values, n_notnull_padded);
+//
+//	FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(decompressed_values, n_notnull_padded);
+
+	/* Now move the data to account for nulls, and fill the validity bitmap. */
+	if (has_nulls)
+	{
 		simple8brle_bitmap_rewind(&iter->nulls);
-	}
-	else
-	{
-		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-	}
-
-	/* Now fill the data. */
-	uint64 prev_val = 0;
-	uint64 prev_delta = 0;
-	for (int i = 0; i < n_total; i++)
-	{
-		if (iter->has_nulls)
+		int current_notnull_element = n_notnull - 1;
+		for (int i = n_total - 1; i >= 0; i--)
 		{
-			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next(&iter->nulls);
+			Assert(i >= current_notnull_element);
+
+			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next_reverse(&iter->nulls);
 			Assert(!res.is_done);
 			if (res.val)
 			{
-				/* Null. */
 				decompressed_values[i] = 0;
-				continue;
+				arrow_validity_bitmap_set(validity_bitmap, i, false);
+			}
+			else
+			{
+				decompressed_values[i] = decompressed_values[current_notnull_element--];
 			}
 		}
 
-		/*
-		 * We use the interator API here because the counter for deltadeltas is
-		 * different from `i` in the presence of nulls.
-		 */
-		const Simple8bRleDecompressResult result =
-			simple8brle_decompression_iterator_try_next_forward(&iter->delta_deltas);
-		Assert(!result.is_done);
-
-		const uint64_t delta_delta = zig_zag_decode(result.val);
-		prev_delta += delta_delta;
-		prev_val += prev_delta;
-
-		decompressed_values[i] = prev_val;
+		Assert(current_notnull_element == -1);
 	}
 
+	/* Return the result. */
 	ArrowArray *result = palloc0(sizeof(ArrowArray));
 	const void **buffers = palloc(sizeof(void *) * 2);
 	buffers[0] = validity_bitmap;

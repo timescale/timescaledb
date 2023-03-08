@@ -20,12 +20,12 @@ typedef struct Simple8bRleBitmap
 pg_attribute_always_inline static Simple8bRleDecompressResult
 simple8brle_bitmap_get_next(Simple8bRleBitmap *bitmap)
 {
-	if (bitmap->current_element >= bitmap->num_elements)
-	{
-		return (Simple8bRleDecompressResult){ .is_done = true };
-	}
-
-	return (Simple8bRleDecompressResult){ .val = bitmap->bitmap[bitmap->current_element++] };
+	Simple8bRleDecompressResult res;
+	/* We have some padding so it's OK to overrun. */
+	res.val = bitmap->bitmap[bitmap->current_element];
+	res.is_done = bitmap->current_element >= bitmap->num_elements;
+	bitmap->current_element++;
+	return res;
 }
 
 pg_attribute_always_inline static Simple8bRleDecompressResult
@@ -72,7 +72,8 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 
 	/*
 	 * Decompress all the rows in one go for better throughput. Add 64 bytes of
-	 * padding on the right so that we can simplify the decompression loop.
+	 * padding on the right so that we can simplify the decompression loop and
+	 * the get() function.
 	 */
 	char *restrict bitmap = palloc(((num_elements + 63) / 64 + 1) * 64);
 	uint32 decompressed_index = 0;
