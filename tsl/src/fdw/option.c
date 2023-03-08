@@ -133,7 +133,8 @@ option_validate(List *options_list, Oid catalog)
 			if (fetch_size <= 0)
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("%s requires a non-negative integer value", def->defname)));
+						 errmsg("%s requires a non-zero and positive integer value",
+								def->defname)));
 		}
 		else if (strcmp(def->defname, "available") == 0)
 		{
@@ -144,6 +145,18 @@ option_validate(List *options_list, Oid catalog)
 		{
 			/* check and store list, warn about non existing tables */
 			(void) option_extract_join_ref_table_list(defGetString(def));
+		}
+		else if (strcmp(def->defname, "copy_rows_per_message") == 0)
+		{
+			int copy_rows_per_message;
+
+			copy_rows_per_message = strtol(defGetString(def), NULL, 10);
+
+			if (copy_rows_per_message <= 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("%s requires a non-zero and positive integer value",
+								def->defname)));
 		}
 	}
 }
@@ -170,6 +183,8 @@ init_ts_fdw_options(void)
 		{ "available", ForeignServerRelationId },
 		/* join reference tables */
 		{ "reference_tables", ForeignDataWrapperRelationId },
+		/* Rows per CopyData when ingesting with COPY */
+		{ "copy_rows_per_message", ForeignDataWrapperRelationId },
 		{ NULL, InvalidOid }
 	};
 
