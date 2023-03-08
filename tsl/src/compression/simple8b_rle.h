@@ -900,7 +900,6 @@ simple8brle_selector_get_bitmask(uint8 selector)
 	uint8 bitLen = SIMPLE8B_BIT_LENGTH[selector];
 	Assert(bitLen != 0);
 	uint64 result = ((-1ULL) >> (64 - bitLen));
-	Assert(result == (bitLen < 64 ? (1ULL << bitLen) - 1 : PG_UINT64_MAX));
 	return result;
 }
 

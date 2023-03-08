@@ -9,62 +9,6 @@
 
 #define INNER_SIZE 8
 
-pg_attribute_always_inline static void FUNCTION_NAME(prefix_sum_per_segment, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n)
-{
-	const int logn = 31 - __builtin_clz(INNER_SIZE);
-
-	Assert(n % INNER_SIZE == 0);
-	for (int segment = 0; segment < n; segment += INNER_SIZE)
-	{
-		for (int l = 0; l < logn; l++)
-		{
-			ELEMENT_TYPE accu[INNER_SIZE] = {0};
-
-#define LOOP \
-			for (int i = 0; i < INNER_SIZE; i++) accu[i] = a[segment + i]; \
-			for (int i = INNER_SIZE - 1; i >= 0; i--) accu[i] = (i >= (1 << l)) ? accu[i - (1 << l)] : 0; \
-			for (int i = 0; i < INNER_SIZE; i++) a[segment + i] += accu[i]; \
-			break;
-
-			switch (l)
-			{
-				case 0: { LOOP }
-				case 1: { LOOP }
-				case 2: { LOOP }
-				case 3: { LOOP }
-				default: Assert(false);
-			}
-#undef LOOP
-		}
-	}
-}
-
-pg_attribute_always_inline static void FUNCTION_NAME(prefix_sum_accumulate, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n)
-{
-	Assert(n % INNER_SIZE == 0);
-	for (int segment = INNER_SIZE; segment < n; segment += INNER_SIZE)
-	{
-		ELEMENT_TYPE accu[INNER_SIZE];
-		for (int i = 0; i < INNER_SIZE; i++)
-		{
-			accu[i] = a[segment - 1];
-		}
-
-		for (int i = 0; i < INNER_SIZE; i++)
-		{
-			a[segment + i] += accu[i];
-		}
-	}
-}
-
-void FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n);
-
-void FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(ELEMENT_TYPE *a, int n)
-{
-	FUNCTION_NAME(prefix_sum_per_segment, ELEMENT_TYPE)(a, n);
-	FUNCTION_NAME(prefix_sum_accumulate, ELEMENT_TYPE)(a, n);
-}
-
 static ArrowArray *
 FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_base)
 {
@@ -111,9 +55,6 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *i
 		}
 	}
 
-//	FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(decompressed_values, n_notnull_padded);
-//
-//	FUNCTION_NAME(prefix_sum_combine, ELEMENT_TYPE)(decompressed_values, n_notnull_padded);
 
 	/* Now move the data to account for nulls, and fill the validity bitmap. */
 	if (has_nulls)
