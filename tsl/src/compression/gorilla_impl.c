@@ -16,16 +16,13 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	const int n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	const int n_notnull = gorilla_data->tag0s->num_elements;
-	const int n_notnull_padded =
-		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
-	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
-	ELEMENT_TYPE *restrict decompressed_values = palloc0(sizeof(ELEMENT_TYPE) * n_total_padded);
+	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 
 	/* All data valid by default, we will fill in the nulls later. */
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
