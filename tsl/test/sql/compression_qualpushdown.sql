@@ -119,3 +119,36 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
 
+-- github issue #5286
+CREATE TABLE deleteme AS
+    SELECT generate_series AS timestamp, 1 AS segment, 0 AS data
+        FROM generate_series('2008-03-01 00:00'::timestamp with time zone,
+                             '2008-03-04 12:00', '1 second');
+
+SELECT create_hypertable('deleteme', 'timestamp', migrate_data => true);
+
+ALTER TABLE deleteme SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'segment'
+);
+
+SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
+EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
+
+CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
+SELECT create_hypertable('deleteme_with_bytea', 'time', chunk_time_interval => 1000000);
+INSERT INTO deleteme_with_bytea(time, bdata) VALUES (1001, E'\\x');
+INSERT INTO deleteme_with_bytea(time, bdata) VALUES (1001, NULL);
+
+ALTER TABLE deleteme_with_bytea SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'bdata'
+);
+
+SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
+EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
+EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
+
+DROP table deleteme;
+DROP table deleteme_with_bytea;

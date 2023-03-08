@@ -2415,12 +2415,15 @@ QUERY PLAN
                Chunks excluded during startup: 1
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=16785 loops=1)
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                     Rows Removed by Filter: 8405
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                     Rows Removed by Filter: 3215
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                           Rows Removed by Filter: 10
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(13 rows)
+                           Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+(16 rows)
 
 :PREFIX
 SELECT time
@@ -2438,11 +2441,14 @@ QUERY PLAN
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=8400 loops=1)
                      Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                     Rows Removed by Filter: 16790
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(13 rows)
+                     Rows Removed by Filter: 1790
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                           Rows Removed by Filter: 15
+(16 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -2461,10 +2467,10 @@ QUERY PLAN
                Chunks excluded during startup: 1
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7195 loops=1)
                      Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                     Rows Removed by Filter: 12995
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25 loops=1)
-                           Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 5
+                     Rows Removed by Filter: 7805
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                           Rows Removed by Filter: 15
 (12 rows)
 
 :PREFIX
@@ -2483,10 +2489,10 @@ QUERY PLAN
                Chunks excluded during startup: 1
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3595 loops=1)
                      Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                     Rows Removed by Filter: 21405
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 5
+                     Rows Removed by Filter: 6405
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=1)
+                           Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                           Rows Removed by Filter: 20
 (12 rows)
 
 -- min/max queries
@@ -3427,40 +3433,52 @@ QUERY PLAN
                ->  Merge Append (actual rows=0 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 3598
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 4
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 10794
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 12
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 3598
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 4
                ->  Merge Append (actual rows=16785 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3357 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 1681
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Rows Removed by Filter: 643
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 2
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10071 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 5043
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                           Rows Removed by Filter: 1929
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3357 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 1681
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Rows Removed by Filter: 643
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 2
                ->  Merge Append (actual rows=25190 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(41 rows)
+                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+(53 rows)
 
 :PREFIX
 SELECT time
@@ -3478,39 +3496,51 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Merge Append (actual rows=8400 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1680 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 3358
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Rows Removed by Filter: 358
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 3
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5040 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 10074
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                           Rows Removed by Filter: 1074
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 9
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1680 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 3358
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Rows Removed by Filter: 358
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 3
                ->  Merge Append (actual rows=0 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 5038
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 15114
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 18
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 5038
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(41 rows)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Rows Removed by Filter: 6
+(53 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -3529,38 +3559,38 @@ QUERY PLAN
                ->  Merge Append (actual rows=0 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 3598
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 4
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 10794
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 12
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 3598
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 4
                ->  Merge Append (actual rows=7195 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1439 loops=1)
                            Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 2599
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                                 Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-                                 Rows Removed by Filter: 1
+                           Rows Removed by Filter: 1561
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 3
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4317 loops=1)
                            Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 7797
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
-                                 Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-                                 Rows Removed by Filter: 3
+                           Rows Removed by Filter: 4683
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 9
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1439 loops=1)
                            Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 2599
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                                 Filter: (_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-                                 Rows Removed by Filter: 1
+                           Rows Removed by Filter: 1561
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 3
 (40 rows)
 
 :PREFIX
@@ -3579,38 +3609,38 @@ QUERY PLAN
                ->  Merge Append (actual rows=3595 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=719 loops=1)
                            Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 4281
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                                 Rows Removed by Filter: 1
+                           Rows Removed by Filter: 1281
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=1)
+                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 4
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2157 loops=1)
                            Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 12843
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                                 Rows Removed by Filter: 3
+                           Rows Removed by Filter: 3843
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 12
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=719 loops=1)
                            Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 4281
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                                 Rows Removed by Filter: 1
+                           Rows Removed by Filter: 1281
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=1)
+                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 4
                ->  Merge Append (actual rows=0 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 5038
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 15114
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 18
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 5038
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Rows Removed by Filter: 6
 (40 rows)
 
 -- min/max queries
