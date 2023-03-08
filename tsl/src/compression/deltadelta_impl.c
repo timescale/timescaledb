@@ -17,9 +17,11 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *i
 
 	const bool has_nulls = iter->has_nulls;
 	const int n_total = has_nulls ? iter->nulls.num_elements : iter->delta_deltas.num_elements;
-	const int n_total_padded = ((n_total * sizeof(ELEMENT_TYPE) + 63) / 64 ) * 64 / sizeof(ELEMENT_TYPE);
+	const int n_total_padded =
+		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	const int n_notnull = iter->delta_deltas.num_elements;
-	const int n_notnull_padded = ((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64 ) * 64 / sizeof(ELEMENT_TYPE);
+	const int n_notnull_padded =
+		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
@@ -38,7 +40,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *i
 	ELEMENT_TYPE current_element = 0;
 	Assert(n_notnull_padded % INNER_SIZE == 0);
 	uint64_t *restrict source = iter->delta_deltas.decompressed_values;
-	for (int outer = 0; outer < n_notnull_padded; outer+= INNER_SIZE)
+	for (int outer = 0; outer < n_notnull_padded; outer += INNER_SIZE)
 	{
 		for (int inner = 0; inner < INNER_SIZE; inner++)
 		{
@@ -54,7 +56,6 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *i
 			decompressed_values[outer + inner] = current_element;
 		}
 	}
-
 
 	/* Now move the data to account for nulls, and fill the validity bitmap. */
 	if (has_nulls)

@@ -610,7 +610,7 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		{
 			/* Bit-packed blocks. Generate separate code for each block type. */
 
-#define UNPACK_BLOCK                                                                                  \
+#define UNPACK_BLOCK                                                                               \
 	/*                                                                                             \
 	 * The last block might have less values than normal, but we have                              \
 	 * padding at the end so we can unpack them all always for simpler                             \

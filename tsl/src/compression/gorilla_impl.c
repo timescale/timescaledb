@@ -15,9 +15,11 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_
 
 	const bool has_nulls = iter->has_nulls;
 	const int n_total = has_nulls ? iter->nulls.num_elements : iter->tag0s.num_elements;
-	const int n_total_padded = ((n_total * sizeof(ELEMENT_TYPE) + 63) / 64 ) * 64 / sizeof(ELEMENT_TYPE);
+	const int n_total_padded =
+		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	const int n_notnull = iter->tag0s.num_elements;
-	const int n_notnull_padded = ((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
+	const int n_notnull_padded =
+		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
@@ -62,7 +64,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_
 			Assert(!num_xor_bits.is_done);
 			Assert(num_xor_bits.val >= 0 && num_xor_bits.val <= 64);
 
-			prev_leading_zeros = bit_array_iter_next(&leading_zeros_iterator, BITS_PER_LEADING_ZEROS);
+			prev_leading_zeros =
+				bit_array_iter_next(&leading_zeros_iterator, BITS_PER_LEADING_ZEROS);
 		}
 
 		/* Reuse previous bit widths. */
