@@ -2363,7 +2363,7 @@ err_end_copy:
 	return false;
 }
 
-bool
+int
 remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
 								TSConnectionError *err)
 {
@@ -2371,13 +2371,13 @@ remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t l
 
 	res = PQputCopyData(remote_connection_get_pg_conn(conn), buffer, len);
 
-	if (res != 1)
+	if (res == -1)
 		return fill_connection_error(err,
 									 ERRCODE_CONNECTION_EXCEPTION,
 									 "could not send COPY data",
 									 conn);
 
-	return true;
+	return res;
 }
 
 static bool

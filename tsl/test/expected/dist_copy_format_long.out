@@ -31,6 +31,8 @@ SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
 GRANT CREATE ON SCHEMA public TO :ROLE_1;
+-- buffer a lot of rows per message to test buffer expansion
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD copy_rows_per_message '1000');
 SET ROLE :ROLE_1;
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);

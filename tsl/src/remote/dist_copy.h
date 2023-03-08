@@ -19,7 +19,7 @@ extern RemoteCopyContext *remote_copy_begin(const CopyStmt *stmt, Hypertable *ht
 											ExprContext *per_tuple_ctx, List *attnums,
 											bool binary_copy);
 extern void remote_copy_end_on_success(RemoteCopyContext *context);
-extern bool remote_copy_send_slot(RemoteCopyContext *context, TupleTableSlot *slot,
+extern void remote_copy_send_slot(RemoteCopyContext *context, TupleTableSlot *slot,
 								  const ChunkInsertState *cis);
 extern const char *remote_copy_get_copycmd(RemoteCopyContext *context);
 
