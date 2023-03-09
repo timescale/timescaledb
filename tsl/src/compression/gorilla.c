@@ -781,10 +781,6 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 								 iter_base->element_type);
 }
 
-#define ELEMENT_TYPE uint16
-#include "gorilla_impl.c"
-#undef ELEMENT_TYPE
-
 #define ELEMENT_TYPE uint32
 #include "gorilla_impl.c"
 #undef ELEMENT_TYPE
@@ -802,13 +798,9 @@ gorilla_decompress_all_forward_direction(Datum datum, Oid element_type)
 	switch (element_type)
 	{
 		case FLOAT8OID:
-		case INT8OID:
 			return gorilla_decompress_all_uint64(&gorilla_data);
 		case FLOAT4OID:
-		case INT4OID:
 			return gorilla_decompress_all_uint32(&gorilla_data);
-		case INT2OID:
-			return gorilla_decompress_all_uint16(&gorilla_data);
 		default:
 			elog(ERROR, "type oid %d is not supported for gorilla decompression", element_type);
 			return NULL;
