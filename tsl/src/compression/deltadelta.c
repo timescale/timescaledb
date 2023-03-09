@@ -155,8 +155,6 @@ deltadelta_compressor_append_null_value(Compressor *compressor)
 	delta_delta_compressor_append_null(extended->internal);
 }
 
-static void *delta_delta_compressor_finish(DeltaDeltaCompressor *compressor);
-
 static void *
 deltadelta_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -331,7 +329,7 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 	return compressed;
 }
 
-static void *
+void *
 delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 {
 	Simple8bRleSerialized *deltas = simple8brle_compressor_finish(&compressor->delta_delta);

@@ -262,13 +262,13 @@ gorilla_compressor_alloc(void)
 	return compressor;
 }
 
+/* This function is used for testing only. */
 Datum
 tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 {
 	MemoryContext old_context;
 	MemoryContext agg_context;
-	GorillaCompressor *compressor =
-		(GorillaCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	Compressor *compressor = (Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (!AggCheckCallContext(fcinfo, &agg_context))
 	{
@@ -279,18 +279,36 @@ tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 	old_context = MemoryContextSwitchTo(agg_context);
 
 	if (compressor == NULL)
-		compressor = gorilla_compressor_alloc();
+	{
+		compressor = gorilla_compressor_for_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
+	}
 
 	if (PG_ARGISNULL(1))
-		gorilla_compressor_append_null(compressor);
+		compressor->append_null(compressor);
 	else
 	{
-		double next_val = PG_GETARG_FLOAT8(1);
-		gorilla_compressor_append_value(compressor, double_get_bits(next_val));
+		compressor->append_val(compressor, PG_GETARG_DATUM(1));
 	}
 
 	MemoryContextSwitchTo(old_context);
 	PG_RETURN_POINTER(compressor);
+}
+
+/* This function is used for testing only. */
+Datum
+tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
+{
+	Compressor *compressor = (Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+
+	if (compressor == NULL)
+		PG_RETURN_NULL();
+
+	void *compressed = compressor->finish(compressor);
+
+	if (compressed == NULL)
+		PG_RETURN_NULL();
+
+	PG_RETURN_POINTER(compressed);
 }
 
 void
@@ -438,22 +456,6 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
 	Assert(compressor->has_nulls || data.nulls != NULL);
 
 	return compressed_gorilla_data_serialize(&data);
-}
-
-Datum
-tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
-{
-	GorillaCompressor *compressor =
-		(GorillaCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
-	void *compressed;
-	if (compressor == NULL)
-		PG_RETURN_NULL();
-
-	compressed = gorilla_compressor_finish(compressor);
-	if (compressed == NULL)
-		PG_RETURN_NULL();
-
-	PG_RETURN_POINTER(compressed);
 }
 
 /*******************************

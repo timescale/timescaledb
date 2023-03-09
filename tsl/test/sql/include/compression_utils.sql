@@ -34,7 +34,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.deltadelta_compressor_finish(in
    AS :MODULE_PATHNAME, 'ts_deltadelta_compressor_finish'
    LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.gorilla_compressor_append(internal, DOUBLE PRECISION)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.gorilla_compressor_append(internal, ANYELEMENT)
    RETURNS internal
    AS :MODULE_PATHNAME, 'ts_gorilla_compressor_append'
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
@@ -86,7 +86,7 @@ CREATE AGGREGATE _timescaledb_internal.compress_deltadelta(timestamptz) (
     FINALFUNC = _timescaledb_internal.timestamptz_compress_finish
 );
 
-CREATE AGGREGATE _timescaledb_internal.compress_gorilla(DOUBLE PRECISION) (
+CREATE AGGREGATE _timescaledb_internal.compress_gorilla(ANYELEMENT) (
     STYPE = internal,
     SFUNC = _timescaledb_internal.gorilla_compressor_append,
     FINALFUNC = _timescaledb_internal.gorilla_compressor_finish
