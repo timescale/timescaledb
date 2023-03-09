@@ -4,11 +4,13 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
 #include <nodes/nodes.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <parser/parsetree.h>
+#include <storage/lmgr.h>
 #include <utils/rel.h>
 #include <catalog/pg_type.h>
 
@@ -303,6 +305,17 @@ chunk_dispatch_exec(CustomScanState *node)
 #else
 		dispatch->hypertable_result_rel_info = dispatch->dispatch_state->mtstate->resultRelInfo;
 #endif
+	}
+
+	if (IsolationUsesXactSnapshot())
+	{
+		/*
+		 * Take an exclusive lock on CHUNK catalog table in case isolation level >
+		 * READ COMMITTED, this is to ensure that INSERT/[RE]COMPRESS when executed
+		 * concurrently will not conflict with each other in updating the chunk
+		 * status
+		 */
+		LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), ExclusiveLock);
 	}
 
 	/* Find or create the insert state matching the point */

@@ -394,3 +394,51 @@ total_chunks|number_compressed_chunks
            3|                       3
 (1 row)
 
+
+starting permutation: LockChunk1 C1 I1 UnlockChunk Cc Ic SC1 S1
+step LockChunk1: 
+  BEGIN;
+  SELECT
+    lock_chunktable(format('%I.%I',ch.schema_name, ch.table_name))
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+
+lock_chunktable
+---------------
+               
+(1 row)
+
+step C1: 
+  BEGIN;
+  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL deadlock_timeout = '10ms';
+  SELECT
+    CASE WHEN compress_chunk(format('%I.%I',ch.schema_name, ch.table_name)) IS NOT NULL THEN true ELSE false END AS compress
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+ <waiting ...>
+step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); <waiting ...>
+step UnlockChunk: ROLLBACK;
+step C1: <... completed>
+compress
+--------
+t       
+(1 row)
+
+step Cc: COMMIT;
+step I1: <... completed>
+step Ic: COMMIT;
+step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch ORDER BY ch::text LIMIT 1;
+count(*)|count(*) only
+--------+-------------
+      11|            1
+(1 row)
+
+step S1: SELECT count(*) from ts_device_table;
+count
+-----
+   31
+(1 row)
+

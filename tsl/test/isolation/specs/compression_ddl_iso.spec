@@ -145,3 +145,8 @@ permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc"
 # - Then start concurrent processes both recompress_chunk and insert
 # - Wait for lock on the chunk.
 permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "INc" "SH"
+
+# Testing concurrent compress and insert.
+#
+# - First compress chunk and insert into chunk
+permutation "LockChunk1" "C1" "I1" "UnlockChunk" "Cc" "Ic" "SC1" "S1"

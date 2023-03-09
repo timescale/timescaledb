@@ -737,12 +737,21 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
 	ResultRelInfo *rri = state->result_relation_info;
 
-	if (state->chunk_compressed && !state->chunk_partial)
-	{
-		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
-		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
+	/*
+	 * always get chunk details from latest updated catalog table,
+	 * rather than checking compressed status from cached chunks.
+	 * This is because once chunk which is retrieved from catalog
+	 * table is cached, an update to this chunk catalog information
+	 * is not updated in cached chunk, which leads to invalid
+	 * behaviour.
+	 */
+	MemoryContext oldmcxt = MemoryContextSwitchTo(state->mctx);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	/* set status to partial (9) only if chunk is compressed (1) */
+	if (ts_chunk_is_compressed(chunk))
 		ts_chunk_set_partial(chunk);
-	}
+	MemoryContextSwitchTo(oldmcxt);
 
 	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)
 		rri->ri_FdwRoutine->EndForeignModify(state->estate, rri);
