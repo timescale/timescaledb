@@ -72,7 +72,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 			/* Load new bit widths. */
 			num_xor_bits = simple8brle_decompression_iterator_try_next_forward(&num_bits_used);
 			Assert(!num_xor_bits.is_done);
-			Assert(num_xor_bits.val >= 0 && num_xor_bits.val <= 64);
+			Assert(num_xor_bits.val <= 64);
 
 			prev_leading_zeros =
 				bit_array_iter_next(&leading_zeros_iterator, BITS_PER_LEADING_ZEROS);
