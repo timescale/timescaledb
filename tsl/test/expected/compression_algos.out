@@ -11,6 +11,9 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- helper function: float -> pseudorandom float [0..1].
+create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
+create or replace function mix(x timestamptz) returns float4 as $$ select mix(extract(epoch from x)::float4) $$ language sql;
 ------------------
 -- C unit tests --
 ------------------
@@ -20,26 +23,6 @@ SELECT ts_test_compression();
  
 (1 row)
 
-\ir include/rand_generator.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
---------------------------
--- cheap rand generator --
---------------------------
-create table rand_minstd_state(i bigint);
-create function rand_minstd_advance(bigint) returns bigint
-language sql immutable as
-$$
-	select (16807 * $1) % 2147483647
-$$;
-create function gen_rand_minstd() returns bigint
-language sql security definer as
-$$
-	update rand_minstd_state set i = rand_minstd_advance(i) returning i
-$$;
--- seed the random num generator
-insert into rand_minstd_state values (321);
 ------------------------
 -- BIGINT Compression --
 ------------------------
@@ -54,7 +37,7 @@ SELECT
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
 \set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
 -- random order
-CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -63,7 +46,7 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (s
 psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist, skipping
  compressed size 
 -----------------
-            1728
+            1720
 (1 row)
 
                                    ?column?                                    | count 
@@ -337,7 +320,7 @@ DROP TABLE base_ints;
 ------------------------
 -- INT Compression --
 ------------------------
-CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::int FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::int FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
 SELECT
   $$
   select item::bigint from base_ints order by rn
@@ -353,7 +336,7 @@ SELECT
 \set ECHO errors
  compressed size 
 -----------------
-            1728
+            1720
 (1 row)
 
                                    ?column?                                    | count 
@@ -391,7 +374,7 @@ SELECT
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
 \set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
 CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
-    (select sub.item from (SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') item) as sub ORDER BY gen_rand_minstd()) sub;
+    (select sub.item from (SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') item) as sub ORDER BY mix(item)) sub;
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -424,20 +407,20 @@ CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
 
 DROP TABLE base_time;
 ------------------------
--- DOUBLE Compression --
+-- FLOAT4 Compression --
 ------------------------
 SELECT
   $$
-  select item from  base_doubles order by rn
+  select item from base_floats order by rn
   $$ AS "QUERY"
 \gset
-\set TABLE_NAME base_doubles
-SELECT 'DOUBLE PRECISION' as "TYPE" \gset
+\set TABLE_NAME base_floats
+SELECT 'real' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_gorilla(item)
-SELECT '_timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_FORWARD_CMD" \gset
-SELECT '_timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_REVERSE_CMD" \gset
-CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double precision FROM
-    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+SELECT '_timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::float4)' AS "DECOMPRESS_FORWARD_CMD" \gset
+SELECT '_timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::float4)' AS "DECOMPRESS_REVERSE_CMD" \gset
+CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM
+    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -471,7 +454,298 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 SELECT c gorilla_text FROM compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                gorilla_text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- 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
+ 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
+(1 row)
+
+DROP TABLE  base_floats;
+-- single element
+CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             109
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_floats;
+--special values
+CREATE TABLE base_floats AS SELECT row_number() over () as rn, item FROM
+    (
+        VALUES
+           --special
+           (0::float4), ('Infinity'), ('-Infinity'), ('NaN'),
+           --big deltas
+           (0), ('Infinity'), ('-Infinity'), ('Infinity'), ('-Infinity'),
+           (0), ('-Infinity'), (32), (5), ('-Infinity'), (-52), ('Infinity'),
+           (1000),
+           --big delta_deltas
+            (0), ('Infinity'), ('Infinity'), ('-Infinity'), ('-Infinity'), ('Infinity'), ('Infinity')
+    ) as t(item);
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             152
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE  base_floats;
+-- all 0s
+CREATE TABLE base_floats AS SELECT row_number() over () as rn, 0::float4 as item FROM (SELECT generate_series(1, 1000) ) j;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             160
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE  base_floats;
+-- NULLs
+CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::float4 item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_floats;
+CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::float4 item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_floats;
+CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::float4 item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_floats;
+CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::float4 item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_floats;
+------------------------
+-- DOUBLE Compression --
+------------------------
+SELECT
+  $$
+  select item from  base_doubles order by rn
+  $$ AS "QUERY"
+\gset
+\set TABLE_NAME base_doubles
+SELECT 'DOUBLE PRECISION' as "TYPE" \gset
+\set COMPRESSION_CMD _timescaledb_internal.compress_gorilla(item)
+SELECT '_timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_FORWARD_CMD" \gset
+SELECT '_timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_REVERSE_CMD" \gset
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double precision FROM
+    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+            1808
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+SELECT c gorilla_text FROM compressed;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               gorilla_text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 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
 (1 row)
 
 DROP TABLE  base_doubles;
@@ -729,7 +1003,7 @@ SELECT 'TEXT' as "TYPE" \gset
 \set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TEXT)
 -- high cardinality
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
-    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -737,7 +1011,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-            4289
+            4305
 (1 row)
 
                                    ?column?                                    | count 
@@ -763,13 +1037,13 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 SELECT c from compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     c                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- AQBwZ19jYXRhbG9nAHRleHQAAAEAAAPoAAAAAzM0OQAAAAM4NjMAAAACNDUAAAADOTc4AAAAAzEwMQAAAAM1MjcAAAADOTUxAAAAAzYyOQAAAAM2NTcAAAADMjU5AAAAAzU5OQAAAAM1MzAAAAADMTI2AAAAAzc1OAAAAAI2MQAAAAMyMjIAAAACNTkAAAADMzUyAAAAAzI3OQAAAAM0NzQAAAADMzg5AAAAAzUxMAAAAAI2MgAAAAM2OTYAAAABMwAAAAM3MDAAAAADMzE3AAAAAzM3OAAAAAM0MTEAAAADNjI0AAAAAzQ4MQAAAAM3NzEAAAADMjE1AAAAAzgxNwAAAAM3NzIAAAADOTA0AAAAAzU5NQAAAAM3NTYAAAADNjE3AAAAAzk1MwAAAAMyMTAAAAADODIzAAAAAzUzNAAAAAM2NTQAAAADMjAxAAAAAjE2AAAAAzkzNgAAAAM3ODQAAAADODQzAAAAAzUwNgAAAAM2NzMAAAADMzYzAAAAAzYzNgAAAAI1OAAAAAM1MDMAAAADMTk1AAAAAzU1MwAAAAMxNDcAAAADOTAxAAAAAzIyMQAAAAMxMjEAAAADNjYxAAAAAzU4NAAAAAM2MDkAAAADNDQ2AAAAAzkwNgAAAAM2MDcAAAADMzYxAAAAAzY0NwAAAAM4MDgAAAADOTc5AAAAAzQ4MAAAAAM5MjMAAAADNzYxAAAAAzI0MwAAAAMzMjEAAAADMjE3AAAAAjM5AAAAAzYwMwAAAAMzNjkAAAADOTM4AAAAAzcyMQAAAAI4MgAAAAM4ODkAAAADMjM2AAAAAzk1NAAAAAMxMTUAAAADNzgyAAAAAzk3NgAAAAMyMDcAAAADNDU4AAAAAzQxMwAAAAM4MjAAAAADODg3AAAAAzk2OQAAAAIxOQAAAAM1MjYAAAADMzQwAAAAAzQ2MgAAAAM1ODYAAAADNTMxAAAAAzQzNgAAAAM3ODEAAAADOTkxAAAAAzQzMgAAAAM4MjUAAAADNTE0AAAAAzYxMQAAAAM0MDAAAAADNjA1AAAAAzQzMwAAAAMzNjYAAAADNjc2AAAAAzE1OQAAAAM1MDUAAAABNQAAAAMxMTIAAAADNDUyAAAAAzYwMgAAAAM2NzIAAAADMzkyAAAAAjM4AAAAAzE2MwAAAAM0ODcAAAADNjI1AAAAAzQ4NAAAAAM3MTIAAAADODM2AAAAAjM3AAAAAzgwNwAAAAM1MzYAAAADNjkzAAAAAzk2MAAAAAMxNTEAAAADMTU3AAAAAzEzMAAAAAM3ODkAAAADOTMyAAAAAzc0MQAAAAM2NDEAAAADOTYxAAAAAzk1MAAAAAMzMDQAAAADNDA1AAAAAzMyNgAAAAM2MTgAAAACNDIAAAADNTUxAAAAAzE3NgAAAAM4ODEAAAADMTc4AAAAAzQwMwAAAAI3MwAAAAI2NwAAAAM0MzgAAAADMjg0AAAAAzgyNgAAAAM5MTAAAAADNTA0AAAAAzgyOAAAAAI0NAAAAAMzNzYAAAADNTkwAAAAAzgzMgAAAAM3MzQAAAADNjcxAAAAAzk2NgAAAAM1ODAAAAADMTU1AAAAAzMyNwAAAAIyNQAAAAM5ODQAAAACMTgAAAADODc0AAAAAzk5NwAAAAMxMDgAAAADMTg3AAAAAzU3NwAAAAM1MTUAAAACMjkAAAACNTEAAAADMjk4AAAAAzczNgAAAAMyMjAAAAACNDkAAAADODgwAAAAAzQwOQAAAAM0MTcAAAADNzU1AAAAAzE5MAAAAAM0NDUAAAADNTYxAAAAAzcxNAAAAAI1MAAAAAM3NDYAAAADNDMxAAAAAzc5NAAAAAM3MjgAAAADNzQzAAAAAzk3MAAAAAM1NDUAAAADMTk0AAAAAzg3MQAAAAM4MjIAAAACMTAAAAADMzY1AAAAAzQ5MgAAAAMzMzUAAAADNTQ2AAAAAzQyMQAAAAM2MDYAAAADODAwAAAAAzkwNwAAAAM3MTcAAAADOTEzAAAAAzE0MwAAAAMxNzUAAAADNDgzAAAAAzE5OQAAAAMzMTYAAAADNDUxAAAAAzk0MAAAAAM0MzUAAAABOAAAAAM5MzQAAAADNTYzAAAAATIAAAADMTA0AAAAAzM0MgAAAAM0MjQAAAADMTUzAAAAAzc3OQAAAAM0MzcAAAADMzI0AAAAAzg0OQAAAAM2NzQAAAADMzMyAAAAAzgwMQAAAAM5MzAAAAADODA1AAAAAzE4MwAAAAM0MTgAAAADMzY4AAAAAzM5MAAAAAMxODIAAAADODU3AAAAAzU2OQAAAAM2NjMAAAADNjA0AAAAAzQzOQAAAAMyMzkAAAADMTM3AAAAAzE4OQAAAAMxMzQAAAADOTE0AAAAAzE4MAAAAAMzMDUAAAADNTg5AAAAAzIyNwAAAAM2NDkAAAADMzgzAAAAAzg4NgAAAAM3MTUAAAADNzEwAAAAAzMyOQAAAAM3MDMAAAADOTE5AAAAAzUyMQAAAAM4NDcAAAADOTg3AAAAAzYxNgAAAAMzMjgAAAADNTA4AAAAAzIzMAAAAAMzMDEAAAADMjI4AAAAAzgzOAAAAAM1MjUAAAADNDk3AAAAAzIwNgAAAAM0MDcAAAAEMTAwMAAAAAMzOTYAAAADNzA5AAAAAzkzMQAAAAM3NzMAAAADNjkxAAAAAzYwOAAAAAM3NTIAAAADOTU1AAAAAzQ5NQAAAAM0ODYAAAACNzgAAAADNjY1AAAAAzc4NwAAAAMxNTIAAAADMjUzAAAAAzk3MgAAAAM2ODQAAAADNzc0AAAAAzU2OAAAAAM3NTEAAAADNjU1AAAAAzMzOQAAAAM5MDUAAAADMzU4AAAAAzc5NwAAAAMzNDEAAAADMzk1AAAAAzM0NwAAAAM4MTEAAAADMzE4AAAAAzI5NAAAAAMyMzgAAAADNTgyAAAAAzU3NgAAAAM4NTMAAAADNjU5AAAAAzkxMgAAAAM4OTAAAAADNzM4AAAAAzU3MQAAAAM0NTQAAAADODI5AAAAAzk1NgAAAAMzODQAAAADNDY4AAAAAzE4NQAAAAMyNDkAAAADODY0AAAAAzM1MAAAAAI4NwAAAAM0NDgAAAADMzU2AAAAAzIyNAAAAAM4OTMAAAADNDA2AAAAAzQ0MAAAAAMyNjkAAAABNwAAAAI5OAAAAAI2NQAAAAIzNgAAAAM1ODMAAAABOQAAAAMyNTUAAAADMTIzAAAAAzE0MQAAAAM3MDIAAAADODY1AAAAAjI4AAAAAzE2NgAAAAMzNzcAAAADNTEzAAAAAzk1OQAAAAM3OTkAAAADOTM3AAAAAzk0MgAAAAMxMjkAAAADNzA0AAAAAzg3NwAAAAI3NAAAAAI3MgAAAAM1NzUAAAADMjkyAAAAAzc4OAAAAAM1OTgAAAADNjY4AAAAAzM1NAAAAAM4MTkAAAADMzIwAAAAAzY1MAAAAAM4NTkAAAADNTQ4AAAAAzc3NwAAAAM0NjUAAAADMjU3AAAAAzI0MQAAAAM3NzYAAAACOTkAAAADNDczAAAAAjE0AAAAAzMyMgAAAAM5OTkAAAACMTcAAAADMjIzAAAAAzc0MAAAAAMxNjAAAAADMzg3AAAAAjEzAAAAAjY2AAAAAzE3MAAAAAM3OTYAAAADODU4AAAAAzE4OAAAAAMyODYAAAADMjAyAAAAAzE4MQAAAAM3MjYAAAADMTc3AAAAATQAAAADMzU3AAAAAjQ2AAAAAzM3MQAAAAMxMzgAAAADNDk2AAAAAzkwMgAAAAM3NTkAAAACNDEAAAADMjI5AAAAAzcwNQAAAAM1NDcAAAADNDI5AAAAAzE5MwAAAAM3MjIAAAADODYxAAAAAzE1OAAAAAM0OTgAAAADNjEzAAAAAzM4OAAAAAM1NjAAAAADNTQxAAAAAzI0NAAAAAMxNjIAAAADNTY0AAAAAzU1NgAAAAM3NDIAAAADNTMzAAAAAzQ3MgAAAAM0NjcAAAADMjgwAAAAAzc1MAAAAAI5MQAAAAMyODkAAAADODQ1AAAAAzUwOQAAAAM2NTMAAAADNzgzAAAAAzc5MQAAAAM5ODEAAAADNjMwAAAAAzM3MwAAAAMzMDAAAAADNjQwAAAAAzk3NAAAAAM0NDcAAAADNjI2AAAAAzk4NQAAAAM2NjAAAAADNjg2AAAAAjMyAAAAAzE1NAAAAAMyMTkAAAADODg1AAAAAzcwMQAAAAM2MzUAAAADODM5AAAAAzQxNgAAAAM2ODUAAAADMjUyAAAAAzM5MQAAAAMzODYAAAADODQ0AAAAAzg4MwAAAAM0NzcAAAADMjEyAAAAAzU1NAAAAAMzOTgAAAADMzIzAAAAAzE5NwAAAAI4MQAAAAM2OTcAAAADNjY0AAAAAzYwMQAAAAM2NDUAAAADNjk5AAAAAzIyNQAAAAI4OAAAAAM0ODIAAAADMzcyAAAAAjIzAAAAAzY1OAAAAAM4MTUAAAADNTk0AAAAAzk5MwAAAAM1MjQAAAADMTEwAAAAAzc5MAAAAAMxNTAAAAADNjEyAAAAAjEyAAAAAzE0MgAAAAM1NjcAAAADODUwAAAAAzg0NgAAAAM1MjMAAAADMjU4AAAAAzMzMwAAAAIzMQAAAAM0MjMAAAADNDkxAAAAAzQ2MwAAAAM0NDQAAAADMzA3AAAAAjc3AAAAAzYxNQAAAAMxMDkAAAADNTg4AAAAAzYyMQAAAAM3NzUAAAADMzUxAAAAAzY3OQAAAAM1NzIAAAADODc4AAAAAzk0OQAAAAM5OTYAAAADNDk5AAAAAzUyMAAAAAMxNzMAAAADNTU4AAAAAjk0AAAAAzM0NQAAAAI5NgAAAAMyODUAAAADNzY3AAAAAzg3OQAAAAMyNjgAAAADOTkwAAAAAzczNQAAAAM5ODAAAAADMjgxAAAAAzY4MQAAAAMxMTQAAAADNzQ5AAAAAzk5NQAAAAI5MwAAAAM5OTQAAAADMjEzAAAAAzUxNgAAAAMxMDIAAAADNTUyAAAAAzU5MwAAAAMzODEAAAADMzgyAAAAAjk1AAAAAzE2NAAAAAM4OTgAAAADOTY0AAAAAzI3MwAAAAM5MjIAAAADNzIwAAAAAzM5NAAAAAIzMAAAAAM3MTYAAAADMTA1AAAAAzg3NQAAAAM3NjIAAAADNTkxAAAAAzk3NwAAAAM3NzgAAAADNjQ4AAAAAzc2OQAAAAM2NzUAAAADNzk1AAAAAzg2OQAAAAMzNDQAAAADOTQ4AAAAAzQyOAAAAAM2MTQAAAADNTE5AAAAAzE3NAAAAAMxNDgAAAADNDkwAAAAAzI4MgAAAAM1OTIAAAADOTgzAAAAAzM5NwAAAAMxOTIAAAADMzQzAAAAAzI3NQAAAAM1NzMAAAADNjE5AAAAAzMwNgAAAAM0MzQAAAACMjAAAAADODk3AAAAAzI2MwAAAAM4OTUAAAADODUxAAAAAzI1MAAAAAMyMzMAAAADNTc0AAAAAzg3MAAAAAMyNjEAAAADNDI1AAAAAzI4NwAAAAM1NDIAAAABMQAAAAM4MTYAAAADNzY2AAAAAjU1AAAAAzg5NAAAAAMyNDgAAAADNDg1AAAAAzI1MQAAAAM1MjkAAAADNzkyAAAAAzUzNwAAAAM2OTIAAAADOTUyAAAAAzczMwAAAAM2NzcAAAACOTIAAAADMTQ1AAAAAzYzMwAAAAM1MzIAAAADNjY5AAAAAjcxAAAAAzg2MgAAAAE2AAAAAzg5MQAAAAMxMDMAAAADNzcwAAAAAzI5MwAAAAM1NzkAAAACOTAAAAADNzA4AAAAAzU5NgAAAAM4MTQAAAADMzU5AAAAAzY0MgAAAAM5MzkAAAADMzY0AAAAAzIwNAAAAAM0OTQAAAADMjA4AAAAAzExMwAAAAM3NDUAAAACNzkAAAADMzQ4AAAAAjU3AAAAAzU0MwAAAAMzOTMAAAADNDU2AAAAAzMxMAAAAAM5MjQAAAADMjcwAAAAAzk3NQAAAAM5NDMAAAADMjE4AAAAAzM3NQAAAAMxNjUAAAADMTU2AAAAAzczOQAAAAMzNTUAAAADODU0AAAAAzEzNQAAAAM4MzAAAAADMzY3AAAAAzMwMgAAAAIyMgAAAAM0NzgAAAADNzY1AAAAAzI0MgAAAAMyOTUAAAADNzg1AAAAAzg4OAAAAAMzODUAAAACNDcAAAADNTM1AAAAAzU0NAAAAAMyMDAAAAADMTM5AAAAAzgyNAAAAAMxMTkAAAADNDU1AAAAAzE3OQAAAAM2NDQAAAADNTU1AAAAAzY4MgAAAAMyNjcAAAADMTkxAAAAAzgzNAAAAAMyMDkAAAADNjMxAAAAAzU3OAAAAAM5NDQAAAADNjgzAAAAAzEyMgAAAAIyMQAAAAM4ODQAAAADMzEyAAAAAzkzMwAAAAM0NDkAAAADNDU5AAAAAzI3NAAAAAMyNzIAAAADODQxAAAAAzI5MAAAAAI2NAAAAAMzNzkAAAADNTU5AAAAAzI5NwAAAAM1MTIAAAADOTE1AAAAAzQyNwAAAAM0MDQAAAADMzE1AAAAAzIzNwAAAAM4NDAAAAADMjYyAAAAAzY3OAAAAAMyODgAAAACNDgAAAADMjMyAAAAAzc0NAAAAAM5MjcAAAADMjU2AAAAAzk1NwAAAAM5NDUAAAADODk5AAAAAzI2MAAAAAMxMzMAAAADNTU3AAAAAzc2MwAAAAM2NzAAAAADMjkxAAAAAzg2OAAAAAMxNjEAAAADMzk5AAAAAzczMAAAAAM1MTEAAAACMjcAAAADNTAyAAAAAzYyMgAAAAM1NDkAAAADNDI2AAAAAjg0AAAAAjYzAAAAAzUyOAAAAAM3MjUAAAACNzAAAAADMjM1AAAAAzUzOAAAAAM0NzkAAAADOTE4AAAAAzY1MQAAAAM0MTkAAAADMzM2AAAAAzk5OAAAAAMxMjQAAAADMjQ3AAAAAzI5OQAAAAM1ODEAAAADMjMxAAAAAzMzMQAAAAMxNjcAAAADMjA1AAAAAzc5OAAAAAM2MjMAAAADNDMwAAAAAjg5AAAAAzI2NQAAAAM0ODkAAAACMTUAAAADMjc4AAAAAzgxOAAAAAM4NTIAAAACOTcAAAADNjIwAAAAAjU2AAAAAzkyMAAAAAM1NTAAAAADODczAAAAAzQ1NwAAAAM2NjIAAAADNDUwAAAAAzExOAAAAAM3MTgAAAADNzI3AAAAAzMwOQAAAAMyNzcAAAADNzExAAAAAzYwMAAAAAMzNDYAAAADNTAwAAAAAzg3NgAAAAM3NTQAAAADMzM0AAAAAzIzNAAAAAMxMzIAAAADMjE2AAAAAzc2OAAAAAMzNzAAAAADODgyAAAAAzI1NAAAAAM3MDcAAAADODY2AAAAAzE2OAAAAAMzMzAAAAADNTIyAAAAAzk2MgAAAAM3NDcAAAADNjgwAAAAAzg0MgAAAAM3NjQAAAADODkyAAAAAzI5NgAAAAM4NzIAAAADOTczAAAAAzQwMgAAAAM4NTUAAAADNDA4AAAAAzkzNQAAAAMzMTkAAAADNzYwAAAAAzYyOAAAAAM0MDEAAAADNDQyAAAAAjUyAAAAAzQyMAAAAAI3NQAAAAM4MDkAAAADNzU3AAAAAzI0NgAAAAM5MDAAAAACNzYAAAADNjk1AAAAAzc0OAAAAAMxMzYAAAACMzUAAAADMjAzAAAAAzczMgAAAAM4MzUAAAADMzE0AAAAAzYzOAAAAAM2ODcAAAADMTI4AAAAAzkyOAAAAAIzNAAAAAM3MjQAAAADODAyAAAAAzc1MwAAAAM4MDYAAAADNjQzAAAAAzkyNgAAAAMzMTMAAAADMTA3AAAAAzY5MAAAAAM5NjcAAAADNTA3AAAAAzQ4OAAAAAM2MzIAAAADOTA4AAAAAzQ5MwAAAAMxNDYAAAADMzExAAAAAzE0MAAAAAMzODAAAAADNjY3AAAAAzk4MgAAAAMxMjUAAAADOTA5AAAAAzk2OAAAAAM4MjcAAAADODAzAAAAAzE5OAAAAAM0MTUAAAADMjc2AAAAAzQ3MAAAAAMzNjIAAAADODM3AAAAAzk2MwAAAAM5NDEAAAADODk2AAAAAzcxOQAAAAM0NjAAAAADOTI1AAAAAzYyNwAAAAMzNjAAAAADODQ4AAAAAzg2MAAAAAM4MDQAAAADNzMxAAAAAzc4MAAAAAIzMwAAAAMyNzEAAAADMzA4AAAAAzExNgAAAAM5MTEAAAADOTQ2AAAAAzU4NQAAAAMzNTMAAAADNjM5AAAAAjgwAAAAAzMzNwAAAAMxMjcAAAADNTM5AAAAAzY5OAAAAAM4NjcAAAADNDcxAAAAAzY5NAAAAAI4NgAAAAM3MjkAAAADNDY2AAAAAzE3MgAAAAM3MTMAAAADOTY1AAAAAzg1NgAAAAM5MjEA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NzU5AAAAAzY3OAAAAAMyMTEAAAADMzg1AAAAAzc3MwAAAAI5NQAAAAM0OTkAAAADNDMwAAAAAzMxNAAAAAM0NjMAAAADNTg1AAAAAzg5OQAAAAM1MTMAAAACODcAAAADODExAAAAAzQxNQAAAAIxNgAAAAMzOTgAAAADNTExAAAAAzQ4MgAAAAM0NzUAAAADODA5AAAAAzU3NgAAAAMyOTkAAAADMzk5AAAAAzYwMgAAAAMxODkAAAADMjkyAAAAAzczMgAAAAM3MjgAAAADNjY3AAAAAzUxNwAAAAMxNzAAAAADOTg5AAAAAzkwOAAAAAM5MDcAAAADMjQ0AAAAAzE0NAAAAAM4NjYAAAADNDYxAAAAAzcxMAAAAAM5MjQAAAADOTc1AAAAAzU3MwAAAAM5NzEAAAADNjI3AAAAAzE3OAAAAAM0MzEAAAADNDY5AAAAAzM3OAAAAAMyMTUAAAADMjA3AAAAAzQ1OQAAAAIzOQAAAAMyODcAAAADMTcxAAAAAzIxMAAAAAM5NjEAAAADNjAwAAAAAzQwMgAAAAM3ODUAAAADMjkxAAAAAzY5MwAAAAMxODMAAAADMTYzAAAAAjY0AAAAAzg1NwAAAAM0NTMAAAADMjk2AAAAAzQxMAAAAAM4ODUAAAADODEwAAAAAzQ5NAAAAAMxMjcAAAADNjc3AAAAAzc3NAAAAAM5NDAAAAADMzkwAAAAAzg2MwAAAAMyNDMAAAACNzcAAAADODUwAAAAAzI2MwAAAAMzMjYAAAADNzc1AAAAAzU0OAAAAAM4NjkAAAADNTQzAAAAAzYyNAAAAAMzOTcAAAADOTg4AAAAAzcyNAAAAAM1MzgAAAACMTcAAAADOTM1AAAAAzk2NQAAAAM5MzgAAAADMjQyAAAAAzgzNgAAAAM3NDYAAAADNzQ4AAAAAzUwMAAAAAMxMjkAAAADODM4AAAAAjI4AAAAAzMwNQAAAAMyODAAAAADNDk4AAAAAzE1NwAAAAMzMTYAAAADODgzAAAAAzgyMwAAAAMyNjUAAAADNjQxAAAAAzkxMAAAAAMyOTgAAAADOTEyAAAAAzE1MgAAAAMxMTAAAAADNDM5AAAAAzkzMQAAAAM3ODEAAAADNDgxAAAAAzcxNAAAAAMyNTAAAAADNjA2AAAAAzk0MwAAAAM5NzkAAAADNDExAAAAAzUzNAAAAAMyNjYAAAADNTUwAAAAAzQyOQAAAAMzNjkAAAADMjE5AAAAAzkxNAAAAAM0NDUAAAADMzU2AAAAAzY0OAAAAAM0ODQAAAACNDAAAAADNjQwAAAAAjQzAAAAAzMyNQAAAAMyNjQAAAADNzEzAAAAAzk2MgAAAAMxMTEAAAADNjM5AAAAAzM0OAAAAAM2MDQAAAADODAzAAAAAzQwNAAAAAMzMDIAAAADMjAyAAAAAzkyOQAAAAI0NgAAAAM4NjAAAAADNTMyAAAAAzIzOAAAAAMzMjMAAAADMTM4AAAAAzY2NAAAAAM5MjUAAAADMjYwAAAAAzc2NQAAAAMzNTEAAAADOTg3AAAAAzc3NwAAAAM5ODQAAAADNzUwAAAAAzY5MgAAAAM4MjIAAAADMzYyAAAAAzgzMwAAAAM2NTgAAAADNjY5AAAAAzEzNgAAAAI1NAAAAAMyNTMAAAADODUxAAAAAzk3OAAAAAMyMDAAAAADMzIwAAAAAzExMgAAAAM5OTQAAAADNTc5AAAAAjM4AAAAAzczMQAAAAMxMzEAAAADNzg2AAAAAzM4OQAAAAMxMDcAAAADNjQ3AAAAAzY3MAAAAAMzMDMAAAADNjU5AAAAAzUxOQAAAAMyMzUAAAADNzYxAAAAAzMyNAAAAAM2MjMAAAADNjI5AAAAAzg5OAAAAAM0NTcAAAADMzQ0AAAAATkAAAADNjkwAAAAAzI3MwAAAAMyMjEAAAADNTQ1AAAAAzI4MwAAAAMzNzEAAAADNjg5AAAAAzQ0NwAAAAI1OQAAAAM4ODAAAAADNDMzAAAAAzM1MAAAAAM3MjIAAAADNjI2AAAAAjQ0AAAAAjExAAAAAzc1NAAAAAM3NzkAAAADNTg5AAAAAzYzNAAAAAI5OAAAAAMxMzcAAAADMjAzAAAAAzg2MQAAAAM2NjgAAAACNTUAAAADNDI2AAAAAjgzAAAAAzY4NAAAAAMyMjMAAAADODYyAAAAAzI2MgAAAAMyMTgAAAADODc2AAAAAzk1NQAAAAM5NDUAAAADOTY3AAAAAzMzNwAAAAM4NjcAAAADNzk2AAAAAzYxMQAAAAMyMjgAAAADNjMzAAAAAzkyMQAAAAM2MDMAAAADMzYwAAAAAjIwAAAAAzQxMgAAAAM5NTIAAAACOTkAAAACODIAAAADODk2AAAAAzQ2MAAAAAMxMDkAAAADOTA0AAAAAzU1MgAAAAM1NzQAAAADNDE3AAAAAzExNwAAAAM1ODcAAAADNTI0AAAAAjM2AAAAAzY5NQAAAAMzMDYAAAADNDE0AAAAAzU5NAAAAAM1NjcAAAADNDQzAAAAAzkwMQAAAAM4NjUAAAADNTU3AAAAAzk5MwAAAAM4ODQAAAACNDgAAAADNDQ4AAAAAzU0MgAAAAM2MzgAAAADNTAzAAAAAzUwNwAAAAM1MjcAAAADODk0AAAAAzUwNAAAAAI3MAAAAAMxMzAAAAADNjIwAAAAAzMzNgAAAAMzNDAAAAADOTAyAAAAAzUwOQAAAAM1OTEAAAADOTQxAAAAAjEwAAAAAzEwMgAAAAMxMDYAAAADNTY1AAAAAzg0MAAAAAM0MDAAAAADMzMxAAAAAzQ1NQAAAAMyODkAAAADMjc4AAAAAzMwOQAAAAM1NDkAAAADNjg3AAAAAzQzNQAAAAM3ODkAAAADOTE2AAAAAzM0NwAAAAMxMzkAAAADMTgwAAAAAzc0NwAAAAMzNzIAAAADODQ2AAAAAzIzNAAAAAMzOTUAAAADNzQzAAAAAzQwMwAAAAM1MTIAAAADNzg0AAAAAzk4NgAAAAMzNTQAAAADOTIzAAAAAzQ0MAAAAAM4MTUAAAADMzEzAAAAAzI1NAAAAAM5MzcAAAADNDI4AAAAAzY1NgAAAAMyNDAAAAADNTg4AAAAAzU1NgAAAAM2OTcAAAADNzAyAAAAAzM2OAAAAAM5MjAAAAADNTgwAAAAAzI2MQAAAAM4MTkAAAADMjcyAAAAAzU0NgAAAAI3NQAAAAM4MDcAAAADNDU4AAAAAzQzMgAAAAMyNTYAAAADNTQ0AAAAAzQ5MwAAAAM2NDkAAAADODM3AAAAAzg3OQAAAAM5ODIAAAADMjU4AAAAAzc0NQAAAAMxOTUAAAACMzQAAAADNzIwAAAAAzg1MwAAAAMzMTAAAAADNDQ2AAAAAjE1AAAAAzkxOQAAAAM0MTYAAAADNTIzAAAAAzc2OAAAAAE0AAAAAzU2OQAAAAMxMzIAAAADODM0AAAAAjI0AAAAAzI1MQAAAAMzMDgAAAADMzU5AAAAAzU0MAAAAAM4MjUAAAADMTI0AAAAAzQwMQAAAAMxMDMAAAADNTYyAAAAAzExNQAAAAM5MzMAAAACODAAAAADNTY2AAAAAjUxAAAABDEwMDAAAAADMjA0AAAAAzg3MgAAAAM4OTIAAAACNTIAAAADNjA1AAAAAzU5OQAAAAIxMwAAAAMyNDcAAAADNzUxAAAAAzU4NAAAAAI0NwAAAAE2AAAAAzM1MgAAAAM1MzcAAAADODQ5AAAAAzI5NAAAAAM5MjYAAAADNzk0AAAAAzY1MQAAAAMzNTUAAAADODkwAAAAAzQ1MgAAAAM2MTkAAAADNDg4AAAAAzgwNQAAAAMxOTIAAAADNjE2AAAAAzYyOAAAAAM1MDUAAAADMzE3AAAAAzM1MwAAAAM4MTgAAAADMzkxAAAAAzEzNQAAAAMzNzMAAAADMjc1AAAAAjIyAAAAAzM0OQAAAAI1MAAAAAM4MjQAAAADOTYzAAAAAzg4OAAAAAI4MQAAAAMxMjgAAAADNTU1AAAAAzk5OAAAAAM0ODMAAAADMjc5AAAAAzkzNAAAAAM5MzIAAAADODM1AAAAAzk5MgAAAAM3NzgAAAADNzM0AAAAAzIzOQAAAAMyMjQAAAACNDkAAAADMjkwAAAAAzk3MAAAAAM1MTQAAAABMQAAAAM4MjYAAAADOTcyAAAAAzU2MQAAAAM0MjAAAAACNzYAAAACNjcAAAADNjczAAAAAzgxNwAAAAMxNDMAAAADNDE5AAAAAjYxAAAAAzcxNQAAAAM0NTEAAAADNjUzAAAAAzc1MgAAAAMxNDkAAAADMzYzAAAAAzE4OAAAAAM5MzkAAAADNzAxAAAAAzE0NwAAAAM3OTgAAAADODMwAAAAAzU3NwAAAAM1MjAAAAADMjcxAAAAAzc2NwAAAAMzMDQAAAADNjk5AAAAAzY1NQAAAAM1MDYAAAACNDIAAAACMzcAAAADMjU3AAAAAzQyMQAAAAM3NDAAAAADODU0AAAAAzQ1NgAAAAMzMjEAAAADNTM2AAAAAzc4NwAAAAM1NjAAAAADMTgyAAAAAzc4OAAAAAI3MQAAAAI2OQAAAAIzMwAAAAM1OTcAAAADMjgxAAAAAzY2MgAAAAM0NjUAAAADNTk1AAAAAzI0NgAAAAM5NDYAAAADODU1AAAAAzEzNAAAAAMzMzMAAAADNjIxAAAAAzE1NAAAAAM5MTMAAAADMzQzAAAAAzczNwAAAAMyMjcAAAADNzI5AAAAAzM2NAAAAAMyNjcAAAADNjE1AAAAAzY5OAAAAAMyNTIAAAACOTYAAAADNzM4AAAAAzE5NAAAAAMyMTcAAAADNjkxAAAAAzUyMgAAAAM3NjAAAAADOTI4AAAAAzI1OQAAAAM0OTYAAAADNjAxAAAAAzcyNQAAAAMzNzAAAAADNzgwAAAAAzk3NAAAAAM5MjIAAAACNTMAAAADNzQ0AAAAAzk0MgAAAAMxNTEAAAACMjYAAAADODY4AAAAAzk5NwAAAAM0MjMAAAACOTQAAAADNzc2AAAAAzMwMQAAAAMyOTUAAAACMjcAAAACNjAAAAADNDQ5AAAAAzg0MgAAAAMyMjUAAAADMzk0AAAAAzY0NAAAAAM0OTAAAAACNTcAAAADMTk3AAAAAzg2NAAAAAM1MzMAAAADNDcxAAAAAjIxAAAAAzU1OAAAAAM0MzQAAAADMTk4AAAAAzEwNAAAAAI5MAAAAAM4NTIAAAADMTUwAAAAAzIzMwAAAAM4MTYAAAADMjA4AAAAAzg0OAAAAAM4ODkAAAADNjgxAAAAAzE3OQAAAAMzMTIAAAADOTc2AAAAAzgyOQAAAAM0NDIAAAACNjUAAAADMjg2AAAAAzYyMgAAAAM3NjYAAAADNDA2AAAAAzg0NAAAAAMxOTkAAAADMTE2AAAAAzQ3OQAAAAM0MDgAAAADNzYyAAAAAzc5MgAAAAMxOTEAAAADNjMxAAAAAzMyOAAAAAMxNjQAAAADNzkzAAAAAzk1OQAAAAM1NDcAAAADODc3AAAAAzYzNQAAAAI4OAAAAAMyODgAAAADNTkwAAAAAzE4NQAAAAM2NTAAAAADNDc3AAAAAzcwOQAAAAM2NDMAAAADNzExAAAAAzEyNgAAAAM0MzcAAAADNDUwAAAAAzg3OAAAAAM4ODcAAAADNDY0AAAAAzE2NwAAAAM5MDMAAAADMzY1AAAAAzcwNgAAAAM4MTMAAAADNTMwAAAAAzU5MwAAAAM1MTgAAAADMjQ4AAAAATIAAAADODA0AAAAAzg5MwAAAAMxOTYAAAADMzE1AAAAAzQ3NAAAAAM5NjYAAAADOTY0AAAAAzMzOAAAAAM3MTIAAAADNDI3AAAAAzYxNwAAAAM5NDgAAAADNjQyAAAAAzgyMAAAAAM2NjUAAAADNTMxAAAAAjQxAAAAAzE0MQAAAAM1OTYAAAADNzA4AAAAAzk3MwAAAAM1OTgAAAADMjIyAAAAAzQ4OQAAAAM0OTUAAAADOTE4AAAAAzM4MgAAAAM4MTQAAAADNDg2AAAAAzM4NwAAAAM0NjIAAAADOTc3AAAAAjMwAAAAAzcyMQAAAAI5MwAAAAMxMjUAAAACOTEAAAADMjY4AAAAAzk5MQAAAAM1MjgAAAACNTYAAAADOTMwAAAAAzQzNgAAAAMyNDUAAAADNzU4AAAAAzc5NQAAAAM4ODEAAAADOTQ0AAAAAzQxOAAAAAMxNzMAAAADMzkzAAAAAzkzNgAAAAMxNjUAAAADMzc2AAAAAzgxMgAAAAMxNzYAAAADNzkwAAAAAzE2MAAAAAI4NgAAAAM4NzQAAAADMzA3AAAAAzYzMAAAAAM1NTkAAAADNDg1AAAAAzcwNAAAAAMzNjEAAAADNjI1AAAAAzc2MwAAAAM2MTgAAAADNzI2AAAAAzgwMQAAAAMyNTUAAAADNDQ0AAAAAzc1NQAAAAM0MDkAAAADNDY2AAAAAzk1NwAAAAM4NDMAAAADMTU2AAAAAzk5OQAAAAMxNTkAAAADNjc2AAAAAzk4MQAAAAM3NTcAAAADNzAwAAAAAzUyNQAAAAM1NzUAAAADMzMwAAAAAzUyMQAAAAM2OTYAAAADODU5AAAAAzc5NwAAAAM5ODMAAAADNjYzAAAAATcAAAADNzcxAAAAAzkyNwAAAAM1NzEAAAADOTU0AAAAAzU4MQAAAAM2MTMAAAADMjIwAAAAAzYzNwAAAAM0MTMAAAADMjgyAAAAAzM2NwAAAAM5NjAAAAADMzE4AAAAAzY3MQAAAAMyMDYAAAADMzExAAAAAzExNAAAAAM2NjYAAAADMzU4AAAAAzkwNgAAAAM2ODgAAAADNTYzAAAAAzI3NwAAAAI5MgAAAAMxODYAAAADNTEwAAAAAzMzNAAAAAMzNDUAAAADOTQ3AAAAAzIwNQAAAAM2NzQAAAADMzg0AAAAAzQ4MAAAAAMxNzcAAAADMTIyAAAAAzI5MwAAAAM3MTcAAAADNjk0AAAAAzkxNQAAAAMxNDUAAAADODA2AAAAAzU4MgAAAAMzNDYAAAADMTgxAAAAAzY0NgAAAAI3MgAAAAM5NjgAAAADMTU4AAAAAzc4MgAAAAMxMDEAAAADNTE1AAAAAzU5MgAAAAM3MzkAAAADODQ3AAAAAzY0NQAAAAM1MTYAAAADNjYxAAAAAzgzMQAAAAM0MjIAAAACMTQAAAADNzM2AAAAAzM5NgAAAAMzODgAAAADMjAxAAAAAzE2MgAAAAM0NzgAAAADMTIzAAAAAzY3OQAAAAI2NgAAAAIyMwAAAAMzMjkAAAADMjMyAAAAAzE2NgAAAAM3MjMAAAADNDczAAAAAzM3NwAAAAM2NjAAAAADODcwAAAAAjYzAAAAAzEwNQAAAAMzMzIAAAACNzMAAAADODU2AAAAAzg3NQAAAAM5OTUAAAADNjE0AAAAAzU3OAAAAAI1OAAAAAMyODUAAAADNTU0AAAAAzg0NQAAAAM2NTQAAAADNTg2AAAAAzQ5MQAAAAMyNzYAAAADOTQ5AAAAAzE2OQAAAAI2MgAAAAMyMDkAAAADMTQyAAAAAzMyNwAAAAM5MDUAAAADODMyAAAAAzM4MAAAAAI4NQAAAAM3NjQAAAADMzgxAAAAAzc1NgAAAAMxMTkAAAACNzkAAAADMTQwAAAAAzQ5NwAAAAM3MzMAAAADMzIyAAAAAzg4MgAAAAM3MzAAAAADNzcwAAAAAzQ3MAAAAAM1MDgAAAADMTAwAAAAAzk1MwAAAAMyMjYAAAADNDg3AAAAAzM0MgAAAAM2NTcAAAADMTQ4AAAAAzE2OAAAAAI3OAAAAAM3MjcAAAADMjMxAAAAAzMxOQAAAAM2ODYAAAADNzgzAAAAAjMxAAAAAzcwNwAAAAM4OTcAAAADOTAwAAAAAzk1MQAAAAM2MzIAAAADNDY3AAAAAzY3NQAAAAM0NzIAAAADOTUwAAAAAzg3MQAAAAI5NwAAAAMzNjYAAAADNTY0AAAAAjM1AAAAAzMzOQAAAAM1Njg=
 (1 row)
 
 DROP TABLE base_texts;
 -- low cardinality
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
-    (SELECT i as item FROM generate_series(1, 10) i, generate_series(1, 100) j ORDER BY gen_rand_minstd()) sub;
+    (SELECT i as item FROM generate_series(1, 10) i, generate_series(1, 100) j ORDER BY mix(i + j)) sub;
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -836,7 +1110,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 DROP TABLE base_texts;
 -- high cardinality with toasted values
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, repeat(item::text, 100000) as item FROM
-    (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY gen_rand_minstd()) sub;
+    (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY mix(item)) sub;
 --make sure it's toasted
 SELECT pg_total_relation_size(reltoastrelid)
       FROM pg_class c
@@ -853,7 +1127,7 @@ SELECT pg_total_relation_size(reltoastrelid)
 \set ECHO errors
  compressed size 
 -----------------
-         1100084
+         1100092
 (1 row)
 
                                    ?column?                                    | count 
@@ -1021,7 +1295,7 @@ SELECT 'TEXT' as "TYPE" \gset
 \set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TEXT)
 --basic test
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
-    (select sub.item from (SELECT generate_series(1, 100) item) as sub ORDER BY gen_rand_minstd()) sub;
+    (select sub.item from (SELECT generate_series(1, 100) item) as sub ORDER BY mix(item)) sub;
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -1055,7 +1329,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 SELECT c from compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                             c                                                                                                                                                                                                                                                                                                                                                                                                                             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- AQBwZ19jYXRhbG9nAHRleHQAAAEAAABkAAAAAjU5AAAAAjg2AAAAAjE2AAAAAjM2AAAAAjk2AAAAAjM4AAAAAjI4AAAAAjEzAAAAAjczAAAAAjM3AAAAAjY5AAAAAjMxAAAAATkAAAACMTQAAAACNDQAAAABMQAAAAI3MQAAAAI2NgAAAAIxMAAAAAI4NQAAAAIyMwAAAAI3MAAAAAIyNQAAAAI4MAAAAAEzAAAAAjgzAAAAAjU2AAAAAjQ5AAAAAjUzAAAAAjI5AAAAAjk5AAAAATUAAAACNTIAAAACMjcAAAACNzkAAAACNDEAAAACNjUAAAACNTUAAAACNTAAAAACNjcAAAACNjEAAAACOTUAAAACNzcAAAACNzIAAAABNgAAAAI4MgAAAAIzNAAAAAI0NQAAAAI5NAAAAAI4NwAAAAI2MwAAAAI0NgAAAAIxOQAAAAI1MQAAAAI0NwAAAAEyAAAAATgAAAACOTIAAAACNTgAAAACNzUAAAACMTgAAAACOTMAAAACNDgAAAACNjAAAAACODQAAAACMTUAAAACMzAAAAACODgAAAACNzgAAAACNjQAAAACOTcAAAABNAAAAAI2MgAAAAI4MQAAAAI5OAAAAAI0MAAAAAI5MQAAAAE3AAAAAjI2AAAAAjQyAAAAAjg5AAAAAjEyAAAAAjkwAAAAAjE3AAAAAjc2AAAAAjM5AAAAAjMzAAAAAjMyAAAAAjIyAAAAAjY4AAAAAjQzAAAAAzEwMAAAAAIyMAAAAAIyNAAAAAI1NwAAAAIxMQAAAAIzNQAAAAI1NAAAAAI3NAAAAAIyMQ==
+ AQBwZ19jYXRhbG9nAHRleHQAAAEAAABkAAAAAjg0AAAAAjMyAAAAAjE5AAAAAjc0AAAAAjE4AAAAAjI5AAAAAjg5AAAAAjQ1AAAAAjI1AAAAATMAAAACNjgAAAABNQAAAAIxMgAAAAE4AAAAAjk1AAAAAjg3AAAAAjE2AAAAAjM5AAAAAjY0AAAAAjc3AAAAAjE3AAAAAjI4AAAAAjQwAAAAAjQzAAAAAjQ2AAAAAjU0AAAAAjM4AAAAATkAAAACNTkAAAACNDQAAAACMTEAAAACOTgAAAACNTUAAAACODMAAAACMjAAAAACOTkAAAACODIAAAACMzYAAAACNDgAAAACNzAAAAACMTAAAAACNzUAAAACMzQAAAACMTUAAAABNAAAAAIyNAAAAAI4MAAAAAI1MQAAAAI1MgAAAAIxMwAAAAI0NwAAAAE2AAAAAjIyAAAAAjUwAAAAAjgxAAAAAjQ5AAAAATEAAAACNzYAAAACNjcAAAACNjEAAAACNDIAAAACMzcAAAACNzEAAAACNjkAAAACMzMAAAACOTYAAAACNTMAAAACMjYAAAACOTQAAAACMjcAAAACNjAAAAACNTcAAAACMjEAAAACOTAAAAACNjUAAAACODgAAAABMgAAAAI0MQAAAAIzMAAAAAI5MwAAAAI5MQAAAAI1NgAAAAI4NgAAAAE3AAAAAjkyAAAAAjcyAAAAAjE0AAAAAjY2AAAAAjIzAAAAAjYzAAAAAjczAAAAAjU4AAAAAjYyAAAAAjg1AAAAAjc5AAAAAzEwMAAAAAI3OAAAAAIzMQAAAAI5NwAAAAIzNQ==
 (1 row)
 
 DROP TABLE base_texts;
@@ -1094,7 +1368,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 DROP TABLE base_texts;
 -- toasted values
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, repeat(item::text, 100000) as item FROM
-    (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY gen_rand_minstd()) sub;
+    (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY mix(item)) sub;
 --make sure it's toasted
 SELECT pg_total_relation_size(reltoastrelid)
       FROM pg_class c
