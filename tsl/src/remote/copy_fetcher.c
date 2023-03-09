@@ -19,8 +19,10 @@ typedef struct CopyFetcher
 	/* Data for virtual tuples of the current retrieved batch. */
 	Datum *batch_values;
 	bool *batch_nulls;
-	bool file_trailer_received;
 	AsyncRequest *req;
+#ifdef USE_ASSERT_CHECKING
+	bool file_trailer_received;
+#endif
 } CopyFetcher;
 
 static void copy_fetcher_send_fetch_request(DataFetcher *df);
@@ -61,7 +63,10 @@ static void
 copy_fetcher_reset(CopyFetcher *fetcher)
 {
 	fetcher->state.open = false;
+
+#ifdef USE_ASSERT_CHECKING
 	fetcher->file_trailer_received = false;
+#endif
 
 	if (fetcher->req != NULL)
 	{
@@ -449,17 +454,21 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 				 * nor the expected number of columns. This provides an extra
 				 * check against somehow getting out of sync with the data.
 				 */
+#ifdef USE_ASSERT_CHECKING
 				fetcher->file_trailer_received = true;
+#endif
 
 				/* Next PQgetCopyData() should return -1, indicating EOF and
 				 * that the remote side ended the copy. The final result
 				 * (PGRES_COMMAND_OK) should then be read with
 				 * PQgetResult().
 				 *
-				 * Perform a PQgetCopyData directly in this branch because
-				 * if row = state.fetch_size - 1 (i.e., file_trailer is the last
-				 * tuple of the batch), the for loop will not executed
-				 * and PQgetCopyData will never be called.
+				 * Execute PQgetCopyData() (invoked in copy_fetcher_read_data)
+				 * directly here, because if row = state.fetch_size - 1
+				 * (i.e., file_trailer is the last tuple of the batch), the
+				 * for loop will not be executed again and PQgetCopyData()
+				 * will never be called. If it is not called, the EOF state
+				 * is not updated and a new batch would be requested.
 				 */
 				tuple_read = copy_fetcher_read_data(fetcher, conn, &dataptr, &copy_data);
 				Assert(tuple_read == false);
