@@ -64,8 +64,12 @@ typedef struct DecompressChunkColumnState
 
 		struct
 		{
+			/* For row-by-row decompression. */
 			DecompressionIterator *iterator;
-			ArrowArray *data;
+
+			/* Exclusive to the above, if we decompressed the entire batch. */
+			Datum *datums;
+			bool *nulls;
 		} compressed;
 	};
 } DecompressChunkColumnState;
@@ -85,6 +89,7 @@ typedef struct DecompressChunkState
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
+	MemoryContext arrow_context;
 } DecompressChunkState;
 
 static TupleTableSlot *decompress_chunk_exec(CustomScanState *node);
@@ -298,80 +303,15 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
 													 "DecompressChunk per_batch",
-													 ALLOCSET_DEFAULT_SIZES);
-}
+													 /* minContextSize = */ 0,
+													 /* initBlockSize = */ 64 * 1024,
+													 /* maxBlockSize = */ 64 * 1024);
 
-static inline void
-datum_to_arrow(Datum datum, void *buffer, int row_index, Oid typeoid)
-{
-	switch (typeoid)
-	{
-		case BOOLOID:
-			((int8 *) buffer)[row_index] = DatumGetBool(datum);
-			break;
-		case CHAROID:
-			((int8 *) buffer)[row_index] = DatumGetChar(datum);
-			break;
-		case INT2OID:
-			((int16 *) buffer)[row_index] = DatumGetInt16(datum);
-			break;
-		case INT4OID:
-			((int32 *) buffer)[row_index] = DatumGetInt32(datum);
-			break;
-		case INT8OID:
-			((int64 *) buffer)[row_index] = DatumGetInt64(datum);
-			break;
-		case FLOAT4OID:
-			((float4 *) buffer)[row_index] = DatumGetFloat4(datum);
-			break;
-		case FLOAT8OID:
-			((float8 *) buffer)[row_index] = DatumGetFloat8(datum);
-			break;
-		case DATEOID:
-			((int32 *) buffer)[row_index] = DatumGetDateADT(datum);
-			break;
-		case TIMESTAMPTZOID:
-			((int64 *) buffer)[row_index] = DatumGetTimestampTz(datum);
-			break;
-		case TIMESTAMPOID:
-			((int64 *) buffer)[row_index] = DatumGetTimestamp(datum);
-			break;
-		default:
-			elog(ERROR, "cannot convert datum with oid %d to arrow type", typeoid);
-	}
-}
-
-/* For experiments. */
-static pg_attribute_always_inline ArrowArray *
-default_decompress_all_forward_direction(
-	struct DecompressionIterator *iterator,
-	DecompressResult (*try_next_impl)(struct DecompressionIterator *))
-{
-	Assert(iterator->forward);
-	ArrowArray *result = palloc0(sizeof(ArrowArray));
-
-	int current_row = 0;
-	int typlen = get_typlen(iterator->element_type);
-	Assert(typlen > 0);
-	uint64 *validity_bitmap =
-		palloc0(sizeof(uint64) * ((GLOBAL_MAX_ROWS_PER_COMPRESSION + 64 - 1) / 64));
-	void *values = palloc(typlen * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	for (DecompressResult res = try_next_impl(iterator); !res.is_done;
-		 res = try_next_impl(iterator))
-	{
-		arrow_validity_bitmap_set(validity_bitmap, current_row, !res.is_null);
-		datum_to_arrow(res.val, values, current_row, iterator->element_type);
-		current_row++;
-	}
-
-	result->n_buffers = 2;
-	result->buffers = palloc(sizeof(void *) * 2);
-	result->buffers[0] = validity_bitmap;
-	result->buffers[1] = values;
-	result->length = current_row;
-	result->null_count = -1;
-
-	return result;
+	state->arrow_context = AllocSetContextCreate(CurrentMemoryContext,
+												 "DecompressChunk Arrow arrays",
+												 /* minContextSize = */ 0,
+												 /* initBlockSize = */ 64 * 1024,
+												 /* maxBlockSize = */ 64 * 1024);
 }
 
 static void
@@ -395,7 +335,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 		{
 			case COMPRESSED_COLUMN:
 			{
-				column->compressed.data = NULL;
+				column->compressed.datums = NULL;
 				column->compressed.iterator = NULL;
 
 				value = slot_getattr(compressed_slot, column->compressed_scan_attno, &isnull);
@@ -414,36 +354,101 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				/* Decompress the entire batch if it is supported. */
 				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 
-				column->compressed.data = tsl_try_decompress_all(header->compression_algorithm,
-																 PointerGetDatum(header),
-																 column->typid);
+				MemoryContext context_before_decompression =
+					MemoryContextSwitchTo(state->arrow_context);
+				ArrowArray *arrow = tsl_try_decompress_all(header->compression_algorithm,
+														   PointerGetDatum(header),
+														   column->typid);
+				MemoryContextSwitchTo(context_before_decompression);
 
-				if (!column->compressed.data &&
-					header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA)
+				if (arrow)
 				{
-					/* Just some experimental stuff. */
-					DecompressionIterator *iterator =
-						tsl_get_decompression_iterator_init(header->compression_algorithm,
-															/* reverse = */ false)(PointerGetDatum(
-																					   header),
-																				   column->typid);
-					column->compressed.data =
-						default_decompress_all_forward_direction(iterator, iterator->try_next);
-				}
+					/*
+					 * Currently we're going to convert the Arrow arrays to postgres
+					 * Data right away, but in the future we will perform vectorized
+					 * operations on Arrow arrays directly before that.
+					 */
+					const int n = arrow->length;
+#define INNER_LOOP_SIZE 8
 
-				if (column->compressed.data)
-				{
-					Assert(column->compressed.data->length > 0);
+					const int n_padded =
+						((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
+					Assert(n > 0);
+
+					const int arrow_bitmap_elements = (n + 64 - 1) / 64;
+					const int n_nulls_padded = arrow_bitmap_elements * 64;
+
 					if (state->total_batch_rows == 0)
 					{
-						state->total_batch_rows = column->compressed.data->length;
+						state->total_batch_rows = n;
 					}
-					else if (state->total_batch_rows != column->compressed.data->length)
+					else if (state->total_batch_rows != n)
 					{
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
 
+					/* Convert Arrow to Data/nulls arrays. */
+					const uint64 *restrict validity_bitmap = arrow->buffers[0];
+					const void *restrict arrow_values = arrow->buffers[1];
+					Datum *restrict datums = palloc(sizeof(Datum) * n_padded);
+					bool *restrict nulls = palloc(sizeof(bool) * n_nulls_padded);
+
+#define CONVERSION_LOOP(OID, CTYPE, CONVERSION)                                                    \
+	case OID:                                                                                      \
+		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
+		{                                                                                          \
+			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
+			{                                                                                      \
+				const int output_row = outer + inner;                                              \
+				const int input_row = reverse ? n - output_row - 1 : output_row;                   \
+				datums[output_row] = CONVERSION(((CTYPE *) arrow_values)[input_row]);              \
+			}                                                                                      \
+		}                                                                                          \
+		break
+
+#define FOR_ONE_DIRECTION                                                                          \
+	switch (column->typid)                                                                         \
+	{                                                                                              \
+		CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);                                            \
+		CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);                                            \
+		CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);                                            \
+		CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);                                        \
+		CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);                                        \
+		CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);                                          \
+		CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);                                   \
+		CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);                               \
+	}                                                                                              \
+	for (int outer = 0; outer < arrow_bitmap_elements; outer++)                                    \
+	{                                                                                              \
+		const uint64_t element = validity_bitmap[outer];                                           \
+		for (int inner = 0; inner < 64; inner++)                                                   \
+		{                                                                                          \
+			const int input_row = outer * 64 + inner;                                              \
+			const int output_row = reverse ? n - input_row - 1 : input_row;                        \
+			nulls[output_row] = ((element >> inner) & 1) ? false : true;                           \
+		}                                                                                          \
+	}
+
+					const bool reverse = state->reverse;
+					if (reverse)
+					{
+						FOR_ONE_DIRECTION
+					}
+					else
+					{
+						FOR_ONE_DIRECTION
+					}
+
+#undef CONVERSION_LOOP
+#undef FOR_ONE_DIRECTION
+
+#undef INNER_LOOP_SIZE
+
+					MemoryContextReset(state->arrow_context);
+
 					column->compressed.iterator = NULL;
+					column->compressed.datums = datums;
+					column->compressed.nulls = nulls;
 
 					break;
 				}
@@ -540,37 +545,6 @@ decompress_chunk_end(CustomScanState *node)
 	ExecEndNode(linitial(node->custom_ps));
 }
 
-static Datum
-arrow_to_datum(const void *buffer, int row_index, Oid typeoid)
-{
-	switch (typeoid)
-	{
-		case BOOLOID:
-			return BoolGetDatum(((int8 *) buffer)[row_index]);
-		case CHAROID:
-			return CharGetDatum(((int8 *) buffer)[row_index]);
-		case INT2OID:
-			return Int16GetDatum(((int16 *) buffer)[row_index]);
-		case INT4OID:
-			return Int32GetDatum(((int32 *) buffer)[row_index]);
-		case INT8OID:
-			return Int64GetDatum(((int64 *) buffer)[row_index]);
-		case FLOAT4OID:
-			return Float4GetDatum(((float4 *) buffer)[row_index]);
-		case FLOAT8OID:
-			return Float8GetDatum(((float8 *) buffer)[row_index]);
-		case DATEOID:
-			return DateADTGetDatum(((int32 *) buffer)[row_index]);
-		case TIMESTAMPTZOID:
-			return TimestampTzGetDatum(((int64 *) buffer)[row_index]);
-		case TIMESTAMPOID:
-			return TimestampGetDatum(((int64 *) buffer)[row_index]);
-		default:
-			elog(ERROR, "cannot convert arrow type to datum with oid %d", typeoid);
-			return (Datum) 0;
-	}
-}
-
 /*
  * Create generated tuple according to column state
  */
@@ -639,19 +613,13 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 			const AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
-			if (column->compressed.data)
+			if (column->compressed.datums)
 			{
 				Assert(column->compressed.iterator == NULL);
+				Assert(column->compressed.nulls != NULL);
 
-				const int row_index = state->reverse ?
-										  state->total_batch_rows - state->current_batch_row - 1 :
-										  state->current_batch_row;
-				Assert(row_index < column->compressed.data->length);
-				/* FIXME add code for passing float8 by reference on 32-bit systems. */
-				slot->tts_isnull[attr] =
-					!arrow_validity_bitmap_get(column->compressed.data->buffers[0], row_index);
-				slot->tts_values[attr] =
-					arrow_to_datum(column->compressed.data->buffers[1], row_index, column->typid);
+				slot->tts_isnull[attr] = column->compressed.nulls[state->current_batch_row];
+				slot->tts_values[attr] = column->compressed.datums[state->current_batch_row];
 			}
 			else if (column->compressed.iterator != NULL)
 			{

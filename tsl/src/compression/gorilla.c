@@ -269,8 +269,7 @@ tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 {
 	MemoryContext old_context;
 	MemoryContext agg_context;
-	Compressor *compressor =
-		(Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	Compressor *compressor = (Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (!AggCheckCallContext(fcinfo, &agg_context))
 	{
@@ -300,8 +299,7 @@ tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 Datum
 tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
 {
-	Compressor *compressor =
-		(Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	Compressor *compressor = (Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (compressor == NULL)
 		PG_RETURN_NULL();
@@ -313,7 +311,6 @@ tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
 
 	PG_RETURN_POINTER(compressed);
 }
-
 
 void
 gorilla_compressor_append_null(GorillaCompressor *compressor)
