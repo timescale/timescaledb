@@ -353,7 +353,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 				base = 2;
 			}
 
-			values[i] = (test_hash64(base) / (double) UINT64_MAX) * 100.;
+			values[i] = (test_hash64(base) / (double) PG_UINT64_MAX) * 100.;
 		}
 		else
 		{
