@@ -65,6 +65,18 @@ SET timescaledb.remote_data_fetcher = 'cursor';
 -- compare results
 :DIFF_CMD
 
+-- Test custom FDW settings. Instead of the tests above, we are not interersted
+-- in comparing the results of the fetchers. In the following tests we are
+-- interested in the actual outputs (e.g., costs).
+ANALYZE one_batch;
+
+SET timescaledb.remote_data_fetcher = 'copy';
+\ir include/data_fetcher_fdw_settings.sql
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+\ir include/data_fetcher_fdw_settings.sql
+
+
 RESET ROLE;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

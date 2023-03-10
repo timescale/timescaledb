@@ -421,21 +421,22 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
 	}
 
+	/*
+	 * Set the default values for startup cost, tuple cost, fetch size and shippable_extensions.
+	 * Note that the per-server settings (applied in apply_fdw_and_server_options()) can override
+	 * these values.
+	 */
+	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
+	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
+	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
+	fpinfo->shippable_extensions = list_make1_oid(ts_extension_get_oid());
+
 	/* Look up foreign-table catalog info. */
 	if (OidIsValid(server_oid))
 	{
 		fpinfo->server = GetForeignServer(server_oid);
 		apply_fdw_and_server_options(fpinfo);
 	}
-
-	/*
-	 * Extract user-settable option values.  Note that per-table setting
-	 * overrides per-server setting.
-	 */
-	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
-	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
-	fpinfo->shippable_extensions = list_make1_oid(ts_extension_get_oid());
-	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
 	/*
 	 * Identify which baserestrictinfo clauses can be sent to the data
