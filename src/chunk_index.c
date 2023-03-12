@@ -106,15 +106,12 @@ adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
 	{
 		Var *var = lfirst_node(Var, lc);
 
-		char *attname = get_attname(ht_relid, var->varattno, false);
-		var->varattno = get_attnum(chunkrel->rd_id, attname);
+		var->varattno = ts_map_attno(ht_relid, chunkrel->rd_id, var->varattno);
 #if PG13_GE
 		var->varattnosyn = var->varattno;
 #else
 		var->varoattno = var->varattno;
 #endif
-		if (var->varattno == InvalidAttrNumber)
-			elog(ERROR, "index attribute %s not found in chunk", attname);
 	}
 }
 
@@ -135,12 +132,8 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Oid ht_relid, Relation chunkrel)
 		 * are independent of parent relation column names. Instead we need to look
 		 * up the attno of the referenced hypertable column and do the matching
 		 * with the hypertable column name */
-		char *colname = get_attname(ht_relid, ii->ii_IndexAttrNumbers[i], false);
-		AttrNumber attno = get_attnum(chunkrel->rd_id, colname);
-
-		if (attno == InvalidAttrNumber)
-			elog(ERROR, "index attribute %s not found in chunk", colname);
-		ii->ii_IndexAttrNumbers[i] = attno;
+		ii->ii_IndexAttrNumbers[i] =
+			ts_map_attno(ht_relid, chunkrel->rd_id, ii->ii_IndexAttrNumbers[i]);
 	}
 }
 
