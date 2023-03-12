@@ -205,4 +205,6 @@ extern TSDLLEXPORT void ts_copy_relation_acl(const Oid source_relid, const Oid t
 extern TSDLLEXPORT bool ts_data_node_is_available_by_server(const ForeignServer *server);
 extern TSDLLEXPORT bool ts_data_node_is_available(const char *node_name);
 
+extern TSDLLEXPORT AttrNumber ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber attno);
+
 #endif /* TIMESCALEDB_UTILS_H */

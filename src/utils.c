@@ -1325,3 +1325,26 @@ ts_data_node_is_available(const char *name)
 {
 	return ts_data_node_is_available_by_server(GetForeignServerByName(name, false));
 }
+
+/*
+ * Map attno from source relation to target relation by column name
+ */
+AttrNumber
+ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber attno)
+{
+	char *attname = get_attname(src_rel, attno, false);
+	AttrNumber dst_attno = get_attnum(dst_rel, attname);
+
+	/*
+	 * For any chunk mappings we do this should never happen.
+	 */
+	if (dst_attno == InvalidAttrNumber)
+		elog(ERROR,
+			 "could not map attribute number from relation \"%s\" to \"%s\" for column \"%s\"",
+			 get_rel_name(src_rel),
+			 get_rel_name(dst_rel),
+			 attname);
+
+	pfree(attname);
+	return dst_attno;
+}

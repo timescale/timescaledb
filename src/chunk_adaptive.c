@@ -293,14 +293,6 @@ chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	return res == MINMAX_FOUND;
 }
 
-static AttrNumber
-chunk_get_attno(Oid hypertable_relid, Oid chunk_relid, AttrNumber hypertable_attnum)
-{
-	const char *attname = get_attname(hypertable_relid, hypertable_attnum, false);
-
-	return get_attnum(chunk_relid, attname);
-}
-
 #define CHUNK_SIZING_FUNC_NARGS 3
 #define DEFAULT_CHUNK_WINDOW 3
 
@@ -473,8 +465,7 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 			ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
 		int64 chunk_size, slice_interval;
 		Datum minmax[2];
-		AttrNumber attno =
-			chunk_get_attno(ht->main_table_relid, chunk->table_id, dim->column_attno);
+		AttrNumber attno = ts_map_attno(ht->main_table_relid, chunk->table_id, dim->column_attno);
 
 		Assert(NULL != slice);
 
