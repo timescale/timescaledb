@@ -18,6 +18,7 @@ accidentally triggering the load of a previous DB version.**
 * #5410 Fix file trailer handling in the COPY fetcher
 * #5233 Out of on_proc_exit slots on guc license change
 * #5427 Handle user-defined FDW options properly
+* #5442 Decompression may have lost DEFAULT values
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
