@@ -1530,7 +1530,8 @@ static void populate_per_compressed_columns_from_data(PerCompressedColumn *per_c
 													  bool *compressed_is_nulls);
 static void row_decompressor_decompress_row(RowDecompressor *row_decompressor);
 static bool per_compressed_col_get_data(PerCompressedColumn *per_compressed_col,
-										Datum *decompressed_datums, bool *decompressed_is_nulls);
+										Datum *decompressed_datums, bool *decompressed_is_nulls,
+										TupleDesc out_desc);
 
 static RowDecompressor
 build_decompressor(Relation in_rel, Relation out_rel)
@@ -1740,7 +1741,8 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
 		{
 			bool col_is_done = per_compressed_col_get_data(&decompressor->per_compressed_cols[col],
 														   decompressor->decompressed_datums,
-														   decompressor->decompressed_is_nulls);
+														   decompressor->decompressed_is_nulls,
+														   decompressor->out_desc);
 			is_done &= col_is_done;
 		}
 
@@ -1752,6 +1754,7 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
 			HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
 														   decompressor->decompressed_datums,
 														   decompressor->decompressed_is_nulls);
+
 			heap_insert(decompressor->out_rel,
 						decompressed_tuple,
 						decompressor->mycid,
@@ -1774,7 +1777,7 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
  */
 bool
 per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *decompressed_datums,
-							bool *decompressed_is_nulls)
+							bool *decompressed_is_nulls, TupleDesc out_desc)
 {
 	DecompressResult decompressed;
 	int16 decompressed_column_offset = per_compressed_col->decompressed_column_offset;
@@ -1794,7 +1797,11 @@ per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *deco
 	/* compressed NULL */
 	if (per_compressed_col->is_null)
 	{
-		decompressed_is_nulls[decompressed_column_offset] = true;
+		decompressed_datums[decompressed_column_offset] =
+			getmissingattr(out_desc,
+						   decompressed_column_offset + 1,
+						   &decompressed_is_nulls[decompressed_column_offset]);
+
 		return true;
 	}
 
