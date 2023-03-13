@@ -596,7 +596,10 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		if (unlikely(simple8brle_selector_is_rle(selector_value)))
 		{
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
-			Assert(decompressed_index + n_block_values <= n_total_values);
+			if (decompressed_index + n_block_values > n_total_values)
+			{
+				ereport(ERROR, (errmsg("the compressed data is corrupt")));
+			}
 
 			const uint64 repeated_value = simple8brle_rledata_value(block_data);
 			for (int i = 0; i < n_block_values; i++)
@@ -609,24 +612,26 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		else
 		{
 			/* Bit-packed blocks. Generate separate code for each block type. */
-
-#define UNPACK_BLOCK                                                                               \
-	/*                                                                                             \
-	 * The last block might have less values than normal, but we have                              \
-	 * padding at the end so we can unpack them all always for simpler                             \
-	 * code.                                                                                       \
-	 */                                                                                            \
-	const int n_block_values = SIMPLE8B_NUM_ELEMENTS[selector_value];                              \
-	const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[selector_value];                             \
-	const uint64 bitmask = simple8brle_selector_get_bitmask(selector_value);                       \
-                                                                                                   \
-	for (int i = 0; i < n_block_values; i++)                                                       \
+#define UNPACK_BLOCK(X)                                                                            \
+	case (X):                                                                                      \
 	{                                                                                              \
-		const uint64 value = (block_data >> (bits_per_value * i)) & bitmask;                       \
-		decompressed_values[decompressed_index + i] = value;                                       \
-	}                                                                                              \
-	decompressed_index += n_block_values;                                                          \
-	break;
+		/*                                                                                         \
+		 * The last block might have less values than normal, but we have                          \
+		 * padding at the end so we can unpack them all always for simpler                         \
+		 * code.                                                                                   \
+		 */                                                                                        \
+		const int n_block_values = SIMPLE8B_NUM_ELEMENTS[X];                                       \
+		const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[X];                                      \
+		const uint64 bitmask = simple8brle_selector_get_bitmask(X);                                \
+                                                                                                   \
+		for (int i = 0; i < n_block_values; i++)                                                   \
+		{                                                                                          \
+			const uint64 value = (block_data >> (bits_per_value * i)) & bitmask;                   \
+			decompressed_values[decompressed_index + i] = value;                                   \
+		}                                                                                          \
+		decompressed_index += n_block_values;                                                      \
+		break;                                                                                     \
+	}
 
 			/*
 			 * FIXME reconsider if we need this switch? It's compiled to some
@@ -634,64 +639,27 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 			 */
 			switch (selector_value)
 			{
-				case 1:
-				{
-					UNPACK_BLOCK
-				}
-				case 2:
-				{
-					UNPACK_BLOCK
-				}
-				case 3:
-				{
-					UNPACK_BLOCK
-				}
-				case 4:
-				{
-					UNPACK_BLOCK
-				}
-				case 5:
-				{
-					UNPACK_BLOCK
-				}
-				case 6:
-				{
-					UNPACK_BLOCK
-				}
-				case 7:
-				{
-					UNPACK_BLOCK
-				}
-				case 8:
-				{
-					UNPACK_BLOCK
-				}
-				case 9:
-				{
-					UNPACK_BLOCK
-				}
-				case 10:
-				{
-					UNPACK_BLOCK
-				}
-				case 11:
-				{
-					UNPACK_BLOCK
-				}
-				case 12:
-				{
-					UNPACK_BLOCK
-				}
-				case 13:
-				{
-					UNPACK_BLOCK
-				}
-				case 14:
-				{
-					UNPACK_BLOCK
-				}
+				UNPACK_BLOCK(1);
+				UNPACK_BLOCK(2);
+				UNPACK_BLOCK(3);
+				UNPACK_BLOCK(4);
+				UNPACK_BLOCK(5);
+				UNPACK_BLOCK(6);
+				UNPACK_BLOCK(7);
+				UNPACK_BLOCK(8);
+				UNPACK_BLOCK(9);
+				UNPACK_BLOCK(10);
+				UNPACK_BLOCK(11);
+				UNPACK_BLOCK(12);
+				UNPACK_BLOCK(13);
+				UNPACK_BLOCK(14);
 				default:
-					Assert(false);
+					/*
+					 * Can only get 0 here in case the data is corrupt. Doesn't
+					 * harm to report it right away, because this loop can't be
+					 * vectorized.
+					 */
+					ereport(ERROR, (errmsg("the compressed data is corrupt")));
 			}
 #undef UNPACK_BLOCK
 		}

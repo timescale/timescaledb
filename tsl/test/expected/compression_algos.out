@@ -11,6 +11,7 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set VERBOSITY verbose
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 create or replace function mix(x timestamptz) returns float4 as $$ select mix(extract(epoch from x)::float4) $$ language sql;
@@ -43,7 +44,8 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (s
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist, skipping
+psql:include/compression_test.sql:7: NOTICE:  00000: table "compressed" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:1271
  compressed size 
 -----------------
             1720

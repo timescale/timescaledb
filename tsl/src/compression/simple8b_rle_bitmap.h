@@ -12,7 +12,7 @@
 
 typedef struct Simple8bRleBitmap
 {
-	char *bitmap;
+	char *bitmap_bools;
 	uint16 current_element;
 	uint16 num_elements;
 } Simple8bRleBitmap;
@@ -22,7 +22,7 @@ simple8brle_bitmap_get_next(Simple8bRleBitmap *bitmap)
 {
 	Simple8bRleDecompressResult res;
 	/* We have some padding so it's OK to overrun. */
-	res.val = bitmap->bitmap[bitmap->current_element];
+	res.val = bitmap->bitmap_bools[bitmap->current_element];
 	res.is_done = bitmap->current_element >= bitmap->num_elements;
 	bitmap->current_element++;
 	return res;
@@ -37,8 +37,16 @@ simple8brle_bitmap_get_next_reverse(Simple8bRleBitmap *bitmap)
 	}
 
 	return (Simple8bRleDecompressResult){
-		.val = bitmap->bitmap[bitmap->num_elements - 1 - bitmap->current_element++]
+		.val = bitmap->bitmap_bools[bitmap->num_elements - 1 - bitmap->current_element++]
 	};
+}
+
+pg_attribute_always_inline static bool
+simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, int i)
+{
+	Assert(i >= 0);
+	// Assert(i < bitmap->num_elements);
+	return bitmap->bitmap_bools[i];
 }
 
 pg_attribute_always_inline static void
@@ -58,10 +66,11 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	if (num_elements > GLOBAL_MAX_ROWS_PER_COMPRESSION)
 	{
 		/* Don't allocate too much if we got corrupt data or something. */
-		elog(ERROR,
-			 "the number of elements in compressed data %d is larger than the maximum allowed %d",
-			 num_elements,
-			 GLOBAL_MAX_ROWS_PER_COMPRESSION);
+		ereport(ERROR,
+				(errmsg("the number of elements in compressed data %d is larger than the maximum "
+						"allowed %d",
+						num_elements,
+						GLOBAL_MAX_ROWS_PER_COMPRESSION)));
 	}
 
 	const uint32 num_selector_slots =
@@ -75,7 +84,7 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	 * padding on the right so that we can simplify the decompression loop and
 	 * the get() function.
 	 */
-	char *restrict bitmap = palloc(((num_elements + 63) / 64 + 1) * 64);
+	char *restrict bitmap_bools = palloc(((num_elements + 63) / 64 + 1) * 64);
 	uint32 decompressed_index = 0;
 	const uint32 num_blocks = compressed->num_blocks;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
@@ -99,10 +108,14 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			 */
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
 			const uint64 repeated_value = simple8brle_rledata_value(block_data);
-			Assert(repeated_value == 0 || repeated_value == 1);
+			if (repeated_value > 1 || decompressed_index + n_block_values > num_elements)
+			{
+				ereport(ERROR, (errmsg("the compressed data is corrupt")));
+			}
+
 			for (int i = 0; i < n_block_values; i++)
 			{
-				bitmap[decompressed_index + i] = repeated_value;
+				bitmap_bools[decompressed_index + i] = repeated_value;
 			}
 			decompressed_index += n_block_values;
 			Assert(decompressed_index <= num_elements);
@@ -115,14 +128,18 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			 * number of elements, but we have 64 bytes of padding on the right
 			 * so we don't care.
 			 */
-			Assert(selector_value == 1);
+			if (selector_value != 1)
+			{
+				ereport(ERROR, (errmsg("the compressed data is corrupt")));
+			}
+
 			Assert(SIMPLE8B_BIT_LENGTH[selector_value] == 1);
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
 			for (int i = 0; i < 64; i++)
 			{
 				const uint64 value = (block_data >> i) & 1;
-				bitmap[decompressed_index + i] = value;
+				bitmap_bools[decompressed_index + i] = value;
 			}
 			decompressed_index += 64;
 		}
@@ -132,6 +149,6 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	//	fprintf(stderr, "   1  15\n");
 	//	fprintf(stderr, " %3d %3d\n\n", blocks[1], blocks[15]);
 
-	result.bitmap = bitmap;
+	result.bitmap_bools = bitmap_bools;
 	return result;
 }

@@ -15,11 +15,12 @@
 #include <utils/memutils.h>
 
 #include "compression/gorilla.h"
-#include "float_utils.h"
+
 #include "adts/bit_array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
 #include "compression/simple8b_rle_bitmap.h"
+#include "float_utils.h"
 
 /*
  * Gorilla compressed data is stored as
@@ -777,6 +778,155 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 									 (GorillaDecompressionIterator *) iter_base),
 								 iter_base->element_type);
 }
+
+/*
+ * Decompress packed 6bit values in lanes that contain a round number of both
+ * packed and unpacked bytes -- 4 6-bit values are packed into 3 8-bit values.
+ */
+#define LANE_INPUTS 3
+#define LANE_OUTPUTS 4
+
+pg_attribute_always_inline static void
+unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
+{
+	Assert(BITS_PER_LEADING_ZEROS == 6);
+
+	const int n_packed = bitarray->buckets.num_elements * sizeof(uint64);
+	const uint8 *restrict packed = ((uint8 *) bitarray->buckets.data);
+
+	/*
+	 * We have two more arrays after leading zeros, so we don't care if the
+	 * reads of final bytes run into them and we unpack some nonsense. This
+	 * means we can always work in full lanes.
+	 */
+	const int n_lanes = (n_packed + LANE_INPUTS - 1) / LANE_INPUTS;
+	for (int lane = 0; lane < n_lanes; lane++)
+	{
+		uint8 *restrict lane_dest = &dest[lane * LANE_OUTPUTS];
+		const uint8 *restrict lane_src = &packed[lane * LANE_INPUTS];
+		for (int output_in_lane = 0; output_in_lane < LANE_OUTPUTS; output_in_lane++)
+		{
+			const int startbit_abs = output_in_lane * 6;
+			const int startbit_rel = startbit_abs % 8;
+			const int offs = 8 - startbit_rel;
+
+			const uint8 this_input = lane_src[startbit_abs / 8];
+			const uint8 next_input = lane_src[(startbit_abs + 6 - 1) / 8];
+
+			uint8 output = this_input >> startbit_rel;
+			output |= ((uint64) next_input) << offs;
+			output &= (1ull << 6) - 1ull;
+
+			lane_dest[output_in_lane] = output;
+		}
+	}
+}
+
+#undef LANE_INPUTS
+#undef LANE_OUTPUTS
+
+//typedef struct
+//{
+//	uint64 *restrict data;
+//	uint64 start_bit_absolute;
+//	uint64 this_word;
+//} SimpleBitArrayIterator;
+//
+//pg_attribute_always_inline static uint64
+//simple_bit_array_next(SimpleBitArrayIterator *iter, uint8 bits)
+//{
+//	Assert(bits <= 64);
+//
+//	if (bits == 0)
+//	{
+//		return 0;
+//	}
+//
+//	const uint64 start_bit_absolute = iter->start_bit_absolute;
+//	const uint64 end_bit_absolute = start_bit_absolute + bits;
+//	const uint64 start_word_index = start_bit_absolute / 64;
+//	const uint64 end_word_index = (end_bit_absolute - 1) / 64;
+//	const uint64 start_bit_in_word = start_bit_absolute % 64;
+//	// const uint64 end_bit_in_word = end_bit_absolute % 64;
+//
+//	iter->start_bit_absolute = end_bit_absolute;
+//
+//	const uint64_t lower_mask = (-1ull) >> (64 - bits);
+//
+//	const uint64 this_word = iter->data[start_word_index];
+//	if (end_word_index == start_word_index)
+//	{
+//		return (this_word >> start_bit_in_word) & lower_mask;
+//	}
+//
+//	/*
+//	 * Our bits span the next word as well. offs is the first bit in the output
+//	 * that is to the next input word.
+//	 */
+//	const uint8 offs = 64 - start_bit_in_word;
+//	Assert(offs > 0);
+//	Assert(offs < 64);
+//	const uint64 next_word = iter->data[end_word_index];
+//	return ((this_word >> start_bit_in_word) | (next_word << offs)) & lower_mask;
+//}
+
+// pg_attribute_always_inline static uint64
+// simple_bit_array_next(SimpleBitArrayIterator *iter, uint8 bits)
+// {
+// 	/*
+// 	 * Bits can be 0 if the first number after tags (1, 1) is zero.
+// 	 */
+// 	Assert(bits <= 64);
+// 	if (bits == 0 || bits > 64)
+// 	{
+// 		return 0;
+// 	}
+//
+// 	const uint64 start_bit_absolute = iter->start_bit_absolute;
+// 	const uint64 end_bit_absolute = start_bit_absolute + bits;
+// 	const uint64 start_bit_in_word = start_bit_absolute % 64;
+// 	const uint64 end_bit_in_word = end_bit_absolute % 64;
+//
+// 	uint64 output = iter->this_word;
+// 	if (start_bit_in_word + bits < 64)
+// 	{
+// 		iter->this_word >>= bits;
+// 	}
+// 	else
+// 	{
+// 		/*
+// 		 * This is the bit in the output, where the bits from the next input word go.
+// 		 */
+// 		const uint8 offs = 64 - start_bit_in_word;
+// 		Assert(offs > 0);
+// 		Assert(offs <= 64);
+// 		/*
+// 		 * If we think we have to load the next word, at least the bit before
+// 		 * the last should be in the next word.
+// 		 */
+// 		Assert(1 + start_bit_absolute / 64 == end_bit_absolute / 64);
+//
+// 		const uint64 next_word = iter->data[end_bit_absolute / 64];
+//
+// 		if (offs < 64)
+// 		{
+// 			/*
+// 			 * Can be 64 when we are asked to get an entire word starting on word
+// 			 * boundary. We can't do this shift in that case.
+// 			 */
+// 			output |= (next_word << offs);
+// 		}
+//
+// 		iter->this_word = next_word >> end_bit_in_word;
+// 	}
+//
+// 	iter->start_bit_absolute = end_bit_absolute;
+//
+// 	const uint64_t lower_mask = (-1ull) >> (64 - bits);
+// 	return output & lower_mask;
+// }
+
+/* Bulk gorilla decompression, specialized for supported data types. */
 
 #define ELEMENT_TYPE uint32
 #include "gorilla_impl.c"

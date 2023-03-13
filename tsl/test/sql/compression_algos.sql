@@ -9,6 +9,8 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 \ir include/compression_utils.sql
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+\set VERBOSITY verbose
+
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 create or replace function mix(x timestamptz) returns float4 as $$ select mix(extract(epoch from x)::float4) $$ language sql;
