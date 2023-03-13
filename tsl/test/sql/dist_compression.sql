@@ -658,6 +658,70 @@ FROM generate_series('2021-08-18 00:00:00'::timestamp,
 
 SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
 
+-- test alter_data_node(unvailable) with compressed chunks
+--
+
+-- create compressed distributed hypertable
+CREATE TABLE compressed(time timestamptz NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('compressed', 'time', 'device', replication_factor => 3);
+
+-- insert data and get chunks distribution
+INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+ALTER TABLE compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+
+SELECT compress_chunk(chunk)
+FROM show_chunks('compressed') AS chunk
+ORDER BY chunk;
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compressed';
+
+SELECT count(*) FROM compressed;
+
+-- make data node unavailable
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SELECT alter_data_node(:'DATA_NODE_1', port => 55433, available => false);
+SET ROLE :ROLE_1;
+
+-- update compressed chunks
+INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+
+-- ensure that chunks associated with unavailable data node 1
+-- are removed after being updated
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compressed';
+
+SELECT * from show_chunks('compressed');
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_2', :'DATA_NODE_3'], $$ SELECT * from show_chunks('compressed'); $$);
+
+SELECT count(*) FROM compressed;
+
+-- make data node available again
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SELECT alter_data_node(:'DATA_NODE_1', port => 55432);
+SELECT alter_data_node(:'DATA_NODE_1', available => true);
+SET ROLE :ROLE_1;
+
+-- ensure that stale chunks being dropped from data node 1 automatically
+SELECT * from show_chunks('compressed');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+
+SELECT count(*) FROM compressed;
+
+-- recompress chunks
+CALL recompress_all_chunks('compressed', 3, true);
+
+SELECT count(*) FROM compressed;
+SELECT * from show_chunks('compressed');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+
+DROP TABLE compressed;
+
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
