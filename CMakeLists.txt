@@ -8,6 +8,7 @@ include(GitCommands)
 include(GenerateScripts)
 include(CMakeDependentOption)
 
+option(APACHE_ONLY "only compile apache code" off)
 # This requires all tests to run. This defaults to OFF but can be enabled to
 # ensure that no tests are skipped because of missing tools.
 option(REQUIRE_ALL_TESTS "Require all tests to run." OFF)
@@ -386,6 +387,12 @@ set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
 if(${PG_VERSION_MAJOR} GREATER "12")
   set(TRUSTED trusted=true)
 endif()
+
+if(APACHE_ONLY)
+  set(LICENSE_EDITION "Apache 2 Edition")
+else()
+  set(LICENSE_EDITION "Community Edition")
+endif()
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
@@ -617,8 +624,6 @@ endif(UNIX)
 add_subdirectory(sql)
 add_subdirectory(test)
 add_subdirectory(src)
-
-option(APACHE_ONLY "only compile apache code" off)
 
 if(NOT APACHE_ONLY)
   add_subdirectory(tsl)
