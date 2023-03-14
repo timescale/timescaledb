@@ -143,6 +143,8 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 /*
  * The chunk status field values are persisted in the database and must never be changed.
  * Those values are used as flags and must always be powers of 2 to allow bitwise operations.
+ * When adding new status values we must make sure to add special handling for these values
+ * to the downgrade script as previous versions will not know how to deal with those.
  */
 #define CHUNK_STATUS_DEFAULT 0
 /*
