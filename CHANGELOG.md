@@ -35,6 +35,7 @@ accidentally triggering the load of a previous DB version.**
 * #5500 Fix when no FROM clause in continuous aggregate definition
 * #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
 * #5556 Fix duplicated entries on timescaledb_experimental.policies view
+* #5433 Fix join rte in CAggs with joins
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
@@ -43,6 +44,7 @@ accidentally triggering the load of a previous DB version.**
 * @geezhu for reporting issue on segfault in historgram()
 * @H25E for reporting error refreshing from beginning of a Continuous Aggregate with variable time bucket
 * @mwahlhuetter for reporting issue with duplicated entries on timescaledb_experimental.policies view
+* @mwahlthuetter for reporting the issue with joins in CAggs
 
 ## 2.10.1 (2023-03-07)
 
