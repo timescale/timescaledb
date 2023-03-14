@@ -8,7 +8,7 @@ BEGIN
     SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
     IF ts_version >= '2.7.0' THEN
             CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
-                cagg_view REGCLASS
+                cagg_view REGCLASS, force_rebuild boolean
             ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
     END IF;
     FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
@@ -26,12 +26,39 @@ BEGIN
             EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
         ELSE
             SET log_error_verbosity TO VERBOSE;
-            CALL _timescaledb_internal.post_update_cagg_try_repair(vname);
+            CALL _timescaledb_internal.post_update_cagg_try_repair(vname, false);
         END IF;
     END LOOP;
     IF ts_version >= '2.7.0' THEN
             DROP PROCEDURE IF EXISTS _timescaledb_internal.post_update_cagg_try_repair;
     END IF;
+    EXCEPTION WHEN OTHERS THEN RAISE;
+END
+$$;
+
+-- For tsdb >= v2.10.0 apply the cagg repair when necessary
+DO $$
+DECLARE
+ vname regclass;
+ materialized_only bool;
+ ts_version TEXT;
+BEGIN
+    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+     IF ts_version >= '2.10.0' THEN
+	        CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
+	            cagg_view REGCLASS, force_rebuild BOOLEAN
+	        ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
+
+	        FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
+	        LOOP
+	            IF ts_version >= '2.10.0' THEN
+	                SET log_error_verbosity TO VERBOSE;
+	                CALL _timescaledb_internal.post_update_cagg_try_repair(vname, true);
+	            END IF;
+	        END LOOP;
+
+	        DROP PROCEDURE IF EXISTS _timescaledb_internal.post_update_cagg_try_repair(REGCLASS, BOOLEAN);
+	    END IF;
     EXCEPTION WHEN OTHERS THEN RAISE;
 END
 $$;
