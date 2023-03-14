@@ -152,3 +152,8 @@ if(PG_ISOLATION_REGRESS)
 endif()
 
 set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
+if(APACHE_ONLY)
+  set(TEST_LICENSE_SUFFIX "oss")
+else()
+  set(TEST_LICENSE_SUFFIX "tsl")
+endif()
