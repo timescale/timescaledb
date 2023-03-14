@@ -7,6 +7,14 @@
 -- the dimension slice table. The repair script should then repair all
 -- of them and there should be no dimension slices missing.
 
+SELECT extversion < '2.10.0' AS test_repair_dimension
+FROM pg_extension
+WHERE extname = 'timescaledb' \gset
+
+SELECT extversion >= '2.10.0' AS has_cagg_joins
+FROM pg_extension
+WHERE extname = 'timescaledb' \gset
+
 CREATE TABLE repair_test_int(time integer not null, temp float8, tag integer, color integer);
 CREATE TABLE repair_test_timestamptz(time timestamptz not null, temp float8, tag integer, color integer);
 CREATE TABLE repair_test_extra(time timestamptz not null, temp float8, tag integer, color integer);
@@ -80,6 +88,7 @@ CREATE VIEW slices AS (
            ON di.hypertable_id = ch.hypertable_id AND attname = di.column_name
    );
 
+\if :test_repair_dimension
 -- Break the first time dimension on each table. These are different
 -- depending on the time type for the table and we need to check all
 -- versions.
@@ -177,5 +186,10 @@ SELECT DISTINCT
   WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
 
 DROP VIEW slices;
+\endif
 
 \ir setup.repair.cagg.sql
+
+\if :has_cagg_joins
+     \ir setup.repair.cagg_joins.sql
+\endif

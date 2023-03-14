@@ -16,17 +16,17 @@ SELECT create_hypertable(
 );
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-14', 'Moscow', 26,1),
-  ('2021-06-15', 'Moscow', 22,2),
-  ('2021-06-16', 'Moscow', 24,3),
-  ('2021-06-17', 'Moscow', 24,4),
-  ('2021-06-18', 'Moscow', 27,4),
+  ('2021-06-15', 'Berlin', 22,2),
+  ('2021-06-16', 'Stockholm', 24,3),
+  ('2021-06-17', 'London', 24,4),
+  ('2021-06-18', 'London', 27,4),
   ('2021-06-19', 'Moscow', 28,4),
   ('2021-06-20', 'Moscow', 30,1),
-  ('2021-06-21', 'Moscow', 31,1),
-  ('2021-06-22', 'Moscow', 34,1),
-  ('2021-06-23', 'Moscow', 34,2),
+  ('2021-06-21', 'Berlin', 31,1),
+  ('2021-06-22', 'Stockholm', 34,1),
+  ('2021-06-23', 'Stockholm', 34,2),
   ('2021-06-24', 'Moscow', 34,2),
-  ('2021-06-25', 'Moscow', 32,3),
+  ('2021-06-25', 'London', 32,3),
   ('2021-06-26', 'Moscow', 32,3),
   ('2021-06-27', 'Moscow', 31,3);
 
@@ -57,6 +57,7 @@ GROUP BY name, bucket;
 
 \d+ conditions_summary_daily_realtime
 
+SELECT * FROM conditions_summary_daily_realtime ORDER BY bucket;
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-30', 'Moscow', 28, 3);
 
@@ -81,6 +82,7 @@ GROUP BY name, bucket;
 
 \d+ conditions_summary_daily_realtime_reorder
 
+SELECT * FROM conditions_summary_daily_realtime_reorder ORDER BY bucket;
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-07-01', 'Moscow', 28, 3);
 
@@ -102,6 +104,8 @@ FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket, thermo_id;
 
+SELECT * FROM conditions_summary_daily ORDER BY bucket;
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_reorder
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -113,6 +117,7 @@ FROM devices, conditions
 WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 
+SELECT * FROM conditions_summary_daily_reorder ORDER BY bucket;
 CREATE MATERIALIZED VIEW conditions_summary_daily_2
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -123,6 +128,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions JOIN devices ON conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 
+SELECT * FROM conditions_summary_daily_2 ORDER BY bucket;
 CREATE MATERIALIZED VIEW conditions_summary_daily_2_reorder
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -133,6 +139,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM devices JOIN conditions ON conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 
+SELECT * FROM conditions_summary_daily_2_reorder ORDER BY bucket;
 CREATE MATERIALIZED VIEW conditions_summary_daily_3
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -143,6 +150,8 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM devices JOIN conditions USING (device_id)
 GROUP BY name, bucket;
 
+SELECT * FROM conditions_summary_daily_3 ORDER BY bucket;
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_3_reorder
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -151,6 +160,64 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    MIN(temperature),
    name
 FROM conditions JOIN devices USING (device_id)
+GROUP BY name, bucket;
+
+SELECT * FROM conditions_summary_daily_3_reorder ORDER BY bucket;
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_3_reorder_using_realtime
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices USING (device_id)
+GROUP BY name, bucket;
+
+SELECT * FROM conditions_summary_daily_3_reorder_using_realtime ORDER BY bucket;
+
+--Create CAgg with join and additional WHERE conditions
+CREATE MATERIALIZED VIEW conditions_summary_daily_more_conds
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+WHERE conditions.city = devices.location AND
+      conditions.temperature > 28
+GROUP BY name, bucket;
+
+SELECT * FROM conditions_summary_daily_more_conds ORDER BY bucket;
+
+--Create CAgg with join and ORDER BY
+CREATE MATERIALIZED VIEW conditions_summary_daily_ordered
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+WHERE conditions.city = devices.location AND
+      conditions.temperature > 28
+GROUP BY name, bucket
+ORDER BY name;
+
+SELECT * FROM conditions_summary_daily_ordered ORDER BY bucket;
+
+--Error out when creating CAgg with multiple join conditions
+CREATE MATERIALIZED VIEW conditions_summary_daily_more_joins_conds
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+AND conditions.city = devices.location AND
+      conditions.temperature > 28
 GROUP BY name, bucket;
 
 --Error out for old format cagg definition
