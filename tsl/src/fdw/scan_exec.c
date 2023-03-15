@@ -20,6 +20,7 @@
 #include "utils.h"
 #include "remote/data_fetcher.h"
 #include "remote/copy_fetcher.h"
+#include "remote/prepared_statement_fetcher.h"
 #include "remote/cursor_fetcher.h"
 #include "guc.h"
 #include "planner.h"
@@ -114,6 +115,7 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 	{
 		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 		fill_query_params_array(econtext, fsstate->param_flinfo, fsstate->param_exprs, values);
+		MemoryContextSwitchTo(oldcontext);
 
 		/*
 		 * Notice that we do not specify param types, thus forcing the data
@@ -124,58 +126,21 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		 * types.
 		 */
 		params = stmt_params_create_from_values(values, num_params);
-		MemoryContextSwitchTo(oldcontext);
 	}
 
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 
-	TupleFactory *tf = tuplefactory_create_for_scan(ss, fsstate->retrieved_attrs);
-
-	if (!tuplefactory_is_binary(tf) && fsstate->planned_fetcher_type == CopyFetcherType)
-	{
-		if (ts_guc_remote_data_fetcher == AutoFetcherType)
-		{
-			/*
-			 * The user-set fetcher type was auto, and the planner decided to
-			 * use COPY fetcher, but at execution time (now) we found out
-			 * there is no binary serialization for some data types. In this
-			 * case we can revert to cursor fetcher which supports text
-			 * serialization.
-			 */
-			fsstate->planned_fetcher_type = CursorFetcherType;
-		}
-		else
-		{
-			ereport(ERROR,
-					(errmsg("cannot use COPY fetcher because some of the column types do not "
-							"have binary serialization")));
-		}
-	}
-
-	/*
-	 * COPY fetcher uses COPY statement that don't work with prepared
-	 * statements. If this plan is parameterized, this means we'll have to
-	 * revert to cursor fetcher.
-	 */
-	if (num_params > 0 && fsstate->planned_fetcher_type == CopyFetcherType)
-	{
-		if (ts_guc_remote_data_fetcher == AutoFetcherType)
-		{
-			fsstate->planned_fetcher_type = CursorFetcherType;
-		}
-		else
-		{
-			ereport(ERROR,
-					(errmsg("cannot use COPY fetcher because the plan is parameterized"),
-					 errhint("Set \"timescaledb.remote_data_fetcher\" to \"cursor\" to explicitly "
-							 "set the fetcher type or use \"auto\" to select the fetcher type "
-							 "automatically.")));
-		}
-	}
-
 	if (fsstate->planned_fetcher_type == CursorFetcherType)
 	{
-		fetcher = cursor_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
+		fetcher =
+			cursor_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, fsstate->tf);
+	}
+	else if (fsstate->planned_fetcher_type == PreparedStatementFetcherType)
+	{
+		fetcher = prepared_statement_fetcher_create_for_scan(fsstate->conn,
+															 fsstate->query,
+															 params,
+															 fsstate->tf);
 	}
 	else
 	{
@@ -184,7 +149,7 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		 * point, so we shouldn't see 'auto' here.
 		 */
 		Assert(fsstate->planned_fetcher_type == CopyFetcherType);
-		fetcher = copy_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
+		fetcher = copy_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, fsstate->tf);
 	}
 
 	fsstate->fetcher = fetcher;
@@ -319,6 +284,58 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 							 &fsstate->param_values);
 
 	fsstate->fetcher = NULL;
+
+	fsstate->tf = tuplefactory_create_for_scan(ss, fsstate->retrieved_attrs);
+
+	Assert(fsstate->planned_fetcher_type != AutoFetcherType);
+
+	/*
+	 * If the planner tells us to use the cursor fetcher because there are
+	 * multiple distributed hypertables per query, we have no other option.
+	 */
+	if (fsstate->planned_fetcher_type == CursorFetcherType)
+	{
+		return;
+	}
+
+	if (!tuplefactory_is_binary(fsstate->tf) && fsstate->planned_fetcher_type == CopyFetcherType)
+	{
+		if (ts_guc_remote_data_fetcher == AutoFetcherType)
+		{
+			/*
+			 * The user-set fetcher type was auto, and the planner decided to
+			 * use COPY fetcher, but at execution time (now) we found out
+			 * there is no binary serialization for some data types. In this
+			 * case we can revert to cursor fetcher which supports text
+			 * serialization.
+			 */
+			fsstate->planned_fetcher_type = CursorFetcherType;
+		}
+		else
+		{
+			ereport(ERROR,
+					(errmsg("cannot use COPY fetcher because some of the column types do not "
+							"have binary serialization")));
+		}
+	}
+
+	/*
+	 * COPY fetcher uses COPY statement that don't work with prepared
+	 * statements. We only end up here in case the COPY fetcher was chosen by
+	 * the user, so error out.
+	 * Note that this can be optimized for parameters coming from initplans,
+	 * where the parameter takes only one value and technically we could deparse
+	 * it into the query string and use a non-parameterized COPY statement.
+	 */
+	if (num_params > 0 && fsstate->planned_fetcher_type == CopyFetcherType)
+	{
+		Assert(ts_guc_remote_data_fetcher == CopyFetcherType);
+		ereport(ERROR,
+				(errmsg("cannot use COPY fetcher because the plan is parameterized"),
+				 errhint("Set \"timescaledb.remote_data_fetcher\" to \"cursor\" to explicitly "
+						 "set the fetcher type or use \"auto\" to select the fetcher type "
+						 "automatically.")));
+	}
 }
 
 TupleTableSlot *
@@ -343,6 +360,7 @@ fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 	/* If we haven't created the cursor yet, nothing to do. */
 	if (NULL == fsstate->fetcher)
 		return;
+
 	/*
 	 * If any internal parameters affecting this node have changed, we'd
 	 * better destroy and recreate the cursor.  Otherwise, rewinding it should
@@ -351,11 +369,33 @@ fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 	 */
 	if (ss->ps.chgParam != NULL)
 	{
-		data_fetcher_free(fsstate->fetcher);
-		fsstate->fetcher = NULL;
+		int num_params = fsstate->num_params;
+		Assert(num_params > 0);
+
+		ExprContext *econtext = ss->ps.ps_ExprContext;
+
+		/*
+		 * Construct array of query parameter values in text format.
+		 */
+		const char **values = fsstate->param_values;
+		fill_query_params_array(econtext, fsstate->param_flinfo, fsstate->param_exprs, values);
+
+		/*
+		 * Notice that we do not specify param types, thus forcing the data
+		 * node to infer types for all parameters.  Since we explicitly cast
+		 * every parameter (see deparse.c), the "inference" is trivial and
+		 * will produce the desired result.  This allows us to avoid assuming
+		 * that the data node has the same OIDs we do for the parameters'
+		 * types.
+		 */
+		StmtParams *params = stmt_params_create_from_values(values, num_params);
+
+		fetcher->funcs->rescan(fsstate->fetcher, params);
 	}
 	else
+	{
 		fetcher->funcs->rewind(fsstate->fetcher);
+	}
 }
 
 void
@@ -448,6 +488,8 @@ explain_fetcher_type(DataFetcherType type)
 			return "COPY";
 		case CursorFetcherType:
 			return "Cursor";
+		case PreparedStatementFetcherType:
+			return "Prepared statement";
 		default:
 			Assert(false);
 			return "";

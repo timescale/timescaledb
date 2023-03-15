@@ -31,17 +31,18 @@ static int copy_fetcher_fetch_data(DataFetcher *df);
 static void copy_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 static void copy_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
 static void copy_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
-static void copy_fetcher_rescan(DataFetcher *df);
+static void copy_fetcher_rewind(DataFetcher *df);
 static void copy_fetcher_close(DataFetcher *df);
 
 static DataFetcherFuncs funcs = {
-	.send_fetch_request = copy_fetcher_send_fetch_request,
+	.close = copy_fetcher_close,
 	.fetch_data = copy_fetcher_fetch_data,
+	.rescan = data_fetcher_rescan,
+	.rewind = copy_fetcher_rewind,
+	.send_fetch_request = copy_fetcher_send_fetch_request,
 	.set_fetch_size = copy_fetcher_set_fetch_size,
 	.set_tuple_mctx = copy_fetcher_set_tuple_memcontext,
 	.store_next_tuple = copy_fetcher_store_next_tuple,
-	.rewind = copy_fetcher_rescan,
-	.close = copy_fetcher_close,
 };
 
 static void
@@ -113,7 +114,7 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 		 * Single-row mode doesn't really influence the COPY queries, but setting
 		 * it here is a convenient way to prevent concurrent COPY requests on the
 		 * same connection. This can happen if we have multiple tables on the same
-		 * data node and still use the row-by-row fetcher.
+		 * data node and still use the COPY fetcher.
 		 */
 		if (!async_request_set_single_row_mode(req))
 		{
@@ -122,7 +123,7 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 					 errmsg("could not set single-row mode on connection to \"%s\"",
 							remote_connection_node_name(fetcher->state.conn)),
 					 errdetail("The aborted statement is: %s.", fetcher->state.stmt),
-					 errhint("Copy fetcher is not supported together with sub-queries."
+					 errhint("COPY fetcher is not supported together with sub-queries."
 							 " Use cursor fetcher instead.")));
 		}
 
@@ -544,6 +545,12 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 													  attconv->typmods[att]);
 					nulls[att] = false;
 				}
+
+				/*
+				 * We expect one row per message here, check that no data is
+				 * left.
+				 */
+				Assert(copy_data.cursor = copy_data.len);
 			}
 			MemoryContextSwitchTo(fetcher->state.batch_mctx);
 			PQfreemem(copy_data.data);
@@ -670,7 +677,7 @@ copy_fetcher_close(DataFetcher *df)
 }
 
 static void
-copy_fetcher_rescan(DataFetcher *df)
+copy_fetcher_rewind(DataFetcher *df)
 {
 	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 

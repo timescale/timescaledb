@@ -20,17 +20,33 @@ typedef struct DataFetcher DataFetcher;
 
 typedef struct DataFetcherFuncs
 {
+	void (*close)(DataFetcher *data_fetcher);
+
+	/*
+	 * Read data in response to a fetch request. If no request has been sent,
+	 * send it first.
+	 */
+	int (*fetch_data)(DataFetcher *data_fetcher);
+
+	/*
+	 * Restart the parameterized remote scan with the new parameter values.
+	 */
+	void (*rescan)(DataFetcher *data_fetcher, StmtParams *params);
+
+	/*
+	 * Restart the non-parameterized remote scan. This happens in some nested
+	 * loop-type plans. Ideally we should materialize the data locally in this
+	 * case, probably on plan level by putting a Materialize node above it.
+	 */
+	void (*rewind)(DataFetcher *data_fetcher);
+
 	/* Send a request for new data. This doesn't read the data itself */
 	void (*send_fetch_request)(DataFetcher *data_fetcher);
-	/* Read data in response to a fetch request. If no request has been sent,
-	 * send it first. */
-	int (*fetch_data)(DataFetcher *data_fetcher);
+
 	/* Set the fetch (batch) size */
 	void (*set_fetch_size)(DataFetcher *data_fetcher, int fetch_size);
 	void (*set_tuple_mctx)(DataFetcher *data_fetcher, MemoryContext mctx);
 	void (*store_next_tuple)(DataFetcher *data_fetcher, TupleTableSlot *slot);
-	void (*rewind)(DataFetcher *data_fetcher);
-	void (*close)(DataFetcher *data_fetcher);
 } DataFetcherFuncs;
 
 typedef struct DataFetcher
@@ -71,6 +87,7 @@ extern void data_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 extern void data_fetcher_set_tuple_mctx(DataFetcher *df, MemoryContext mctx);
 extern void data_fetcher_validate(DataFetcher *df);
 extern void data_fetcher_reset(DataFetcher *df);
+extern void data_fetcher_rescan(DataFetcher *df, StmtParams *params);
 
 #ifdef USE_ASSERT_CHECKING
 static inline DataFetcher *

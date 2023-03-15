@@ -168,6 +168,13 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 
 	node->fdw_state = (TsFdwScanState *) palloc0(sizeof(TsFdwScanState));
 
+	/*
+	 * This is a per-chunk FDW scan, not per-data-node scan, so we're going to
+	 * scan multiple tables per data node, so we only can use the cursor data
+	 * fetcher.
+	 */
+	((TsFdwScanState *) node->fdw_state)->planned_fetcher_type = CursorFetcherType;
+
 	fdw_scan_init(&node->ss,
 				  node->fdw_state,
 				  fsplan->fs_relids,

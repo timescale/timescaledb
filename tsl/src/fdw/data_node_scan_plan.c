@@ -1669,11 +1669,34 @@ data_node_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_
 						 "columns.")));
 
 	/* Should have determined the fetcher type by now. */
-	Assert(ts_data_node_fetcher_scan_type != AutoFetcherType);
+	DataFetcherType fetcher_type = ts_data_node_fetcher_scan_type;
+	Assert(fetcher_type != AutoFetcherType);
+
+	/* Check if we should use prepared statement data fetcher. */
+	if (fetcher_type == CopyFetcherType && list_length(scaninfo.params_list) > 0 &&
+		ts_guc_remote_data_fetcher == AutoFetcherType)
+	{
+		/*
+		 * The path is parameterized by either Nested Loop params or InitPlan
+		 * params. We can distinguish the join by presence of Path.param_info.
+		 *
+		 * For joins, it is optimal to use Prepared Statement fetcher, because
+		 * this plan is likely to be ran multiple times, and this avoids
+		 * re-planning the query on each inner loop.
+		 *
+		 * For InitPlans, COPY fetcher would be more optimal. Now it's not
+		 * technically possible to use it, because the COPY statements cannot be
+		 * parameterized. We need support for this case in deparsing, to encode
+		 * the parameter values into the query itself. For now, also use the
+		 * Prepared Statement fetcher for this case, because it does not prevent
+		 * parallelism, unlike Cursor.
+		 */
+		fetcher_type = PreparedStatementFetcherType;
+	}
 
 	cscan->custom_private = list_make3(scaninfo.fdw_private,
 									   list_make1_int(scaninfo.systemcol),
-									   makeInteger(ts_data_node_fetcher_scan_type));
+									   makeInteger(fetcher_type));
 
 	return &cscan->scan.plan;
 }

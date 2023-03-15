@@ -538,12 +538,14 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 				if (context.num_distributed_tables >= 2)
 				{
-					if (ts_guc_remote_data_fetcher == CopyFetcherType)
+					if (ts_guc_remote_data_fetcher != CursorFetcherType &&
+						ts_guc_remote_data_fetcher != AutoFetcherType)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("COPY fetcher not supported"),
-								 errhint("COPY fetching of data is not supported in "
+								 errmsg("only cursor fetcher is supported for this query"),
+								 errhint("COPY or prepared statement fetching of data is not "
+										 "supported in "
 										 "queries with multiple distributed hypertables."
 										 " Use cursor fetcher instead.")));
 					}
@@ -561,6 +563,8 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 					}
 				}
 			}
+
+			Assert(ts_data_node_fetcher_scan_type != AutoFetcherType);
 		}
 
 		if (prev_planner_hook != NULL)

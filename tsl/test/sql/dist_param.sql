@@ -16,6 +16,7 @@ grant usage on foreign server data_node_1 to public;
 grant create on schema public to :ROLE_1;
 set role :ROLE_1;
 reset client_min_messages;
+\set ON_ERROR_STOP 0
 
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
@@ -93,6 +94,87 @@ order by id
 
 reset timescaledb.enable_parameterized_data_node_scan;
 
+
+-- All fetcher types with join
+set timescaledb.remote_data_fetcher = 'copy';
+
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+set timescaledb.remote_data_fetcher = 'cursor';
+
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+set timescaledb.remote_data_fetcher = 'prepared';
+
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+-- All fetcher types with initplan
+set timescaledb.remote_data_fetcher = 'copy';
+
+select id, max(value), count(*)
+from metric_dist
+where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+
+set timescaledb.remote_data_fetcher = 'cursor';
+
+select id, max(value), count(*)
+from metric_dist
+where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+
+set timescaledb.remote_data_fetcher = 'prepared';
+
+select id, max(value), count(*)
+from metric_dist
+where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+
+-- Should prefer prepared statement data fetcher for these queries.
+set timescaledb.remote_data_fetcher = 'auto';
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+
+-- Should reset the prepared cache mode after using the prepared statement fetcher.
+call distributed_exec('create or replace procedure assert_auto_plan_cache_mode() as $$ begin assert (select setting from pg_settings where name = ''plan_cache_mode'') = ''auto''; end; $$ language plpgsql;');
+call distributed_exec('call assert_auto_plan_cache_mode();');
 
 -- Shippable EC join
 select name, max(value), count(*)
@@ -268,6 +350,7 @@ where name like 'cpu%' and texteq(location, 'Yerevan')
     and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 ;
+
 
 -- Multiple joins on different variables. Use a table instead of a CTE for saner
 -- stats.

@@ -19,6 +19,7 @@ grant usage on foreign server data_node_1 to public;
 grant create on schema public to :ROLE_1;
 set role :ROLE_1;
 reset client_min_messages;
+\set ON_ERROR_STOP 0
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 -- distributed hypertable
@@ -154,6 +155,122 @@ order by id
 (21 rows)
 
 reset timescaledb.enable_parameterized_data_node_scan;
+-- All fetcher types with join
+set timescaledb.remote_data_fetcher = 'copy';
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ERROR:  cannot use COPY fetcher because the plan is parameterized
+set timescaledb.remote_data_fetcher = 'cursor';
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ id |       max        | count 
+----+------------------+-------
+  1 | 49.9941974878311 |  4174
+  3 | 49.9958902597427 |  4119
+  7 | 49.9881327152252 |  4316
+(3 rows)
+
+set timescaledb.remote_data_fetcher = 'prepared';
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ id |       max        | count 
+----+------------------+-------
+  1 | 49.9941974878311 |  4174
+  3 | 49.9958902597427 |  4119
+  7 | 49.9881327152252 |  4316
+(3 rows)
+
+-- All fetcher types with initplan
+set timescaledb.remote_data_fetcher = 'copy';
+select id, max(value), count(*)
+from metric_dist
+where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ERROR:  cannot use COPY fetcher because the plan is parameterized
+set timescaledb.remote_data_fetcher = 'cursor';
+select id, max(value), count(*)
+from metric_dist
+where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ id |       max        | count 
+----+------------------+-------
+  1 | 49.9941974878311 |  4174
+  3 | 49.9958902597427 |  4119
+  7 | 49.9881327152252 |  4316
+(3 rows)
+
+set timescaledb.remote_data_fetcher = 'prepared';
+select id, max(value), count(*)
+from metric_dist
+where id = any((select array_agg(id) from metric_name where name like 'cpu%')::int[])
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+ id |       max        | count 
+----+------------------+-------
+  1 | 49.9941974878311 |  4174
+  3 | 49.9958902597427 |  4119
+  7 | 49.9881327152252 |  4316
+(3 rows)
+
+-- Should prefer prepared statement data fetcher for these queries.
+set timescaledb.remote_data_fetcher = 'auto';
+explain (analyze, verbose, costs off, timing off, summary off)
+select id, max(value), count(*)
+from metric_dist
+where id in (select id from metric_name where name like 'cpu%')
+    and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
+group by id
+order by id
+;
+                                                                                                                                                        QUERY PLAN                                                                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=3 loops=1)
+   Output: metric_dist.id, max(metric_dist.value), count(*)
+   Group Key: metric_dist.id
+   ->  Sort (actual rows=12609 loops=1)
+         Output: metric_dist.id, metric_dist.value
+         Sort Key: metric_dist.id
+         Sort Method: quicksort 
+         ->  Nested Loop (actual rows=12609 loops=1)
+               Output: metric_dist.id, metric_dist.value
+               ->  Index Scan using metric_name_name on public.metric_name (actual rows=3 loops=1)
+                     Output: metric_name.id, metric_name.name
+                     Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
+                     Filter: (metric_name.name ~~ 'cpu%'::text)
+               ->  Custom Scan (DataNodeScan) on public.metric_dist (actual rows=4203 loops=3)
+                     Output: metric_dist.id, metric_dist.value
+                     Data node: data_node_1
+                     Fetcher Type: Prepared statement
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+(19 rows)
+
+-- Should reset the prepared cache mode after using the prepared statement fetcher.
+call distributed_exec('create or replace procedure assert_auto_plan_cache_mode() as $$ begin assert (select setting from pg_settings where name = ''plan_cache_mode'') = ''auto''; end; $$ language plpgsql;');
+call distributed_exec('call assert_auto_plan_cache_mode();');
 -- Shippable EC join
 select name, max(value), count(*)
 from metric_dist join metric_name using (id)
