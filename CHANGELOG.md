@@ -14,6 +14,11 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
 * #5410 Fix file trailer handling in the COPY fetcher 
+* #5410 Fix file trailer handling in the COPY fetcher
+* #5233 Out of on_proc_exit slots on guc license change
+* #5427 Handle user-defined FDW options properly
+* #5442 Decompression may have lost DEFAULT values
+* #5446 Add checks for malloc failure in libpq calls
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
