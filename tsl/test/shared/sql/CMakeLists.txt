@@ -29,8 +29,7 @@ endif()
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED dist_parallel_agg.sql dist_queries.sql
        timestamp_limits.sql with_clause_parser.sql)
-  list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in
-       dist_remote_error.sql.in)
+  list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are

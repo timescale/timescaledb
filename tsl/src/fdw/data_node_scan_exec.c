@@ -44,6 +44,9 @@ data_node_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	List *fdw_exprs = linitial(cscan->custom_exprs);
 	List *recheck_quals = lsecond(cscan->custom_exprs);
 	List *fdw_private = list_nth(cscan->custom_private, DataNodeScanFdwPrivate);
+	sss->fsstate.planned_fetcher_type =
+		intVal(list_nth(cscan->custom_private, DataNodeScanFetcherType));
+	Assert(sss->fsstate.planned_fetcher_type != AutoFetcherType);
 
 	if ((eflags & EXEC_FLAG_EXPLAIN_ONLY) && !ts_guc_enable_remote_explain)
 		return;
@@ -167,5 +170,6 @@ data_node_scan_state_create(CustomScan *cscan)
 	dnss->async_state.fetch_data = fetch_data;
 	dnss->fsstate.planned_fetcher_type =
 		intVal(list_nth(cscan->custom_private, DataNodeScanFetcherType));
+	Assert(dnss->fsstate.planned_fetcher_type != AutoFetcherType);
 	return (Node *) dnss;
 }

@@ -159,6 +159,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     remote_copy.sql.in
     dist_grant.sql.in
     dist_ref_table_join.sql.in
+    dist_remote_error.sql.in
     dist_partial_agg.sql.in
     dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in

@@ -28,8 +28,13 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id
 limit 1;
 
--- This query can't work with copy fetcher.
+-- This query can't work with copy or prepared fetcher.
 set timescaledb.remote_data_fetcher = 'copy';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+
+set timescaledb.remote_data_fetcher = 'prepared';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
@@ -64,7 +69,7 @@ WHERE
       ) AS l
     WHERE d.name ~~ d.name
   )
-ORDER BY 1,2;
+ORDER BY 1, 2;
 RESET jit;
 
 
@@ -96,8 +101,16 @@ explain (analyze, verbose, costs off, timing off, summary off)
 select * from disttable_with_bytea;
 select * from disttable_with_bytea;
 
+-- Prepared statement fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'prepared';
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_bytea;
+select * from disttable_with_bytea;
+
 -- #4515 test for assertion failure in copy_fetcher_close
 SET timescaledb.remote_data_fetcher = 'copy';
+
 SELECT *
 FROM
   conditions ref_0
@@ -113,6 +126,41 @@ WHERE EXISTS (
   WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
 );
 
+SET timescaledb.remote_data_fetcher = 'prepared';
+
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+
+
 -- #4518
 -- test error handling for queries with multiple distributed hypertables
 SET timescaledb.remote_data_fetcher = 'copy';
@@ -124,7 +172,21 @@ WHERE EXISTS (
     LATERAL (select * from metrics as ref_2) as subq_3
   WHERE
     (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
-);
+)
+ORDER BY 1, 2;
+
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1, 2;
+
 SET timescaledb.remote_data_fetcher = 'auto';
 SELECT * FROM
   conditions_dist1 ref_0
@@ -135,7 +197,7 @@ WHERE EXISTS (
   WHERE
     (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
 )
-ORDER BY 1,2;
+ORDER BY 1, 2;
 
 -- Check that we don't use COPY fetcher for parameterized plans.
 CREATE TABLE lookup (id SERIAL NOT NULL, key TEXT, val TEXT);
@@ -174,9 +236,17 @@ WHERE
     AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
 ORDER BY 1 DESC LIMIT 1;
 
--- Test copy fetcher when query is aborted before EOF due to LIMIT
+
+-- Test fetcher when query is aborted before EOF due to LIMIT
 SET timescaledb.remote_data_fetcher = 'copy';
 SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+
 
 -- Verify that cursor fetcher can be rewind before EOF due to an
 -- intermediate JOIN product reaching LIMIT

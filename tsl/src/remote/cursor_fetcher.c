@@ -55,13 +55,14 @@ static void cursor_fetcher_rewind(DataFetcher *df);
 static void cursor_fetcher_close(DataFetcher *df);
 
 static DataFetcherFuncs funcs = {
-	.send_fetch_request = cursor_fetcher_send_fetch_request,
+	.close = cursor_fetcher_close,
 	.fetch_data = cursor_fetcher_fetch_data,
+	.rescan = data_fetcher_rescan,
+	.rewind = cursor_fetcher_rewind,
+	.send_fetch_request = cursor_fetcher_send_fetch_request,
 	.set_fetch_size = cursor_fetcher_set_fetch_size,
 	.set_tuple_mctx = cursor_fetcher_set_tuple_memcontext,
 	.store_next_tuple = cursor_fetcher_store_next_tuple,
-	.rewind = cursor_fetcher_rewind,
-	.close = cursor_fetcher_close,
 };
 
 static void
@@ -327,7 +328,14 @@ cursor_fetcher_fetch_data(DataFetcher *df)
 		return 0;
 
 	if (!cursor->state.open)
+	{
+		if (cursor->create_req == NULL)
+		{
+			cursor_create_req(cursor);
+		}
+
 		cursor_fetcher_wait_until_open(df);
+	}
 
 	if (cursor->state.data_req == NULL)
 		cursor_fetcher_send_fetch_request(df);

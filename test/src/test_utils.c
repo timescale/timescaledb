@@ -87,7 +87,7 @@ ts_test_error_injection(PG_FUNCTION_ARGS)
 }
 
 static int
-throw_after_n_rows(int max_rows, int severity)
+transaction_row_counter(void)
 {
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
@@ -99,7 +99,13 @@ throw_after_n_rows(int max_rows, int severity)
 		last_lxid = MyProc->lxid;
 	}
 
-	rows_seen++;
+	return rows_seen++;
+}
+
+static int
+throw_after_n_rows(int max_rows, int severity)
+{
+	int rows_seen = transaction_row_counter();
 
 	if (max_rows <= rows_seen)
 	{
@@ -125,27 +131,36 @@ ts_debug_shippable_fatal_after_n_rows(PG_FUNCTION_ARGS)
 }
 
 /*
+ * After how many rows should we error out according to the user-set option.
+ */
+static int
+get_error_after_rows()
+{
+	int error_after = 7103; /* default is an arbitrary prime */
+
+	const char *error_after_option =
+		GetConfigOption("timescaledb.debug_broken_sendrecv_error_after", true, false);
+	if (error_after_option)
+	{
+		error_after = pg_strtoint32(error_after_option);
+	}
+
+	return error_after;
+}
+
+/*
  * Broken send/receive functions for int4 that throw after an (arbitrarily
  * chosen prime or configured) number of rows.
  */
 static void
 broken_sendrecv_throw()
 {
-	int throw_after = 7103; /* an arbitrary prime */
-	const char *throw_after_option =
-		GetConfigOption("timescaledb.debug_broken_sendrecv_throw_after", true, false);
-
-	if (throw_after_option)
-	{
-		throw_after = pg_strtoint32(throw_after_option);
-	}
-
 	/*
 	 * Use ERROR, not FATAL, because PG versions < 14 are unable to report a
 	 * FATAL error to the access node before closing the connection, so the test
 	 * results would be different.
 	 */
-	(void) throw_after_n_rows(throw_after, ERROR);
+	(void) throw_after_n_rows(get_error_after_rows(), ERROR);
 }
 
 TS_FUNCTION_INFO_V1(ts_debug_broken_int4recv);
@@ -166,11 +181,25 @@ ts_debug_broken_int4send(PG_FUNCTION_ARGS)
 	return int4send(fcinfo);
 }
 
-TS_FUNCTION_INFO_V1(ts_debug_sleepy_int4recv);
+/* An incorrect int4out that sometimes returns not a number. */
+TS_FUNCTION_INFO_V1(ts_debug_incorrect_int4out);
 
-/* Sleep after some rows. */
 Datum
-ts_debug_sleepy_int4recv(PG_FUNCTION_ARGS)
+ts_debug_incorrect_int4out(PG_FUNCTION_ARGS)
+{
+	int rows_seen = transaction_row_counter();
+
+	if (rows_seen >= get_error_after_rows())
+	{
+		PG_RETURN_CSTRING("surprise");
+	}
+
+	return int4out(fcinfo);
+}
+
+/* Sleeps after a certain number of calls. */
+static void
+ts_debug_sleepy_function()
 {
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
@@ -184,7 +213,7 @@ ts_debug_sleepy_int4recv(PG_FUNCTION_ARGS)
 
 	rows_seen++;
 
-	if (rows_seen >= 1000)
+	if (rows_seen >= 997)
 	{
 		(void) WaitLatch(MyLatch,
 						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
@@ -194,8 +223,24 @@ ts_debug_sleepy_int4recv(PG_FUNCTION_ARGS)
 
 		rows_seen = 0;
 	}
+}
 
+TS_FUNCTION_INFO_V1(ts_debug_sleepy_int4recv);
+
+Datum
+ts_debug_sleepy_int4recv(PG_FUNCTION_ARGS)
+{
+	ts_debug_sleepy_function();
 	return int4recv(fcinfo);
+}
+
+TS_FUNCTION_INFO_V1(ts_debug_sleepy_int4send);
+
+Datum
+ts_debug_sleepy_int4send(PG_FUNCTION_ARGS)
+{
+	ts_debug_sleepy_function();
+	return int4send(fcinfo);
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_wait);

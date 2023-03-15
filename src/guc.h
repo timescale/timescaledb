@@ -61,9 +61,10 @@ extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 
 typedef enum DataFetcherType
 {
-	CursorFetcherType,
+	AutoFetcherType = 1, /* Skip 0 to better catch uninitialized values. */
 	CopyFetcherType,
-	AutoFetcherType,
+	CursorFetcherType,
+	PreparedStatementFetcherType,
 } DataFetcherType;
 
 extern TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher;
