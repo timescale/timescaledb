@@ -21,3 +21,6 @@ CREATE FUNCTION _timescaledb_internal.recompress_chunk_segmentwise(REGCLASS, BOO
 AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 CREATE FUNCTION _timescaledb_internal.get_compressed_chunk_index_for_recompression(REGCLASS) RETURNS REGCLASS
 AS '@MODULE_PATHNAME@', 'ts_get_compressed_chunk_index_for_recompression' LANGUAGE C STRICT VOLATILE;
+
+DROP FUNCTION _timescaledb_internal.dimension_is_finite;
+DROP FUNCTION _timescaledb_internal.dimension_slice_get_constraint_sql;

@@ -26,8 +26,8 @@ ts_test_merge_chunks_on_dimension(PG_FUNCTION_ARGS)
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_id, true);
 	Chunk *merge_chunk = ts_chunk_get_by_relid(merge_chunk_id, true);
-
-	ts_chunk_merge_on_dimension(chunk, merge_chunk, dimension_id);
+	Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+	ts_chunk_merge_on_dimension(ht, chunk, merge_chunk, dimension_id);
 
 	PG_RETURN_VOID();
 }

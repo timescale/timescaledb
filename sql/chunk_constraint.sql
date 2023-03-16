@@ -22,12 +22,7 @@ BEGIN
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.id = chunk_row.hypertable_id;
 
     IF chunk_constraint_row.dimension_slice_id IS NOT NULL THEN
-        check_sql = _timescaledb_internal.dimension_slice_get_constraint_sql(chunk_constraint_row.dimension_slice_id);
-        IF check_sql IS NOT NULL THEN
-            def := format('CHECK (%s)',  check_sql);
-        ELSE
-            def := NULL;
-        END IF;
+	    RAISE 'cannot create dimension constraint %', chunk_constraint_row;
     ELSIF chunk_constraint_row.hypertable_constraint_name IS NOT NULL THEN
 
         SELECT oid, contype INTO STRICT constraint_oid, constraint_type FROM pg_constraint

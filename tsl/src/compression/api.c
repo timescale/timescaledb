@@ -525,11 +525,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
 		 * referenced table during compression.
 		 */
-		ts_chunk_constraints_create(compress_ht_chunk->constraints,
-									compress_ht_chunk->table_id,
-									compress_ht_chunk->fd.id,
-									compress_ht_chunk->hypertable_relid,
-									compress_ht_chunk->fd.hypertable_id);
+		ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
 		ts_trigger_create_all_on_chunk(compress_ht_chunk);
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 	}
@@ -551,7 +547,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 																	  colinfo_array,
 																	  htcols_listlen);
 
-		ts_chunk_merge_on_dimension(mergable_chunk, cxt.srcht_chunk, time_dim->fd.id);
+		ts_chunk_merge_on_dimension(cxt.srcht, mergable_chunk, cxt.srcht_chunk, time_dim->fd.id);
 
 		if (chunk_unordered)
 		{
@@ -654,7 +650,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
 
 	/* Recreate FK constraints, since they were dropped during compression. */
-	ts_chunk_create_fks(uncompressed_chunk);
+	ts_chunk_create_fks(uncompressed_hypertable, uncompressed_chunk);
 
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
@@ -809,11 +805,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
 
 	/* Copy chunk constraints (including fkey) to compressed chunk */
-	ts_chunk_constraints_create(compress_ht_chunk->constraints,
-								compress_ht_chunk->table_id,
-								compress_ht_chunk->fd.id,
-								compress_ht_chunk->hypertable_relid,
-								compress_ht_chunk->fd.hypertable_id);
+	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
 	ts_trigger_create_all_on_chunk(compress_ht_chunk);
 
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow

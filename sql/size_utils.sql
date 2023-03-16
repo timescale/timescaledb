@@ -366,7 +366,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
 $BODY$
 DECLARE
 BEGIN
-    IF NOT _timescaledb_internal.dimension_is_finite(time_value) THEN
+    IF NOT (time_value > (-9223372036854775808)::bigint AND
+	   	    time_value < 9223372036854775807::bigint) THEN
         RETURN '';
     END IF;
     IF time_value IS NULL THEN

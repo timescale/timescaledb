@@ -105,7 +105,7 @@ typedef struct ChunkScanCtx
 {
 	HTAB *htab;
 	char relkind; /* Create chunks of this relkind */
-	const Hyperspace *space;
+	const Hypertable *ht;
 	const Point *point;
 	unsigned int num_complete_chunks;
 	int num_processed;
@@ -176,9 +176,9 @@ extern TSDLLEXPORT int32 ts_chunk_get_id_by_relid(Oid relid);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT int ts_chunk_num_of_chunks_created_after(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
-extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
+extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id);
 extern TSDLLEXPORT void ts_chunk_drop_fks(const Chunk *const chunk);
-extern TSDLLEXPORT void ts_chunk_create_fks(const Chunk *const chunk);
+extern TSDLLEXPORT void ts_chunk_create_fks(const Hypertable *ht, const Chunk *const chunk);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
@@ -236,8 +236,8 @@ extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);
 extern int ts_chunk_oid_cmp(const void *p1, const void *p2);
 int ts_chunk_get_osm_chunk_id(int hypertable_id);
-extern TSDLLEXPORT void ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk,
-													int32 dimension_id);
+extern TSDLLEXPORT void ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk,
+													const Chunk *merge_chunk, int32 dimension_id);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
