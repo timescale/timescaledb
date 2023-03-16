@@ -2187,7 +2187,7 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	Oid hypertable_constraint_oid = *((Oid *) arg);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	ts_chunk_constraint_create_on_chunk(chunk, hypertable_constraint_oid);
+	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
 }
 
 static void
@@ -3097,7 +3097,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	ts_dimension_set_type(dim, new_type);
 	ts_process_utility_set_expect_chunk_modification(true);
-	ts_chunk_recreate_all_constraints_for_dimension(ht->space, dim->fd.id);
+	ts_chunk_recreate_all_constraints_for_dimension(ht, dim->fd.id);
 	ts_process_utility_set_expect_chunk_modification(false);
 }
 

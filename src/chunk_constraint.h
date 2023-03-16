@@ -59,10 +59,9 @@ extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkCon
 extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_check_constraints(
 	ChunkConstraints *ccs, int32 chunk_id, const char chunk_relkind, Oid hypertable_oid);
 extern TSDLLEXPORT void ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs);
-extern TSDLLEXPORT void ts_chunk_constraints_create(const ChunkConstraints *ccs, Oid chunk_oid,
-													int32 chunk_id, Oid hypertable_oid,
-													int32 hypertable_id);
-extern void ts_chunk_constraint_create_on_chunk(const Chunk *chunk, Oid constraint_oid);
+extern TSDLLEXPORT void ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk);
+extern void ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk,
+												Oid constraint_oid);
 extern int ts_chunk_constraint_delete_by_hypertable_constraint_name(
 	int32 chunk_id, const char *hypertable_constraint_name, bool delete_metadata,
 	bool drop_constraint);
@@ -72,7 +71,7 @@ extern int ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id,
 														 const char *constraint_name,
 														 bool delete_metadata,
 														 bool drop_constraint);
-extern void ts_chunk_constraint_recreate(const ChunkConstraint *cc, Oid chunk_oid);
+extern void ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk);
 extern int ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
 															const char *new_name);
 extern int ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
