@@ -26,6 +26,7 @@ typedef.list
 /compile_commands.json
 /.DS_Store
 /.clangd
+/.cache
 
 /CMakeSettings.json
 /out/*
