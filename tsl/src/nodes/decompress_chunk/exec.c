@@ -473,7 +473,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 		if (!state->initialized)
 		{
-			ExecClearTuple(decompressed_slot);
+			ExecStoreAllNullTuple(decompressed_slot);
 
 			/*
 			 * Reset expression memory context to clean out any cruft from

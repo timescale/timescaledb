@@ -30,6 +30,7 @@ accidentally triggering the load of a previous DB version.**
 * #5499 Do not segfault on large histogram() parameters
 * #5497 Allow named time_bucket arguments in Cagg definition
 * #5500 Fix when no FROM clause in continuous aggregate definition
+* #5462 Fix segfault after column drop on compressed table
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
