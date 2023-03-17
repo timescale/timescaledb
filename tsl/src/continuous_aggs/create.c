@@ -205,7 +205,7 @@ static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
 static void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo);
 static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
+	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
 	char *table_access_method, ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
 														  Query *userview_query, bool finalized);
@@ -549,8 +549,8 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
  *
  *  Parameters:
  *    mat_rel: relation information for the materialization table
- *    origquery_tblinfo: - user query's tbale information. used for setting up
- *        thr partitioning of the hypertable.
+ *    bucket_info: bucket information used for setting up the
+ *                 hypertable partitioning (`chunk_interval_size`).
  *    tablespace_name: Name of the tablespace for the materialization table.
  *    table_access_method: Name of the table access method to use for the
  *        materialization table.
@@ -559,8 +559,7 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
  */
 static int32
 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
-												RangeVar *mat_rel,
-												CAggTimebucketInfo *origquery_tblinfo,
+												RangeVar *mat_rel, CAggTimebucketInfo *bucket_info,
 												bool create_addl_index, char *const tablespacename,
 												char *const table_access_method,
 												ObjectAddress *mataddress)
@@ -604,7 +603,12 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 
 	/* Convert the materialization table to a hypertable. */
-	matpartcol_interval = MATPARTCOL_INTERVAL_FACTOR * (origquery_tblinfo->htpartcol_interval_len);
+	matpartcol_interval = bucket_info->htpartcol_interval_len;
+
+	/* Apply the factor just for non-Hierachical CAggs */
+	if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+		matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
+
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
 	/* Retrieve the hypertable id from the cache. */
@@ -621,7 +625,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 * aggregate. This is the initial state of the aggregate before any
 	 * refreshes.
 	 */
-	orig_ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
+	orig_ht = ts_hypertable_cache_get_entry(hcache, bucket_info->htoid, CACHE_FLAG_NONE);
 	continuous_agg_invalidate_mat_ht(orig_ht, mat_ht, TS_TIME_NOBEGIN, TS_TIME_NOEND);
 	ts_cache_release(hcache);
 	return mat_htid;
@@ -1147,11 +1151,10 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 				bucket_info.interval->day = bucket_info.interval->month * DAYS_PER_MONTH;
 				bucket_info.interval->month = 0;
 			}
-			Datum epoch = DirectFunctionCall2(interval_part,
-											  PointerGetDatum(cstring_to_text("epoch")),
-											  IntervalPGetDatum(bucket_info.interval));
-			/* Cast float8 to int8. */
-			width = DatumGetInt64(DirectFunctionCall1(dtoi8, epoch));
+
+			/* Convert Interval to int64 */
+			width =
+				ts_interval_value_to_internal(IntervalPGetDatum(bucket_info.interval), INTERVALOID);
 			break;
 		}
 		default:
@@ -2615,7 +2618,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  */
 static void
 cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-			CAggTimebucketInfo *origquery_ht, WithClauseResult *with_clause_options)
+			CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options)
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
@@ -2668,7 +2671,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	mattablecolumninfo_create_materialization_table(&mattblinfo,
 													materialize_hypertable_id,
 													mat_rel,
-													origquery_ht,
+													bucket_info,
 													is_create_mattbl_index,
 													create_stmt->into->tableSpaceName,
 													create_stmt->into->accessMethod,
@@ -2682,7 +2685,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													mat_rel->relname);
 
 	if (!materialized_only)
-		final_selquery = build_union_query(origquery_ht,
+		final_selquery = build_union_query(bucket_info,
 										   mattblinfo.matpartcolno,
 										   final_selquery,
 										   panquery,
@@ -2719,19 +2722,19 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	nspid = RangeVarGetCreationNamespace(stmt->view);
 
 	create_cagg_catalog_entry(materialize_hypertable_id,
-							  origquery_ht->htid,
+							  bucket_info->htid,
 							  get_namespace_name(nspid), /*schema name for user view */
 							  stmt->view->relname,
 							  part_rel->schemaname,
 							  part_rel->relname,
-							  origquery_ht->bucket_width,
+							  bucket_info->bucket_width,
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname,
 							  finalized,
-							  origquery_ht->parent_mat_hypertable_id);
+							  bucket_info->parent_mat_hypertable_id);
 
-	if (origquery_ht->bucket_width == BUCKET_WIDTH_VARIABLE)
+	if (bucket_info->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
 		const char *bucket_width;
 		const char *origin = "";
@@ -2739,14 +2742,14 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		/*
 		 * Variable-sized buckets work only with intervals.
 		 */
-		Assert(origquery_ht->interval != NULL);
+		Assert(bucket_info->interval != NULL);
 		bucket_width = DatumGetCString(
-			DirectFunctionCall1(interval_out, IntervalPGetDatum(origquery_ht->interval)));
+			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->interval)));
 
-		if (!TIMESTAMP_NOT_FINITE(origquery_ht->origin))
+		if (!TIMESTAMP_NOT_FINITE(bucket_info->origin))
 		{
 			origin = DatumGetCString(
-				DirectFunctionCall1(timestamp_out, TimestampGetDatum(origquery_ht->origin)));
+				DirectFunctionCall1(timestamp_out, TimestampGetDatum(bucket_info->origin)));
 		}
 
 		/*
@@ -2757,17 +2760,16 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		 * that can be optimized later.
 		 */
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 get_func_namespace(
-												 origquery_ht->bucket_func->funcid) !=
+											 get_func_namespace(bucket_info->bucket_func->funcid) !=
 												 PG_PUBLIC_NAMESPACE,
-											 get_func_name(origquery_ht->bucket_func->funcid),
+											 get_func_name(bucket_info->bucket_func->funcid),
 											 bucket_width,
 											 origin,
-											 origquery_ht->timezone);
+											 bucket_info->timezone);
 	}
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
-	cagg_add_trigger_hypertable(origquery_ht->htoid, origquery_ht->htid);
+	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
 }
 
 DDLResult

@@ -64,19 +64,25 @@ check_for_partialize_function_call(Node *node, PartializeWalkerState *state)
 		if (state->looking_for_agg)
 		{
 			state->looking_for_agg = false;
-			if (state->fix_aggref == TS_FIX_AGGREF)
-			{
-				aggref->aggsplit = AGGSPLIT_INITIAL_SERIAL;
 
-				if (aggref->aggtranstype == INTERNALOID &&
-					DO_AGGSPLIT_SERIALIZE(AGGSPLIT_INITIAL_SERIAL))
+			if (state->fix_aggref != TS_DO_NOT_FIX_AGGSPLIT)
+			{
+				if (state->fix_aggref == TS_FIX_AGGSPLIT_SIMPLE &&
+					aggref->aggsplit == AGGSPLIT_SIMPLE)
 				{
+					aggref->aggsplit = AGGSPLIT_INITIAL_SERIAL;
+				}
+				else if (state->fix_aggref == TS_FIX_AGGSPLIT_FINAL &&
+						 aggref->aggsplit == AGGSPLIT_FINAL_DESERIAL)
+				{
+					aggref->aggsplit = AGGSPLITOP_COMBINE | AGGSPLITOP_DESERIALIZE |
+									   AGGSPLITOP_SERIALIZE | AGGSPLITOP_SKIPFINAL;
+				}
+
+				if (aggref->aggtranstype == INTERNALOID)
 					aggref->aggtype = BYTEAOID;
-				}
 				else
-				{
 					aggref->aggtype = aggref->aggtranstype;
-				}
 			}
 		}
 
@@ -99,7 +105,7 @@ check_for_partialize_function_call(Node *node, PartializeWalkerState *state)
 }
 
 bool
-has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref)
+has_partialize_function(Node *node, PartializeAggFixAggref fix_aggref)
 {
 	Oid partialfnoid = InvalidOid;
 	Oid argtyp[] = { ANYELEMENTOID };
@@ -114,7 +120,7 @@ has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref)
 	partialfnoid = LookupFuncName(name, lengthof(argtyp), argtyp, false);
 	Assert(OidIsValid(partialfnoid));
 	state.fnoid = partialfnoid;
-	check_for_partialize_function_call((Node *) parse->targetList, &state);
+	check_for_partialize_function_call(node, &state);
 
 	if (state.found_partialize && state.found_non_partial_agg)
 		elog(ERROR, "cannot mix partialized and non-partialized aggregates in the same statement");
@@ -124,19 +130,59 @@ has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref)
 
 /*
  * Modify all AggPaths in relation to use partial aggregation.
+ *
+ * Note that there can be both parallel (split) paths and non-parallel
+ * (non-split) paths suggested at this stage, but all of them refer to the
+ * same Aggrefs. Depending on the Path picked, the Aggrefs are "fixed up" by
+ * the PostgreSQL planner at a later stage in planner (in setrefs.c) to match
+ * the choice of Path. For this reason, it is not possible to modify Aggrefs
+ * at this stage AND keep both type of Paths. Therefore, if a split Path is
+ * found, then prune the non-split path.
  */
-static void
+static bool
 partialize_agg_paths(RelOptInfo *rel)
 {
 	ListCell *lc;
+	bool has_combine = false;
+	List *aggsplit_simple_paths = NIL;
+	List *aggsplit_final_paths = NIL;
+	List *other_paths = NIL;
 
 	foreach (lc, rel->pathlist)
 	{
 		Path *path = lfirst(lc);
 
 		if (IsA(path, AggPath))
-			castNode(AggPath, path)->aggsplit = AGGSPLIT_INITIAL_SERIAL;
+		{
+			AggPath *agg = castNode(AggPath, path);
+
+			if (agg->aggsplit == AGGSPLIT_SIMPLE)
+			{
+				agg->aggsplit = AGGSPLIT_INITIAL_SERIAL;
+				aggsplit_simple_paths = lappend(aggsplit_simple_paths, path);
+			}
+			else if (agg->aggsplit == AGGSPLIT_FINAL_DESERIAL)
+			{
+				has_combine = true;
+				aggsplit_final_paths = lappend(aggsplit_final_paths, path);
+			}
+			else
+			{
+				other_paths = lappend(other_paths, path);
+			}
+		}
+		else
+		{
+			other_paths = lappend(other_paths, path);
+		}
 	}
+
+	if (aggsplit_final_paths != NIL)
+		rel->pathlist = list_concat(other_paths, aggsplit_final_paths);
+	else
+		rel->pathlist = list_concat(other_paths, aggsplit_simple_paths);
+
+	return has_combine;
 }
 
 /*
@@ -182,13 +228,29 @@ bool
 ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel)
 {
 	Query *parse = root->parse;
+	bool found_partialize_agg_func;
+
 	Assert(IS_UPPER_REL(output_rel));
 
 	if (CMD_SELECT != parse->commandType || !parse->hasAggs)
 		return false;
 
-	if (!has_partialize_function(parse, TS_FIX_AGGREF))
+	found_partialize_agg_func =
+		has_partialize_function((Node *) parse->targetList, TS_DO_NOT_FIX_AGGSPLIT);
+
+	if (!found_partialize_agg_func)
 		return false;
+
+	/* partialize_agg() function found. Now turn simple (non-partial) aggs
+	 * (AGGSPLIT_SIMPLE) into partials. If the Agg is a combine/final we want
+	 * to do the combine but not the final step. However, it is not possible
+	 * to change that here at the Path stage because the PostgreSQL planner
+	 * will hit an assertion, so we defer that to the plan stage in planner.c.
+	 */
+	bool is_combine = partialize_agg_paths(output_rel);
+
+	if (!is_combine)
+		has_partialize_function((Node *) parse->targetList, TS_FIX_AGGSPLIT_SIMPLE);
 
 	/* We cannot check root->hasHavingqual here because sometimes the
 	 * planner can replace the HAVING clause with a simple filter. But
@@ -201,6 +263,5 @@ ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel)
 				 errhint("Any aggregates in a HAVING clause need to be partialized in the output "
 						 "target list.")));
 
-	partialize_agg_paths(output_rel);
 	return true;
 }

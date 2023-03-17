@@ -279,4 +279,9 @@ extern ArrowArray *tsl_try_decompress_all(CompressionAlgorithms algorithm, Datum
 extern void update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid);
 extern void merge_chunk_relstats(Oid merged_relid, Oid compressed_relid);
 
+typedef struct Chunk Chunk;
+typedef struct ChunkInsertState ChunkInsertState;
+extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
+										  TupleTableSlot *slot);
+
 #endif

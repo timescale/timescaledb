@@ -25,6 +25,8 @@
 #include <nodes/parsenodes.h>
 #include <nodes/nodes.h>
 #include <nodes/value.h>
+#include <storage/lockdefs.h>
+#include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/array.h>
@@ -1157,6 +1159,8 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			{
 				ChunkDataNode *cdn = lfirst(cs_lc);
 				const Chunk *chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
+				LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
+
 				chunk_update_foreign_server_if_needed(chunk, cdn->foreign_server_oid, false);
 				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																	NameStr(cdn->fd.node_name));
@@ -1958,10 +1962,10 @@ data_node_get_node_name_list_with_aclcheck(AclMode mode, bool fail_on_aclcheck)
 	return nodes;
 }
 
-void
-data_node_fail_if_nodes_are_unavailable(void)
+bool
+data_node_some_unavailable(void)
 {
-	/* Get a list of data nodes and ensure all of them are available */
+	/* Get a list of data nodes and check if one is unavailable */
 	List *data_node_list = data_node_get_node_name_list_with_aclcheck(ACL_NO_CHECK, false);
 	ListCell *lc;
 
@@ -1972,8 +1976,13 @@ data_node_fail_if_nodes_are_unavailable(void)
 
 		server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false);
 		if (!ts_data_node_is_available_by_server(server))
-			ereport(ERROR, (errmsg("some data nodes are not available")));
+		{
+			list_free(data_node_list);
+			return true;
+		}
 	}
+	list_free(data_node_list);
+	return false;
 }
 
 /*

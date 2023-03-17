@@ -123,6 +123,38 @@ SELECT
 FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+          name           | chunk_interval 
+-------------------------+----------------
+ conditions              |             10
+ conditions_summary_1_1  |            100
+ conditions_summary_2_5  |            100
+ conditions_summary_3_10 |            100
+(4 rows)
+
+\endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -328,21 +360,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:124: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:125: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:126: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:127: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:131: NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
+psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:134: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -365,11 +397,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:145: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
+psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:148: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -384,11 +416,11 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:155: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
 \set IS_DEFAULT_COLUMN_ORDER TRUE
@@ -492,6 +524,38 @@ SELECT
 FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+          name           | chunk_interval 
+-------------------------+----------------
+ conditions              |             10
+ conditions_summary_1_1  |            100
+ conditions_summary_2_5  |            100
+ conditions_summary_3_10 |            100
+(4 rows)
+
+\endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -697,21 +761,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:124: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:125: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:126: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:127: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:131: NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
+psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:134: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -734,11 +798,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:145: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_8_chunk
+psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_8_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:148: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -753,11 +817,11 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:155: NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
 \set ON_ERROR_STOP 1
 --
 -- Validation test for non-multiple bucket sizes
@@ -1112,6 +1176,38 @@ SELECT
 FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+            name             | chunk_interval 
+-----------------------------+----------------
+ conditions                  | @ 7 days
+ conditions_summary_1_hourly | @ 70 days
+ conditions_summary_2_daily  | @ 70 days
+ conditions_summary_3_weekly | @ 70 days
+(4 rows)
+
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -1317,21 +1413,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:124: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:125: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:126: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:127: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:131: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
+psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:134: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -1354,11 +1450,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:145: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_13_chunk
+psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_13_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:148: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -1373,11 +1469,11 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:155: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
 \set IS_DEFAULT_COLUMN_ORDER TRUE
@@ -1477,6 +1573,38 @@ SELECT
 FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+            name             | chunk_interval 
+-----------------------------+----------------
+ conditions                  | @ 7 days
+ conditions_summary_1_hourly | @ 70 days
+ conditions_summary_2_daily  | @ 70 days
+ conditions_summary_3_weekly | @ 70 days
+(4 rows)
+
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -1682,21 +1810,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:124: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:125: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:126: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:127: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:131: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_18_chunk
+psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_18_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:134: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -1719,11 +1847,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:145: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_17_chunk
+psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_17_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:148: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -1738,11 +1866,11 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:155: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_16_chunk
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_16_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 --
 -- Validation test for variable bucket on top of fixed bucket
@@ -2172,6 +2300,38 @@ SELECT
 FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+            name             | chunk_interval 
+-----------------------------+----------------
+ conditions                  | @ 7 days
+ conditions_summary_1_hourly | @ 70 days
+ conditions_summary_2_daily  | @ 70 days
+ conditions_summary_3_weekly | @ 70 days
+(4 rows)
+
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -2377,21 +2537,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:124: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:125: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:126: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:127: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:131: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_22_chunk
+psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_22_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:134: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -2414,11 +2574,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:145: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_21_chunk
+psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_21_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:148: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -2433,11 +2593,11 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:155: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_20_chunk
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_20_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
 \set IS_DEFAULT_COLUMN_ORDER TRUE
@@ -2536,6 +2696,38 @@ SELECT
 FROM :CAGG_NAME_2TH_LEVEL
 GROUP BY 1
 WITH NO DATA;
+-- Check chunk_interval
+\if :IS_TIME_DIMENSION
+  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+            name             | chunk_interval 
+-----------------------------+----------------
+ conditions                  | @ 7 days
+ conditions_summary_1_hourly | @ 70 days
+ conditions_summary_2_daily  | @ 70 days
+ conditions_summary_3_weekly | @ 70 days
+(4 rows)
+
+\else
+  SELECT h.table_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.hypertable h
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
+  WHERE h.table_name = 'conditions'
+  UNION ALL
+  SELECT c.user_view_name AS name, d.interval_length AS chunk_interval
+  FROM _timescaledb_catalog.continuous_agg c
+  LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
+  WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
+  ORDER BY 1, 2;
+\endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -2741,21 +2933,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:124: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:125: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:126: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:127: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:131: NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_26_chunk
+psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_26_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:134: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -2778,11 +2970,11 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:145: NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_25_chunk
+psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_25_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:148: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -2797,11 +2989,11 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:155: NOTICE:  drop cascades to table _timescaledb_internal._hyper_31_24_chunk
+psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_31_24_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:158: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 --
 -- Validation test for variable bucket on top of fixed bucket
@@ -4046,6 +4238,423 @@ GROUP BY 1
 WITH NO DATA;
 psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 30 days] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 7 days].
+\d+ :CAGG_NAME_2TH_LEVEL
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+-- bug report 5277
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
+\set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
+-- epoch plus cast to int would compute a bucket width of 0 for parent
+\set BUCKET_WIDTH_1ST 'INTERVAL \'146 ms\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 ms\''
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_58.bucket,
+    _materialized_hypertable_58.temperature
+   FROM _timescaledb_internal._materialized_hypertable_58
+  WHERE _materialized_hypertable_58.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(58)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 0.146 secs'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(58)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 0.146 secs'::interval, conditions."time"));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_59.bucket,
+    _materialized_hypertable_59.temperature
+   FROM _timescaledb_internal._materialized_hypertable_59
+  WHERE _materialized_hypertable_59.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1.168 secs'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1.168 secs'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+\set BUCKET_WIDTH_1ST 'INTERVAL \'9344 ms\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'74752 ms\''
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_60.bucket,
+    _materialized_hypertable_60.temperature
+   FROM _timescaledb_internal._materialized_hypertable_60
+  WHERE _materialized_hypertable_60.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(60)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 9.344 secs'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(60)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 9.344 secs'::interval, conditions."time"));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_61.bucket,
+    _materialized_hypertable_61.temperature
+   FROM _timescaledb_internal._materialized_hypertable_61
+  WHERE _materialized_hypertable_61.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(61)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 min 14.752 secs'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(61)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 min 14.752 secs'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+\set BUCKET_WIDTH_1ST 'INTERVAL \'74752 ms\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'598016 ms\''
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_62.bucket,
+    _materialized_hypertable_62.temperature
+   FROM _timescaledb_internal._materialized_hypertable_62
+  WHERE _materialized_hypertable_62.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(62)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 min 14.752 secs'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(62)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 min 14.752 secs'::interval, conditions."time"));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_63.bucket,
+    _materialized_hypertable_63.temperature
+   FROM _timescaledb_internal._materialized_hypertable_63
+  WHERE _materialized_hypertable_63.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(63)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 9 mins 58.016 secs'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(63)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 9 mins 58.016 secs'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+-- test microseconds - should pass
+\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1168 usec\''
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_64.bucket,
+    _materialized_hypertable_64.temperature
+   FROM _timescaledb_internal._materialized_hypertable_64
+  WHERE _materialized_hypertable_64.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 0.000146 secs'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 0.000146 secs'::interval, conditions."time"));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_2TH_LEVEL
+                               View "public.conditions_summary_2"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_65.bucket,
+    _materialized_hypertable_65.temperature
+   FROM _timescaledb_internal._materialized_hypertable_65
+  WHERE _materialized_hypertable_65.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(65)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 0.001168 secs'::interval, conditions_summary_1.bucket) AS bucket,
+    sum(conditions_summary_1.temperature) AS temperature
+   FROM conditions_summary_1
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(65)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 0.001168 secs'::interval, conditions_summary_1.bucket));
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+--
+-- Cleanup
+--
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
+DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
+-- test microseconds - SHOULD FAIL
+\set BUCKET_WIDTH_1ST 'INTERVAL \'146 usec\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1160 usec\''
+\ir include/cagg_on_cagg_validations.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CAGG_NAME_1ST_LEVEL conditions_summary_1
+\set CAGG_NAME_2TH_LEVEL conditions_summary_2
+--
+-- CAGG on hypertable (1st level)
+--
+CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
+    time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+\d+ :CAGG_NAME_1ST_LEVEL
+                               View "public.conditions_summary_1"
+   Column    |           Type           | Collation | Nullable | Default | Storage | Description 
+-------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain   | 
+ temperature | numeric                  |           |          |         | main    | 
+View definition:
+ SELECT _materialized_hypertable_66.bucket,
+    _materialized_hypertable_66.temperature
+   FROM _timescaledb_internal._materialized_hypertable_66
+  WHERE _materialized_hypertable_66.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(66)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 0.000146 secs'::interval, conditions."time") AS bucket,
+    sum(conditions.temperature) AS temperature
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(66)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 0.000146 secs'::interval, conditions."time"));
+
+--
+-- CAGG on CAGG (2th level)
+--
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+\echo :WARNING_MESSAGE
+-- SHOULD WORK
+CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
+WITH (timescaledb.continuous) AS
+SELECT
+  \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
+  \else
+    time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
+  \endif
+  SUM(temperature) AS temperature
+FROM :CAGG_NAME_1ST_LEVEL
+GROUP BY 1
+WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 0.00116 secs] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 0.000146 secs].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse

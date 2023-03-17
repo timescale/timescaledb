@@ -105,9 +105,6 @@ ALTER TABLE foo RESET (timescaledb.compress);
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
---can add index , but not unique index
-CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
-CREATE INDEX foo_idx ON foo ( a, c );
 
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
@@ -167,11 +164,17 @@ create table  table_constr( device_id integer,
 
 );
 select table_name from create_hypertable('table_constr', 'timec', chunk_time_interval=> 10);
+BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+ROLLBACK;
 alter table table_constr add constraint table_constr_uk unique (location, timec, device_id);
+BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id');
+ROLLBACK;
+
 alter table table_constr add constraint table_constr_fk FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location');
+
 --exclusion constraints not allowed
 alter table table_constr add constraint table_constr_exclu exclude using btree (timec with = );
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');

@@ -8,12 +8,14 @@ name: Regression Windows
       - prerelease_test
     paths:
       - '**.md'
+      - CHANGELOG
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
   pull_request:
     paths:
       - '**.md'
+      - CHANGELOG
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
@@ -22,17 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
-      pg12_latest: ${{ steps.config.outputs.pg12_latest }}
-      pg13_latest: ${{ steps.config.outputs.pg13_latest }}
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
-      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
 
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
-    - name: Read configuration
-      id: config
-      run: python .github/gh_config_reader.py
     - name: Set build_type
       id: build_type
       run: |
@@ -50,25 +45,6 @@ jobs:
         pg: [ 12, 13, 14, 15 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["chunk_adaptive metadata"]
-        tsl_ignores: ["compression_algos remote_connection"]
-        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht
-          data_fetcher dist_compression dist_remote_error remote_txn"]
-        pg_config: ["-cfsync=off -cstatement_timeout=60s"]
-        include:
-          - pg: 12
-            pkg_version: ${{ fromJson(needs.config.outputs.pg12_latest) }}.1
-            tsl_skips_version: dist_partial_agg-12
-          - pg: 13
-            pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}.1
-            tsl_skips_version: dist_grant-13 dist_partial_agg-13
-          - pg: 14
-            pkg_version: 14.5.1 # hardcoded due to issues with PG14.6 on chocolatey
-            tsl_skips_version: dist_partial_agg-14 dist_grant-14
-          - pg: 15
-            pkg_version: 15.0.1 # hardcoded due to issues with PG15.1 on chocolatey
-            tsl_skips_version: dist_partial_agg-15 dist_grant-15
-            tsl_ignores_version: partialize_finalize
     steps:
       - run: |
           echo "No build required"

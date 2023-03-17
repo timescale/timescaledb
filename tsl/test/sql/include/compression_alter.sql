@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \ir compression_utils.sql
-
+\ir ../../../../test/sql/include/test_utils.sql
 CREATE TABLE test1 ("Time" timestamptz, intcol integer, bntcol bigint, txtcol text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
 
@@ -172,6 +172,14 @@ INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
 CALL recompress_all_chunks('test_defaults', 1, false);
 SELECT * FROM test_defaults ORDER BY 1,2;
+
+-- timescale/timescaledb#5412
+ALTER TABLE test_defaults ADD COLUMN c3 int NOT NULL DEFAULT 43;
+SELECT *,assert_equal(c3,43) FROM test_defaults ORDER BY 1,2;
+select decompress_chunk(show_chunks('test_defaults'),true);
+SELECT *,assert_equal(c3,43) FROM test_defaults ORDER BY 1,2;
+select compress_chunk(show_chunks('test_defaults'));
+SELECT *,assert_equal(c3,43) FROM test_defaults ORDER BY 1,2;
 
 -- test dropping columns from compressed
 CREATE TABLE test_drop(f1 text, f2 text, f3 text, time timestamptz, device int, o1 text, o2 text);

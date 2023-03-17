@@ -8,9 +8,8 @@
 \set TEST_BASE_NAME data_fetcher
 SELECT format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/results/%s_results_cursor.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_CURSOR",
-       format('%s/results/%s_results_copy.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COPY"
-\gset
-SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_COPY') as "DIFF_CMD"
+       format('%s/results/%s_results_copy.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COPY",
+       format('%s/results/%s_results_prepared.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_PREPARED"
 \gset
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
@@ -41,6 +40,26 @@ SELECT setseed(1);
 INSERT INTO disttable
 SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random() * 10
 FROM generate_series('2019-01-01'::timestamptz, '2019-01-02'::timestamptz, '1 second') as t;
+-- This table contains the content for precisely one batch of the copy fetcher. The fetch_size
+-- will be set to 100 below and this table contains 99 tuples and the last element on the first
+-- copy batch is the file trailer (#5323).
+CREATE table one_batch(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
+SELECT create_distributed_hypertable('one_batch', 'ts');
+ create_distributed_hypertable 
+-------------------------------
+ (2,public,one_batch,t)
+(1 row)
+
+INSERT INTO one_batch SELECT '2023-01-01'::timestamptz AS time, sensor_id, random() AS value FROM generate_series(1, 99, 1) AS g1(sensor_id) ORDER BY time;
+-- Same but for the DEFAULT_FDW_FETCH_SIZE (10000)
+CREATE table one_batch_default(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
+SELECT create_distributed_hypertable('one_batch_default', 'ts');
+ create_distributed_hypertable  
+--------------------------------
+ (3,public,one_batch_default,t)
+(1 row)
+
+INSERT INTO one_batch_default SELECT '2023-01-01'::timestamptz AS time, sensor_id, random() AS value FROM generate_series(1, 9999, 1) AS g1(sensor_id) ORDER BY time;
 SET client_min_messages TO error;
 -- Set a smaller fetch size to ensure that the result is split into
 -- mutliple batches.
@@ -59,6 +78,10 @@ SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
 FROM disttable
 GROUP BY 1,2
 ORDER BY 1,2;
+-- Test for #5323 - ensure that no NULL tuples are generated
+-- if the last element of the batch is the file trailer.
+SELECT count(*), count(value) FROM one_batch;
+SELECT count(*), count(value) FROM one_batch_default;
 \o
 \set ON_ERROR_STOP 1
 -- run queries using cursor fetcher
@@ -74,9 +97,147 @@ SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
 FROM disttable
 GROUP BY 1,2
 ORDER BY 1,2;
+-- Test for #5323 - ensure that no NULL tuples are generated
+-- if the last element of the batch is the file trailer.
+SELECT count(*), count(value) FROM one_batch;
+SELECT count(*), count(value) FROM one_batch_default;
 \o
 -- compare results
+SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_COPY') as "DIFF_CMD"
+\gset
 :DIFF_CMD
+-- run queries using prepares statement fetcher
+SET timescaledb.remote_data_fetcher = 'prepared';
+\o :TEST_RESULTS_PREPARED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+ANALYZE disttable;
+SELECT count(*) FROM disttable;
+SELECT time_bucket('1 hour', time) AS time, device, avg(temp)
+FROM disttable
+GROUP BY 1,2
+ORDER BY 1,2;
+-- Test for #5323 - ensure that no NULL tuples are generated
+-- if the last element of the batch is the file trailer.
+SELECT count(*), count(value) FROM one_batch;
+SELECT count(*), count(value) FROM one_batch_default;
+\o
+-- compare results
+SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_PREPARED') as "DIFF_CMD"
+\gset
+:DIFF_CMD
+-- Test custom FDW settings. Instead of the tests above, we are not interersted
+-- in comparing the results of the fetchers. In the following tests we are
+-- interested in the actual outputs (e.g., costs).
+ANALYZE one_batch;
+SET timescaledb.remote_data_fetcher = 'copy';
+\ir include/data_fetcher_fdw_settings.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Default settings
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
+(1 row)
+
+-- Set custom startup cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_startup_cost '200');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=200.00..210.90 rows=99 width=20)
+(1 row)
+
+-- Set custom tuple cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '1');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=200.00..301.98 rows=99 width=20)
+(1 row)
+
+-- Update startup cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_startup_cost '2');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=2.00..103.98 rows=99 width=20)
+(1 row)
+
+-- Update startup cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_tuple_cost '0.5');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=2.00..54.48 rows=99 width=20)
+(1 row)
+
+-- Reset custom settings
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_startup_cost);
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_tuple_cost);
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
+(1 row)
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+\ir include/data_fetcher_fdw_settings.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Default settings
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
+(1 row)
+
+-- Set custom startup cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_startup_cost '200');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=200.00..210.90 rows=99 width=20)
+(1 row)
+
+-- Set custom tuple cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '1');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=200.00..301.98 rows=99 width=20)
+(1 row)
+
+-- Update startup cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_startup_cost '2');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=2.00..103.98 rows=99 width=20)
+(1 row)
+
+-- Update startup cost
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_tuple_cost '0.5');
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=2.00..54.48 rows=99 width=20)
+(1 row)
+
+-- Reset custom settings
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_startup_cost);
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_tuple_cost);
+EXPLAIN (COSTS) SELECT * FROM one_batch;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
+(1 row)
+
 RESET ROLE;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

@@ -60,7 +60,7 @@ LOCATION:  ts_test_bad_remote_query, connection.c:216
 SELECT * FROM test.get_connection_stats();
  connections_created | connections_closed | results_created | results_cleared 
 ---------------------+--------------------+-----------------+-----------------
-                   1 |                  1 |               8 |               8
+                   1 |                  1 |               9 |               9
 (1 row)
 
 SELECT test.remote_connection_tests();

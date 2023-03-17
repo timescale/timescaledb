@@ -6,14 +6,47 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #5212 Allow pushdown of reference table joins
+* #5312 Add timeout support to the ping_data_node()
+* #5361 Add parallel support for partialize_agg()
+* #5252 Improve unique constraint support on compressed hypertables
+* #5312 Add timeout support to ping_data_node()
+
 **Bugfixes**
-* #5364 Fix num_chunks inconsistency in hypertables view
-* #5362 Make copy fetcher more async
-* #5336 Use NameData and namestrcpy for names
-* #5317 Fix some incorrect memory handling
+* #5396 Fix SEGMENTBY columns predicates to be pushed down
+* #5410 Fix file trailer handling in the COPY fetcher
+* #5233 Out of on_proc_exit slots on guc license change
+* #5427 Handle user-defined FDW options properly
+* #5442 Decompression may have lost DEFAULT values
 
 **Thanks**
+* @nikolaps for reporting an issue with the COPY fetcher
+* @S-imo-n for reporting the issue on Background Worker Scheduler crash
+
+## 2.10.1 (2023-03-07)
+
+This release contains bug fixes since the 2.10.0 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #5159 Support Continuous Aggregates names in hypertable_(detailed_)size
+* #5226 Fix concurrent locking with chunk_data_node table
+* #5317 Fix some incorrect memory handling
+* #5336 Use NameData and namestrcpy for names
+* #5343 Set PortalContext when starting job
+* #5360 Fix uninitialized bucket_info variable
+* #5362 Make copy fetcher more async
+* #5364 Fix num_chunks inconsistency in hypertables view
+* #5367 Fix column name handling in old-style continuous aggregates
+* #5378 Fix multinode DML HA performance regression
+* #5384 Fix Hierarchical Continuous Aggregates chunk_interval_size
+* #5304 Fix sub-second intervals in hierarchical caggs
+
+**Thanks**
+* @justinozavala for reporting an issue with PL/Python procedures in the background worker
 * @Medvecrab for discovering an issue with copying NameData when forming heap tuples.
+* @pushpeepkmonroe for discovering an issue in upgrading old-style continuous aggregates with renamed columns
 
 ## 2.10.0 (2023-02-21)
 
@@ -42,9 +75,6 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 * #5246 Make connection establishment interruptible
 * #5253 Make data node command execution interruptible
 * #5262 Extend enabling compression on a continuous aggregrate with 'compress_segmentby' and 'compress_orderby' parameters
-* #5343 Set PortalContext when starting job
-* #5312 Add timeout support to the ping_data_node()
-* #5212 Allow pushdown of reference table joins 
 
 **Bugfixes**
 * #5214 Fix use of prepared statement in async module
@@ -54,9 +84,6 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 
 **Thanks**
 * @henriquegelio for reporting the issue on fixed schedules
-
-**Thanks**
-* @justinozavala for reporting an issue with PL/Python procedures in the background worker
 
 ## 2.9.3 (2023-02-03)
 
@@ -2759,4 +2786,3 @@ the next release.
 * [72f754a] use PostgreSQL's own `hash_any` function as default partfunc (thanks @robin900)
 * [39f4c0f] Remove sample data instructions and point to docs site
 * [9015314] Revised the `get_general_index_definition` function to handle cases where indexes have definitions other than just `CREATE INDEX` (thanks @bricklen)
-

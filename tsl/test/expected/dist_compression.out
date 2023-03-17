@@ -1474,6 +1474,260 @@ SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
  Wed Aug 18 00:00:00 2021 PDT | 4.14 |      1 | medium_value_text | 
 (1 row)
 
+-- test alter_data_node(unvailable) with compressed chunks
+--
+-- create compressed distributed hypertable
+CREATE TABLE compressed(time timestamptz NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('compressed', 'time', 'device', replication_factor => 3);
+ create_distributed_hypertable 
+-------------------------------
+ (11,public,compressed,t)
+(1 row)
+
+-- insert data and get chunks distribution
+INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+ALTER TABLE compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+SELECT compress_chunk(chunk)
+FROM show_chunks('compressed') AS chunk
+ORDER BY chunk;
+                compress_chunk                 
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_11_44_chunk
+ _timescaledb_internal._dist_hyper_11_45_chunk
+ _timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+NOTICE:  [db_dist_compression_1]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_1]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_2]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_3]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_3]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compressed';
+                   ?column?                    |                             data_nodes                              
+-----------------------------------------------+---------------------------------------------------------------------
+ _timescaledb_internal._dist_hyper_11_44_chunk | {db_dist_compression_1,db_dist_compression_2,db_dist_compression_3}
+ _timescaledb_internal._dist_hyper_11_45_chunk | {db_dist_compression_1,db_dist_compression_2,db_dist_compression_3}
+ _timescaledb_internal._dist_hyper_11_46_chunk | {db_dist_compression_1,db_dist_compression_2,db_dist_compression_3}
+(3 rows)
+
+SELECT count(*) FROM compressed;
+ count 
+-------
+    49
+(1 row)
+
+-- make data node unavailable
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SELECT alter_data_node(:'DATA_NODE_1', port => 55433, available => false);
+WARNING:  could not switch data node on 5 chunks
+                         alter_data_node                         
+-----------------------------------------------------------------
+ (db_dist_compression_1,localhost,55433,db_dist_compression_1,f)
+(1 row)
+
+SET ROLE :ROLE_1;
+-- update compressed chunks
+INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+-- ensure that chunks associated with unavailable data node 1
+-- are removed after being updated
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compressed';
+                   ?column?                    |                  data_nodes                   
+-----------------------------------------------+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_11_44_chunk | {db_dist_compression_2,db_dist_compression_3}
+ _timescaledb_internal._dist_hyper_11_45_chunk | {db_dist_compression_2,db_dist_compression_3}
+ _timescaledb_internal._dist_hyper_11_46_chunk | {db_dist_compression_2,db_dist_compression_3}
+(3 rows)
+
+SELECT * from show_chunks('compressed');
+                  show_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_11_44_chunk
+ _timescaledb_internal._dist_hyper_11_45_chunk
+ _timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_2', :'DATA_NODE_3'], $$ SELECT * from show_chunks('compressed'); $$);
+NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_2]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_3]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_3]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT count(*) FROM compressed;
+ count 
+-------
+    98
+(1 row)
+
+-- make data node available again
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SELECT alter_data_node(:'DATA_NODE_1', port => 55432);
+                         alter_data_node                         
+-----------------------------------------------------------------
+ (db_dist_compression_1,localhost,55432,db_dist_compression_1,f)
+(1 row)
+
+SELECT alter_data_node(:'DATA_NODE_1', available => true);
+                         alter_data_node                         
+-----------------------------------------------------------------
+ (db_dist_compression_1,localhost,55432,db_dist_compression_1,t)
+(1 row)
+
+SET ROLE :ROLE_1;
+-- ensure that stale chunks being dropped from data node 1 automatically
+SELECT * from show_chunks('compressed');
+                  show_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_11_44_chunk
+ _timescaledb_internal._dist_hyper_11_45_chunk
+ _timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_2]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_3]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_3]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_1]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_1]:
+show_chunks
+-----------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT count(*) FROM compressed;
+ count 
+-------
+    98
+(1 row)
+
+-- recompress chunks
+CALL recompress_all_chunks('compressed', 3, true);
+SELECT count(*) FROM compressed;
+ count 
+-------
+    98
+(1 row)
+
+SELECT * from show_chunks('compressed');
+                  show_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_11_44_chunk
+ _timescaledb_internal._dist_hyper_11_45_chunk
+ _timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_2]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_3]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_3]:
+show_chunks                                  
+---------------------------------------------
+_timescaledb_internal._dist_hyper_11_44_chunk
+_timescaledb_internal._dist_hyper_11_45_chunk
+_timescaledb_internal._dist_hyper_11_46_chunk
+(3 rows)
+
+
+NOTICE:  [db_dist_compression_1]:  SELECT * from show_chunks('compressed')
+NOTICE:  [db_dist_compression_1]:
+show_chunks
+-----------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP TABLE compressed;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

@@ -28,11 +28,13 @@ data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt, StmtPar
 	df->tf = tf;
 
 	tuplefactory_set_per_tuple_mctx_reset(df->tf, false);
-	df->batch_mctx =
-		AllocSetContextCreate(CurrentMemoryContext, "cursor tuple data", ALLOCSET_DEFAULT_SIZES);
+	df->batch_mctx = AllocSetContextCreate(CurrentMemoryContext,
+										   "data fetcher tuple batch data",
+										   ALLOCSET_DEFAULT_SIZES);
 	df->tuple_mctx = df->batch_mctx;
-	df->req_mctx =
-		AllocSetContextCreate(CurrentMemoryContext, "async req/resp", ALLOCSET_DEFAULT_SIZES);
+	df->req_mctx = AllocSetContextCreate(CurrentMemoryContext,
+										 "data fetcher async request/response",
+										 ALLOCSET_DEFAULT_SIZES);
 	df->fetch_size = DEFAULT_FETCH_SIZE;
 }
 
@@ -44,7 +46,7 @@ data_fetcher_validate(DataFetcher *df)
 	if (df->next_tuple_idx != 0 && df->next_tuple_idx < df->num_tuples)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("invalid cursor state. sql: %s", df->stmt),
+				 errmsg("invalid data fetcher state. sql: %s", df->stmt),
 				 errhint("Shouldn't fetch new data before consuming existing.")));
 }
 
@@ -110,6 +112,19 @@ data_fetcher_reset(DataFetcher *df)
 	df->eof = false;
 	MemoryContextReset(df->req_mctx);
 	MemoryContextReset(df->batch_mctx);
+}
+
+/*
+ * This is the default implementation of starting the scan with the new
+ * parameters. It just closes the current scan and updates the parameter
+ * values, and the next scan is initialized from scratch. The prepared statement
+ * fetcher is more efficient than that, and reuses the prepared statement.
+ */
+void
+data_fetcher_rescan(DataFetcher *df, StmtParams *params)
+{
+	df->funcs->close(df);
+	df->stmt_params = params;
 }
 
 void

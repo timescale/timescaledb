@@ -54,6 +54,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "osm_callbacks.h"
 #include "partitioning.h"
 #include "process_utility.h"
 #include "scan_iterator.h"
@@ -142,6 +143,8 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 /*
  * The chunk status field values are persisted in the database and must never be changed.
  * Those values are used as flags and must always be powers of 2 to allow bitwise operations.
+ * When adding new status values we must make sure to add special handling for these values
+ * to the downgrade script as previous versions will not know how to deal with those.
  */
 #define CHUNK_STATUS_DEFAULT 0
 /*
@@ -1156,27 +1159,15 @@ ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_n
 	return chunk;
 }
 
-#if PG14_GE
-#define OSM_CHUNK_INSERT_CHECK_HOOK "osm_chunk_insert_check_hook"
-typedef int (*ts_osm_chunk_insert_hook_type)(Oid ht_oid, int64 range_start, int64 range_end);
-static ts_osm_chunk_insert_hook_type
-get_osm_chunk_insert_hook()
-{
-	ts_osm_chunk_insert_hook_type *func_ptr =
-		(ts_osm_chunk_insert_hook_type *) find_rendezvous_variable(OSM_CHUNK_INSERT_CHECK_HOOK);
-	return *func_ptr;
-}
-#endif
-
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
 #if PG14_GE
-	ts_osm_chunk_insert_hook_type insert_func_ptr = get_osm_chunk_insert_hook();
+	OsmCallbacks *callbacks = ts_get_osm_callbacks();
 
-	if (insert_func_ptr)
+	if (callbacks)
 	{
 		/* OSM only uses first dimension . doesn't work with multinode tables yet*/
 		Dimension *dim = &ht->space->dimensions[0];
@@ -1185,7 +1176,10 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 			ts_internal_to_time_int64(cube->slices[0]->fd.range_start, dim->fd.column_type);
 		int64 range_end =
 			ts_internal_to_time_int64(cube->slices[0]->fd.range_end, dim->fd.column_type);
-		int chunk_exists = insert_func_ptr(ht->main_table_relid, range_start, range_end);
+
+		int chunk_exists =
+			callbacks->chunk_insert_check_hook(ht->main_table_relid, range_start, range_end);
+
 		if (chunk_exists)
 		{
 			Oid outfuncid = InvalidOid;
@@ -4384,6 +4378,12 @@ bool
 ts_chunk_is_compressed(const Chunk *chunk)
 {
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
+}
+
+bool
+ts_chunk_is_distributed(const Chunk *chunk)
+{
+	return chunk->data_nodes != NIL;
 }
 
 /* Note that only a compressed chunk can have partial flag set */

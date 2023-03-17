@@ -37,36 +37,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-#        chocolatey packages for 14.6 and 15.1 are currently not available so we skip
-#        these tests for now
-#        test: [ "12min", "12max", "13min", "13max", "14min", "14max", "15min", "15max" ]
-        test: [ "12min", "12max", "13min", "13max", "14min", "15min" ]
         os: [ windows-2019 ]
+        test: [ "12min", "12max", "13min", "13max", "14min", "14max", "15min", "15max" ]
         include:
           - test: 12min
             pg: 12
             pkg_version: ${{ fromJson(needs.config.outputs.pg12_earliest) }}.1
           - test: 12max
             pg: 12
-            pkg_version: ${{ fromJson(needs.config.outputs.pg12_latest) }}.1
+            pkg_version: ${{ fromJson(needs.config.outputs.pg12_latest) }}
           - test: 13min
             pg: 13
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_earliest) }}.1
           - test: 13max
             pg: 13
-            pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}.1
+            pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}
           - test: 14min
             pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1
-#          - test: 14max
-#            pg: 14
-#            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.1
+          - test: 14max
+            pg: 14
+            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}
           - test: 15min
             pg: 15
             pkg_version: ${{ fromJson(needs.config.outputs.pg15_earliest) }}.1
-#          - test: 15max
-#            pg: 15
-#            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.1
+          - test: 15max
+            pg: 15
+            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}
     env:
       # PostgreSQL configuration
       PGPORT: 6543

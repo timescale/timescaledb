@@ -264,7 +264,7 @@ gorilla_compressor_alloc(void)
 	return compressor;
 }
 
-/* This function is used for testing. */
+/* This function is used for testing only. */
 Datum
 tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 {

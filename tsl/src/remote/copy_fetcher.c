@@ -19,8 +19,10 @@ typedef struct CopyFetcher
 	/* Data for virtual tuples of the current retrieved batch. */
 	Datum *batch_values;
 	bool *batch_nulls;
-	bool file_trailer_received;
 	AsyncRequest *req;
+#ifdef USE_ASSERT_CHECKING
+	bool file_trailer_received;
+#endif
 } CopyFetcher;
 
 static void copy_fetcher_send_fetch_request(DataFetcher *df);
@@ -29,17 +31,18 @@ static int copy_fetcher_fetch_data(DataFetcher *df);
 static void copy_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 static void copy_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
 static void copy_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
-static void copy_fetcher_rescan(DataFetcher *df);
+static void copy_fetcher_rewind(DataFetcher *df);
 static void copy_fetcher_close(DataFetcher *df);
 
 static DataFetcherFuncs funcs = {
-	.send_fetch_request = copy_fetcher_send_fetch_request,
+	.close = copy_fetcher_close,
 	.fetch_data = copy_fetcher_fetch_data,
+	.rescan = data_fetcher_rescan,
+	.rewind = copy_fetcher_rewind,
+	.send_fetch_request = copy_fetcher_send_fetch_request,
 	.set_fetch_size = copy_fetcher_set_fetch_size,
 	.set_tuple_mctx = copy_fetcher_set_tuple_memcontext,
 	.store_next_tuple = copy_fetcher_store_next_tuple,
-	.rewind = copy_fetcher_rescan,
-	.close = copy_fetcher_close,
 };
 
 static void
@@ -61,7 +64,10 @@ static void
 copy_fetcher_reset(CopyFetcher *fetcher)
 {
 	fetcher->state.open = false;
+
+#ifdef USE_ASSERT_CHECKING
 	fetcher->file_trailer_received = false;
+#endif
 
 	if (fetcher->req != NULL)
 	{
@@ -108,7 +114,7 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 		 * Single-row mode doesn't really influence the COPY queries, but setting
 		 * it here is a convenient way to prevent concurrent COPY requests on the
 		 * same connection. This can happen if we have multiple tables on the same
-		 * data node and still use the row-by-row fetcher.
+		 * data node and still use the COPY fetcher.
 		 */
 		if (!async_request_set_single_row_mode(req))
 		{
@@ -117,7 +123,7 @@ copy_fetcher_send_fetch_request(DataFetcher *df)
 					 errmsg("could not set single-row mode on connection to \"%s\"",
 							remote_connection_node_name(fetcher->state.conn)),
 					 errdetail("The aborted statement is: %s.", fetcher->state.stmt),
-					 errhint("Copy fetcher is not supported together with sub-queries."
+					 errhint("COPY fetcher is not supported together with sub-queries."
 							 " Use cursor fetcher instead.")));
 		}
 
@@ -334,6 +340,50 @@ copy_fetcher_read_fetch_response(CopyFetcher *fetcher)
 }
 
 /*
+ * Read the next data from the connection and store the data in copy_data.
+ * If no data can be read return false, or throw an error, otherwise
+ * return true.
+ */
+static bool
+copy_fetcher_read_data(CopyFetcher *fetcher, PGconn *conn, char *volatile *dataptr,
+					   StringInfoData *copy_data)
+{
+	copy_data->len = PQgetCopyData(conn,
+								   &copy_data->data,
+								   /* async = */ false);
+
+	/* Set dataptr to ensure data is freed with PQfreemem() in
+	 * PG_CATCH() clause in case error is thrown. */
+	*dataptr = copy_data->data;
+
+	if (copy_data->len == -1)
+	{
+		/* Note: it is possible to get EOF without having received the
+		 * file trailer in case there's e.g., a remote error. */
+		fetcher->state.eof = true;
+
+		/* Should read final result with PQgetResult() until it
+		 * returns NULL. This happens later in end_copy. */
+		return false;
+	}
+	else if (copy_data->len == -2)
+	{
+		/*
+		 * Error. The docs say: consult PQerrorMessage() for the reason.
+		 * remote_connection_elog() will do this for us.
+		 */
+		remote_connection_elog(fetcher->state.conn, ERROR);
+
+		/* remote_connection_elog should raise an ERROR */
+		pg_unreachable();
+	}
+
+	copy_data->maxlen = copy_data->len;
+
+	return true;
+}
+
+/*
  * Process response for ongoing async request
  */
 static int
@@ -378,34 +428,12 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 			MemoryContextSwitchTo(fetcher->state.req_mctx);
 
 			StringInfoData copy_data = { 0 };
+			bool tuple_read = copy_fetcher_read_data(fetcher, conn, &dataptr, &copy_data);
 
-			copy_data.len = PQgetCopyData(conn,
-										  &copy_data.data,
-										  /* async = */ false);
-
-			/* Set dataptr to ensure data is freed with PQfreemem() in
-			 * PG_CATCH() clause in case error is thrown. */
-			dataptr = copy_data.data;
-
-			if (copy_data.len == -1)
-			{
-				/* Note: it is possible to get EOF without having received the
-				 * file trailer in case there's e.g., a remote error. */
-				fetcher->state.eof = true;
-				/* Should read final result with PQgetResult() until it
-				 * returns NULL. This happens below. */
+			/* Were we able to fetch new data? */
+			if (!tuple_read)
 				break;
-			}
-			else if (copy_data.len == -2)
-			{
-				/*
-				 * Error. The docs say: consult PQerrorMessage() for the reason.
-				 * remote_connection_elog() will do this for us.
-				 */
-				remote_connection_elog(fetcher->state.conn, ERROR);
-			}
 
-			copy_data.maxlen = copy_data.len;
 			Assert(copy_data.cursor == 0);
 
 			if (fetcher->state.batch_count == 0 && row == 0)
@@ -427,12 +455,25 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 				 * nor the expected number of columns. This provides an extra
 				 * check against somehow getting out of sync with the data.
 				 */
+#ifdef USE_ASSERT_CHECKING
 				fetcher->file_trailer_received = true;
+#endif
 
 				/* Next PQgetCopyData() should return -1, indicating EOF and
 				 * that the remote side ended the copy. The final result
 				 * (PGRES_COMMAND_OK) should then be read with
-				 * PQgetResult(). */
+				 * PQgetResult().
+				 *
+				 * Execute PQgetCopyData() (invoked in copy_fetcher_read_data)
+				 * directly here, because if row = state.fetch_size - 1
+				 * (i.e., file_trailer is the last tuple of the batch), the
+				 * for loop will not be executed again and PQgetCopyData()
+				 * will never be called. If it is not called, the EOF state
+				 * is not updated and a new batch would be requested.
+				 */
+				tuple_read = copy_fetcher_read_data(fetcher, conn, &dataptr, &copy_data);
+				Assert(tuple_read == false);
+				break;
 			}
 			else
 			{
@@ -504,21 +545,26 @@ copy_fetcher_complete(CopyFetcher *fetcher)
 													  attconv->typmods[att]);
 					nulls[att] = false;
 				}
+
+				/*
+				 * We expect one row per message here, check that no data is
+				 * left.
+				 */
+				Assert(copy_data.cursor = copy_data.len);
 			}
 			MemoryContextSwitchTo(fetcher->state.batch_mctx);
 			PQfreemem(copy_data.data);
 			dataptr = NULL;
 		}
 
-		/* Don't count the file trailer as a row if this was the last batch */
-		fetcher->state.num_tuples = fetcher->file_trailer_received ? row - 1 : row;
+		fetcher->state.num_tuples = row;
 		fetcher->state.next_tuple_idx = 0;
 
 		/* Must be EOF if we didn't get as many tuples as we asked for. */
+#ifdef USE_ASSERT_CHECKING
 		if (fetcher->state.num_tuples < fetcher->state.fetch_size)
-		{
 			Assert(fetcher->state.eof);
-		}
+#endif
 
 		fetcher->state.batch_count++;
 
@@ -631,7 +677,7 @@ copy_fetcher_close(DataFetcher *df)
 }
 
 static void
-copy_fetcher_rescan(DataFetcher *df)
+copy_fetcher_rewind(DataFetcher *df)
 {
 	CopyFetcher *fetcher = cast_fetcher(CopyFetcher, df);
 

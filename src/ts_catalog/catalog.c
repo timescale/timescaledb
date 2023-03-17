@@ -709,18 +709,6 @@ ts_catalog_delete_tid(Relation rel, ItemPointer tid)
 	CommandCounterIncrement();
 }
 
-void
-ts_catalog_delete_only(Relation rel, HeapTuple tuple)
-{
-	ts_catalog_delete_tid_only(rel, &tuple->t_self);
-}
-
-void
-ts_catalog_delete(Relation rel, HeapTuple tuple)
-{
-	ts_catalog_delete_tid(rel, &tuple->t_self);
-}
-
 /*
  * Invalidate TimescaleDB catalog caches.
  *
@@ -819,4 +807,131 @@ ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int n
 	};
 
 	ts_scanner_scan(&scanctx);
+}
+
+extern TSDLLEXPORT ResultRelInfo *
+ts_catalog_open_indexes(Relation heapRel)
+{
+	ResultRelInfo *resultRelInfo;
+
+	resultRelInfo = makeNode(ResultRelInfo);
+	resultRelInfo->ri_RangeTableIndex = 0; /* dummy */
+	resultRelInfo->ri_RelationDesc = heapRel;
+	resultRelInfo->ri_TrigDesc = NULL; /* we don't fire triggers */
+
+	ExecOpenIndices(resultRelInfo, false);
+
+	return resultRelInfo;
+}
+
+extern TSDLLEXPORT void
+ts_catalog_close_indexes(ResultRelInfo *indstate)
+{
+	ExecCloseIndices(indstate);
+	pfree(indstate);
+}
+
+/*
+ * Copied verbatim from postgres source CatalogIndexInsert which is static
+ * in postgres source code.
+ * We need to have this function available because we do not want to use
+ * simple_heap_insert which is used by CatalogTupleInsert which would
+ * prevent using bulk inserts.
+ */
+extern TSDLLEXPORT void
+ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple)
+{
+	int i;
+	int numIndexes;
+	RelationPtr relationDescs;
+	Relation heapRelation;
+	TupleTableSlot *slot;
+	IndexInfo **indexInfoArray;
+	Datum values[INDEX_MAX_KEYS];
+	bool isnull[INDEX_MAX_KEYS];
+
+	/*
+	 * HOT update does not require index inserts. But with asserts enabled we
+	 * want to check that it'd be legal to currently insert into the
+	 * table/index.
+	 */
+#ifndef USE_ASSERT_CHECKING
+	if (HeapTupleIsHeapOnly(heapTuple))
+		return;
+#endif
+
+	/*
+	 * Get information from the state structure.  Fall out if nothing to do.
+	 */
+	numIndexes = indstate->ri_NumIndices;
+	if (numIndexes == 0)
+		return;
+	relationDescs = indstate->ri_IndexRelationDescs;
+	indexInfoArray = indstate->ri_IndexRelationInfo;
+	heapRelation = indstate->ri_RelationDesc;
+
+	/* Need a slot to hold the tuple being examined */
+	slot = MakeSingleTupleTableSlot(RelationGetDescr(heapRelation), &TTSOpsHeapTuple);
+	ExecStoreHeapTuple(heapTuple, slot, false);
+
+	/*
+	 * for each index, form and insert the index tuple
+	 */
+	for (i = 0; i < numIndexes; i++)
+	{
+		IndexInfo *indexInfo;
+		Relation index;
+
+		indexInfo = indexInfoArray[i];
+		index = relationDescs[i];
+
+		/* If the index is marked as read-only, ignore it */
+		if (!indexInfo->ii_ReadyForInserts)
+			continue;
+
+		/*
+		 * Expressional and partial indexes on system catalogs are not
+		 * supported, nor exclusion constraints, nor deferred uniqueness
+		 */
+		Assert(indexInfo->ii_Expressions == NIL);
+		Assert(indexInfo->ii_Predicate == NIL);
+		Assert(indexInfo->ii_ExclusionOps == NULL);
+		Assert(index->rd_index->indimmediate);
+		Assert(indexInfo->ii_NumIndexKeyAttrs != 0);
+
+		/* see earlier check above */
+#ifdef USE_ASSERT_CHECKING
+		if (HeapTupleIsHeapOnly(heapTuple))
+		{
+			Assert(!ReindexIsProcessingIndex(RelationGetRelid(index)));
+			continue;
+		}
+#endif /* USE_ASSERT_CHECKING */
+
+		/*
+		 * FormIndexDatum fills in its values and isnull parameters with the
+		 * appropriate values for the column(s) of the index.
+		 */
+		FormIndexDatum(indexInfo,
+					   slot,
+					   NULL, /* no expression eval to do */
+					   values,
+					   isnull);
+
+		/*
+		 * The index AM does the rest.
+		 */
+		index_insert(index,				   /* index relation */
+					 values,			   /* array of index Datums */
+					 isnull,			   /* is-null flags */
+					 &(heapTuple->t_self), /* tid of heap tuple */
+					 heapRelation,
+					 index->rd_index->indisunique ? UNIQUE_CHECK_YES : UNIQUE_CHECK_NO,
+#if PG14_GE
+					 false,
+#endif
+					 indexInfo);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
 }

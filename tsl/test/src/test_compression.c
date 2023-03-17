@@ -38,6 +38,8 @@
 #define VEC_SCOPE static inline
 #include <adts/vec.h>
 
+#define TEST_ELEMENTS 1015
+
 TS_FUNCTION_INFO_V1(ts_test_compression);
 TS_FUNCTION_INFO_V1(ts_compress_table);
 TS_FUNCTION_INFO_V1(ts_decompress_table);
@@ -49,7 +51,7 @@ test_int_array()
 	ArrayCompressed *compressed;
 	DecompressionIterator *iter;
 	int i;
-	for (i = 0; i < 1015; i++)
+	for (i = 0; i < TEST_ELEMENTS; i++)
 		array_compressor_append(compressor, Int32GetDatum(i));
 
 	compressed = array_compressor_finish(compressor);
@@ -65,7 +67,7 @@ test_int_array()
 		TestAssertInt64Eq(DatumGetInt32(r.val), i);
 		i += 1;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 
 	iter =
 		tsl_array_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), INT4OID);
@@ -91,7 +93,7 @@ test_string_array()
 	for (i = 0; i < 5; i++)
 		texts[i] = cstring_to_text(strings[i]);
 
-	for (i = 0; i < 1015; i++)
+	for (i = 0; i < TEST_ELEMENTS; i++)
 		array_compressor_append(compressor, PointerGetDatum(texts[i % 5]));
 
 	compressed = array_compressor_finish(compressor);
@@ -113,7 +115,7 @@ test_string_array()
 				 __LINE__);
 		i += 1;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 
 	iter =
 		tsl_array_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), TEXTOID);
@@ -140,7 +142,7 @@ test_int_dictionary()
 	DictionaryCompressed *compressed;
 	DecompressionIterator *iter;
 	int i;
-	for (i = 0; i < 1015; i++)
+	for (i = 0; i < TEST_ELEMENTS; i++)
 		dictionary_compressor_append(compressor, Int32GetDatum(i % 15));
 
 	compressed = dictionary_compressor_finish(compressor);
@@ -156,7 +158,7 @@ test_int_dictionary()
 		TestAssertInt64Eq(DatumGetInt32(r.val), i % 15);
 		i += 1;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 }
 
 static void
@@ -222,7 +224,7 @@ test_gorilla_int()
 	GorillaCompressed *compressed;
 	DecompressionIterator *iter;
 	uint32 i;
-	for (i = 0; i < 1015; i++)
+	for (i = 0; i < TEST_ELEMENTS; i++)
 		gorilla_compressor_append_value(compressor, i);
 
 	compressed = gorilla_compressor_finish(compressor);
@@ -238,7 +240,7 @@ test_gorilla_int()
 		TestAssertInt64Eq(DatumGetInt64(r.val), i);
 		i += 1;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 
 	iter = gorilla_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), INT8OID);
 	for (DecompressResult r = gorilla_decompression_iterator_try_next_reverse(iter); !r.is_done;
@@ -277,7 +279,7 @@ test_gorilla_int()
 			TestAssertInt64Eq(DatumGetInt64(r.val), i);
 			i += 1;
 		}
-		TestAssertInt64Eq(i, 1015);
+		TestAssertInt64Eq(i, TEST_ELEMENTS);
 	}
 }
 
@@ -288,7 +290,7 @@ test_gorilla_float()
 	GorillaCompressed *compressed;
 	DecompressionIterator *iter;
 	float i;
-	for (i = 0.0; i < 1015.0; i++)
+	for (i = 0.0; i < TEST_ELEMENTS; i++)
 		gorilla_compressor_append_value(compressor, float_get_bits(i));
 
 	compressed = gorilla_compressor_finish(compressor);
@@ -305,7 +307,7 @@ test_gorilla_float()
 		TestAssertDoubleEq(DatumGetFloat4(r.val), i);
 		i += 1.0;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 
 	iter =
 		gorilla_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), FLOAT4OID);
@@ -336,9 +338,9 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	GorillaCompressor *compressor = gorilla_compressor_alloc();
 	GorillaCompressed *compressed;
 
-	double values[1015];
-	bool nulls[1015];
-	for (int i = 0; i < 1015; i++)
+	double values[TEST_ELEMENTS];
+	bool nulls[TEST_ELEMENTS];
+	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		if (have_random)
 		{
@@ -391,7 +393,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT8OID);
 	ArrowArray *bulk_result =
 		gorilla_decompress_all_forward_direction(PointerGetDatum(compressed), FLOAT8OID);
-	for (int i = 0; i < 1015; i++)
+	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
 		TestAssertTrue(!r.is_done);
@@ -414,7 +416,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	/* Reverse decompression. */
 	iter =
 		gorilla_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), FLOAT8OID);
-	for (int i = 1015 - 1; i >= 0; i--)
+	for (int i = TEST_ELEMENTS - 1; i >= 0; i--)
 	{
 		DecompressResult r = gorilla_decompression_iterator_try_next_reverse(iter);
 		TestAssertTrue(!r.is_done);
@@ -439,7 +441,7 @@ test_delta()
 	Datum compressed;
 	DecompressionIterator *iter;
 	int i;
-	for (i = 0; i < 1015; i++)
+	for (i = 0; i < TEST_ELEMENTS; i++)
 		delta_delta_compressor_append_value(compressor, i);
 
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
@@ -455,7 +457,7 @@ test_delta()
 		TestAssertInt64Eq(DatumGetInt64(r.val), i);
 		i += 1;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 }
 
 static void
@@ -465,7 +467,7 @@ test_delta2()
 	Datum compressed;
 	DecompressionIterator *iter;
 	int i;
-	for (i = 0; i < 1015; i++)
+	for (i = 0; i < TEST_ELEMENTS; i++)
 	{
 		/* prevent everything from being rle'd away */
 		if (i % 2 != 0)
@@ -490,7 +492,7 @@ test_delta2()
 			TestAssertInt64Eq(DatumGetInt64(r.val), i);
 		i += 1;
 	}
-	TestAssertInt64Eq(i, 1015);
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
 }
 
 static void

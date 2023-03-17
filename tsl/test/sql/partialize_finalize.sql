@@ -316,6 +316,54 @@ FROM generate_series(1, 100000) x(x);
 SET force_parallel_mode = 'on';
 SET parallel_setup_cost = 0;
 
+-- Materialize partials from execution of parallel query plan
+EXPLAIN (VERBOSE, COSTS OFF)
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+
+CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+
+
+-- Materialize partials from execution of non-parallel query plan
+SET max_parallel_workers_per_gather = 0;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+
+CREATE MATERIALIZED VIEW issue4922_partials_non_parallel AS
+  SELECT
+    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+  FROM public.issue4922;
+
+RESET max_parallel_workers_per_gather;
+
+-- partials should be the same in both parallel and non-parallel execution
+SELECT * FROM issue4922_partials_parallel;
+SELECT * FROM issue4922_partials_non_parallel;
+
+-- Compare results from partial and non-partial query execution
 SELECT
   sum(value),
   avg(value),
@@ -331,38 +379,4 @@ SELECT
   _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
   _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
   _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
-FROM (
-  SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
-  FROM public.issue4922) AS a;
-
--- Check for parallel planning
-EXPLAIN (COSTS OFF)
-SELECT
-  sum(value),
-  avg(value),
-  min(value),
-  max(value),
-  count(*)
-FROM issue4922;
-
--- Make sure even forcing the parallel mode those functions are not safe for parallel
-EXPLAIN (COSTS OFF)
-SELECT
-  _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_sum, NULL::bigint) AS sum,
-  _timescaledb_internal.finalize_agg('pg_catalog.avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_avg, NULL::numeric) AS avg,
-  _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
-  _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
-  _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
-FROM (
-  SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
-  FROM public.issue4922) AS a;
+FROM issue4922_partials_parallel;

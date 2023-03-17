@@ -117,7 +117,8 @@ create_distributed_restore_point(PG_FUNCTION_ARGS)
 							 "from there.")));
 
 		/* Ensure all data nodes are available */
-		data_node_fail_if_nodes_are_unavailable();
+		if (data_node_some_unavailable())
+			ereport(ERROR, (errmsg("some data nodes are not available")));
 
 		/*
 		 * In order to achieve synchronization across the multinode cluster,

@@ -19,6 +19,17 @@ SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
 GRANT CREATE ON SCHEMA public TO :ROLE_1;
+
+-- make sure parallel query plans are preferred on data nodes
+ALTER DATABASE :DN_DBNAME_1 SET parallel_setup_cost TO 1;
+ALTER DATABASE :DN_DBNAME_2 SET parallel_setup_cost TO 1;
+ALTER DATABASE :DN_DBNAME_3 SET parallel_setup_cost TO 1;
+
+-- make sure query push-down is enabled
+ALTER DATABASE :DN_DBNAME_1 SET enable_partitionwise_aggregate TO true;
+ALTER DATABASE :DN_DBNAME_2 SET enable_partitionwise_aggregate TO true;
+ALTER DATABASE :DN_DBNAME_3 SET enable_partitionwise_aggregate TO true;
+SET enable_partitionwise_aggregate TO true;
 SET ROLE :ROLE_1;
 
 

@@ -67,12 +67,17 @@ QUERY PLAN
                      Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
 (19 rows)
 
--- This query can't work with copy fetcher.
+-- This query can't work with copy or prepared fetcher.
 set timescaledb.remote_data_fetcher = 'copy';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
-ERROR:  COPY fetcher not supported
+ERROR:  only cursor fetcher is supported for this query
+set timescaledb.remote_data_fetcher = 'prepared';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ERROR:  only cursor fetcher is supported for this query
 -- Check once again that 'auto' is used after 'copy'.
 set timescaledb.remote_data_fetcher = 'auto';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
@@ -105,7 +110,7 @@ WHERE
       ) AS l
     WHERE d.name ~~ d.name
   )
-ORDER BY 1,2;
+ORDER BY 1, 2;
  device_id | name 
 -----------+------
 (0 rows)
@@ -171,8 +176,66 @@ select * from disttable_with_bytea;
  1001 | 
 (2 rows)
 
+-- Prepared statement fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'prepared';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_bytea;
+QUERY PLAN
+ Custom Scan (DataNodeScan) on public.disttable_with_bytea (actual rows=2 loops=1)
+   Output: disttable_with_bytea."time", disttable_with_bytea.bdata
+   Data node: data_node_3
+   Fetcher Type: Prepared statement
+   Chunks: _dist_hyper_X_X_chunk
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+(6 rows)
+
+select * from disttable_with_bytea;
+ time | bdata 
+------+-------
+ 1001 | \x
+ 1001 | 
+(2 rows)
+
 -- #4515 test for assertion failure in copy_fetcher_close
 SET timescaledb.remote_data_fetcher = 'copy';
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+ time | device | value 
+------+--------+-------
+(0 rows)
+
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+ time | device | value 
+------+--------+-------
+(0 rows)
+
+SET timescaledb.remote_data_fetcher = 'cursor';
 SELECT *
 FROM
   conditions ref_0
@@ -202,8 +265,21 @@ WHERE EXISTS (
     LATERAL (select * from metrics as ref_2) as subq_3
   WHERE
     (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
-);
-ERROR:  COPY fetcher not supported
+)
+ORDER BY 1, 2;
+ERROR:  only cursor fetcher is supported for this query
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1, 2;
+ERROR:  only cursor fetcher is supported for this query
 SET timescaledb.remote_data_fetcher = 'auto';
 SELECT * FROM
   conditions_dist1 ref_0
@@ -214,7 +290,7 @@ WHERE EXISTS (
   WHERE
     (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
 )
-ORDER BY 1,2;
+ORDER BY 1, 2;
              time             | device | value 
 ------------------------------+--------+-------
  Sun Jan 01 06:01:00 2017 PST |      1 |   1.2
@@ -268,8 +344,42 @@ WHERE
     AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
 ORDER BY 1 DESC LIMIT 1;
 ERROR:  cannot use COPY fetcher because the plan is parameterized
--- Test copy fetcher when query is aborted before EOF due to LIMIT
+-- Test fetcher when query is aborted before EOF due to LIMIT
 SET timescaledb.remote_data_fetcher = 'copy';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+             time             | device_id | v0 | v1 | v2  | v3 
+------------------------------+-----------+----+----+-----+----
+ Fri Dec 31 16:00:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+(11 rows)
+
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+             time             | device_id | v0 | v1 | v2  | v3 
+------------------------------+-----------+----+----+-----+----
+ Fri Dec 31 16:00:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+(11 rows)
+
+SET timescaledb.remote_data_fetcher = 'cursor';
 SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
              time             | device_id | v0 | v1 | v2  | v3 
 ------------------------------+-----------+----+----+-----+----

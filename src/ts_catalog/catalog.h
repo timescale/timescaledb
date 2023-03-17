@@ -1472,9 +1472,10 @@ extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, Hea
 extern TSDLLEXPORT void ts_catalog_update(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_delete_tid_only(Relation rel, ItemPointer tid);
 extern TSDLLEXPORT void ts_catalog_delete_tid(Relation rel, ItemPointer tid);
-extern TSDLLEXPORT void ts_catalog_delete_only(Relation rel, HeapTuple tuple);
-extern TSDLLEXPORT void ts_catalog_delete(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
+extern TSDLLEXPORT ResultRelInfo *ts_catalog_open_indexes(Relation heapRel);
+extern TSDLLEXPORT void ts_catalog_close_indexes(ResultRelInfo *indstate);
+extern TSDLLEXPORT void ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple);
 
 bool TSDLLEXPORT ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey,
 									 int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode,

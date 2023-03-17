@@ -1416,7 +1416,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
 	if ((enable_partitionwise_aggregate &&
-		 !has_partialize_function(root->parse, TS_DO_NOT_FIX_AGGREF)) ||
+		 !has_partialize_function((Node *) root->parse->targetList, TS_DO_NOT_FIX_AGGSPLIT)) ||
 		hypertable_is_distributed(ht))
 	{
 		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));

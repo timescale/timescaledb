@@ -22,10 +22,12 @@
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
 #include <nodes/pg_list.h>
+#include <nodes/print.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
+#include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
@@ -38,17 +40,18 @@
 
 #include "array.h"
 #include "chunk.h"
+#include "create.h"
+#include "custom_type_cache.h"
 #include "debug_point.h"
 #include "deltadelta.h"
 #include "dictionary.h"
 #include "gorilla.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "create.h"
-#include "custom_type_cache.h"
-#include "segment_meta.h"
-#include "ts_catalog/hypertable_compression.h"
-#include "ts_catalog/catalog.h"
 #include "guc.h"
+#include "nodes/chunk_dispatch/chunk_insert_state.h"
+#include "indexing.h"
+#include "segment_meta.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/hypertable_compression.h"
 
 #define MAX_ROWS_PER_COMPRESSION 1000
 /* gap in sequence id between rows, potential for adding rows in gap later */
@@ -1418,8 +1421,11 @@ row_compressor_finish(RowCompressor *row_compressor)
 static SegmentInfo *
 segment_info_new(Form_pg_attribute column_attr)
 {
-	Oid eq_fn_oid =
-		lookup_type_cache(column_attr->atttypid, TYPECACHE_EQ_OPR_FINFO)->eq_opr_finfo.fn_oid;
+	TypeCacheEntry *tce = lookup_type_cache(column_attr->atttypid, TYPECACHE_EQ_OPR_FINFO);
+
+	if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
+		elog(ERROR, "no equality function for column \"%s\"", NameStr(column_attr->attname));
+
 	SegmentInfo *segment_info = palloc(sizeof(*segment_info));
 
 	*segment_info = (SegmentInfo){
@@ -1427,9 +1433,7 @@ segment_info_new(Form_pg_attribute column_attr)
 		.typ_by_val = column_attr->attbyval,
 	};
 
-	if (!OidIsValid(eq_fn_oid))
-		elog(ERROR, "no equality function for column \"%s\"", NameStr(column_attr->attname));
-	fmgr_info_cxt(eq_fn_oid, &segment_info->eq_fn, CurrentMemoryContext);
+	fmgr_info_cxt(tce->eq_opr_finfo.fn_oid, &segment_info->eq_fn, CurrentMemoryContext);
 
 	segment_info->eq_fcinfo = HEAP_FCINFO(2);
 	segment_info->collation = column_attr->attcollation;
@@ -1515,9 +1519,11 @@ typedef struct RowDecompressor
 	int16 num_compressed_columns;
 
 	TupleDesc in_desc;
+	Relation in_rel;
 
 	TupleDesc out_desc;
 	Relation out_rel;
+	ResultRelInfo *indexstate;
 
 	CommandId mycid;
 	BulkInsertState bistate;
@@ -1539,7 +1545,8 @@ static void populate_per_compressed_columns_from_data(PerCompressedColumn *per_c
 													  bool *compressed_is_nulls);
 static void row_decompressor_decompress_row(RowDecompressor *row_decompressor);
 static bool per_compressed_col_get_data(PerCompressedColumn *per_compressed_col,
-										Datum *decompressed_datums, bool *decompressed_is_nulls);
+										Datum *decompressed_datums, bool *decompressed_is_nulls,
+										TupleDesc out_desc);
 
 static RowDecompressor
 build_decompressor(Relation in_rel, Relation out_rel)
@@ -1557,9 +1564,11 @@ build_decompressor(Relation in_rel, Relation out_rel)
 		.num_compressed_columns = in_desc->natts,
 
 		.in_desc = in_desc,
+		.in_rel = in_rel,
 
 		.out_desc = out_desc,
 		.out_rel = out_rel,
+		.indexstate = ts_catalog_open_indexes(out_rel),
 
 		.mycid = GetCurrentCommandId(true),
 		.bistate = GetBulkInsertState(),
@@ -1602,8 +1611,8 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 * We may as well allow readers to keep reading the compressed data while
 	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation out_rel = table_open(out_table, ExclusiveLock);
-	Relation in_rel = relation_open(in_table, ExclusiveLock);
+	Relation out_rel = table_open(out_table, AccessExclusiveLock);
+	Relation in_rel = table_open(in_table, ExclusiveLock);
 
 	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
 
@@ -1626,24 +1635,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	FreeBulkInsertState(decompressor.bistate);
 	MemoryContextDelete(decompressor.per_compressed_row_ctx);
-
-	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
-	 * so the strong locks taken by reindex_relation shouldn't matter. */
-#if PG14_LT
-	int options = 0;
-#else
-	ReindexParams params = { 0 };
-	ReindexParams *options = &params;
-#endif
-
-	/* The reindex_relation() function creates an AccessExclusiveLock on the
-	 * chunk index (if present). After calling this function, concurrent
-	 * SELECTs have to wait until the index lock is released. When no
-	 * index is present concurrent SELECTs can be still performed in
-	 * parallel. */
-	DEBUG_WAITPOINT("decompress_chunk_impl_before_reindex");
-	reindex_relation(out_table, 0, options);
-	DEBUG_WAITPOINT("decompress_chunk_impl_after_reindex");
+	ts_catalog_close_indexes(decompressor.indexstate);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1764,7 +1756,8 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
 		{
 			bool col_is_done = per_compressed_col_get_data(&decompressor->per_compressed_cols[col],
 														   decompressor->decompressed_datums,
-														   decompressor->decompressed_is_nulls);
+														   decompressor->decompressed_is_nulls,
+														   decompressor->out_desc);
 			is_done &= col_is_done;
 		}
 
@@ -1776,11 +1769,14 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
 			HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
 														   decompressor->decompressed_datums,
 														   decompressor->decompressed_is_nulls);
+
 			heap_insert(decompressor->out_rel,
 						decompressed_tuple,
 						decompressor->mycid,
 						0 /*=options*/,
 						decompressor->bistate);
+
+			ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
 
 			heap_freetuple(decompressed_tuple);
 			wrote_data = true;
@@ -1796,7 +1792,7 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
  */
 bool
 per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *decompressed_datums,
-							bool *decompressed_is_nulls)
+							bool *decompressed_is_nulls, TupleDesc out_desc)
 {
 	DecompressResult decompressed;
 	int16 decompressed_column_offset = per_compressed_col->decompressed_column_offset;
@@ -1816,7 +1812,11 @@ per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *deco
 	/* compressed NULL */
 	if (per_compressed_col->is_null)
 	{
-		decompressed_is_nulls[decompressed_column_offset] = true;
+		decompressed_datums[decompressed_column_offset] =
+			getmissingattr(out_desc,
+						   decompressed_column_offset + 1,
+						   &decompressed_is_nulls[decompressed_column_offset]);
+
 		return true;
 	}
 
@@ -2056,4 +2056,184 @@ update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
 		restore_pgclass_stats(uncompressed_relid, comp_pages, comp_visible, out_tuples);
 		CommandCounterIncrement();
 	}
+}
+
+/*
+ * Build scankeys for decompression of specific batches. key_columns references the
+ * columns of the uncompressed chunk.
+ */
+static ScanKeyData *
+build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key_columns,
+			   Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys)
+{
+	int key_index = 0;
+	ScanKeyData *scankeys = NULL;
+
+	if (!bms_is_empty(key_columns))
+	{
+		scankeys = palloc0(bms_num_members(key_columns) * 2 * sizeof(ScanKeyData));
+		int i = -1;
+		while ((i = bms_next_member(key_columns, i)) > 0)
+		{
+			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
+			char *attname = get_attname(decompressor.out_rel->rd_id, attno, false);
+			AttrNumber cmp_attno = get_attnum(decompressor.in_rel->rd_id, attname);
+			FormData_hypertable_compression *fd =
+				ts_hypertable_compression_get_by_pkey(hypertable_id, attname);
+
+			/*
+			 * There are 3 possible scenarios we have to consider
+			 * when dealing with columns which are part of unique
+			 * constraints.
+			 *
+			 * 1. Column is segmentby-Column
+			 * In this case we can add a single ScanKey with an
+			 * equality check for the value.
+			 * 2. Column is orderby-Column
+			 * In this we can add 2 ScanKeys with range constraints
+			 * utilizing batch metadata.
+			 * 3. Column is neither segmentby nor orderby
+			 * In this case we cannot utilize this column for
+			 * batch filtering as the values are compressed and
+			 * we have no metadata.
+			 */
+
+			if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
+			{
+				bool isnull;
+				Datum value = slot_getattr(slot, attno, &isnull);
+				Oid atttypid = decompressor.out_desc->attrs[attno - 1].atttypid;
+
+				TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_EQ_OPR_FINFO);
+
+				/* Segmentby column type should match in compressed and uncompressed chunk */
+				Assert(decompressor.out_desc->attrs[AttrNumberGetAttrOffset(attno)].atttypid ==
+					   decompressor.in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid);
+
+				if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
+					elog(ERROR, "no equality function for type \"%s\"", format_type_be(atttypid));
+
+				/*
+				 * In PG versions <= 14 NULL values are always considered distinct
+				 * from other NULL values and therefore NULLABLE multi-columnn
+				 * unique constraints might expose unexpected behaviour in the
+				 * presence of NULL values.
+				 * Since SK_SEARCHNULL is not supported by heap scans we cannot
+				 * build a ScanKey for NOT NULL and instead have to do those
+				 * checks manually.
+				 */
+				if (isnull)
+				{
+					*null_columns = bms_add_member(*null_columns, cmp_attno);
+				}
+				else
+				{
+					ScanKeyEntryInitialize(&scankeys[key_index],
+										   0, /* flags */
+										   cmp_attno,
+										   BTEqualStrategyNumber,
+										   InvalidOid, /* No strategy subtype. */
+										   decompressor.out_desc
+											   ->attrs[AttrNumberGetAttrOffset(attno)]
+											   .attcollation,
+										   tce->eq_opr_finfo.fn_oid,
+										   value);
+					key_index++;
+				}
+			}
+		}
+	}
+
+	*num_scankeys = key_index;
+	return scankeys;
+}
+
+void
+decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlot *slot)
+{
+	Relation out_rel = cis->rel;
+
+	if (!ts_indexing_relation_has_primary_or_unique_index(out_rel))
+	{
+		/*
+		 * If there are no unique constraints there is nothing to do here.
+		 */
+		return;
+	}
+
+	Chunk *comp = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
+
+	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
+	Bitmapset *key_columns = RelationGetIndexAttrBitmap(out_rel, INDEX_ATTR_BITMAP_KEY);
+	Bitmapset *null_columns = NULL;
+
+	int num_scankeys;
+	ScanKeyData *scankeys = build_scankeys(chunk->fd.hypertable_id,
+										   decompressor,
+										   key_columns,
+										   &null_columns,
+										   slot,
+										   &num_scankeys);
+
+	bms_free(key_columns);
+
+	TableScanDesc heapScan =
+		table_beginscan(in_rel, GetTransactionSnapshot(), num_scankeys, scankeys);
+
+	for (HeapTuple compressed_tuple = heap_getnext(heapScan, ForwardScanDirection);
+		 compressed_tuple != NULL;
+		 compressed_tuple = heap_getnext(heapScan, ForwardScanDirection))
+	{
+		Assert(HeapTupleIsValid(compressed_tuple));
+		bool valid = true;
+
+		/*
+		 * Since the heap scan API does not support SK_SEARCHNULL we have to check
+		 * for NULL values manually when those are part of the constraints.
+		 */
+		for (int attno = bms_next_member(null_columns, -1); attno >= 0;
+			 attno = bms_next_member(null_columns, attno))
+		{
+			if (!heap_attisnull(compressed_tuple, attno, decompressor.in_desc))
+			{
+				valid = false;
+				break;
+			}
+		}
+
+		/*
+		 * Skip if NULL check failed.
+		 */
+		if (!valid)
+			continue;
+
+		heap_deform_tuple(compressed_tuple,
+						  decompressor.in_desc,
+						  decompressor.compressed_datums,
+						  decompressor.compressed_is_nulls);
+
+		row_decompressor_decompress_row(&decompressor);
+
+		TM_FailureData tmfd;
+		TM_Result result pg_attribute_unused();
+		result = table_tuple_delete(in_rel,
+									&compressed_tuple->t_self,
+									decompressor.mycid,
+									GetTransactionSnapshot(),
+									InvalidSnapshot,
+									true,
+									&tmfd,
+									false);
+		Assert(result == TM_Ok);
+	}
+
+	heap_endscan(heapScan);
+
+	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeBulkInsertState(decompressor.bistate);
+
+	CommandCounterIncrement();
+
+	table_close(in_rel, NoLock);
 }

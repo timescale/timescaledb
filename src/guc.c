@@ -42,9 +42,10 @@ static const struct config_enum_entry telemetry_level_options[] = {
 #endif
 
 static const struct config_enum_entry remote_data_fetchers[] = {
+	{ "auto", AutoFetcherType, false },
 	{ "copy", CopyFetcherType, false },
 	{ "cursor", CursorFetcherType, false },
-	{ "auto", AutoFetcherType, false },
+	{ "prepared", PreparedStatementFetcherType, false },
 	{ NULL, 0, false }
 };
 
@@ -337,8 +338,7 @@ _guc_init(void)
 	DefineCustomBoolVariable("timescaledb.enable_parameterized_data_node_scan",
 							 "Enable parameterized data node scans",
 							 "Disable this as a workaround in case these plans are incorrectly "
-							 "chosen "
-							 "by the query planner when they are suboptimal",
+							 "chosen by the query planner when they are suboptimal",
 							 &ts_guc_enable_parameterized_data_node_scan,
 							 true,
 							 PGC_USERSET,

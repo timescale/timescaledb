@@ -270,36 +270,13 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 	table_close(tblrel, AccessShareLock);
 }
 
-bool
+bool TSDLLEXPORT
 ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 {
-	List *indexoidlist = RelationGetIndexList(htrel);
-	ListCell *lc;
-	bool result = false;
+	Bitmapset *key_attrs = RelationGetIndexAttrBitmap(htrel, INDEX_ATTR_BITMAP_KEY);
+	bool result = bms_num_members(key_attrs) > 0;
 
-	if (OidIsValid(htrel->rd_pkindex))
-		return true;
-
-	foreach (lc, indexoidlist)
-	{
-		Oid indexoid = lfirst_oid(lc);
-		HeapTuple index_tuple;
-		Form_pg_index index;
-
-		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
-		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
-			elog(ERROR,
-				 "cache lookup failed for index %u in \"%s\" ",
-				 indexoid,
-				 RelationGetRelationName(htrel));
-		index = (Form_pg_index) GETSTRUCT(index_tuple);
-		result = index->indisunique;
-		ReleaseSysCache(index_tuple);
-		if (result)
-			break;
-	}
-
-	list_free(indexoidlist);
+	bms_free(key_attrs);
 	return result;
 }
 

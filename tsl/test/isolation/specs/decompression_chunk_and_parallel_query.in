@@ -10,11 +10,6 @@
 ###
 
 setup {
-   CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-     AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-   CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-     AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
 
    CREATE TABLE sensor_data (
    time timestamptz not null,
@@ -57,56 +52,25 @@ teardown {
 
 session "s1"
 
+step "s1_begin" {
+  BEGIN;
+}
+
 step "s1_decompress" {
    SELECT count(*) FROM (SELECT decompress_chunk(i, if_compressed => true) FROM show_chunks('sensor_data') i) i;
    SELECT compression_status FROM chunk_compression_stats('sensor_data');
+}
+
+step "s1_commit" {
+  COMMIT;
 }
 
 session "s2"
 
 step "s2_read_sensor_data" {
    SELECT FROM sensor_data;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
 }
 
-session "s3"
+permutation "s2_read_sensor_data" "s1_begin" "s1_decompress" "s2_read_sensor_data" "s1_commit" "s2_read_sensor_data"
 
-step "s3_lock_decompression_locks" {
-   -- This waitpoint is defined before the decompressed chunk is re-indexed. Up to this 
-   -- point parallel SELECTs should be possible. 
-   SELECT debug_waitpoint_enable('decompress_chunk_impl_before_reindex');
-
-   -- This waitpoint is defined after all locks for the decompression and the deletion
-   -- of the compressed chunk are requested.
-   SELECT debug_waitpoint_enable('decompress_chunk_impl_after_reindex');
-}
-
-step "s3_unlock_decompression_before_reindex_lock" {
-   -- Ensure that we are waiting on our debug waitpoint
-   -- Note: The OIDs of the advisory locks are based on the hash value of the lock name (see debug_point_init())
-   --       decompress_chunk_impl_before_reindex = 3966149665.
-   SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND locktype = 'advisory' ORDER BY relation, locktype, mode, granted;
-
-   SELECT debug_waitpoint_release('decompress_chunk_impl_before_reindex');
-}
-
-step "s3_unlock_decompression_after_reindex_lock" {
-   -- Ensure that we are waiting on our debug waitpoint
-   -- Note: The OIDs of the advisory locks are based on the hash value of the lock name (see debug_point_init())
-   --       decompress_chunk_impl_after_reindex = 1858017383.
-   SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND locktype = 'advisory' ORDER BY relation, locktype, mode, granted;
-
-   SELECT debug_waitpoint_release('decompress_chunk_impl_after_reindex');
-}
-
-# Desired execution:
-# s3_lock_decompression_locks - Locks the decompression waitpoints.
-# s2_read_sensor_data - Read the compressed chunk. This should be executed without blocking.
-# s1_decompress - Start the decompression and block on the first waitpoint.
-# s2_read_sensor_data - Read the compressed chunk again. This should be still possible without blocking.
-# s3_unlock_decompression_before_reindex_lock - Releases the decompress_chunk_impl_before_reindex waitpoint.
-# s1_decompress continues - The chunk is reindexed and the index is locked.
-# s2_read_sensor_data - Read the chunk. This blocks due to the locked index.
-# s3_unlock_decompression_after_reindex_lock - Releases the decompress_chunk_impl_after_compressed_chunk_lock.
-# s1_decompress continues - Finishes the decompression operation and releases the locks.
-# s2_read_sensor_data continues.
-permutation "s3_lock_decompression_locks" "s2_read_sensor_data" "s1_decompress" "s2_read_sensor_data" "s3_unlock_decompression_before_reindex_lock" "s2_read_sensor_data" "s3_unlock_decompression_after_reindex_lock"
