@@ -124,7 +124,6 @@ BEGIN
   END IF;
 END $$;
 
-
 -- Create dimension partition information for existing space-partitioned hypertables
 CREATE FUNCTION _timescaledb_internal.update_dimension_partition(hypertable REGCLASS) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_partition_update' LANGUAGE C VOLATILE;
 SELECT _timescaledb_internal.update_dimension_partition(format('%I.%I', h.schema_name, h.table_name))
@@ -148,3 +147,22 @@ BEGIN
       RAISE WARNING 'Continuous Aggregate: % with old format will not be supported with PG15. You should upgrade to the new format', cagg_name;
     END LOOP;
 END $$;
+
+-- Create watermark record when required
+DO
+$$
+DECLARE
+  ts_version TEXT;
+BEGIN
+    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+    IF ts_version >= '2.11.0' THEN
+      INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
+      SELECT a.mat_hypertable_id, _timescaledb_internal.cagg_watermark_materialized(a.mat_hypertable_id)
+      FROM _timescaledb_catalog.continuous_agg a
+      LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark b ON b.mat_hypertable_id = a.mat_hypertable_id
+      WHERE b.mat_hypertable_id IS NULL
+      ORDER BY 1;
+    END IF;
+END;
+$$;
+

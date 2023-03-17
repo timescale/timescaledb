@@ -65,6 +65,7 @@
 #include "ts_catalog/chunk_data_node.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "ts_catalog/hypertable_data_node.h"
 #include "utils.h"
 
@@ -3893,7 +3894,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	Chunk *chunks;
 	const char *schema_name, *table_name;
 	const int32 hypertable_id = ht->fd.id;
-	bool has_continuous_aggs;
+	bool has_continuous_aggs, is_materialization_hypertable;
 	const MemoryContext oldcontext = CurrentMemoryContext;
 	ScanTupLock tuplock = {
 		.waitpolicy = LockWaitBlock,
@@ -3913,13 +3914,17 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	 * well. Do not unlock - let the transaction semantics take care of it. */
 	lock_referenced_tables(ht->main_table_relid);
 
+	is_materialization_hypertable = false;
+
 	switch (ts_continuous_agg_hypertable_status(hypertable_id))
 	{
 		case HypertableIsMaterialization:
 			has_continuous_aggs = false;
+			is_materialization_hypertable = true;
 			break;
 		case HypertableIsMaterializationAndRaw:
 			has_continuous_aggs = true;
+			is_materialization_hypertable = true;
 			break;
 		case HypertableIsRawTable:
 			has_continuous_aggs = true;
@@ -4027,6 +4032,14 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			ChunkDataNode *cdn = lfirst(lc);
 			data_nodes = list_append_unique_oid(data_nodes, cdn->foreign_server_oid);
 		}
+	}
+
+	/* When dropping chunks for a given CAgg then force set the watermark */
+	if (is_materialization_hypertable)
+	{
+		bool isnull;
+		int64 watermark = ts_hypertable_get_open_dim_max_value(ht, 0, &isnull);
+		ts_cagg_watermark_update(ht, watermark, isnull, true);
 	}
 
 	if (affected_data_nodes)

@@ -747,20 +747,25 @@ NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
 NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
 -- Watermarks at min for the above caggs:
-SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+SELECT
+  user_view_name,
+  _timescaledb_internal.cagg_watermark(mat_hypertable_id),
+  _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id),
+  _timescaledb_internal.cagg_watermark(mat_hypertable_id) = _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id) AS is_equal
 FROM _timescaledb_catalog.continuous_agg
-ORDER BY 1,2;
- user_view_name  |    cagg_watermark    
------------------+----------------------
- bigint_agg      | -9223372036854775808
- boundary_view   |                   30
- date_agg        |  -210866803200000000
- int_agg         |          -2147483648
- mat_m1          |                   25
- metrics_summary |      946771200000000
- smallint_agg    |               -32768
- timestamp_agg   |  -210866803200000000
- timestamptz_agg |  -210866803200000000
+NATURAL JOIN _timescaledb_catalog.continuous_aggs_watermark
+ORDER BY 1, 2, 3;
+ user_view_name  |    cagg_watermark    | cagg_watermark_materialized | is_equal 
+-----------------+----------------------+-----------------------------+----------
+ bigint_agg      | -9223372036854775808 |        -9223372036854775808 | t
+ boundary_view   |                   30 |                          30 | t
+ date_agg        |  -210866803200000000 |         -210866803200000000 | t
+ int_agg         |          -2147483648 |                 -2147483648 | t
+ mat_m1          |                   25 |                          25 | t
+ metrics_summary |      946771200000000 |             946771200000000 | t
+ smallint_agg    |               -32768 |                      -32768 | t
+ timestamp_agg   |  -210866803200000000 |         -210866803200000000 | t
+ timestamptz_agg |  -210866803200000000 |         -210866803200000000 | t
 (9 rows)
 
 INSERT INTO smallint_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
@@ -904,3 +909,115 @@ SELECT _timescaledb_internal.cagg_watermark(NULL);
 (1 row)
 
 \set ON_ERROR_STOP 1
+-- Remove stored watermark, so query and refresh should error
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.continuous_aggs_watermark;
+\set ON_ERROR_STOP 0
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 16
+SELECT * FROM int_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 17
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 18
+SELECT * FROM date_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 19
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 20
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 21
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+ERROR:  watermark not defined for continuous aggregate: 17
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+ERROR:  watermark not defined for continuous aggregate: 16
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+ERROR:  watermark not defined for continuous aggregate: 18
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+NOTICE:  continuous aggregate "date_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
+\set ON_ERROR_STOP 1
+-- Fix all continuous aggregates inserting materialized watermark into the metadata table
+INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
+SELECT a.mat_hypertable_id, _timescaledb_internal.cagg_watermark_materialized(a.mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg a
+LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark b ON b.mat_hypertable_id = a.mat_hypertable_id
+WHERE b.mat_hypertable_id IS NULL
+ORDER BY 1;
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+ bucket |          avg           
+--------+------------------------
+      0 |     4.2500000000000000
+     10 |    19.0000000000000000
+  32760 | 1.00000000000000000000
+(3 rows)
+
+SELECT * FROM int_agg
+ORDER BY 1,2;
+   bucket   |          avg           
+------------+------------------------
+          0 |     1.5000000000000000
+          5 |     7.0000000000000000
+         15 |    19.0000000000000000
+ 2147483645 | 1.00000000000000000000
+(4 rows)
+
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+       bucket        |          avg           
+---------------------+------------------------
+                   0 |     4.2500000000000000
+                  10 |    19.0000000000000000
+ 9223372036854775800 | 1.00000000000000000000
+(3 rows)
+
+SELECT * FROM date_agg
+ORDER BY 1,2;
+    bucket    |          avg           
+--------------+------------------------
+ 12-31-2019   | 1.00000000000000000000
+ 01-02-2020   |     2.0000000000000000
+ 01-06-2020   |     6.0000000000000000
+ 01-08-2020   |     8.0000000000000000
+ 12-31-294246 | 1.00000000000000000000
+(5 rows)
+
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+           bucket           |          avg           
+----------------------------+------------------------
+ Tue Dec 31 00:00:00 2019   | 1.00000000000000000000
+ Thu Jan 02 00:00:00 2020   |     2.0000000000000000
+ Mon Jan 06 00:00:00 2020   |     6.0000000000000000
+ Wed Jan 08 00:00:00 2020   |     8.0000000000000000
+ Thu Dec 31 00:00:00 294246 | 1.00000000000000000000
+(5 rows)
+
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+             bucket             |          avg           
+--------------------------------+------------------------
+ Mon Dec 30 16:00:00 2019 PST   | 1.00000000000000000000
+ Wed Jan 01 16:00:00 2020 PST   |     2.0000000000000000
+ Sun Jan 05 16:00:00 2020 PST   |     6.0000000000000000
+ Tue Jan 07 16:00:00 2020 PST   |     8.0000000000000000
+ Wed Dec 30 16:00:00 294246 PST | 1.00000000000000000000
+(5 rows)
+
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+NOTICE:  continuous aggregate "date_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date

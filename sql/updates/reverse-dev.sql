@@ -4,3 +4,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ping_data_node(node_name NAME) 
 AS '@MODULE_PATHNAME@', 'ts_data_node_ping' LANGUAGE C VOLATILE;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.get_approx_row_count(REGCLASS);
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_watermark;
+
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_watermark;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.cagg_watermark_materialized(hypertable_id INTEGER);

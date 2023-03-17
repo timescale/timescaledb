@@ -269,7 +269,8 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 
 	Assert(time_dim != NULL);
 
-	continuous_agg_update_materialization(refresh->partial_view,
+	continuous_agg_update_materialization(refresh->cagg_ht,
+										  refresh->partial_view,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,

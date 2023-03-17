@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Features**
 * #5212 Allow pushdown of reference table joins
+* #5221 Improve Realtime Continuous Aggregate performance
 * #5312 Add timeout support to the ping_data_node()
 * #5361 Add parallel support for partialize_agg()
 * #5252 Improve unique constraint support on compressed hypertables
@@ -26,6 +27,7 @@ accidentally triggering the load of a previous DB version.**
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
 * @S-imo-n for reporting the issue on Background Worker Scheduler crash
+* @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
 
 ## 2.10.1 (2023-03-07)
 
