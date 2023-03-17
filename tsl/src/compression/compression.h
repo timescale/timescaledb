@@ -158,4 +158,19 @@ typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
 										  TupleTableSlot *slot);
 
+#define CheckCompressedData(X) if (!(X)) { abort(); ereport(ERROR, (errmsg("the compressed data is corrupt"))); }
+
+inline static void *consumeCompressedData(StringInfo si, int bytes)
+{
+	CheckCompressedData(bytes >= 0);
+	CheckCompressedData(bytes < PG_INT32_MAX / 2);
+	CheckCompressedData(si->cursor + bytes >= 0);
+	CheckCompressedData(si->cursor + bytes <= si->len);
+
+	void *result = si->data + si->cursor;
+	si->cursor += bytes;
+	return result;
+}
+
+
 #endif

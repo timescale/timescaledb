@@ -14,10 +14,10 @@
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 
+#include "compression/compression.h"
 #include "compression/gorilla.h"
 #include "float_utils.h"
 #include "adts/bit_array.h"
-#include "compression/compression.h"
 #include "compression/simple8b_rle.h"
 
 /*
@@ -462,54 +462,64 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
  ***  DecompressionIterator  ***
  *******************************/
 
-static void
-compressed_gorilla_data_init_from_pointer(CompressedGorillaData *expanded,
-										  const GorillaCompressed *compressed)
+inline static void
+bytes_attach_bit_array_and_advance(BitArray *dst, StringInfo si, uint32 num_buckets,
+								   uint8 bits_in_last_bucket)
 {
-	bool has_nulls;
-	const char *data = (char *) compressed;
+	bit_array_wrap_internal(dst, num_buckets, bits_in_last_bucket, (uint64 *) (si->data + si->cursor));
+	consumeCompressedData(si, bit_array_data_bytes_used(dst));
+}
 
-	expanded->header = compressed;
+static void
+compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, StringInfo si)
+{
+	expanded->header = (GorillaCompressed *) consumeCompressedData(si, sizeof(GorillaCompressed));
+
 	if (expanded->header->compression_algorithm != COMPRESSION_ALGORITHM_GORILLA)
 		elog(ERROR, "unknown compression algorithm");
 
-	has_nulls = expanded->header->has_nulls == 1;
-	data += sizeof(GorillaCompressed);
+	bool has_nulls = expanded->header->has_nulls == 1;
 
-	expanded->tag0s = bytes_deserialize_simple8b_and_advance(&data);
-	expanded->tag1s = bytes_deserialize_simple8b_and_advance(&data);
+	expanded->tag0s = bytes_deserialize_simple8b_and_advance(si);
+	expanded->tag1s = bytes_deserialize_simple8b_and_advance(si);
 
-	data = bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
-											  data,
+ bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
+											  si,
 											  expanded->header->num_leading_zeroes_buckets,
 											  expanded->header
 												  ->bits_used_in_last_leading_zeros_bucket);
 
-	expanded->num_bits_used_per_xor = bytes_deserialize_simple8b_and_advance(&data);
+	expanded->num_bits_used_per_xor = bytes_deserialize_simple8b_and_advance(si);
 
-	data = bytes_attach_bit_array_and_advance(&expanded->xors,
-											  data,
+	bytes_attach_bit_array_and_advance(&expanded->xors,
+											  si,
 											  expanded->header->num_xor_buckets,
 											  expanded->header->bits_used_in_last_xor_bucket);
 
 	if (has_nulls)
-		expanded->nulls = bytes_deserialize_simple8b_and_advance(&data);
+		expanded->nulls = bytes_deserialize_simple8b_and_advance(si);
 	else
 		expanded->nulls = NULL;
 }
 
 static void
-compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum gorilla_compressed)
+compressed_gorilla_data_init_from_pointer(CompressedGorillaData *expanded,
+										  const GorillaCompressed *compressed)
 {
-	compressed_gorilla_data_init_from_pointer(data,
-											  (GorillaCompressed *) PG_DETOAST_DATUM(
-												  gorilla_compressed));
+	StringInfoData si = {.data = (char *) compressed, .len = VARSIZE(compressed)};
+	compressed_gorilla_data_init_from_stringinfo(expanded, &si);
 }
 
-DecompressionIterator *
-gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type)
+static void
+compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum gorilla_compressed)
 {
-	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	compressed_gorilla_data_init_from_pointer(data, (GorillaCompressed *) DatumGetPointer(gorilla_compressed));
+//											  (GorillaCompressed *) PG_DETOAST_DATUM(
+//												  gorilla_compressed));
+}
+
+static void gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterator, Oid element_type)
+{
 	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
 	iterator->base.forward = true;
 	iterator->base.element_type = element_type;
@@ -517,7 +527,6 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
-	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
 
 	simple8brle_decompression_iterator_init_forward(&iterator->tag0s, iterator->gorilla_data.tag0s);
 	simple8brle_decompression_iterator_init_forward(&iterator->tag1s, iterator->gorilla_data.tag1s);
@@ -530,7 +539,24 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	if (iterator->has_nulls)
 		simple8brle_decompression_iterator_init_forward(&iterator->nulls,
 														iterator->gorilla_data.nulls);
+}
 
+DecompressionIterator *
+gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type)
+{
+	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
+	gorilla_iterator_init_from_expanded_forward(iterator, element_type);
+	return &iterator->base;
+}
+
+
+DecompressionIterator *
+gorilla_decompression_iterator_from_stringinfo_forward(StringInfo si, Oid element_type)
+{
+	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	compressed_gorilla_data_init_from_stringinfo(&iterator->gorilla_data, si);
+	gorilla_iterator_init_from_expanded_forward(iterator, element_type);
 	return &iterator->base;
 }
 

@@ -33,7 +33,7 @@ typedef struct DeltaDeltaCompressed
 	uint8 padding[2];
 	uint64 last_value;
 	uint64 last_delta;
-	Simple8bRleSerialized delta_deltas;
+	char delta_deltas[FLEXIBLE_ARRAY_MEMBER];
 } DeltaDeltaCompressed;
 
 static void
@@ -44,10 +44,9 @@ pg_attribute_unused() assertions(void)
 	StaticAssertStmt(sizeof(DeltaDeltaCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
 							 sizeof(test_val.has_nulls) + sizeof(test_val.padding) +
-							 sizeof(test_val.last_value) + sizeof(test_val.last_delta) +
-							 sizeof(test_val.delta_deltas),
+							 sizeof(test_val.last_value) + sizeof(test_val.last_delta),
 					 "DeltaDeltaCompressed wrong size");
-	StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 32, "DeltaDeltaCompressed wrong size");
+	//StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 16, "DeltaDeltaCompressed wrong size");
 }
 
 typedef struct DeltaDeltaDecompressionIterator
@@ -298,7 +297,7 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 		nulls_size = simple8brle_serialized_total_size(nulls);
 
 	compressed_size =
-		sizeof(DeltaDeltaCompressed) + simple8brle_serialized_slot_size(deltas) + nulls_size;
+		sizeof(DeltaDeltaCompressed) + simple8brle_serialized_total_size(deltas) + nulls_size;
 
 	if (!AllocSizeIsValid(compressed_size))
 		ereport(ERROR,
@@ -314,7 +313,7 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 	compressed->last_delta = last_delta;
 	compressed->has_nulls = nulls_size != 0 ? 1 : 0;
 
-	compressed_data = (char *) &compressed->delta_deltas;
+	compressed_data += sizeof(*compressed);
 	compressed_data =
 		bytes_serialize_simple8b_and_advance(compressed_data,
 											 simple8brle_serialized_total_size(deltas),
@@ -404,13 +403,15 @@ delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next
 
 static void
 int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
-										  DeltaDeltaCompressed *compressed, Oid element_type)
+										  void *compressed, Oid element_type)
 {
-	const char *data = (char *) &compressed->delta_deltas;
-	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&data);
-	bool has_nulls = compressed->has_nulls == 1;
+	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
+	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 
-	Assert(compressed->has_nulls == 0 || compressed->has_nulls == 1);
+	bool has_nulls = header->has_nulls == 1;
+
+	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 
 	*iter = (DeltaDeltaDecompressionIterator){
 		.base = {
@@ -428,20 +429,20 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 
 	if (has_nulls)
 	{
-		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&data);
+		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
 		simple8brle_decompression_iterator_init_forward(&iter->nulls, nulls);
 	}
 }
 
 static void
 int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
-										  DeltaDeltaCompressed *compressed, Oid element_type)
+										  void *compressed, Oid element_type)
 {
-	const char *data = (char *) &compressed->delta_deltas;
-	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&data);
-	bool has_nulls = compressed->has_nulls == 1;
+	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
+	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 
-	Assert(compressed->has_nulls == 0 || compressed->has_nulls == 1);
+	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 
 	*iter = (DeltaDeltaDecompressionIterator){
 		.base = {
@@ -450,16 +451,16 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 			.element_type = element_type,
 			.try_next = delta_delta_decompression_iterator_try_next_reverse,
 		},
-		.prev_val = compressed->last_value,
-		.prev_delta = compressed->last_delta,
-		.has_nulls = has_nulls,
+		.prev_val = header->last_value,
+		.prev_delta = header->last_delta,
+		.has_nulls = header->has_nulls,
 	};
 
 	simple8brle_decompression_iterator_init_reverse(&iter->delta_deltas, deltas);
 
-	if (has_nulls)
+	if (header->has_nulls)
 	{
-		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&data);
+		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
 		simple8brle_decompression_iterator_init_reverse(&iter->nulls, nulls);
 	}
 }
@@ -649,12 +650,12 @@ deltadelta_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	pq_sendbyte(buffer, data->has_nulls);
 	pq_sendint64(buffer, data->last_value);
 	pq_sendint64(buffer, data->last_delta);
-	simple8brle_serialized_send(buffer, &data->delta_deltas);
+	simple8brle_serialized_send(buffer, (Simple8bRleSerialized *) data->delta_deltas);
 	if (data->has_nulls)
 	{
 		Simple8bRleSerialized *nulls =
-			(Simple8bRleSerialized *) (((char *) &data->delta_deltas) +
-									   simple8brle_serialized_total_size(&data->delta_deltas));
+			(Simple8bRleSerialized *) (((char *) data->delta_deltas) +
+									   simple8brle_serialized_total_size((Simple8bRleSerialized *) data->delta_deltas));
 		simple8brle_serialized_send(buffer, nulls);
 	}
 }

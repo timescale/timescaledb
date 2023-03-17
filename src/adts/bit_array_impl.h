@@ -185,14 +185,6 @@ bit_array_wrap(BitArray *dst, uint64 *data, uint64 num_bits)
 	bit_array_wrap_internal(dst, num_buckets, bits_used_in_last_bucket, data);
 }
 
-static inline const char *
-bytes_attach_bit_array_and_advance(BitArray *dst, const char *data, uint32 num_buckets,
-								   uint8 bits_in_last_bucket)
-{
-	bit_array_wrap_internal(dst, num_buckets, bits_in_last_bucket, (uint64 *) data);
-	return data + bit_array_data_bytes_used(dst);
-}
-
 static inline void
 bit_array_append(BitArray *array, uint8 num_bits, uint64 bits)
 {
