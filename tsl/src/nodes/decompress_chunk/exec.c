@@ -423,6 +423,8 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 	{
 		if (!state->initialized)
 		{
+			ExecStoreAllNullTuple(slot);
+
 			TupleTableSlot *subslot = ExecProcNode(linitial(state->csstate.custom_ps));
 
 			if (TupIsNull(subslot))
