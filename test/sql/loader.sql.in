@@ -5,7 +5,10 @@
 \set TEST_DBNAME_2 :TEST_DBNAME _2
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE DATABASE :TEST_DBNAME_2;
+
+CREATE DATABASE :TEST_DBNAME_2; -- this errors out
+
+SELECT pg_sleep(100);
 
 DROP EXTENSION timescaledb;
 --no extension
