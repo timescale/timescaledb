@@ -295,7 +295,7 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 	if (max_refresh)
 	{
 		bool isnull;
-		Datum maxdat = ts_hypertable_get_open_dim_max_value(ht, 0, &isnull);
+		int64 maxval = ts_hypertable_get_open_dim_max_value(ht, 0, &isnull);
 
 		if (isnull)
 		{
@@ -325,8 +325,6 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		}
 		else
 		{
-			int64 maxval = ts_time_value_to_internal(maxdat, refresh_window->type);
-
 			if (ts_continuous_agg_bucket_width_variable(cagg))
 			{
 				return ts_compute_beginning_of_the_next_bucket_variable(maxval,

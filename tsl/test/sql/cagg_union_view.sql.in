@@ -379,9 +379,14 @@ CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
 
 -- Watermarks at min for the above caggs:
-SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+SELECT
+  user_view_name,
+  _timescaledb_internal.cagg_watermark(mat_hypertable_id),
+  _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id),
+  _timescaledb_internal.cagg_watermark(mat_hypertable_id) = _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id) AS is_equal
 FROM _timescaledb_catalog.continuous_agg
-ORDER BY 1,2;
+NATURAL JOIN _timescaledb_catalog.continuous_aggs_watermark
+ORDER BY 1, 2, 3;
 
 INSERT INTO smallint_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
 INSERT INTO int_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
@@ -397,7 +402,6 @@ CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
-
 
 -- Watermarks should reflect the new materializations
 SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
@@ -456,3 +460,67 @@ SELECT _timescaledb_internal.cagg_watermark(100);
 -- NULL hypertable ID. Function is STRICT, so does nothing:
 SELECT _timescaledb_internal.cagg_watermark(NULL);
 \set ON_ERROR_STOP 1
+
+-- Remove stored watermark, so query and refresh should error
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.continuous_aggs_watermark;
+
+\set ON_ERROR_STOP 0
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+
+SELECT * FROM int_agg
+ORDER BY 1,2;
+
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+
+SELECT * FROM date_agg
+ORDER BY 1,2;
+
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+\set ON_ERROR_STOP 1
+
+-- Fix all continuous aggregates inserting materialized watermark into the metadata table
+INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
+SELECT a.mat_hypertable_id, _timescaledb_internal.cagg_watermark_materialized(a.mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg a
+LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark b ON b.mat_hypertable_id = a.mat_hypertable_id
+WHERE b.mat_hypertable_id IS NULL
+ORDER BY 1;
+
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+
+SELECT * FROM int_agg
+ORDER BY 1,2;
+
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+
+SELECT * FROM date_agg
+ORDER BY 1,2;
+
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);

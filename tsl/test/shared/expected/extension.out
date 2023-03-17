@@ -37,6 +37,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.cagg_migrate_plan_exists(integer)
  _timescaledb_internal.cagg_migrate_pre_validation(text,text,text)
  _timescaledb_internal.cagg_watermark(integer)
+ _timescaledb_internal.cagg_watermark_materialized(integer)
  _timescaledb_internal.calculate_chunk_interval(integer,bigint,bigint)
  _timescaledb_internal.chunk_constraint_add_table_constraint(_timescaledb_catalog.chunk_constraint)
  _timescaledb_internal.chunk_drop_replica(regclass,name)

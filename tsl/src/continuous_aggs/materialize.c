@@ -17,7 +17,9 @@
 #include <compat/compat.h>
 #include <scan_iterator.h>
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include <time_utils.h>
+#include "debug_assert.h"
 
 #include "materialize.h"
 
@@ -32,7 +34,7 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
  * materialization support *
  ***************************/
 
-static void spi_update_materializations(SchemaAndName partial_view,
+static void spi_update_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 										SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange invalidation_range, const int32 chunk_id);
@@ -40,14 +42,14 @@ static void spi_delete_materializations(SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange invalidation_range,
 										const char *const chunk_condition);
-static void spi_insert_materializations(SchemaAndName partial_view,
+static void spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 										SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange materialization_range,
 										const char *const chunk_condition);
 
 void
-continuous_agg_update_materialization(SchemaAndName partial_view,
+continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_view,
 									  SchemaAndName materialization_table,
 									  const NameData *time_column_name,
 									  InternalTimeRange new_materialization_range,
@@ -55,9 +57,7 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
-	int res = SPI_connect();
-	if (res != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI in materializer");
+	int res;
 
 	/* Lock down search_path */
 	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
@@ -97,7 +97,8 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 	 */
 	if (range_length(invalidation_range) == 0 || !materialize_invalidations_separately)
 	{
-		spi_update_materializations(partial_view,
+		spi_update_materializations(mat_ht,
+									partial_view,
 									materialization_table,
 									time_column_name,
 									internal_time_range_to_time_range(
@@ -106,21 +107,20 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 	}
 	else
 	{
-		spi_update_materializations(partial_view,
+		spi_update_materializations(mat_ht,
+									partial_view,
 									materialization_table,
 									time_column_name,
 									internal_time_range_to_time_range(invalidation_range),
 									chunk_id);
 
-		spi_update_materializations(partial_view,
+		spi_update_materializations(mat_ht,
+									partial_view,
 									materialization_table,
 									time_column_name,
 									internal_time_range_to_time_range(new_materialization_range),
 									chunk_id);
 	}
-
-	if ((res = SPI_finish()) != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 }
 
 static bool
@@ -212,9 +212,9 @@ internal_time_range_to_time_range(InternalTimeRange internal)
 }
 
 static void
-spi_update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-							const NameData *time_column_name, TimeRange invalidation_range,
-							const int32 chunk_id)
+spi_update_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
+							SchemaAndName materialization_table, const NameData *time_column_name,
+							TimeRange invalidation_range, const int32 chunk_id)
 {
 	StringInfo chunk_condition = makeStringInfo();
 
@@ -231,7 +231,8 @@ spi_update_materializations(SchemaAndName partial_view, SchemaAndName materializ
 								time_column_name,
 								invalidation_range,
 								chunk_condition->data);
-	spi_insert_materializations(partial_view,
+	spi_insert_materializations(mat_ht,
+								partial_view,
 								materialization_table,
 								time_column_name,
 								invalidation_range,
@@ -264,25 +265,20 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 					 quote_literal_cstr(invalidation_end),
 					 chunk_condition);
 
-	res = SPI_execute_with_args(command->data,
-								0 /*=nargs*/,
-								NULL,
-								NULL,
-								NULL /*=Nulls*/,
-								false /*=read_only*/,
-								0 /*count*/);
+	res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
+
 	if (res < 0)
 		elog(ERROR, "could not delete old values from materialization table");
 }
 
 static void
-spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-							const NameData *time_column_name, TimeRange materialization_range,
-							const char *const chunk_condition)
+spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
+							SchemaAndName materialization_table, const NameData *time_column_name,
+							TimeRange materialization_range, const char *const chunk_condition)
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid out_fn;
+	Oid out_fn, timetype;
 	bool type_is_varlena;
 	char *materialization_start;
 	char *materialization_end;
@@ -304,14 +300,52 @@ spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materializ
 					 quote_literal_cstr(materialization_end),
 					 chunk_condition);
 
-	res = SPI_execute_with_args(command->data,
-								0 /*=nargs*/,
-								NULL /*=argtypes*/,
-								NULL /*=Values*/,
-								NULL /*=Nulls*/,
-								false /*=read_only*/,
-								0 /*count*/);
+	res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
 
 	if (res < 0)
 		elog(ERROR, "could not materialize values into the materialization table");
+
+	/* Get the max(time_dimension) of the materialized data */
+	if (SPI_processed > 0)
+	{
+		int64 watermark;
+		bool isnull;
+		Datum maxdat;
+		const Dimension *dim = hyperspace_get_open_dimension(mat_ht->space, 0);
+
+		if (NULL == dim)
+			elog(ERROR, "invalid open dimension index 0");
+
+		timetype = ts_dimension_get_partition_type(dim);
+
+		resetStringInfo(command);
+		appendStringInfo(command,
+						 "SELECT pg_catalog.max(%s) FROM %s.%s AS I "
+						 "WHERE I.%s >= %s AND I.%s < %s %s;",
+						 quote_identifier(NameStr(*time_column_name)),
+						 quote_identifier(NameStr(*partial_view.schema)),
+						 quote_identifier(NameStr(*partial_view.name)),
+						 quote_identifier(NameStr(*time_column_name)),
+						 quote_literal_cstr(materialization_start),
+						 quote_identifier(NameStr(*time_column_name)),
+						 quote_literal_cstr(materialization_end),
+						 chunk_condition);
+
+		res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			elog(ERROR, "could not get the last bucket of the materialized data");
+
+		Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
+			   "partition types for result (%d) and dimension (%d) do not match",
+			   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
+			   ts_dimension_get_partition_type(dim));
+		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+
+		if (!isnull)
+		{
+			watermark = ts_time_value_to_internal(maxdat, timetype);
+			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
+		}
+	}
 }

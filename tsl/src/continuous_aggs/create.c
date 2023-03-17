@@ -60,8 +60,11 @@
 
 #include "create.h"
 
+#include "debug_assert.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "dimension.h"
 #include "extension_constants.h"
 #include "func_cache.h"
@@ -69,14 +72,12 @@
 #include "hypertable.h"
 #include "invalidation.h"
 #include "dimension.h"
-#include "ts_catalog/continuous_agg.h"
 #include "options.h"
 #include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
 #include "refresh.h"
 #include "remote/dist_commands.h"
-#include "ts_catalog/hypertable_data_node.h"
 #include "deparse.h"
 #include "timezones.h"
 
@@ -2787,9 +2788,15 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		.options = stmt->into->options,
 		.aliases = stmt->into->colNames,
 	};
+	ContinuousAgg *cagg;
+	Hypertable *mat_ht;
+	Oid relid;
+	char *schema_name;
 
 	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
-	if (get_relname_relid(stmt->into->rel->relname, nspid))
+	relid = get_relname_relid(stmt->into->rel->relname, nspid);
+
+	if (OidIsValid(relid))
 	{
 		if (stmt->if_not_exists)
 		{
@@ -2808,6 +2815,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 							 " first or use another name.")));
 		}
 	}
+
 	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
 	{
 		ereport(ERROR,
@@ -2816,21 +2824,38 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 				 errhint("Use ALTER MATERIALIZED VIEW to enable compression.")));
 	}
 
+	schema_name = get_namespace_name(nspid);
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
 											  finalized,
-											  get_namespace_name(nspid),
+											  schema_name,
 											  stmt->into->rel->relname);
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
+	/* Insert the MIN of the time dimension type for the new watermark */
+	CommandCounterIncrement();
+
+	relid = get_relname_relid(stmt->into->rel->relname, nspid);
+	Ensure(OidIsValid(relid),
+		   "relation \"%s\".\"%s\" not found",
+		   schema_name,
+		   stmt->into->rel->relname);
+
+	cagg = ts_continuous_agg_find_by_relid(relid);
+	Ensure(NULL != cagg,
+		   "continuous aggregate \"%s\".\"%s\" not found",
+		   schema_name,
+		   stmt->into->rel->relname);
+
+	mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	Ensure(NULL != mat_ht, "materialization hypertable %d not found", cagg->data.mat_hypertable_id);
+
+	ts_cagg_watermark_insert(mat_ht, 0, true);
+
 	if (!stmt->into->skipData)
 	{
-		Oid relid;
-		ContinuousAgg *cagg;
 		InternalTimeRange refresh_window = {
 			.type = InvalidOid,
 		};
-
-		CommandCounterIncrement();
 
 		/*
 		 * We are creating a refresh window here in a similar way to how it's
@@ -2839,10 +2864,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		 * function and adding a 'verbose' parameter to is not useful for a
 		 * user.
 		 */
-		relid = get_relname_relid(stmt->into->rel->relname, nspid);
-		cagg = ts_continuous_agg_find_by_relid(relid);
-		Assert(cagg != NULL);
 		refresh_window.type = cagg->partition_type;
+
 		/*
 		 * To determine inscribed/circumscribed refresh window for variable-sized
 		 * buckets we should be able to calculate time_bucket(window.begin) and
@@ -2863,6 +2886,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION, true, true);
 	}
+
 	return DDL_DONE;
 }
 
