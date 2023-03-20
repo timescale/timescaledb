@@ -4,6 +4,7 @@ name: Homebrew
   schedule:
     # run daily 20:00 on main branch
     - cron: '0 20 * * *'
+  pull_request:
   push:
     tags:
     - '*'
@@ -16,11 +17,6 @@ jobs:
     runs-on: macos-latest
     strategy:
       fail-fast: false
-      matrix:
-        license: [ "TSL", "Apache"]
-        include:
-          - license: Apache
-            install_options: "--with-oss-only"
 
     steps:
 
@@ -31,7 +27,7 @@ jobs:
 
     - name: Install timescaledb
       run: |
-        brew install timescaledb ${{ matrix.install_options }}
+        brew install timescaledb
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
         brew services start postgresql
