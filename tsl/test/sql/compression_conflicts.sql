@@ -210,3 +210,82 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHI
 -- data should have move into uncompressed chunk for conflict check
 SELECT count(*) FROM ONLY :CHUNK;
 
+CREATE OR REPLACE VIEW compressed_chunk_info_view AS
+SELECT
+   h.schema_name AS hypertable_schema,
+   h.table_name AS hypertable_name,
+   c.schema_name as chunk_schema,
+   c.table_name as chunk_name,
+   c.status as chunk_status,
+   comp.schema_name as compressed_chunk_schema,
+   comp.table_name as compressed_chunk_name
+FROM
+   _timescaledb_catalog.hypertable h JOIN
+  _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.chunk comp
+ON comp.id = c.compressed_chunk_id;
+
+CREATE TABLE compressed_ht (
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       cpu double precision null,
+       temperature double precision null,
+       name varchar(100) default 'this is a default string value'
+);
+CREATE UNIQUE INDEX sensor_id_time_idx on compressed_ht(time, sensor_id);
+
+SELECT * FROM create_hypertable('compressed_ht', 'time',
+       chunk_time_interval => INTERVAL '2 months');
+
+-- create chunk 1
+INSERT INTO compressed_ht VALUES ('2017-12-28 01:10:28.192199+05:30', '1', 0.876, 4.123, 'chunk 1');
+INSERT INTO compressed_ht VALUES ('2017-12-24 01:10:28.192199+05:30', '1', 0.876, 4.123, 'chunk 1');
+
+-- create chunk 2
+INSERT INTO compressed_ht VALUES ('2017-03-28 01:10:28.192199+05:30', '2', 0.876, 4.123, 'chunk 2');
+INSERT INTO compressed_ht VALUES ('2017-03-12 01:10:28.192199+05:30', '3', 0.876, 4.123, 'chunk 2');
+
+-- create chunk 3
+INSERT INTO compressed_ht VALUES ('2022-01-18 01:10:28.192199+05:30', '4', 0.876, 4.123, 'chunk 3');
+INSERT INTO compressed_ht VALUES ('2022-01-08 01:10:28.192199+05:30', '4', 0.876, 4.123, 'chunk 3');
+INSERT INTO compressed_ht VALUES ('2022-01-11 01:10:28.192199+05:30', '5', 0.876, 4.123, 'chunk 3');
+INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'chunk 3');
+
+ALTER TABLE compressed_ht SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'sensor_id'
+);
+
+SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
+
+-- check compression status
+SELECT chunk_status,
+       chunk_name as "CHUNK_NAME"
+FROM compressed_chunk_info_view
+WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
+
+-- should report 0 row
+SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
+
+INSERT INTO compressed_ht VALUES ('2017-12-28 01:10:28.192199+05:30', '1', 0.876, 4.123, 'new insert row')
+  ON conflict(sensor_id, time)
+DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE';
+
+-- should report 1 row
+SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
+
+-- check that chunk 1 compression status is set to partial
+SELECT chunk_status,
+       chunk_name as "CHUNK_NAME"
+FROM compressed_chunk_info_view
+WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
+
+INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
+  ON conflict(sensor_id, time)
+DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE' RETURNING *;
+
+-- check that chunks 1 and 3 compression status is set to partial
+SELECT chunk_status,
+       chunk_name as "CHUNK_NAME"
+FROM compressed_chunk_info_view
+WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
