@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
 #include <nodes/nodes.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
@@ -145,7 +146,14 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 			 * postgres can do proper constraint checking.
 			 */
 			if (ts_cm_functions->decompress_batches_for_insert)
+			{
 				ts_cm_functions->decompress_batches_for_insert(cis, chunk, slot);
+				OnConflictAction onconflict_action =
+					chunk_dispatch_get_on_conflict_action(dispatch);
+				/* mark rows visible */
+				if (onconflict_action == ONCONFLICT_UPDATE)
+					dispatch->estate->es_output_cid = GetCurrentCommandId(true);
+			}
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
