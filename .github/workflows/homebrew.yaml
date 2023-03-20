@@ -27,6 +27,7 @@ jobs:
 
     - name: Install timescaledb
       run: |
+        brew install postgresql@15
         brew install timescaledb
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
