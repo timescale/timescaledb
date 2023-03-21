@@ -23,6 +23,7 @@ accidentally triggering the load of a previous DB version.**
 * #5428 Use consistent snapshots when scanning metadata
 * #5442 Decompression may have lost DEFAULT values
 * #5446 Add checks for malloc failure in libpq calls
+* #5470 Ensure superuser perms during copy/move chunk
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
