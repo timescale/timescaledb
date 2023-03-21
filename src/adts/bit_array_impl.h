@@ -262,7 +262,8 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 		iter->bits_used_in_current_bucket += num_bits;
 
 		CheckCompressedData(iter->current_bucket != iter->array->buckets.num_elements - 1 ||
-			   iter->bits_used_in_current_bucket <= iter->array->bits_used_in_last_bucket);
+							iter->bits_used_in_current_bucket <=
+								iter->array->bits_used_in_last_bucket);
 
 		return value;
 	}
@@ -287,7 +288,7 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 	iter->bits_used_in_current_bucket = num_bits_from_next_bucket;
 	CheckCompressedData(iter->current_bucket < iter->array->buckets.num_elements);
 	CheckCompressedData(iter->current_bucket != iter->array->buckets.num_elements - 1 ||
-		   iter->bits_used_in_current_bucket <= iter->array->bits_used_in_last_bucket);
+						iter->bits_used_in_current_bucket <= iter->array->bits_used_in_last_bucket);
 	return value;
 }
 

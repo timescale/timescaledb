@@ -769,5 +769,3 @@ ts_compression_custom_type_eq(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(*arg1 == *arg2);
 }
-
-

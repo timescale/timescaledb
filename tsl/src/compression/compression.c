@@ -2223,18 +2223,17 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	table_close(in_rel, NoLock);
 }
 
-
 /////////////////////////////////////////////////
 
 static int
 test_one_input_throw(const uint8_t *Data, size_t Size)
 {
 	/* FIXME this is broken. */
-//	void *vl = palloc(Size + 4);
-//	SET_VARSIZE(vl, Size + 4);
-//	memcpy(VARDATA(vl), Data, Size);
-//
-//	StringInfoData si = { .data = (char *) vl, .len = VARSIZE(vl) };
+	//	void *vl = palloc(Size + 4);
+	//	SET_VARSIZE(vl, Size + 4);
+	//	memcpy(VARDATA(vl), Data, Size);
+	//
+	//	StringInfoData si = { .data = (char *) vl, .len = VARSIZE(vl) };
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 	//*
 	int algo = pq_getmsgbyte(&si);
@@ -2245,29 +2244,28 @@ test_one_input_throw(const uint8_t *Data, size_t Size)
 	//*/
 
 	Datum datum = gorilla_compressed_recv(&si);
-//  Datum datum = tsl_compressed_data_recv(&si);
-//	CompressedDataHeader *header = (CompressedDataHeader *) datum;
-//
-//	if (header->compression_algorithm != 3)
-//	{
-//		return -1;
-//	}
-//
-//	DecompressionIterator *iter = tsl_get_decompression_iterator(
-//		header->compression_algorithm, /* reverse = */ false)(datum, FLOAT8OID);
+	//  Datum datum = tsl_compressed_data_recv(&si);
+	//	CompressedDataHeader *header = (CompressedDataHeader *) datum;
+	//
+	//	if (header->compression_algorithm != 3)
+	//	{
+	//		return -1;
+	//	}
+	//
+	//	DecompressionIterator *iter = tsl_get_decompression_iterator(
+	//		header->compression_algorithm, /* reverse = */ false)(datum, FLOAT8OID);
 
-	DecompressionIterator *iter = gorilla_decompression_iterator_from_datum_forward(datum, FLOAT8OID);
+	DecompressionIterator *iter =
+		gorilla_decompression_iterator_from_datum_forward(datum, FLOAT8OID);
 
 	int i = 0;
-	for (DecompressResult r = iter->try_next(iter);
-		!r.is_done;
-		r = iter->try_next(iter))
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
 		i++;
-		//fprintf(stderr, "%lf ", DatumGetFloat8(r.val));
+		// fprintf(stderr, "%lf ", DatumGetFloat8(r.val));
 	}
 	(void) i;
-	//fprintf(stderr, " (%d total)\n", i);
+	// fprintf(stderr, " (%d total)\n", i);
 	return 0;
 }
 
@@ -2373,7 +2371,7 @@ ts_fromfile(PG_FUNCTION_ARGS)
 
 	fseek(f, 0, SEEK_END);
 	long fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
+	fseek(f, 0, SEEK_SET); /* same as rewind(f); */
 
 	char *string = malloc(fsize + 1);
 	fread(string, fsize, 1, f);
@@ -2385,4 +2383,3 @@ ts_fromfile(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(res);
 }
-

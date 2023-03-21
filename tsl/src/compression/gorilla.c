@@ -466,7 +466,10 @@ inline static void
 bytes_attach_bit_array_and_advance(BitArray *dst, StringInfo si, uint32 num_buckets,
 								   uint8 bits_in_last_bucket)
 {
-	bit_array_wrap_internal(dst, num_buckets, bits_in_last_bucket, (uint64 *) (si->data + si->cursor));
+	bit_array_wrap_internal(dst,
+							num_buckets,
+							bits_in_last_bucket,
+							(uint64 *) (si->data + si->cursor));
 	consumeCompressedData(si, bit_array_data_bytes_used(dst));
 }
 
@@ -486,15 +489,14 @@ compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, St
 	bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
 									   si,
 									   expanded->header->num_leading_zeroes_buckets,
-									   expanded->header
-									   ->bits_used_in_last_leading_zeros_bucket);
+									   expanded->header->bits_used_in_last_leading_zeros_bucket);
 
 	expanded->num_bits_used_per_xor = bytes_deserialize_simple8b_and_advance(si);
 
 	bytes_attach_bit_array_and_advance(&expanded->xors,
-											  si,
-											  expanded->header->num_xor_buckets,
-											  expanded->header->bits_used_in_last_xor_bucket);
+									   si,
+									   expanded->header->num_xor_buckets,
+									   expanded->header->bits_used_in_last_xor_bucket);
 
 	if (has_nulls)
 		expanded->nulls = bytes_deserialize_simple8b_and_advance(si);
@@ -506,19 +508,23 @@ static void
 compressed_gorilla_data_init_from_pointer(CompressedGorillaData *expanded,
 										  const GorillaCompressed *compressed)
 {
-	StringInfoData si = {.data = (char *) compressed, .len = VARSIZE(compressed)};
+	StringInfoData si = { .data = (char *) compressed, .len = VARSIZE(compressed) };
 	compressed_gorilla_data_init_from_stringinfo(expanded, &si);
 }
 
 static void
 compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum gorilla_compressed)
 {
-	compressed_gorilla_data_init_from_pointer(data, (GorillaCompressed *) DatumGetPointer(gorilla_compressed));
-//											  (GorillaCompressed *) PG_DETOAST_DATUM(
-//												  gorilla_compressed));
+	compressed_gorilla_data_init_from_pointer(data,
+											  (GorillaCompressed *) DatumGetPointer(
+												  gorilla_compressed));
+	//											  (GorillaCompressed *) PG_DETOAST_DATUM(
+	//												  gorilla_compressed));
 }
 
-static void gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterator, Oid element_type)
+static void
+gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterator,
+											Oid element_type)
 {
 	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
 	iterator->base.forward = true;
@@ -549,7 +555,6 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	gorilla_iterator_init_from_expanded_forward(iterator, element_type);
 	return &iterator->base;
 }
-
 
 DecompressionIterator *
 gorilla_decompression_iterator_from_stringinfo_forward(StringInfo si, Oid element_type)

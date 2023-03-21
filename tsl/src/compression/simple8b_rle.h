@@ -274,7 +274,7 @@ simple8brle_serialized_slot_size(const Simple8bRleSerialized *data)
 		return 0;
 
 	int total_slots =
-		   data->num_blocks + simple8brle_num_selector_slots_for_num_blocks(data->num_blocks);
+		data->num_blocks + simple8brle_num_selector_slots_for_num_blocks(data->num_blocks);
 
 	CheckCompressedData(total_slots > 0);
 	CheckCompressedData((uint32) total_slots < PG_INT32_MAX / sizeof(uint64));
@@ -641,7 +641,7 @@ simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIter
 			.is_done = true,
 		};
 
-	if((uint32) iter->current_in_compressed_pos >= iter->current_block.num_elements_compressed)
+	if ((uint32) iter->current_in_compressed_pos >= iter->current_block.num_elements_compressed)
 	{
 		CheckCompressedData(iter->current_compressed_pos < iter->num_blocks);
 

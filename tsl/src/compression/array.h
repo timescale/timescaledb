@@ -51,9 +51,9 @@ Size array_compression_serialization_size(ArrayCompressorSerializationInfo *info
 uint32 array_compression_serialization_num_elements(ArrayCompressorSerializationInfo *info);
 extern char *bytes_serialize_array_compressor_and_advance(char *dst, Size dst_size,
 														  ArrayCompressorSerializationInfo *info);
-extern DecompressionIterator *
-array_decompression_iterator_alloc_forward(StringInfo serialized_data,
-										   Oid element_type, bool has_nulls);
+extern DecompressionIterator *array_decompression_iterator_alloc_forward(StringInfo serialized_data,
+																		 Oid element_type,
+																		 bool has_nulls);
 
 extern ArrayCompressorSerializationInfo *array_compressed_data_recv(StringInfo buffer,
 																	Oid element_type);

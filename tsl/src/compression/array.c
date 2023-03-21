@@ -310,8 +310,7 @@ array_compressor_finish(ArrayCompressor *compressor)
  ******************/
 
 static ArrayCompressedData
-array_compressed_data_from_bytes(StringInfo serialized_data, Oid element_type,
-								 bool has_nulls)
+array_compressed_data_from_bytes(StringInfo serialized_data, Oid element_type, bool has_nulls)
 {
 	ArrayCompressedData data = { .element_type = element_type };
 
@@ -329,8 +328,8 @@ array_compressed_data_from_bytes(StringInfo serialized_data, Oid element_type,
 }
 
 DecompressionIterator *
-array_decompression_iterator_alloc_forward(StringInfo serialized_data,
-										   Oid element_type, bool has_nulls)
+array_decompression_iterator_alloc_forward(StringInfo serialized_data, Oid element_type,
+										   bool has_nulls)
 {
 	ArrayCompressedData data =
 		array_compressed_data_from_bytes(serialized_data, element_type, has_nulls);
@@ -359,7 +358,7 @@ DecompressionIterator *
 tsl_array_decompression_iterator_from_datum_forward(Datum compressed_array, Oid element_type)
 {
 	void *compressed_data = (void *) PG_DETOAST_DATUM(compressed_array);
-	StringInfoData si = {.data = compressed_data, .len = VARSIZE(compressed_data)};
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 
 	ArrayCompressed *compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
 
@@ -434,7 +433,7 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	iterator->base.try_next = array_decompression_iterator_try_next_reverse;
 
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
-	StringInfoData si = {.data = compressed_data, .len = VARSIZE(compressed_data)};
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 	compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
@@ -566,10 +565,12 @@ array_compressed_data_send(StringInfo buffer, const char *_serialized_data, Size
 	BinaryStringEncoding encoding = datum_serializer_binary_string_encoding(serializer);
 
 	StringInfoData si = { .data = (char *) _serialized_data, .len = _data_size };
-	ArrayCompressedData array_compressed_data = array_compressed_data_from_bytes(&si, element_type, has_nulls);
+	ArrayCompressedData array_compressed_data =
+		array_compressed_data_from_bytes(&si, element_type, has_nulls);
 
 	si.cursor = 0;
-	DecompressionIterator *data_iter = array_decompression_iterator_alloc_forward(&si, element_type, has_nulls);
+	DecompressionIterator *data_iter =
+		array_decompression_iterator_alloc_forward(&si, element_type, has_nulls);
 
 	pq_sendbyte(buffer, array_compressed_data.nulls != NULL);
 	if (array_compressed_data.nulls != NULL)

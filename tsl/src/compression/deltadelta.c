@@ -46,7 +46,7 @@ pg_attribute_unused() assertions(void)
 							 sizeof(test_val.has_nulls) + sizeof(test_val.padding) +
 							 sizeof(test_val.last_value) + sizeof(test_val.last_delta),
 					 "DeltaDeltaCompressed wrong size");
-	//StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 16, "DeltaDeltaCompressed wrong size");
+	// StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 16, "DeltaDeltaCompressed wrong size");
 }
 
 typedef struct DeltaDeltaDecompressionIterator
@@ -402,8 +402,8 @@ delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next
 /**********************************************************************************/
 
 static void
-int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
-										  void *compressed, Oid element_type)
+int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter, void *compressed,
+										  Oid element_type)
 {
 	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
@@ -435,8 +435,8 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 }
 
 static void
-int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
-										  void *compressed, Oid element_type)
+int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter, void *compressed,
+										  Oid element_type)
 {
 	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
@@ -655,7 +655,8 @@ deltadelta_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	{
 		Simple8bRleSerialized *nulls =
 			(Simple8bRleSerialized *) (((char *) data->delta_deltas) +
-									   simple8brle_serialized_total_size((Simple8bRleSerialized *) data->delta_deltas));
+									   simple8brle_serialized_total_size(
+										   (Simple8bRleSerialized *) data->delta_deltas));
 		simple8brle_serialized_send(buffer, nulls);
 	}
 }
