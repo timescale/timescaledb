@@ -546,7 +546,7 @@ unset_libpq_envvar(void)
 	PQconninfoOption *lopt;
 	PQconninfoOption *options = PQconndefaults();
 
-	Assert(options != NULL);
+	TS_OOM_CHECK(options, "out of memory");
 
 	/* Explicitly unset all libpq environment variables.
 	 *
@@ -1024,6 +1024,7 @@ remote_connection_get_result(const TSConnection *conn, TimestampTz endtime)
 				if (PQconsumeInput(conn->pg_conn) == 0)
 				{
 					pgres = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+					TS_OOM_CHECK(pgres, "out of memory");
 					PQfireResultCreateEvents(conn->pg_conn, pgres);
 					return pgres;
 				}
@@ -1102,6 +1103,7 @@ remote_connection_exec_timeout(TSConnection *conn, const char *cmd, TimestampTz 
 			if (ret == 0)
 			{
 				res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+				TS_OOM_CHECK(res, "out of memory");
 				PQfireResultCreateEvents(conn->pg_conn, res);
 				return res;
 			}
@@ -2522,7 +2524,6 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		}
 	}
 
-	Assert(res == NULL);
 	remote_connection_set_status(conn, CONN_IDLE);
 
 	return success;

@@ -83,7 +83,7 @@ chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 #endif
 }
 
-static OnConflictAction
+OnConflictAction
 chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
 	if (!dispatch->dispatch_state)
@@ -583,7 +583,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *relinfo;
-	bool has_compressed_chunk = (chunk->fd.compressed_chunk_id != 0);
 
 	/* permissions NOT checked here; were checked at hypertable level */
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
@@ -596,12 +595,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 												 chunk->fd.status,
 												 CHUNK_INSERT,
 												 true);
-
-	if (has_compressed_chunk && onconflict_action == ONCONFLICT_UPDATE)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg(
-					 "INSERT with ON CONFLICT DO UPDATE is not supported on compressed chunks")));
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
 

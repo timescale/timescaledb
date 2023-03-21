@@ -208,9 +208,26 @@ ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compres
 insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b;
-ERROR:  INSERT with ON CONFLICT DO UPDATE is not supported on compressed chunks
+SELECT * from foo ORDER BY a,b;
+ a  |  b  | c  | d  
+----+-----+----+----
+ 10 |  12 | 12 | 12
+ 20 |  11 | 20 |   
+ 30 | 222 | 40 |   
+(3 rows)
+
 --TEST2c Do DML directly on the chunk.
-insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
+insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12)
+on conflict( a, b)
+do update set b = excluded.b + 12;
+SELECT * from foo ORDER BY a,b;
+ a  |  b  | c  | d  
+----+-----+----+----
+ 10 |  24 | 12 | 12
+ 20 |  11 | 20 |   
+ 30 | 222 | 40 |   
+(3 rows)
+
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
 ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
@@ -229,7 +246,7 @@ ERROR:  duplicate key value violates unique constraint "_hyper_1_2_chunk_foo_uni
 select * from _timescaledb_internal._hyper_1_2_chunk order by a;
  a  | b  | c  |  d  
 ----+----+----+-----
- 10 | 12 | 12 |  12
+ 10 | 24 | 12 |  12
  10 | 10 | 20 |    
  11 | 10 | 20 | 120
 (3 rows)

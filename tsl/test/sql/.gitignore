@@ -13,6 +13,8 @@
 /dist_partial_agg-*.sql
 /dist_ref_table_join-*.sql
 /dist_ref_table_join-*.sql
+/dist_remote_error-*.sql
+/dist_remote_error.text
 /hypertable_distributed-*.sql
 /jit-*.sql
 /modify_exclusion-*.sql

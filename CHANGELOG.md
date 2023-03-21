@@ -12,13 +12,16 @@ accidentally triggering the load of a previous DB version.**
 * #5361 Add parallel support for partialize_agg()
 * #5252 Improve unique constraint support on compressed hypertables
 * #5312 Add timeout support to ping_data_node()
+* #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
 * #5410 Fix file trailer handling in the COPY fetcher
 * #5233 Out of on_proc_exit slots on guc license change
 * #5427 Handle user-defined FDW options properly
+* #5428 Use consistent snapshots when scanning metadata
 * #5442 Decompression may have lost DEFAULT values
+* #5446 Add checks for malloc failure in libpq calls
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher

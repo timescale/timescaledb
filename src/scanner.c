@@ -221,6 +221,20 @@ prepare_scan(ScannerCtx *ctx)
 		 */
 		MemoryContext oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
 		ctx->snapshot = RegisterSnapshot(GetSnapshotData(SnapshotSelf));
+		/*
+		 * Invalidate the PG catalog snapshot to ensure it is refreshed and
+		 * up-to-date with the snapshot used to scan TimescaleDB
+		 * metadata. Since TimescaleDB metadata is often joined with PG
+		 * catalog data (e.g., calling get_relname_relid() to fill in chunk
+		 * table Oid), this avoids any potential problems where the different
+		 * snapshots used to scan TimescaleDB metadata and PG catalog metadata
+		 * aren't in sync.
+		 *
+		 * Ideally, a catalog snapshot would be used to scan TimescaleDB
+		 * metadata, but that will change the behavior of chunk creation in
+		 * SERIALIZED mode, as described above.
+		 */
+		InvalidateCatalogSnapshot();
 		ctx->internal.registered_snapshot = true;
 		MemoryContextSwitchTo(oldmcxt);
 	}
