@@ -2222,3 +2222,167 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 	table_close(in_rel, NoLock);
 }
+
+
+/////////////////////////////////////////////////
+
+static int
+test_one_input_throw(const uint8_t *Data, size_t Size)
+{
+	/* FIXME this is broken. */
+//	void *vl = palloc(Size + 4);
+//	SET_VARSIZE(vl, Size + 4);
+//	memcpy(VARDATA(vl), Data, Size);
+//
+//	StringInfoData si = { .data = (char *) vl, .len = VARSIZE(vl) };
+	StringInfoData si = { .data = (char *) Data, .len = Size };
+	//*
+	int algo = pq_getmsgbyte(&si);
+	if (algo != 3)
+	{
+		return -1;
+	}
+	//*/
+
+	Datum datum = gorilla_compressed_recv(&si);
+//  Datum datum = tsl_compressed_data_recv(&si);
+//	CompressedDataHeader *header = (CompressedDataHeader *) datum;
+//
+//	if (header->compression_algorithm != 3)
+//	{
+//		return -1;
+//	}
+//
+//	DecompressionIterator *iter = tsl_get_decompression_iterator(
+//		header->compression_algorithm, /* reverse = */ false)(datum, FLOAT8OID);
+
+	DecompressionIterator *iter = gorilla_decompression_iterator_from_datum_forward(datum, FLOAT8OID);
+
+	int i = 0;
+	for (DecompressResult r = iter->try_next(iter);
+		!r.is_done;
+		r = iter->try_next(iter))
+	{
+		i++;
+		//fprintf(stderr, "%lf ", DatumGetFloat8(r.val));
+	}
+	(void) i;
+	//fprintf(stderr, " (%d total)\n", i);
+	return 0;
+}
+
+//*
+TS_FUNCTION_INFO_V1(ts_fuzz);
+
+Datum
+ts_fuzz(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_NULL();
+}
+
+/*/
+
+static int
+LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+{
+	//MemoryContext oldcontext = CurrentMemoryContext;
+	MemoryContextReset(CurrentMemoryContext);
+	volatile int res = -1;
+
+	PG_TRY();
+	{
+		CHECK_FOR_INTERRUPTS();
+		res = test_one_input_throw(Data, Size);
+	}
+	PG_CATCH();
+	{
+//		MemoryContextSwitchTo(oldcontext);
+//
+//		ErrorData  *edata = CopyErrorData();
+//
+//		if (edata->sqlerrcode == ERRCODE_QUERY_CANCELED &&
+//			strstr(edata->message, "due to user request"))
+//		{
+//			PG_RE_THROW();
+//		}
+
+		FlushErrorState();
+		res = -1;
+	}
+	PG_END_TRY();
+	return res;
+}
+
+
+extern int
+LLVMFuzzerRunDriver(int *argc, char ***argv,
+					int (*UserCb)(const uint8_t *Data, size_t Size));
+
+
+TS_FUNCTION_INFO_V1(ts_fuzz);
+
+Datum
+ts_fuzz(PG_FUNCTION_ARGS)
+{
+	MemoryContext fuzzing_context = AllocSetContextCreate(CurrentMemoryContext,
+											 "fuzzing",
+											 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
+	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
+
+	char *argvdata[] = {
+		"PostgresFuzzer",
+		//"-help=1",
+		"-verbosity=1",
+		"-timeout=1",
+		"-report_slow_units=1",
+		"-use_value_profile=1",
+		//"-reload=1",
+		//"-print_full_coverage=1",
+		//"-runs=1",
+		//"-data_flow_trace=1",
+		//"-focus-function=auto",
+		//"-merge=1",
+		//"/var/tmp/corpus-mini",
+		"/var/tmp/corpus",
+		NULL
+	};
+	char **argv = argvdata;
+	int argc = sizeof(argvdata)/sizeof(*argvdata) - 1;
+
+	int res = LLVMFuzzerRunDriver(&argc, &argv, LLVMFuzzerTestOneInput);
+
+	MemoryContextSwitchTo(old_context);
+
+	PG_RETURN_INT32(res);
+}
+
+//*/
+
+TS_FUNCTION_INFO_V1(ts_fromfile);
+
+Datum
+ts_fromfile(PG_FUNCTION_ARGS)
+{
+	char *name = PG_GETARG_CSTRING(0);
+	FILE *f = fopen(name, "r");
+
+	if (!f)
+	{
+		elog(ERROR, "could not open the file");
+	}
+
+	fseek(f, 0, SEEK_END);
+	long fsize = ftell(f);
+	fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
+
+	char *string = malloc(fsize + 1);
+	fread(string, fsize, 1, f);
+	fclose(f);
+
+	string[fsize] = 0;
+
+	int res = test_one_input_throw((const uint8_t *) string, fsize);
+
+	PG_RETURN_INT32(res);
+}
+

@@ -12,6 +12,14 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <utils/relcache.h>
+
+
+/* Normal compression uses 1k rows, but the regression tests use up to 1015. */
+#ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
+#endif
+
+
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
  * varlen header, and followed by a version specifying which compression
@@ -158,7 +166,7 @@ typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
 										  TupleTableSlot *slot);
 
-#define CheckCompressedData(X) if (!(X)) { abort(); ereport(ERROR, (errmsg("the compressed data is corrupt"))); }
+#define CheckCompressedData(X) if (!(X)) { ereport(ERROR, (/*errmsg("the compressed data is corrupt")*/true)); }
 
 inline static void *consumeCompressedData(StringInfo si, int bytes)
 {

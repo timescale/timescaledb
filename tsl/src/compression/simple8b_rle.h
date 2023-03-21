@@ -218,7 +218,7 @@ simple8brle_serialized_recv(StringInfo buffer)
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 
-	data = palloc0(compressed_size);
+	data = palloc(compressed_size);
 	data->num_elements = num_elements;
 	data->num_blocks = num_blocks;
 
@@ -259,6 +259,7 @@ bytes_deserialize_simple8b_and_advance(StringInfo si)
 	Simple8bRleSerialized *ser = consumeCompressedData(si, sizeof(Simple8bRleSerialized));
 	consumeCompressedData(si, simple8brle_serialized_slot_size(ser));
 
+	CheckCompressedData(ser->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	CheckCompressedData(ser->num_elements > 0);
 	CheckCompressedData(ser->num_blocks > 0);
 	CheckCompressedData(ser->num_elements >= ser->num_blocks);
@@ -739,11 +740,17 @@ simple8brle_block_create(uint8 selector, uint64 data)
 		.data = data,
 	};
 
-	Assert(block.selector != 0);
+	CheckCompressedData(block.selector != 0);
 	if (simple8brle_selector_is_rle(block.selector))
+	{
 		block.num_elements_compressed = simple8brle_rledata_repeatcount(block.data);
+		CheckCompressedData(block.num_elements_compressed <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	}
 	else
+	{
 		block.num_elements_compressed = SIMPLE8B_NUM_ELEMENTS[block.selector];
+	}
+
 	return block;
 }
 
@@ -788,6 +795,7 @@ simple8brle_block_get_element(Simple8bRleBlock block, uint32 position_in_value)
 	{
 		/* decode rle-encoded integers */
 		uint64 repeated_value = simple8brle_rledata_value(block.data);
+		CheckCompressedData(simple8brle_rledata_repeatcount(block.data) > 0);
 		Assert(simple8brle_rledata_repeatcount(block.data) > position_in_value);
 		return repeated_value;
 	}

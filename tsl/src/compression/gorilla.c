@@ -483,11 +483,11 @@ compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, St
 	expanded->tag0s = bytes_deserialize_simple8b_and_advance(si);
 	expanded->tag1s = bytes_deserialize_simple8b_and_advance(si);
 
- bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
-											  si,
-											  expanded->header->num_leading_zeroes_buckets,
-											  expanded->header
-												  ->bits_used_in_last_leading_zeros_bucket);
+	bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
+									   si,
+									   expanded->header->num_leading_zeroes_buckets,
+									   expanded->header
+									   ->bits_used_in_last_leading_zeros_bucket);
 
 	expanded->num_bits_used_per_xor = bytes_deserialize_simple8b_and_advance(si);
 
@@ -618,7 +618,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 
 		if (null.val != 0)
 		{
-			Assert(null.val == 1);
+			CheckCompressedData(null.val == 1);
 			return (DecompressResultInternal){
 				.is_null = true,
 			};
@@ -638,7 +638,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		};
 
 	tag1 = simple8brle_decompression_iterator_try_next_forward(&iter->tag1s);
-	Assert(!tag1.is_done);
+	CheckCompressedData(!tag1.is_done);
 
 	if (tag1.val != 0)
 	{
@@ -646,9 +646,14 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		/* get new xor sizes */
 		iter->prev_leading_zeroes =
 			bit_array_iter_next(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
+		CheckCompressedData(iter->prev_leading_zeroes <= 64);
+
 		num_xor_bits = simple8brle_decompression_iterator_try_next_forward(&iter->num_bits_used);
-		Assert(!num_xor_bits.is_done);
+		CheckCompressedData(!num_xor_bits.is_done);
 		iter->prev_xor_bits_used = num_xor_bits.val;
+		CheckCompressedData(iter->prev_xor_bits_used <= 64);
+
+		CheckCompressedData(iter->prev_xor_bits_used + iter->prev_leading_zeroes <= 64);
 	}
 
 	xor = bit_array_iter_next(&iter->xors, iter->prev_xor_bits_used);
@@ -839,7 +844,9 @@ gorilla_compressed_recv(StringInfo buf)
 
 	header.has_nulls = pq_getmsgbyte(buf);
 	if (header.has_nulls != 0 && header.has_nulls != 1)
+	{
 		elog(ERROR, "invalid recv in gorilla: bad bool");
+	}
 
 	header.last_value = pq_getmsgint64(buf);
 	data.tag0s = simple8brle_serialized_recv(buf);

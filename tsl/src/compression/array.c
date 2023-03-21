@@ -244,7 +244,7 @@ array_compression_serialization_num_elements(ArrayCompressorSerializationInfo *i
 }
 
 char *
-bytes_serialize_array_compressor_and_advance(char *dst, Size dst_size,
+bytes_serialize_array_compressor_and_advance(char *dst, PG_USED_FOR_ASSERTS_ONLY Size dst_size,
 											 ArrayCompressorSerializationInfo *info)
 {
 	uint32 sizes_bytes = simple8brle_serialized_total_size(info->sizes);
