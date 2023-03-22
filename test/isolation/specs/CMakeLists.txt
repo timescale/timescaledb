@@ -12,20 +12,11 @@ file(REMOVE ${ISOLATION_TEST_SCHEDULE})
 
 set(TEST_TEMPLATES)
 
-set(TEST_TEMPLATES_DEBUG
-    dropchunks_race.spec.in multi_transaction_indexing.spec.in
-    concurrent_query_and_drop_chunks.spec.in concurrent_add_dimension.spec.in)
-
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES ${TEST_TEMPLATES_DEBUG})
+  list(APPEND TEST_FILES concurrent_add_dimension.spec
+       concurrent_query_and_drop_chunks.spec dropchunks_race.spec
+       multi_transaction_indexing.spec)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
-  get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
-  set(TEST_FILE ${TEMPLATE}.spec)
-  configure_file(${TEMPLATE_FILE} ${TEST_FILE})
-  list(APPEND TEST_FILES "${TEST_FILE}")
-endforeach(TEMPLATE_FILE)
 
 foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.spec" "\\1" TESTS_TO_RUN ${TEST_FILE})

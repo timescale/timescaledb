@@ -10,12 +10,6 @@ setup {
         (21, 19.5, 3);
 
     CREATE TABLE barrier(i INTEGER);
-
-    CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-    CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
 }
 
 teardown {

@@ -7,13 +7,6 @@
 ###
 
 setup {
-   CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-     AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-   CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-     AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
-
-
    -- Compressing a lot of chunks from a single hypertable in a single transaction can
    -- cause deadlocks due to locking the compressed hypertable when creating compressed chunks.
    -- Hence we compress them in their individual transactions, similar how the compression

@@ -27,34 +27,26 @@ ERROR:  TestFailure | (big_double == small_double) [923423478.324200 == 324.3000
 --
 \set ECHO all
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION debug_point_enable(TEXT)
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_debug_point_enable'
-LANGUAGE C VOLATILE STRICT;
-CREATE OR REPLACE FUNCTION debug_point_release(TEXT)
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_debug_point_release'
-LANGUAGE C VOLATILE STRICT;
 -- debug point already enabled
-SELECT debug_point_enable('test_debug_point');
- debug_point_enable 
---------------------
+SELECT debug_waitpoint_enable('test_debug_point');
+ debug_waitpoint_enable 
+------------------------
  
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT debug_point_enable('test_debug_point');
+SELECT debug_waitpoint_enable('test_debug_point');
 ERROR:  debug point "test_debug_point" already enabled
 \set ON_ERROR_STOP 1
-SELECT debug_point_release('test_debug_point');
- debug_point_release 
----------------------
+SELECT debug_waitpoint_release('test_debug_point');
+ debug_waitpoint_release 
+-------------------------
  
 (1 row)
 
 -- debug point not enabled
 \set ON_ERROR_STOP 0
-SELECT debug_point_release('test_debug_point');
+SELECT debug_waitpoint_release('test_debug_point');
 WARNING:  you don't own a lock of type ExclusiveLock
 ERROR:  cannot release debug point "test_debug_point"
 \set ON_ERROR_STOP 1
@@ -71,9 +63,9 @@ SELECT test_error_injection('test_error');
  
 (1 row)
 
-SELECT debug_point_enable('test_error');
- debug_point_enable 
---------------------
+SELECT debug_waitpoint_enable('test_error');
+ debug_waitpoint_enable 
+------------------------
  
 (1 row)
 
@@ -81,9 +73,9 @@ SELECT debug_point_enable('test_error');
 SELECT test_error_injection('test_error');
 ERROR:  error injected at debug point 'test_error'
 \set ON_ERROR_STOP 1
-SELECT debug_point_release('test_error');
- debug_point_release 
----------------------
+SELECT debug_waitpoint_release('test_error');
+ debug_waitpoint_release 
+-------------------------
  
 (1 row)
 

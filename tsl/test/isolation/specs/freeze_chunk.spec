@@ -10,11 +10,6 @@ setup {
   INSERT INTO measurements VALUES ('2020-01-03 10:30', 1, 1.0), ('2020-01-03 11:30', 2, 2.0);
   ALTER TABLE measurements SET (timescaledb.compress);
 
-  CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-  CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
   CREATE OR REPLACE FUNCTION lock_chunktable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s IN SHARE MODE', name);
     END; $$ LANGUAGE plpgsql;

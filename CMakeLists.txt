@@ -25,6 +25,7 @@ option(
   ENABLE_OPTIMIZER_DEBUG
   "Enable OPTIMIZER_DEBUG when building. Requires Postgres server to be built with OPTIMIZER_DEBUG."
   OFF)
+option(ENABLE_DEBUG_UTILS "Enable debug utilities for the extension." ON)
 
 # Option to enable assertions. Note that if we include headers from a PostgreSQL
 # build that has assertions enabled, we might inherit that setting without

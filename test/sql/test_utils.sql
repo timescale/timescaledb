@@ -27,26 +27,16 @@ SELECT test.double_eq();
 \set ECHO all
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION debug_point_enable(TEXT)
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_debug_point_enable'
-LANGUAGE C VOLATILE STRICT;
-
-CREATE OR REPLACE FUNCTION debug_point_release(TEXT)
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_debug_point_release'
-LANGUAGE C VOLATILE STRICT;
-
 -- debug point already enabled
-SELECT debug_point_enable('test_debug_point');
+SELECT debug_waitpoint_enable('test_debug_point');
 \set ON_ERROR_STOP 0
-SELECT debug_point_enable('test_debug_point');
+SELECT debug_waitpoint_enable('test_debug_point');
 \set ON_ERROR_STOP 1
-SELECT debug_point_release('test_debug_point');
+SELECT debug_waitpoint_release('test_debug_point');
 
 -- debug point not enabled
 \set ON_ERROR_STOP 0
-SELECT debug_point_release('test_debug_point');
+SELECT debug_waitpoint_release('test_debug_point');
 \set ON_ERROR_STOP 1
 
 -- error injections
@@ -59,12 +49,12 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT test_error_injection('test_error');
 
-SELECT debug_point_enable('test_error');
+SELECT debug_waitpoint_enable('test_error');
 \set ON_ERROR_STOP 0
 SELECT test_error_injection('test_error');
 \set ON_ERROR_STOP 1
 
-SELECT debug_point_release('test_error');
+SELECT debug_waitpoint_release('test_error');
 SELECT test_error_injection('test_error');
 
 -- Test Scanner

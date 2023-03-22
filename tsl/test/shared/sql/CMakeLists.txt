@@ -10,7 +10,6 @@ set(TEST_FILES_SHARED
     dist_distinct_pushdown.sql
     dist_gapfill.sql
     dist_insert.sql
-    extension.sql
     gapfill.sql
     subtract_integer_from_now.sql)
 
@@ -34,8 +33,14 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES_SHARED dist_parallel_agg.sql dist_queries.sql
-       timestamp_limits.sql with_clause_parser.sql)
+  list(
+    APPEND
+    TEST_FILES_SHARED
+    dist_parallel_agg.sql
+    dist_queries.sql
+    extension.sql
+    timestamp_limits.sql
+    with_clause_parser.sql)
   list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
