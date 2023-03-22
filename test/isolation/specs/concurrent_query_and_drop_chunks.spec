@@ -7,12 +7,6 @@ setup {
   CREATE TABLE measurements (time timestamptz, device int, temp float);
   SELECT create_hypertable('measurements', 'time', 'device', 2);
   INSERT INTO measurements VALUES ('2020-01-03 10:30', 1, 1.0), ('2021-01-03 10:30', 2, 2.0);
-
-  CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-  CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
 }
 
 teardown {

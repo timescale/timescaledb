@@ -10,15 +10,6 @@ setup
 	CREATE TABLE conditions (time timestamptz, device int, temp float);
 	SELECT create_hypertable('conditions', 'time', 'device', 2, chunk_time_interval => interval '1 day');
 
-	CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-	CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
-
-	CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT) RETURNS BIGINT LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_id';
-
 	CREATE OR REPLACE FUNCTION waitpoint_count(tag TEXT) RETURNS bigint AS
 	$$
 		SELECT count(*)

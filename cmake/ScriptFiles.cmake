@@ -61,6 +61,10 @@ set(SOURCE_FILES
     cagg_migrate.sql
     job_error_log_retention.sql)
 
+if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND SOURCE_FILES debug_utils.sql)
+endif()
+
 if(USE_TELEMETRY)
   list(APPEND SOURCE_FILES with_telemetry.sql)
 else()

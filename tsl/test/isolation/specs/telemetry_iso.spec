@@ -10,12 +10,6 @@ setup {
   FROM generate_series('2020-01-20'::timestamptz, '2020-02-20', '10m') t;
   ALTER TABLE compress SET (timescaledb.compress = TRUE);
   SELECT compress_chunk(c) FROM show_chunks('compress') c ORDER BY c LIMIT 10;
-
-  CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-  CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
 }
 
 teardown {
@@ -25,9 +19,11 @@ teardown {
   DROP TABLE telemetry;
 }
 
-session "s1"
+session "waitpoints"
 step "s1_wp_enable"           { SELECT debug_waitpoint_enable('telemetry_classify_relation'); }
 step "s1_wp_release"      { SELECT debug_waitpoint_release('telemetry_classify_relation'); }
+
+session "s1"
 step "s1_decompress"	{ SELECT decompress_chunk(c) INTO decompressed_chunks FROM show_chunks('compress') c ORDER BY c LIMIT 10; }
 step "s1_insert_new_chunk" { INSERT INTO compress VALUES ('2020-03-01'::timestamptz, 1, 33.3); }
 step "s1_drop_chunks"   { SELECT count(*) FROM drop_chunks('compress', timestamptz '2020-01-20 15:00'); }
