@@ -3139,38 +3139,53 @@ QUERY PLAN
          Order: o1."time"
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=3598 loops=1)
                Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     Index Cond: (device_id = 1)
-                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (actual rows=4 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           Filter: ((_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (device_id = 1))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (actual rows=5038 loops=1)
                Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Index Cond: (device_id = 1)
-                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (actual rows=6 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: ((_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (device_id = 1))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (actual rows=5038 loops=1)
                Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Index Cond: (device_id = 1)
-                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (actual rows=6 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: ((_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (device_id = 1))
    ->  Materialize (actual rows=13674 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=13674 loops=1)
                Order: o2."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_1 (actual rows=3598 loops=1)
                      Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                           Index Cond: (device_id = 2)
-                           Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Sort (actual rows=4 loops=1)
+                           Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Filter: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                                 Rows Removed by Filter: 8
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_2 (actual rows=5038 loops=1)
                      Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Index Cond: (device_id = 2)
-                           Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Sort (actual rows=6 loops=1)
+                           Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                                 Rows Removed by Filter: 12
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_3 (actual rows=5038 loops=1)
                      Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Index Cond: (device_id = 2)
-                           Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-(37 rows)
+                     ->  Sort (actual rows=6 loops=1)
+                           Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                                 Rows Removed by Filter: 12
+(52 rows)
 
 -- test JOIN
 -- last chunk of o2 should not be executed
@@ -3267,14 +3282,23 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=13674 loops=1)
          Order: o1."time"
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=3598 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     Index Cond: (device_id = 1)
+               ->  Sort (actual rows=4 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           Filter: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (actual rows=5038 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Index Cond: (device_id = 1)
+               ->  Sort (actual rows=6 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (actual rows=5038 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Index Cond: (device_id = 1)
+               ->  Sort (actual rows=6 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: (device_id = 1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (max(_hyper_X_X_chunk."time"))
          Sort Method: quicksort 
@@ -3298,7 +3322,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(36 rows)
+(45 rows)
 
 RESET enable_hashjoin;
 SET enable_seqscan TO false;
