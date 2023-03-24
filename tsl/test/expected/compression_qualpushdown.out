@@ -286,13 +286,17 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
 (1 row)
 
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
-                       QUERY PLAN                        
----------------------------------------------------------
- Aggregate
-   ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
-         ->  Seq Scan on compress_hyper_8_9_chunk
-               Filter: ((segment)::text ~~ '%4%'::text)
-(4 rows)
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 1
+         ->  Partial Aggregate
+               ->  Parallel Append
+                     ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
+                           ->  Parallel Seq Scan on compress_hyper_8_9_chunk
+                                 Filter: ((segment)::text ~~ '%4%'::text)
+(8 rows)
 
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
                        QUERY PLAN                        

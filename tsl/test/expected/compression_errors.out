@@ -601,11 +601,11 @@ SELECT 1 FROM test GROUP BY enum_col;
 (2 rows)
 
 EXPLAIN SELECT DISTINCT 1 FROM test;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Unique  (cost=0.51..21.02 rows=1 width=4)
-   ->  Result  (cost=0.51..21.02 rows=2000 width=4)
-         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Unique  (cost=0.51..41.02 rows=1 width=4)
+   ->  Result  (cost=0.51..41.02 rows=2000 width=4)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..21.02 rows=2000 width=0)
                ->  Seq Scan on compress_hyper_32_20_chunk  (cost=0.00..1.02 rows=2 width=4)
 (4 rows)
 
