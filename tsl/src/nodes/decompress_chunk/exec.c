@@ -308,6 +308,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 	Datum value;
 	bool isnull;
 	int i;
+	TupleDesc desc = decompressed_slot->tts_tupleDescriptor;
 	MemoryContext old_context = MemoryContextSwitchTo(state->per_batch_context);
 	MemoryContextReset(state->per_batch_context);
 
@@ -385,6 +386,21 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 				break;
 		}
 	}
+	/*
+	 * For SELECT query with reference to whole-row var expression, fetching
+	 * whole row from the compressed chunk scan is not needed, however all
+	 * dropped attributes should be marked as NULL , else later in call to
+	 * ExecEvalWholeRowVar() we end up fetching slots which are not filled
+	 * up and reference a NULL value causing segfault.
+	 */
+	for (int varattno = 0; varattno < desc->natts; varattno++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(desc, varattno);
+		/* Mark dropped columns as NULL */
+		if (attr->attisdropped)
+			decompressed_slot->tts_isnull[varattno] = true;
+	}
+
 	state->initialized = true;
 	MemoryContextSwitchTo(old_context);
 }

@@ -749,3 +749,26 @@ SET enable_indexscan to off;
 SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
+
+-- github issue 5458
+
+DROP TABLE IF EXISTS readings;
+CREATE TABLE readings(
+    time  TIMESTAMP WITH TIME ZONE NOT NULL,
+    battery_status TEXT,
+    battery_temperature  DOUBLE PRECISION
+);
+
+INSERT INTO readings (time) VALUES ('2022-11-11 11:11:11');
+INSERT INTO readings VALUES ('2022-11-11 12:12:12', NULL, 1234);
+
+SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12 hour', migrate_data=>true);
+--enable compression
+ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 'battery_temperature');
+-- compress chunks
+SELECT compress_chunk(show_chunks('readings'));
+-- drop column such that physical layout of compressed and uncompressed chunks differ
+ALTER TABLE readings drop column battery_status;
+
+-- SELECT with reference to wholerow Var expression should not crash
+SELECT c from  readings c ORDER BY 1;
