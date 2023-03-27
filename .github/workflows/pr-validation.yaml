@@ -2,7 +2,8 @@ name: Pull Request Validation
 "on":
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [main]
+    branches: [main, '[0-9]+.[0-9]+.x']
+
 jobs:
   # Count the number of commits in a pull request. This can be
   # disabled by adding a trailer line of the following form to the
