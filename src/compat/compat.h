@@ -358,9 +358,10 @@ get_reindex_options(ReindexStmt *stmt)
 #endif
 
 /*
- * define lfifth macro for convenience
+ * define lfifth and lsixth macros for convenience
  */
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
+#define lsixth(l) lfirst(list_nth_cell(l, 5))
 
 /* PG13 removes the natts parameter from map_variable_attnos */
 #if PG13_LT

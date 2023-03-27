@@ -65,6 +65,9 @@ date_trunc_sort_transform(FuncExpr *func)
 
 #define time_bucket_has_const_period(func) IsA(linitial((func)->args), Const)
 #define time_bucket_has_const_timezone(func) IsA(lthird((func)->args), Const)
+// FIXME: update when timezone optional
+#define time_bucket_has_const_origin(func)                                                         \
+	((func)->args->length == 6 && IsA(lsixth((func)->args), Const))
 
 static Expr *
 do_sort_transform(FuncExpr *func)
@@ -86,10 +89,11 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
 	 * > time2
 	 */
-	Assert(list_length(func->args) == 4 || list_length(func->args) == 5);
+	Assert(list_length(func->args) >= 4 && list_length(func->args) <= 6);
 
 	if (!time_bucket_has_const_period(func) ||
-		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func)))
+		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func) &&
+		 !time_bucket_has_const_origin(func)))
 		return (Expr *) func;
 
 	return do_sort_transform(func);
@@ -419,18 +423,8 @@ static FuncInfo funcinfo[] = {
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID, TIMESTAMPOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_gapfill_sort_transform,
-	},
-	{
-		.origin = ORIGIN_TIMESCALE,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_gapfill",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
+		.nargs = 5,
+		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID, TIMESTAMPOID, TIMESTAMPOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
@@ -440,7 +434,11 @@ static FuncInfo funcinfo[] = {
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 5,
-		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TEXTOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
@@ -449,8 +447,23 @@ static FuncInfo funcinfo[] = {
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, DATEOID, DATEOID, DATEOID },
+		.nargs = 6,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TEXTOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
+		.nargs = 5,
+		.arg_types = { INTERVALOID, DATEOID, DATEOID, DATEOID, DATEOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},

@@ -142,22 +142,23 @@ gapfill_internal_get_datum(int64 value, Oid type)
 	}
 }
 
+// FIXME: needs to be updated when I add 5-arg origin
 static Expr *
 get_start_arg(GapFillState *state)
 {
-	if (!state->have_timezone)
-		return lthird(state->args);
-	else
+	if (state->have_timezone)
 		return lfourth(state->args);
+	else
+		return lthird(state->args);
 }
 
 static Expr *
 get_finish_arg(GapFillState *state)
 {
-	if (!state->have_timezone)
-		return lfourth(state->args);
-	else
+	if (state->have_timezone)
 		return lfifth(state->args);
+	else
+		return lfourth(state->args);
 }
 
 static Expr *
@@ -165,6 +166,16 @@ get_timezone_arg(GapFillState *state)
 {
 	Assert(state->have_timezone);
 	return lthird(state->args);
+}
+
+static Expr *
+get_origin_arg(GapFillState *state)
+{
+	Assert(state->have_origin);
+	if (state->have_timezone)
+		return lsixth(state->args);
+	else
+		return lfifth(state->args);
 }
 
 static inline int64
@@ -227,7 +238,8 @@ gapfill_state_create(CustomScan *cscan)
 	state->csstate.methods = &gapfill_state_methods;
 	state->subplan = linitial(cscan->custom_plans);
 	state->args = lfourth(cscan->custom_private);
-	state->have_timezone = list_length(state->args) == 5;
+	state->have_timezone = list_length(state->args) == 6;
+	state->have_origin = list_length(state->args) >= 5;
 
 	return (Node *) state;
 }
@@ -351,6 +363,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 				 errmsg(
 					 "invalid time_bucket_gapfill argument: start must be a simple expression")));
 
+	List *args = list_make2(linitial(time_bucket->args), expr);
 	if (state->have_timezone)
 	{
 		if (IsA(get_timezone_arg(state), Const) &&
@@ -361,13 +374,26 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 					 errmsg("invalid time_bucket_gapfill argument: timezone cannot be NULL")));
 		}
 
-		time_bucket->args =
-			list_make3(linitial(time_bucket->args), expr, lthird(time_bucket->args));
+		args = lappend(args, lthird(time_bucket->args));
 	}
-	else
+	if (state->have_origin && !(IsA(get_origin_arg(state), Const) &&
+								castNode(Const, get_origin_arg(state))->constisnull)) // <- segfault
 	{
-		time_bucket->args = list_make2(linitial(time_bucket->args), expr);
+		if (state->have_timezone)
+		{
+			args = lappend(args, lfourth(time_bucket->args)); // start, unused
+			args = lappend(args, lfifth(time_bucket->args));  // finish, unused
+			args = lappend(args, lsixth(time_bucket->args));
+		}
+		else
+		{
+			args = lappend(args, lthird(time_bucket->args));  // start, unused
+			args = lappend(args, lfourth(time_bucket->args)); // finish, unused
+			args = lappend(args, lfifth(time_bucket->args));
+		}
 	}
+	time_bucket->args = args;
+
 	value = gapfill_exec_expr(state, (Expr *) time_bucket, &isnull);
 
 	/* start expression must not evaluate to NULL */
