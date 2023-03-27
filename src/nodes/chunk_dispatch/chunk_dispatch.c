@@ -157,8 +157,11 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("functionality not supported under the current \"%s\" license",
-								ts_guc_license)));
+						 errmsg("functionality not supported under the current \"%s\" license. "
+								"Learn more at https://timescale.com/.",
+								ts_guc_license),
+						 errhint("To get access to all features, and the best time-series "
+								 "experience try out Timescale Cloud")));
 		}
 
 		MemoryContextSwitchTo(old_context);
