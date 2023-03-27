@@ -1,0 +1,126 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_wait1 s2_copy1 s3_check1 s3_check2 s3_check3 s1_release1 s3_check2
+node_name
+---------
+dn_1     
+(1 row)
+
+node_name
+---------
+dn_2     
+(1 row)
+
+step s1_wait1: SELECT debug_waitpoint_enable('chunk_copy_after_empty_chunk');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_copy1: 
+    CALL timescaledb_experimental.move_chunk(chunk=>'public._dist_hyper_X_X_chunk', source_node=> 'dn_1', destination_node => 'dn_2')
+ <waiting ...>
+s3: NOTICE:  [dn_1]: 
+      SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename =
+      '_dist_hyper_X_X_chunk' AND tableowner != 'htowner1'
+s3: NOTICE:  [dn_1]:
+?column?
+--------
+(0 rows)
+
+
+s3: NOTICE:  [dn_2]: 
+      SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename =
+      '_dist_hyper_X_X_chunk' AND tableowner != 'htowner1'
+s3: NOTICE:  [dn_2]:
+?column?
+--------
+       1
+(1 row)
+
+
+step s3_check1: 
+    SELECT * FROM remote_exec(ARRAY['dn_1', 'dn_2'], $DIST$
+      SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename =
+      '_dist_hyper_X_X_chunk' AND tableowner != 'htowner1'; $DIST$);
+
+remote_exec
+-----------
+           
+(1 row)
+
+s3: NOTICE:  [dn_1]: 
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_X_X_chunk')
+s3: NOTICE:  [dn_1]:
+usesuper
+--------
+f       
+(1 row)
+
+
+s3: NOTICE:  [dn_2]: 
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_X_X_chunk')
+s3: NOTICE:  [dn_2]:
+usesuper
+--------
+t       
+(1 row)
+
+
+step s3_check2: 
+    SELECT * FROM remote_exec(ARRAY['dn_1', 'dn_2'], $DIST$
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_X_X_chunk'); $DIST$);
+
+remote_exec
+-----------
+           
+(1 row)
+
+step s3_check3: 
+    SET ROLE htowner1;
+    SELECT * FROM remote_exec(ARRAY['dn_2'], $DIST$
+      CREATE INDEX ON public._dist_hyper_X_X_chunk (lower(temp));
+      $DIST$);
+
+s3: NOTICE:  [dn_2]: 
+      CREATE INDEX ON public._dist_hyper_X_X_chunk (lower(temp))
+ERROR:  [dn_2]: must be owner of table _dist_hyper_X_X_chunk
+step s1_release1: SELECT debug_waitpoint_release('chunk_copy_after_empty_chunk');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_copy1: <... completed>
+s3: NOTICE:  [dn_1]: 
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_X_X_chunk')
+s3: NOTICE:  [dn_1]:
+usesuper
+--------
+(0 rows)
+
+
+s3: NOTICE:  [dn_2]: 
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_X_X_chunk')
+s3: NOTICE:  [dn_2]:
+usesuper
+--------
+f       
+(1 row)
+
+
+step s3_check2: 
+    SELECT * FROM remote_exec(ARRAY['dn_1', 'dn_2'], $DIST$
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_X_X_chunk'); $DIST$);
+
+remote_exec
+-----------
+           
+(1 row)
+
