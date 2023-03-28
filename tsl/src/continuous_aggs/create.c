@@ -763,6 +763,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	ListCell *l;
 	bool found = false;
 	bool custom_origin = false;
+	Const *const_arg;
 
 	/* Make sure tbinfo was initialized. This assumption is used below. */
 	Assert(tbinfo->bucket_width == 0);
@@ -803,6 +804,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 			/* Only column allowed : time_bucket('1day', <column> ) */
 			col_arg = lsecond(fe->args);
+			/* Could be a named argument */
+			if (IsA(col_arg, NamedArgExpr))
+				col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
 
 			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
 				ereport(ERROR,
@@ -830,6 +834,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 			if (list_length(fe->args) >= 4)
 			{
+				/* origin */
 				Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth");
 				if (exprType((Node *) arg) == TEXTOID)
 				{
@@ -853,19 +858,22 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					/* Origin is always 3rd arg for date variants. */
 					if (list_length(fe->args) == 3)
 					{
+						Node *arg = lthird(fe->args);
 						custom_origin = true;
+						/* this function also takes care of named arguments */
+						const_arg = check_time_bucket_argument(arg, "third");
 						tbinfo->origin = DatumGetTimestamp(
-							DirectFunctionCall1(date_timestamp,
-												castNode(Const, lthird(fe->args))->constvalue));
+							DirectFunctionCall1(date_timestamp, const_arg->constvalue));
 					}
 					break;
 				case TIMESTAMPOID:
 					/* Origin is always 3rd arg for timestamp variants. */
 					if (list_length(fe->args) == 3)
 					{
+						Node *arg = lthird(fe->args);
 						custom_origin = true;
-						tbinfo->origin =
-							DatumGetTimestamp(castNode(Const, lthird(fe->args))->constvalue);
+						const_arg = check_time_bucket_argument(arg, "third");
+						tbinfo->origin = DatumGetTimestamp(const_arg->constvalue);
 					}
 					break;
 				case TIMESTAMPTZOID:
@@ -880,8 +888,20 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 							 exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
 					{
 						custom_origin = true;
-						tbinfo->origin =
-							DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
+						if (IsA(lfourth(fe->args), Const))
+						{
+							tbinfo->origin =
+								DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
+						}
+						/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
+						 * ...) */
+						else if (IsA(lfourth(fe->args), NamedArgExpr))
+						{
+							Const *constval =
+								check_time_bucket_argument(lfourth(fe->args), "fourth");
+
+							tbinfo->origin = DatumGetTimestampTz(constval->constvalue);
+						}
 					}
 			}
 			if (custom_origin && TIMESTAMP_NOT_FINITE(tbinfo->origin))
@@ -897,7 +917,12 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			 * partitioning column as int constants default to int4 and so expression would
 			 * have a cast and not be a Const.
 			 */
-			width_arg = eval_const_expressions(NULL, linitial(fe->args));
+			width_arg = linitial(fe->args);
+
+			if (IsA(width_arg, NamedArgExpr))
+				width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
+
+			width_arg = eval_const_expressions(NULL, width_arg);
 			if (IsA(width_arg, Const))
 			{
 				Const *width = castNode(Const, width_arg);
