@@ -36,6 +36,7 @@ accidentally triggering the load of a previous DB version.**
 * #5433 Fix join rte in CAggs with joins
 * #5462 Fix segfault after column drop on compressed table
 * #5543 Copy scheduled_jobs list before sorting it
+* #5497 Allow named time_bucket arguments in Cagg definition
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
