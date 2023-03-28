@@ -90,4 +90,9 @@ extern ScanIterator ts_chunk_constraint_scan_iterator_create(MemoryContext resul
 extern void ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id);
 extern void ts_chunk_constraint_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 
+// TODO These aren't really to do with chunks; move somewhere else.
+TSDLLEXPORT void ts_chunk_copy_constraints(char const *table_name, int32 hypertable_id,
+										   List const *constraints);
+TSDLLEXPORT List *ts_find_check_constraints(char relkind, Oid hypertable_oid);
+
 #endif /* TIMESCALEDB_CHUNK_CONSTRAINT_H */

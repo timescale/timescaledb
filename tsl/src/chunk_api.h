@@ -16,6 +16,7 @@
 extern Datum chunk_status(PG_FUNCTION_ARGS);
 extern Datum chunk_show(PG_FUNCTION_ARGS);
 extern Datum chunk_create(PG_FUNCTION_ARGS);
+extern Datum copy_constraints(PG_FUNCTION_ARGS);
 extern void chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht,
 										   const char *remote_chunk_name, List *data_nodes);
 extern Datum chunk_api_get_chunk_relstats(PG_FUNCTION_ARGS);

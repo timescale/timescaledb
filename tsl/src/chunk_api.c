@@ -394,6 +394,27 @@ chunk_create(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
+Datum
+copy_constraints(PG_FUNCTION_ARGS)
+{
+	Oid const hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid const chunk_table_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	Cache *const hcache = ts_hypertable_cache_pin();
+	Hypertable *const ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
+
+	Assert(NULL != ht);
+	Assert(OidIsValid(ht->main_table_relid));
+	check_privileges_for_creating_chunk(hypertable_relid);
+
+	List *const constraints =
+		ts_find_check_constraints(hypertable_chunk_relkind(ht), ht->main_table_relid);
+	ts_chunk_copy_constraints(get_rel_name(chunk_table_relid), ht->fd.id, constraints);
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_VOID();
+}
+
 #define CREATE_CHUNK_FUNCTION_NAME "create_chunk"
 #define CREATE_CHUNK_NUM_ARGS 5
 #define CHUNK_CREATE_STMT                                                                          \

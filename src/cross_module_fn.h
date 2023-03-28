@@ -166,6 +166,7 @@ typedef struct CrossModuleFunctions
 
 	PGFunction chunk_set_default_data_node;
 	PGFunction create_chunk;
+	PGFunction copy_constraints;
 	PGFunction show_chunk;
 
 	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);

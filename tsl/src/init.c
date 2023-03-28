@@ -197,6 +197,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,
+	.copy_constraints = copy_constraints,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
 	.chunk_drop_replica = chunk_drop_replica,
 	.chunk_freeze_chunk = chunk_freeze_chunk,

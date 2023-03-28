@@ -332,6 +332,10 @@ static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 		.name = "hypertable_constraint_add_table_fk_constraint",
 		.args = 4,
 	},
+	[DDL_ADD_CONSTRAINT] = {
+		.name = "add_table_constraint",
+		.args = 3,
+	},
 };
 
 /* Names for proxy tables used for cache invalidation. Must match names in

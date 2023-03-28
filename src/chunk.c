@@ -80,6 +80,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
+TS_FUNCTION_INFO_V1(ts_copy_constraints);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
@@ -1346,15 +1347,19 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 			ts_hypercube_find_existing_slices(hc, &tuplock);
 
 			if (OidIsValid(chunk_table_relid))
+			{
 				chunk = chunk_create_from_hypercube_and_table_after_lock(ht,
 																		 hc,
 																		 chunk_table_relid,
 																		 schema_name,
 																		 table_name,
 																		 NULL);
+			}
 			else
+			{
 				chunk =
 					chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
+			}
 
 			if (NULL != created)
 				*created = true;
@@ -4454,6 +4459,12 @@ ts_chunk_create(PG_FUNCTION_ARGS)
 	return ts_cm_functions->create_chunk(fcinfo);
 }
 
+Datum
+ts_copy_constraints(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->copy_constraints(fcinfo);
+}
+
 /**
  * Get the chunk status.
  *
@@ -4786,9 +4797,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 }
 
 /* Internal API used by OSM extension. OSM table is a foreign table that is
- * attached as a chunk of the hypertable. A chunk needs dimension constraints. We
- * add dummy constraints for the OSM chunk and then attach it to the hypertable.
- * OSM extension is responsible for maintaining any constraints on this table.
+ * attached as a chunk of the hypertable.  add_foreign_table_as_chunk makes
+ * sure that all check constraints are replicated on the child OSM chunk.
  */
 Datum
 ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)

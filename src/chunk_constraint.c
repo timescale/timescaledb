@@ -518,6 +518,36 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 	}
 }
 
+static void
+copy_constraint(int32 const hypertable_id, char const *const constraint_name,
+				char const *const table_name)
+{
+	ts_process_utility_set_expect_chunk_modification(true);
+
+	CatalogSecurityContext sec_ctx;
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+	CatalogInternalCall3(DDL_ADD_CONSTRAINT,
+						 Int32GetDatum(hypertable_id),
+						 CStringGetDatum(constraint_name),
+						 CStringGetDatum(table_name));
+	ts_catalog_restore_user(&sec_ctx);
+
+	ts_process_utility_set_expect_chunk_modification(false);
+}
+
+void
+ts_chunk_copy_constraints(char const *const table_name, int32 const hypertable_id,
+						  List const *const constraints)
+{
+	ListCell *lc;
+	foreach (lc, constraints)
+	{
+		char const *const constraint_name = lfirst(lc);
+		copy_constraint(hypertable_id, constraint_name, table_name);
+	}
+}
+
 ScanIterator
 ts_chunk_constraint_scan_iterator_create(MemoryContext result_mcxt)
 {
@@ -852,6 +882,39 @@ ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, in
 		.chunk_id = chunk_id,
 	};
 	return ts_constraint_process(hypertable_oid, chunk_constraint_add_check, &cc);
+}
+
+struct FindCheckConstraintsContext
+{
+	char relkind;
+	List *result;
+};
+
+/* check constraints have the same name as the one on the hypertable */
+static ConstraintProcessStatus
+find_check_constraint_inner(HeapTuple const constraint_tuple, void *const arg)
+{
+	FormData_pg_constraint const *const constraint =
+		(FormData_pg_constraint *) GETSTRUCT(constraint_tuple);
+	struct FindCheckConstraintsContext *const ctx = arg;
+
+	if (constraint->contype != CONSTRAINT_CHECK)
+	{
+		return CONSTR_IGNORED;
+	}
+	ctx->result = lappend(ctx->result, (void *) NameStr(constraint->conname));
+	return CONSTR_PROCESSED;
+}
+
+List *
+ts_find_check_constraints(const char relkind, const Oid hypertable_oid)
+{
+	struct FindCheckConstraintsContext ctx = {
+		.relkind = relkind,
+		.result = NULL,
+	};
+	(void) ts_constraint_process(hypertable_oid, find_check_constraint_inner, &ctx);
+	return ctx.result;
 }
 
 void

@@ -66,3 +66,65 @@ BEGIN
     END IF;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
+
+-- TODO nothing to do with chunk so move out of here
+-- It's actually a form of the above but with (hypertable_id, schema_name, table_name)
+-- as parameters rather than looked up from chunk_id, so make the previous call this?
+CREATE OR REPLACE FUNCTION _timescaledb_internal.add_table_constraint(
+	hypertable_id INTEGER,
+	constraint_name NAME,
+	table_name NAME)
+RETURNS VOID LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    hypertable_row _timescaledb_catalog.hypertable;
+    constraint_oid OID;
+    constraint_type CHAR;
+    check_sql TEXT;
+    def TEXT;
+    indx_tablespace NAME;
+    tablespace_def TEXT;
+BEGIN
+    IF constraint_name IS NULL THEN
+        RAISE 'unknown constraint type';
+    END IF;
+
+    SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.id = hypertable_id;
+
+        SELECT oid, contype INTO STRICT constraint_oid, constraint_type FROM pg_constraint
+        WHERE conname=constraint_name AND
+              conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
+
+        IF constraint_type IN ('p','u') THEN
+          -- since primary keys and unique constraints are backed by an index
+          -- they might have an index tablespace assigned
+          -- the tablspace is not part of the constraint definition so
+          -- we have to append it explicitly to preserve it
+          SELECT T.spcname INTO indx_tablespace
+          FROM pg_constraint C, pg_class I, pg_tablespace T
+          WHERE C.oid = constraint_oid AND C.contype IN ('p', 'u') AND I.oid = C.conindid AND I.reltablespace = T.oid;
+
+          def := pg_get_constraintdef(constraint_oid);
+
+          IF indx_tablespace IS NOT NULL THEN
+            def := format('%s USING INDEX TABLESPACE %I', def, indx_tablespace);
+          END IF;
+
+        ELSIF constraint_type = 't' THEN
+          -- constraint triggers are copied separately with normal triggers
+          def := NULL;
+        ELSE
+          def := pg_get_constraintdef(constraint_oid);
+        END IF;
+
+    IF def IS NOT NULL THEN
+        -- to allow for custom types with operators outside of pg_catalog
+        -- we set search_path to @extschema@
+        SET LOCAL search_path TO @extschema@, pg_temp;
+        EXECUTE pg_catalog.format(
+            $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
+            hypertable_row.schema_name, table_name, constraint_name, def
+        );
+    END IF;
+END
+$BODY$ SET search_path TO pg_catalog, pg_temp;
