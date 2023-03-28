@@ -523,3 +523,5 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 CREATE MATERIALIZED VIEW matv1 AS SELECT now() AS time;
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM matv1 GROUP BY 1;
 
+-- No FROM clause in CAGG definition
+CREATE MATERIALIZED VIEW cagg1 with (timescaledb.continuous) AS SELECT 1 GROUP BY 1 WITH NO DATA;
