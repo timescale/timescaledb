@@ -20,6 +20,7 @@ static bool load_enabled = false;
 static GucSource load_source = PGC_S_DEFAULT;
 static void *tsl_handle = NULL;
 static PGFunction tsl_init_fn = NULL;
+static bool tsl_register_proc_exit = false;
 
 /*
  * License Functions.
@@ -128,6 +129,8 @@ tsl_module_load(void)
 		return false;
 	tsl_init_fn = function;
 	tsl_handle = handle;
+	/* the on_proc_exit callback is registered by the tsl_init_fn after load */
+	tsl_register_proc_exit = true;
 	return true;
 }
 
@@ -136,7 +139,10 @@ tsl_module_init(void)
 {
 	Assert(tsl_handle != NULL);
 	Assert(tsl_init_fn != NULL);
-	DirectFunctionCall1(tsl_init_fn, CharGetDatum(0));
+	DirectFunctionCall1(tsl_init_fn, BoolGetDatum(tsl_register_proc_exit));
+	/* register the on_proc_exit only when the module is reloaded */
+	if (tsl_register_proc_exit)
+		tsl_register_proc_exit = false;
 }
 
 /*
