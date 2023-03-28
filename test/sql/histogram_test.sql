@@ -51,3 +51,28 @@ SELECT qualify, histogram(score, 0, 10, 5) FROM hitest2 GROUP BY qualify ORDER B
 \set ON_ERROR_STOP 0
 select histogram(i,10,90,case when i=1 then 1 else 1000000 end) FROM generate_series(1,100) i;
 \set ON_ERROR_STOP 1
+
+CREATE TABLE weather (
+       time TIMESTAMPTZ NOT NULL,
+       city TEXT,
+       temperature FLOAT,
+       PRIMARY KEY(time, city)
+);
+
+-- There is a bug in width_bucket() causing a NaN as a result, so we
+-- check that it is not causing a crash in histogram().
+SELECT * FROM create_hypertable('weather', 'time', 'city', 3);
+INSERT INTO weather VALUES
+       ('2023-02-10 09:16:51.133584+00','city1',10.4),
+       ('2023-02-10 11:16:51.611618+00','city1',10.3),
+       ('2023-02-10 06:58:59.999999+00','city1',10.3),
+       ('2023-02-10 01:58:59.999999+00','city1',10.3),
+       ('2023-02-09 01:58:59.999999+00','city1',10.3),
+       ('2023-02-10 08:58:59.999999+00','city1',10.3),
+       ('2023-03-23 06:12:02.73765+00 ','city1', 9.7),
+       ('2023-03-23 06:12:06.990998+00','city1',11.7);
+
+-- This will currently generate an error.
+\set ON_ERROR_STOP 0
+SELECT histogram(temperature, -1.79769e+308, 1.79769e+308,10) FROM weather GROUP BY city;
+\set ON_ERROR_STOP 1

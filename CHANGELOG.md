@@ -22,10 +22,15 @@ accidentally triggering the load of a previous DB version.**
 * #5446 Add checks for malloc failure in libpq calls
 * #5410 Fix file trailer handling in the COPY fetcher
 * #5233 Out of on_proc_exit slots on guc license change
+* #5470 Ensure superuser perms during copy/move chunk
+* #5459 Fix issue creating dimensional constraints
+* #5499 Do not segfault on large histogram() parameters
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
 * @S-imo-n for reporting the issue on Background Worker Scheduler crash
+* @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
+* @geezhu for reporting issue on segfault in historgram()
 
 ## 2.10.1 (2023-03-07)
 

@@ -37,7 +37,7 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
         IGNORES: "append-* debug_notice transparent_decompression-*
           transparent_decompress_chunk-* plan_skip_scan-12 pg_dump"
-        SKIPS: chunk_adaptive
+        SKIPS: chunk_adaptive histogram_test
     strategy:
       fail-fast: false
       matrix:
