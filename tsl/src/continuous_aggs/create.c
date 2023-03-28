@@ -1023,7 +1023,11 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 	}
 #endif
 #endif
-
+	if (!query->jointree->fromlist)
+	{
+		appendStringInfoString(hint, "FROM clause missing in the query");
+		return false;
+	}
 	if (query->commandType != CMD_SELECT)
 	{
 		appendStringInfoString(hint, "Use a SELECT query in the continuous aggregate view.");
