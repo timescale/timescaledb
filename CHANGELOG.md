@@ -25,6 +25,8 @@ accidentally triggering the load of a previous DB version.**
 * #5459 Fix issue creating dimensional constraints
 * #5499 Do not segfault on large histogram() parameters
 * #5470 Ensure superuser perms during copy/move chunk
+* #5497 Allow named time_bucket arguments in Cagg definition
+* #5500 Fix when no FROM clause in continuous aggregate definition
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
