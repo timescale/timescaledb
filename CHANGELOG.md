@@ -15,6 +15,7 @@ accidentally triggering the load of a previous DB version.**
 * #5312 Add timeout support to ping_data_node()
 * #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
 * #5344 Enable JOINS for Hierarchical Continuous Aggregates
+* #5510 Analyze compressed chunks when analyzing hypertable
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
