@@ -759,14 +759,7 @@ typedef struct VacuumCtx
 {
 	VacuumRelation *ht_vacuum_rel;
 	List *chunk_rels;
-	List *chunk_pairs;
 } VacuumCtx;
-
-typedef struct ChunkPair
-{
-	Oid uncompressed_relid;
-	Oid compressed_relid;
-} ChunkPair;
 
 /* Adds a chunk to the list of tables to be vacuumed */
 static void
@@ -783,6 +776,18 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk_vacuum_rel =
 		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
+
+	/* If we have a compressed chunk, make sure to analyze it as well */
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	{
+		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+		/* Compressed chunk might be missing due to concurrent operations */
+		if (comp_chunk)
+		{
+			chunk_vacuum_rel = makeVacuumRelation(NULL, comp_chunk->table_id, NIL);
+			ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
+		}
+	}
 }
 
 /*
@@ -856,7 +861,6 @@ process_vacuum(ProcessUtilityArgs *args)
 	VacuumCtx ctx = {
 		.ht_vacuum_rel = NULL,
 		.chunk_rels = NIL,
-		.chunk_pairs = NIL,
 	};
 	ListCell *lc;
 	Hypertable *ht;
@@ -1119,7 +1123,7 @@ process_truncate(ProcessUtilityArgs *args)
 						{
 							Chunk *compressed_chunk =
 								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-							if (compressed_chunk != NULL)
+							if (compressed_chunk != NULL && !compressed_chunk->fd.dropped)
 							{
 								/* Create list item into the same context of the list. */
 								oldctx = MemoryContextSwitchTo(parsetreectx);

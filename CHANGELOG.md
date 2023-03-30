@@ -18,6 +18,7 @@ accidentally triggering the load of a previous DB version.**
 * #5417 Refactor and optimize distributed COPY
 * #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
 * #5547 Skip Ordered Append when only 1 child node is present
+* #5510 Propagate vacuum/analyze to compressed chunks
 
 **Bugfixes**
 * #5233 Out of on_proc_exit slots on guc license change

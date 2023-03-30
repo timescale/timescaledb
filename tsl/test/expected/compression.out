@@ -1245,7 +1245,7 @@ WHERE series_id IN (SELECT series_id FROM compressed);
 
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;
--- Test that pg_stats and pg_class stats for uncompressed chunks are frozen at compression time
+-- Test that pg_stats and pg_class stats for uncompressed chunks are correctly updated after compression.
 -- Note that approximate_row_count pulls from pg_class
 CREATE TABLE stattest(time TIMESTAMPTZ NOT NULL, c1 int);
 SELECT create_hypertable('stattest', 'time');
@@ -1281,6 +1281,7 @@ SELECT approximate_row_count('stattest');
                      0
 (1 row)
 
+-- Uncompressed chunk table is empty since we just compressed the chunk and moved everything to compressed chunk table.
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
  relpages | reltuples 
@@ -1300,13 +1301,13 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ht.table_name = 'stattest' AND ch.hypertable_id = ht.id
         AND compch.id = ch.compressed_chunk_id AND ch.compressed_chunk_id > 0  \gset
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
-SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
  relpages | reltuples 
 ----------+-----------
         0 |         0
 (1 row)
 
--- Now verify stats are not changed when we analyze the hypertable
+-- Now verify stats are updated on compressed chunk table when we analyze the hypertable.
 ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
                                                        histogram_bounds                                                        
@@ -1320,36 +1321,49 @@ SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname =
 ------------------
 (0 rows)
 
--- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
-SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
- relpages | reltuples 
-----------+-----------
-        0 |         0
-(1 row)
-
--- verify that corresponding compressed chunk's stats is updated as well.
--- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
-SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
- relpages | reltuples 
-----------+-----------
-        0 |         0
-(1 row)
-
--- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
--- to hide WARNINGs for skipped tables
-SET client_min_messages TO ERROR;
-ANALYZE;
-SET client_min_messages TO NOTICE;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
-                                                       histogram_bounds                                                        
--------------------------------------------------------------------------------------------------------------------------------
- {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
-(1 row)
-
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
  relpages | reltuples 
 ----------+-----------
         0 |         0
+(1 row)
+
+-- verify that corresponding compressed chunk table stats is updated as well.
+SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+ relpages | reltuples 
+----------+-----------
+        1 |         1
+(1 row)
+
+-- Verify partial chunk stats are handled correctly when analyzing
+-- for both uncompressed and compressed chunk tables
+INSERT INTO stattest SELECT '2020/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(25,50) v;
+ANALYZE stattest;
+SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
+                                                                histogram_bounds                                                                
+------------------------------------------------------------------------------------------------------------------------------------------------
+ {6250,6500,6750,7000,7250,7500,7750,8000,8250,8500,8750,9000,9250,9500,9750,10000,10250,10500,10750,11000,11250,11500,11750,12000,12250,12500}
+(1 row)
+
+-- Hypertable will now see the histogram bounds since we have data in the uncompressed chunk table.
+SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
+                                                                histogram_bounds                                                                
+------------------------------------------------------------------------------------------------------------------------------------------------
+ {6250,6500,6750,7000,7250,7500,7750,8000,8250,8500,8750,9000,9250,9500,9750,10000,10250,10500,10750,11000,11250,11500,11750,12000,12250,12500}
+(1 row)
+
+-- verify that corresponding uncompressed chunk table stats is updated as well.
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+ relpages | reltuples 
+----------+-----------
+        1 |        26
+(1 row)
+
+-- verify that corresponding compressed chunk table stats have not changed since
+-- we didn't compress anything new.
+SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+ relpages | reltuples 
+----------+-----------
+        1 |         1
 (1 row)
 
 -- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
@@ -1394,6 +1408,23 @@ SELECT reloptions FROM pg_class WHERE relname = :statchunk;
          reloptions         
 ----------------------------
  {autovacuum_enabled=false}
+(1 row)
+
+-- Verify that even a global analyze works as well, changing message scope here
+-- to hide WARNINGs for skipped tables
+SET client_min_messages TO ERROR;
+ANALYZE;
+SET client_min_messages TO NOTICE;
+SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk and attname = 'c1';
+                                                                                                                         histogram_bounds                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6500,6750,7000,7250,7500,7750,8000,8250,8500,8750,9000,9250,9500,9750,10000,10250,10500,10750,11000,11250,11500,11750,12000,12250,12500}
+(1 row)
+
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+ relpages | reltuples 
+----------+-----------
+        1 |        52
 (1 row)
 
 DROP TABLE stattest;
