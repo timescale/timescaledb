@@ -1342,12 +1342,6 @@ table_is_logged(Oid table_relid)
 	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
 }
 
-static bool
-table_has_replica_identity(const Relation rel)
-{
-	return rel->rd_rel->relreplident != REPLICA_IDENTITY_DEFAULT;
-}
-
 inline static bool
 table_has_rules(Relation rel)
 {
@@ -2183,12 +2177,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
 				 errdetail(
 					 "It is not possible to turn temporary or unlogged tables into hypertables.")));
-
-	if (table_has_replica_identity(rel))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("table \"%s\" has replica identity set", get_rel_name(table_relid)),
-				 errdetail("Logical replication is not supported on hypertables.")));
 
 	if (table_has_rules(rel))
 		ereport(ERROR,

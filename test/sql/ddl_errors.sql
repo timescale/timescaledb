@@ -85,18 +85,6 @@ ALTER TABLE "Hypertable_1" SET UNLOGGED;
 \set ON_ERROR_STOP 1
 
 ALTER TABLE "Hypertable_1" SET LOGGED;
-CREATE TABLE PUBLIC."Hypertable_1_replica_ident" (
-  time BIGINT NOT NULL,
-  "Device_id" TEXT NOT NULL,
-  temp_c int NOT NULL DEFAULT -1
-);
-ALTER TABLE "Hypertable_1_replica_ident" REPLICA IDENTITY FULL;
-
-\set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Hypertable_1_replica_ident"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-ALTER TABLE "Hypertable_1" REPLICA IDENTITY FULL;
-\set ON_ERROR_STOP 1
-
 
 CREATE TABLE PUBLIC."Hypertable_1_rule" (
   time BIGINT NOT NULL,

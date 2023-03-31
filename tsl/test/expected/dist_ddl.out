@@ -596,6 +596,160 @@ SELECT * FROM show_chunks('disttable');
  _timescaledb_internal._dist_hyper_1_5_chunk
 (5 rows)
 
+-- Replica identity
+SELECT * FROM test.remote_exec(NULL,
+$$
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname;
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+$$);
+NOTICE:  [db_dist_ddl_1]: 
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
+NOTICE:  [db_dist_ddl_1]:
+relname  |relreplident
+---------+------------
+disttable|d           
+(1 row)
+
+
+NOTICE:  [db_dist_ddl_1]: 
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname
+NOTICE:  [db_dist_ddl_1]:
+relname              |relreplident
+---------------------+------------
+_dist_hyper_1_1_chunk|d           
+_dist_hyper_1_2_chunk|d           
+_dist_hyper_1_3_chunk|d           
+_dist_hyper_1_4_chunk|d           
+_dist_hyper_1_5_chunk|d           
+(5 rows)
+
+
+NOTICE:  [db_dist_ddl_2]: 
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
+NOTICE:  [db_dist_ddl_2]:
+relname  |relreplident
+---------+------------
+disttable|d           
+(1 row)
+
+
+NOTICE:  [db_dist_ddl_2]: 
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname
+NOTICE:  [db_dist_ddl_2]:
+relname              |relreplident
+---------------------+------------
+_dist_hyper_1_1_chunk|d           
+_dist_hyper_1_2_chunk|d           
+_dist_hyper_1_3_chunk|d           
+_dist_hyper_1_4_chunk|d           
+_dist_hyper_1_5_chunk|d           
+(5 rows)
+
+
+NOTICE:  [db_dist_ddl_3]: 
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
+NOTICE:  [db_dist_ddl_3]:
+relname  |relreplident
+---------+------------
+disttable|d           
+(1 row)
+
+
+NOTICE:  [db_dist_ddl_3]: 
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname
+NOTICE:  [db_dist_ddl_3]:
+relname              |relreplident
+---------------------+------------
+_dist_hyper_1_1_chunk|d           
+_dist_hyper_1_2_chunk|d           
+_dist_hyper_1_3_chunk|d           
+_dist_hyper_1_4_chunk|d           
+_dist_hyper_1_5_chunk|d           
+(5 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+ALTER TABLE disttable REPLICA IDENTITY FULL;
+SELECT * FROM test.remote_exec(NULL,
+$$
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname;
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+$$);
+NOTICE:  [db_dist_ddl_1]: 
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
+NOTICE:  [db_dist_ddl_1]:
+relname  |relreplident
+---------+------------
+disttable|f           
+(1 row)
+
+
+NOTICE:  [db_dist_ddl_1]: 
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname
+NOTICE:  [db_dist_ddl_1]:
+relname              |relreplident
+---------------------+------------
+_dist_hyper_1_1_chunk|f           
+_dist_hyper_1_2_chunk|f           
+_dist_hyper_1_3_chunk|f           
+_dist_hyper_1_4_chunk|f           
+_dist_hyper_1_5_chunk|f           
+(5 rows)
+
+
+NOTICE:  [db_dist_ddl_2]: 
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
+NOTICE:  [db_dist_ddl_2]:
+relname  |relreplident
+---------+------------
+disttable|f           
+(1 row)
+
+
+NOTICE:  [db_dist_ddl_2]: 
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname
+NOTICE:  [db_dist_ddl_2]:
+relname              |relreplident
+---------------------+------------
+_dist_hyper_1_1_chunk|f           
+_dist_hyper_1_2_chunk|f           
+_dist_hyper_1_3_chunk|f           
+_dist_hyper_1_4_chunk|f           
+_dist_hyper_1_5_chunk|f           
+(5 rows)
+
+
+NOTICE:  [db_dist_ddl_3]: 
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
+NOTICE:  [db_dist_ddl_3]:
+relname  |relreplident
+---------+------------
+disttable|f           
+(1 row)
+
+
+NOTICE:  [db_dist_ddl_3]: 
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname
+NOTICE:  [db_dist_ddl_3]:
+relname              |relreplident
+---------------------+------------
+_dist_hyper_1_1_chunk|f           
+_dist_hyper_1_2_chunk|f           
+_dist_hyper_1_3_chunk|f           
+_dist_hyper_1_4_chunk|f           
+_dist_hyper_1_5_chunk|f           
+(5 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
 -- Rename column
 ALTER TABLE disttable RENAME COLUMN description TO descr;
 SELECT * FROM test.show_columns('disttable')
