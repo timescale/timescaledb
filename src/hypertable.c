@@ -129,7 +129,7 @@ get_chunk_sizing_func_oid(const FormData_hypertable *fd)
 									 makeString((char *) NameStr(fd->chunk_sizing_func_name))),
 						  sizeof(argtype) / sizeof(argtype[0]),
 						  argtype,
-						  false);
+						  true);
 }
 
 static HeapTuple
@@ -1851,17 +1851,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
 	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
 	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
-	DimensionInfo *time_dim_info =
-		ts_dimension_info_create_open(table_relid,
-									  /* column name */
-									  time_dim_name,
-									  /* interval */
-									  PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
-									  /* interval type */
-									  PG_ARGISNULL(6) ? InvalidOid :
-														get_fn_expr_argtype(fcinfo->flinfo, 6),
-									  /* partitioning func */
-									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
+	DimensionInfo *time_dim_info = NULL;
 	DimensionInfo *space_dim_info = NULL;
 	bool replication_factor_is_null = PG_ARGISNULL(14);
 	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
@@ -1908,15 +1898,16 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot migrate data for distributed hypertable")));
 
-	if (NULL == time_dim_name)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("time column cannot be NULL")));
-
 	if (NULL != data_node_arr && ARR_NDIM(data_node_arr) > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid data nodes format"),
 				 errhint("Specify a one-dimensional array of data nodes.")));
+
+	if (NULL == time_dim_name && NULL == space_dim_name)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("must specify at least one partitioning column")));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (ht)
@@ -1951,6 +1942,23 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 															 replication_factor_is_null,
 															 data_node_arr,
 															 &data_nodes);
+
+		if (NULL != time_dim_name)
+		{
+			time_dim_info =
+				ts_dimension_info_create_open(table_relid,
+											  /* column name */
+											  time_dim_name,
+											  /* interval */
+											  PG_ARGISNULL(6) ? Int64GetDatum(-1) :
+																PG_GETARG_DATUM(6),
+											  /* interval type */
+											  PG_ARGISNULL(6) ?
+												  InvalidOid :
+												  get_fn_expr_argtype(fcinfo->flinfo, 6),
+											  /* partitioning func */
+											  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
+		}
 
 		if (NULL != space_dim_name)
 		{
@@ -2079,6 +2087,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	NameData schema_name, table_name, default_associated_schema_name;
 	Relation rel;
 	bool if_not_exists = (flags & HYPERTABLE_CREATE_IF_NOT_EXISTS) != 0;
+
+	Assert(time_dim_info || space_dim_info);
 
 	/* quick exit in the easy if-not-exists case to avoid all locking */
 	if (if_not_exists && ts_is_hypertable(table_relid))
@@ -2225,31 +2235,44 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
 
 	/* Validate and set chunk sizing information */
-	if (OidIsValid(chunk_sizing_info->func))
+	if (time_dim_info != NULL)
 	{
-		ts_chunk_adaptive_sizing_info_validate(chunk_sizing_info);
-
-		if (chunk_sizing_info->target_size_bytes > 0)
+		if (OidIsValid(chunk_sizing_info->func))
 		{
-			ereport(NOTICE,
-					(errcode(ERRCODE_WARNING),
-					 errmsg("adaptive chunking is a BETA feature and is not recommended for "
-							"production deployments")));
-			time_dim_info->adaptive_chunking = true;
+			ts_chunk_adaptive_sizing_info_validate(chunk_sizing_info);
+
+			if (chunk_sizing_info->target_size_bytes > 0)
+			{
+				ereport(NOTICE,
+						(errcode(ERRCODE_WARNING),
+						 errmsg("adaptive chunking is a BETA feature and is not recommended for "
+								"production deployments")));
+
+				time_dim_info->adaptive_chunking = true;
+			}
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("chunk sizing function cannot be NULL")));
 		}
 	}
-	else
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("chunk sizing function cannot be NULL")));
-	}
+
+	int16 num_dimensions = 0;
 
 	/* Validate that the dimensions are OK */
-	ts_dimension_info_validate(time_dim_info);
+	if (DIMENSION_INFO_IS_SET(time_dim_info))
+	{
+		ts_dimension_info_validate(time_dim_info);
+		num_dimensions++;
+	}
 
 	if (DIMENSION_INFO_IS_SET(space_dim_info))
+	{
 		ts_dimension_info_validate(space_dim_info);
+		num_dimensions++;
+	}
 
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
@@ -2263,20 +2286,23 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &chunk_sizing_info->func_schema,
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
-					  DIMENSION_INFO_IS_SET(space_dim_info) ? 2 : 1,
+					  num_dimensions,
 					  false,
 					  replication_factor);
 
 	/* Get the a Hypertable object via the cache */
-	time_dim_info->ht =
-		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Add validated dimensions */
-	ts_dimension_add_from_info(time_dim_info);
+	if (DIMENSION_INFO_IS_SET(time_dim_info))
+	{
+		time_dim_info->ht = ht;
+		ts_dimension_add_from_info(time_dim_info);
+	}
 
 	if (DIMENSION_INFO_IS_SET(space_dim_info))
 	{
-		space_dim_info->ht = time_dim_info->ht;
+		space_dim_info->ht = ht;
 		ts_dimension_add_from_info(space_dim_info);
 		ts_dimension_partition_info_recreate(space_dim_info->dimension_id,
 											 space_dim_info->num_slices,

@@ -25,7 +25,7 @@
 -- distributed - (Optional) Create distributed hypertable
 CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     relation                REGCLASS,
-    time_column_name        NAME,
+    time_column_name        NAME = NULL,
     partitioning_column     NAME = NULL,
     number_partitions       INTEGER = NULL,
     associated_schema_name  NAME = NULL,
