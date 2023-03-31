@@ -99,3 +99,5 @@ BEGIN
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
+DROP SCHEMA _timescaledb_functions;
+

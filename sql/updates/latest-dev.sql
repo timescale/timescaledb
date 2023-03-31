@@ -24,3 +24,7 @@ AS '@MODULE_PATHNAME@', 'ts_get_compressed_chunk_index_for_recompression' LANGUA
 
 DROP FUNCTION _timescaledb_internal.dimension_is_finite;
 DROP FUNCTION _timescaledb_internal.dimension_slice_get_constraint_sql;
+
+CREATE SCHEMA _timescaledb_functions;
+GRANT USAGE ON SCHEMA _timescaledb_functions TO PUBLIC;
+
