@@ -194,6 +194,21 @@ INSERT INTO disttable VALUES
 
 SELECT * FROM show_chunks('disttable');
 
+-- Replica identity
+SELECT * FROM test.remote_exec(NULL,
+$$
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname;
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+$$);
+
+ALTER TABLE disttable REPLICA IDENTITY FULL;
+
+SELECT * FROM test.remote_exec(NULL,
+$$
+    SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname;
+    SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+$$);
+
 -- Rename column
 ALTER TABLE disttable RENAME COLUMN description TO descr;
 SELECT * FROM test.show_columns('disttable')

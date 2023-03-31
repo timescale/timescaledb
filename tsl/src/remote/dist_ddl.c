@@ -793,6 +793,7 @@ dist_ddl_process_alter_table(const ProcessUtilityArgs *args)
 			case AT_DropNotNull:
 			case AT_AddIndex:
 			case AT_AlterColumnType:
+			case AT_ReplicaIdentity:
 				exec_type = set_alter_table_exec_type(exec_type, DIST_DDL_EXEC_ON_END);
 				break;
 			case AT_ChangeOwner:

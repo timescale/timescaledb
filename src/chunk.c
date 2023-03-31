@@ -1006,6 +1006,44 @@ chunk_insert_into_metadata_after_lock(const Chunk *chunk)
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 }
 
+/*
+ * Ensure the replica identity setting of a chunk matches that of the root
+ * table.
+ */
+static void
+chunk_set_replica_identity(const Chunk *chunk)
+{
+	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	ReplicaIdentityStmt stmt = {
+		.type = T_ReplicaIdentityStmt,
+		.identity_type = ht_rel->rd_rel->relreplident,
+	};
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.def = (Node *) &stmt,
+		.subtype = AT_ReplicaIdentity,
+	};
+	CatalogSecurityContext sec_ctx;
+
+	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
+	{
+		ChunkIndexMapping idxm;
+
+		/* Lookup the corresponding chunk index. If this index is
+		 * dropped, the behavior is the same as NOTHING (as per PG
+		 * documentation). */
+		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, ht_rel->rd_replidindex, &idxm))
+			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
+		else
+			stmt.name = get_rel_name(idxm.indexoid);
+	}
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	AlterTableInternal(chunk->table_id, list_make1(&cmd), false);
+	ts_catalog_restore_user(&sec_ctx);
+	table_close(ht_rel, NoLock);
+}
+
 static void
 chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 {
@@ -1020,6 +1058,8 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 								  chunk->fd.id,
 								  chunk->table_id,
 								  InvalidOid);
+
+		chunk_set_replica_identity(chunk);
 	}
 }
 

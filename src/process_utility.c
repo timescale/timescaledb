@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#include <catalog/pg_class_d.h>
 #include <postgres.h>
 #include <foreign/foreign.h>
 #include <nodes/parsenodes.h>
@@ -3219,6 +3220,64 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 }
 
 static void
+process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = castNode(AlterTableCmd, copyObject(arg));
+	ReplicaIdentityStmt *stmt = castNode(ReplicaIdentityStmt, cmd->def);
+	char relkind = get_rel_relkind(chunk_relid);
+
+	/* If this is not a local chunk (e.g., it is foreign table representing a
+	 * data node or OSM chunk), then we don't set replica identity locally */
+	if (relkind != RELKIND_RELATION)
+		return;
+
+	if (stmt->identity_type == REPLICA_IDENTITY_INDEX)
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+		Oid hyper_schema_oid = get_rel_namespace(ht->main_table_relid);
+		Oid hyper_index_oid = get_relname_relid(stmt->name, hyper_schema_oid);
+		ChunkIndexMapping cim;
+
+		Assert(OidIsValid(hyper_index_oid));
+
+		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, hyper_index_oid, &cim))
+			elog(ERROR,
+				 "chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name),
+				 stmt->name);
+
+		stmt->name = get_rel_name(cim.indexoid);
+	}
+
+	AlterTableInternal(chunk_relid, list_make1(cmd), false);
+}
+
+static void
+process_altertable_replica_identity(Hypertable *ht, AlterTableCmd *cmd)
+{
+	ReplicaIdentityStmt *stmt = castNode(ReplicaIdentityStmt, cmd->def);
+
+	if (stmt->identity_type == REPLICA_IDENTITY_INDEX)
+	{
+		Oid hyper_schema_oid = get_rel_namespace(ht->main_table_relid);
+		Oid hyper_index_oid;
+
+		hyper_index_oid = get_relname_relid(stmt->name, hyper_schema_oid);
+
+		if (!OidIsValid(hyper_index_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("index \"%s\" for table \"%s.%s\" does not exist",
+							stmt->name,
+							NameStr(ht->fd.schema_name),
+							NameStr(ht->fd.table_name))));
+	}
+
+	foreach_chunk(ht, process_altertable_chunk_replica_identity, cmd);
+}
+
+static void
 process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	NameData tspc_name;
@@ -3712,10 +3771,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			/* Break here to silence compiler */
 			break;
 		case AT_ReplicaIdentity:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support logical replication")));
-			/* Break here to silence compiler */
+			process_altertable_replica_identity(ht, cmd);
 			break;
 		case AT_EnableRule:
 		case AT_EnableAlwaysRule:

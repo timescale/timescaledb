@@ -787,7 +787,8 @@ chunk_index_tuple_found(TupleInfo *ti, void *const data)
 }
 
 bool
-ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid, ChunkIndexMapping *cim_out)
+ts_chunk_index_get_by_indexrelid(const Chunk *chunk, Oid chunk_indexrelid,
+								 ChunkIndexMapping *cim_out)
 {
 	int tuples_found;
 	ScanKeyData scankey[2];
@@ -835,7 +836,7 @@ chunk_hypertable_index_name_filter(const TupleInfo *ti, void *data)
 }
 
 TSDLLEXPORT bool
-ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid,
+ts_chunk_index_get_by_hypertable_indexrelid(const Chunk *chunk, Oid hypertable_indexrelid,
 											ChunkIndexMapping *cim_out)
 {
 	int tuples_found;
