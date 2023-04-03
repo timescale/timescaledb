@@ -57,13 +57,13 @@ jobs:
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1
           - test: 14max
             pg: 14
-            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            pkg_version: 14.5.1 # hardcoded due to issues with PG14.7 on chocolatey
           - test: 15min
             pg: 15
             pkg_version: ${{ fromJson(needs.config.outputs.pg15_earliest) }}.1
           - test: 15max
             pg: 15
-            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            pkg_version: 15.0.1 # hardcoded due to issues with PG15.2 on chocolatey
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -98,8 +98,8 @@ jobs:
         choco install wget
 
     - name: Download TimescaleDB
-      run: "wget --quiet -O timescaledb.zip 'https://timescalereleases.blob.core.windows.net/windows/\
-        timescaledb-postgresql-${{ matrix.pg }}_latest-windows-amd64.zip'"
+      run: "wget --quiet -O timescaledb.zip 'https://github.com/timescale/timescaledb/releases/download/${{ steps.version.outputs.version }}/\
+        timescaledb-postgresql-${{ matrix.pg}}_${{ steps.version.outputs.version }}-windows-amd64.zip'"
 
     - name: Install TimescaleDB
       run: |
