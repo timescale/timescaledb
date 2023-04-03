@@ -6,6 +6,7 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in
     reorder_vs_select.spec.in
     remote_create_chunk.spec.in
+    dist_su_copy_chunk.spec.in
     dist_ha_chunk_drop.spec.in
     dist_restore_point.spec.in
     dist_cmd_exec.spec.in
