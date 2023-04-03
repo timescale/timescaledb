@@ -893,6 +893,12 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
 					return false;
 
+				/* cannot support ordered append with OSM chunks. OSM chunk
+				 * ranges are not recorded with the catalog
+				 */
+				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
+					return false;
+
 				/*
 				 * Check for partial compressed chunks.
 				 *
@@ -913,11 +919,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					}
 				}
 
-				/* cannot support ordered append with OSM chunks. OSM chunk
-				 * ranges are not recorded with the catalog
-				 */
-				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
-					return false;
 				pk = linitial_node(PathKey, path->pathkeys);
 
 				/*
