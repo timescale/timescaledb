@@ -1035,14 +1035,12 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 	const ColumnCompressionInfo **colinfo_array;
 	colinfo_array = palloc(sizeof(ColumnCompressionInfo *) * htcols_listlen);
 
-	int nsegmentby_cols = 0, i = 0;
+	int i = 0;
 
 	foreach (lc, htcols_list)
 	{
 		FormData_hypertable_compression *fd = (FormData_hypertable_compression *) lfirst(lc);
 		colinfo_array[i++] = fd;
-		if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
-			nsegmentby_cols++;
 	}
 
 	const ColumnCompressionInfo **keys;
