@@ -21,3 +21,4 @@
 /query-*.sql
 /rowsecurity-*.sql
 /update-*.sql
+/loader-*.sql
