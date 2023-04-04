@@ -214,65 +214,6 @@ invalidation_threshold_get(int32 hypertable_id)
 	return threshold;
 }
 
-static ScanTupleResult
-invalidation_threshold_htid_found(TupleInfo *tinfo, void *data)
-{
-	if (tinfo->lockresult != TM_Ok)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not acquire lock for invalidation threshold row %d",
-						tinfo->lockresult),
-				 errhint("Retry the operation again.")));
-	}
-	return SCAN_DONE;
-}
-
-/* lock row corresponding to hypertable id in
- * continuous_aggs_invalidation_threshold table in AccessExclusive mode,
- * block till lock is acquired.
- */
-void
-invalidation_threshold_lock(int32 raw_hypertable_id)
-{
-	ScanTupLock scantuplock = {
-		.waitpolicy = LockWaitBlock,
-		.lockmode = LockTupleExclusive,
-	};
-	Catalog *catalog = ts_catalog_get();
-	ScanKeyData scankey[1];
-	int retcnt = 0;
-	ScannerCtx scanctx;
-
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(raw_hypertable_id));
-
-	/* lock table in AccessShare mode and the row with AccessExclusive */
-	scanctx = (ScannerCtx){ .table = catalog_get_table_id(catalog,
-														  CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-							.index = catalog_get_index(catalog,
-													   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
-													   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
-							.nkeys = 1,
-							.scankey = scankey,
-							.limit = 1,
-							.tuple_found = invalidation_threshold_htid_found,
-							.lockmode = AccessShareLock,
-							.scandirection = ForwardScanDirection,
-							.result_mctx = CurrentMemoryContext,
-							.tuplock = &scantuplock };
-	retcnt = ts_scanner_scan(&scanctx);
-	if (retcnt > 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("found multiple invalidation rows for hypertable %d", raw_hypertable_id)));
-	}
-}
-
 /*
  * Compute a new invalidation threshold.
  *
