@@ -1124,11 +1124,8 @@ SELECT * from search_query_count_3 ORDER BY 1, 2, 3;
 -- ).
 insert into raw_data select '2000-05-01 00:00+0','Q3', 0, 0;
 
---this one fails now
-\set ON_ERROR_STOP 0
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, '2000-06-01 00:00+0'::timestamptz);
 CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
-\set ON_ERROR_STOP 1
 
 --insert row
 insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;

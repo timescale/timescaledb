@@ -293,10 +293,10 @@ INSERT INTO public.table_to_compress VALUES ('2020-01-01 10:00', 12, 77);
 ERROR:  cannot INSERT into frozen chunk "_hyper_2_3_chunk"
 --touches all chunks
 UPDATE public.table_to_compress SET value = 3;
-ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
+ERROR:  cannot modify frozen chunk status
 --touches only frozen chunk
 DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
-ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
+ERROR:  cannot modify frozen chunk status
 \set ON_ERROR_STOP 1
 --try to refreeze
 SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');

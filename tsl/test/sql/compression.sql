@@ -507,8 +507,7 @@ DELETE FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
 ROLLBACK;
 
-\set ON_ERROR_STOP 0
--- test delete inside CTE is blocked
+-- test delete inside CTE
 WITH compressed AS (
   DELETE FROM compressed_ht RETURNING series_id
 )
@@ -521,8 +520,6 @@ WITH compressed AS (
 )
 SELECT * FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
-
-\set ON_ERROR_STOP 1
 
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;

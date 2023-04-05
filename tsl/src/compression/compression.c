@@ -1994,3 +1994,330 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 	table_close(in_rel, NoLock);
 }
+
+#if PG14_GE
+/*
+ * Helper method which returns true if given column_name
+ * is configured as SEGMENT BY column in a compressed hypertable
+ */
+static bool
+is_segmentby_col(List *ht_compression_info, char *column_name)
+{
+	ListCell *lc;
+	foreach (lc, ht_compression_info)
+	{
+		FormData_hypertable_compression *fd = lfirst(lc);
+		if (namestrcmp(&fd->attname, column_name) == 0)
+		{
+			if (fd->segmentby_column_index > 0)
+				return true;
+			break;
+		}
+	}
+	return false;
+}
+
+/*
+ * This method will evaluate the predicates, extract
+ * left and right operands, check if one of the operands is
+ * a simple Var type. If its Var type extract its corresponding
+ * column name from hypertable_compression catalog table.
+ * If extracted column is a SEGMENT BY column then save column
+ * name, value specified in the predicate. This information will
+ * be used to build scan keys later.
+ */
+static void
+fill_predicate_context(Chunk *ch, List *predicates, List **segmentby_columns,
+					   List **segmentby_columns_value, List **is_null_check, List **is_null)
+{
+	List *ht_compression_info = ts_hypertable_compression_get(ch->fd.hypertable_id);
+	ListCell *lc;
+	foreach (lc, predicates)
+	{
+		Node *node = lfirst(lc);
+		if (node == NULL)
+			continue;
+
+		Var *var;
+		char *column_name;
+		switch (nodeTag(node))
+		{
+			case T_OpExpr:
+			{
+				OpExpr *opexpr = (OpExpr *) node;
+				Expr *leftop, *rightop;
+				Const *arg_value;
+
+				leftop = linitial(opexpr->args);
+				rightop = lsecond(opexpr->args);
+
+				if (IsA(leftop, RelabelType))
+					leftop = ((RelabelType *) leftop)->arg;
+				if (IsA(rightop, RelabelType))
+					rightop = ((RelabelType *) rightop)->arg;
+
+				if (IsA(leftop, Var) && IsA(rightop, Const))
+				{
+					var = (Var *) leftop;
+					arg_value = (Const *) rightop;
+				}
+				else if (IsA(rightop, Var) && IsA(leftop, Const))
+				{
+					var = (Var *) rightop;
+					arg_value = (Const *) leftop;
+				}
+				else
+					continue;
+
+				column_name = get_attname(ch->table_id, var->varattno, false);
+				if (is_segmentby_col(ht_compression_info, column_name))
+				{
+					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
+					int op_strategy = get_op_opfamily_strategy(opexpr->opno, tce->btree_opf);
+					if (op_strategy == BTEqualStrategyNumber)
+					{
+						/* save segment by column name and its corresponding value specified in
+						 * WHERE */
+						*segmentby_columns = lappend(*segmentby_columns, column_name);
+						*segmentby_columns_value = lappend(*segmentby_columns_value, arg_value);
+						/* this constraint is not IS [NOT] NULL, so mark is_null_check as 0 */
+						*is_null_check = lappend_int(*is_null_check, 0);
+					}
+				}
+			}
+			break;
+			case T_NullTest:
+			{
+				NullTest *ntest = (NullTest *) node;
+				if (IsA(ntest->arg, Var))
+				{
+					var = (Var *) ntest->arg;
+					column_name = get_attname(ch->table_id, var->varattno, false);
+					if (is_segmentby_col(ht_compression_info, column_name))
+					{
+						*segmentby_columns = lappend(*segmentby_columns, column_name);
+						*is_null_check = lappend_int(*is_null_check, 1);
+						if (ntest->nulltesttype == IS_NULL)
+							*is_null = lappend_int(*is_null, 1);
+						else
+							*is_null = lappend_int(*is_null, 0);
+					}
+				}
+			}
+			break;
+			default:
+				break;
+		}
+	}
+}
+
+/*
+ * This method will build scan keys for predicates including
+ * SEGMENT BY column with attribute number from compressed chunk
+ * if condition is like <segmentbycol> = <const value>, else
+ * OUT param null_columns is saved with column attribute number.
+ */
+static ScanKeyData *
+build_update_delete_scankeys(Chunk *chunk, List *segmentby_columns, List *segmentby_column_values,
+							 List *is_null_check, int *num_scankeys, Bitmapset **null_columns)
+{
+	Chunk *comp_chunk = NULL;
+	Relation comp_chunk_rel;
+	TupleDesc tupleDesc;
+	ListCell *col;
+	ListCell *is_null_or_not_null;
+	int key_index = 0;
+	int pos = 0;
+
+	ScanKeyData *scankeys = palloc0(segmentby_columns->length * sizeof(ScanKeyData));
+	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	comp_chunk_rel = table_open(comp_chunk->table_id, AccessShareLock);
+	tupleDesc = RelationGetDescr(comp_chunk_rel);
+
+	forboth (col, segmentby_columns, is_null_or_not_null, is_null_check)
+	{
+		char *column_name = lfirst(col);
+		AttrNumber attnum = get_attnum(RelationGetRelid(comp_chunk_rel), column_name);
+		if (attnum == InvalidAttrNumber)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" of relation \"%s\" does not exist",
+							column_name,
+							RelationGetRelationName(comp_chunk_rel))));
+		Form_pg_attribute attr = TupleDescAttr(tupleDesc, AttrNumberGetAttrOffset(attnum));
+		TypeCacheEntry *tce = lookup_type_cache(attr->atttypid, TYPECACHE_EQ_OPR_FINFO);
+		if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
+			elog(ERROR, "no equality function for column \"%s\"", column_name);
+
+		if (lfirst_int(is_null_or_not_null) == 0)
+		{
+			Const *const_value = list_nth(segmentby_column_values, pos++);
+			Datum value = (const_value ? const_value->constvalue : 0);
+			ScanKeyEntryInitialize(&scankeys[key_index++],
+								   0, /* flags */
+								   attnum,
+								   BTEqualStrategyNumber,
+								   InvalidOid, /* No strategy subtype. */
+								   attr->attcollation,
+								   tce->eq_opr_finfo.fn_oid,
+								   value);
+		}
+		else
+		{
+			*null_columns = bms_add_member(*null_columns, attnum);
+		}
+	}
+	*num_scankeys = key_index;
+	table_close(comp_chunk_rel, AccessShareLock);
+	return scankeys;
+}
+
+/*
+ * This method will:
+ *  1.scan compressed chunk
+ *  2.decompress the row
+ *  3.insert decompressed rows to uncompressed chunk
+ *  4.delete this row from compressed chunk
+ */
+static bool
+decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset *null_columns,
+				   List *is_nulls, bool *chunk_status_changed)
+{
+	Relation chunk_rel;
+	Relation comp_chunk_rel;
+	Chunk *comp_chunk;
+	HeapTuple compressed_tuple;
+	RowDecompressor decompressor;
+	Snapshot snapshot;
+
+	snapshot = GetTransactionSnapshot();
+	chunk_rel = table_open(ch->table_id, RowExclusiveLock);
+	comp_chunk = ts_chunk_get_by_id(ch->fd.compressed_chunk_id, true);
+	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
+	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
+
+	TableScanDesc heapScan = table_beginscan(comp_chunk_rel, snapshot, num_scankeys, scankeys);
+	while ((compressed_tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
+	{
+		bool skip_tuple = false;
+		int attrno = bms_next_member(null_columns, -1);
+		int pos = 0;
+		bool is_null_condition = 0;
+		bool seg_col_is_null = false;
+		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
+		{
+			is_null_condition = list_nth_int(is_nulls, pos);
+			seg_col_is_null = heap_attisnull(compressed_tuple, attrno, decompressor.in_desc);
+			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
+			{
+				/*
+				 * if segment by column in the scanned tuple has non null value
+				 * and IS NULL is specified, OR segment by column has null value
+				 * and IS NOT NULL is specified then skip this tuple
+				 */
+				skip_tuple = true;
+				break;
+			}
+			pos++;
+		}
+		if (skip_tuple)
+			continue;
+		heap_deform_tuple(compressed_tuple,
+						  decompressor.in_desc,
+						  decompressor.compressed_datums,
+						  decompressor.compressed_is_nulls);
+
+		row_decompressor_decompress_row(&decompressor, NULL);
+		TM_FailureData tmfd;
+		TM_Result result;
+		result = table_tuple_delete(comp_chunk_rel,
+									&compressed_tuple->t_self,
+									decompressor.mycid,
+									snapshot,
+									InvalidSnapshot,
+									true,
+									&tmfd,
+									false);
+
+		if (result == TM_Updated || result == TM_Deleted)
+		{
+			if (IsolationUsesXactSnapshot())
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			return false;
+		}
+		if (result == TM_Invisible)
+		{
+			elog(ERROR, "attempted to lock invisible tuple");
+			return false;
+		}
+		*chunk_status_changed = true;
+	}
+	if (scankeys)
+		pfree(scankeys);
+	table_endscan(heapScan);
+	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeBulkInsertState(decompressor.bistate);
+
+	table_close(chunk_rel, NoLock);
+	table_close(comp_chunk_rel, NoLock);
+	return true;
+}
+
+/*
+ * This method will:
+ *  1. Evaluate WHERE clauses and check if SEGMENT BY columns
+ *     are specified or not.
+ *  2. Build scan keys for SEGMENT BY columns.
+ *  3. Move scanned rows to staging area.
+ *  4. Update catalog table to change status of moved chunk.
+ */
+void
+decompress_batches_for_update_delete(List *chunks, List *predicates)
+{
+	List *segmentby_columns = NIL;
+	List *segmentby_columns_value = NIL;
+	List *is_null_check = NIL;
+	List *is_null = NIL;
+	ListCell *ch = NULL;
+	if (predicates)
+		fill_predicate_context(linitial(chunks),
+							   predicates,
+							   &segmentby_columns,
+							   &segmentby_columns_value,
+							   &is_null_check,
+							   &is_null);
+	foreach (ch, chunks)
+	{
+		bool chunk_status_changed = false;
+		ScanKeyData *scankeys = NULL;
+		Bitmapset *null_columns = NULL;
+		int num_scankeys = 0;
+
+		if (segmentby_columns)
+		{
+			scankeys = build_update_delete_scankeys(lfirst(ch),
+													segmentby_columns,
+													segmentby_columns_value,
+													is_null_check,
+													&num_scankeys,
+													&null_columns);
+		}
+		if (decompress_batches(lfirst(ch),
+							   scankeys,
+							   num_scankeys,
+							   null_columns,
+							   is_null,
+							   &chunk_status_changed))
+		{
+			/*
+			 * tuples from compressed chunk has been decompressed and moved
+			 * to staging area, thus mark this chunk as partially compressed
+			 */
+			if (chunk_status_changed == true)
+				ts_chunk_set_partial(lfirst(ch));
+		}
+	}
+}
+#endif

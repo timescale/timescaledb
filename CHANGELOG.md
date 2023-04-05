@@ -16,6 +16,7 @@ accidentally triggering the load of a previous DB version.**
 * #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
 * #5344 Enable JOINS for Hierarchical Continuous Aggregates
 * #5417 Refactor and optimize distributed COPY
+* #5339 Support UPDATE/DELETE on compressed hypertables
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down

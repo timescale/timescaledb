@@ -153,8 +153,12 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			return;
 		}
 	}
-#endif
-
+#else
+	/*
+	 * We do not support UPDATE/DELETE operations on compressed hypertables
+	 * on PG versions < 14, because Custom Scan (HypertableModify) node is
+	 * not generated in the plan for UPDATE/DELETE operations on hypertables
+	 */
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		ListCell *lc;
@@ -168,6 +172,7 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			}
 		}
 	}
+#endif
 }
 
 /*

@@ -27,7 +27,8 @@ if(PG_VERSION VERSION_GREATER "12.7"
 endif()
 
 if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
-  list(APPEND TEST_TEMPLATES_MODULE_DEBUG freeze_chunk.spec.in)
+  list(APPEND TEST_TEMPLATES_MODULE_DEBUG freeze_chunk.spec.in
+       compression_dml_iso.spec)
 endif()
 
 list(
