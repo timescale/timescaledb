@@ -351,11 +351,11 @@ static void
 cost_decompress_chunk(Path *path, Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
-	path->startup_cost = compressed_path->startup_cost;
 	if (compressed_path->rows > 0)
 	{
-		path->startup_cost +=
-			(compressed_path->total_cost - compressed_path->startup_cost) / compressed_path->rows;
+		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
+	} else {
+		path->startup_cost = compressed_path->startup_cost;
 	}
 
 	/* total_cost is cost for fetching all tuples */
