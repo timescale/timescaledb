@@ -184,6 +184,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
+#if PG14_GE
+	.decompress_batches_for_update_delete = decompress_batches_for_update_delete,
+#else
+	.decompress_batches_for_update_delete = NULL,
+#endif
 
 	.data_node_add = data_node_add,
 	.data_node_delete = data_node_delete,

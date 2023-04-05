@@ -16,6 +16,7 @@
 #include <nodes/execnodes.h>
 #include "segment_meta.h"
 
+#include "compat/compat.h"
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
  * varlen header, and followed by a version specifying which compression
@@ -290,6 +291,9 @@ typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
 										  TupleTableSlot *slot);
+#if PG14_GE
+extern void decompress_batches_for_update_delete(List *chunks, List *predicates);
+#endif
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;
 typedef struct CompressSingleRowState CompressSingleRowState;

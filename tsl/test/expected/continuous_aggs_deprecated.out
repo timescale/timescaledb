@@ -1590,9 +1590,8 @@ insert into raw_data select '2000-05-01 00:00+0','Q3', 0, 0;
 --this one fails now
 \set ON_ERROR_STOP 0
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, '2000-06-01 00:00+0'::timestamptz);
-ERROR:  cannot update/delete rows from chunk "_hyper_41_81_chunk" as it is compressed
 CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
-ERROR:  cannot update/delete rows from chunk "_hyper_41_81_chunk" as it is compressed
+NOTICE:  continuous aggregate "search_query_count_3" is already up-to-date
 \set ON_ERROR_STOP 1
 --insert row
 insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
@@ -1620,7 +1619,7 @@ WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                  41 |  -9223372036854775808 |     -210866803200000001
-                 41 |       946857660000000 |         988675199999999
+                 41 |       959817600000000 |         988675199999999
                  41 |       991353600000000 |     9223372036854775807
 (3 rows)
 
@@ -1640,13 +1639,10 @@ ERROR:  cannot change configuration on already compressed chunks
 SELECT decompress_chunk(schema_name || '.' || table_name)
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = :'MAT_HTID' and status = 1;
-             decompress_chunk             
-------------------------------------------
- _timescaledb_internal._hyper_41_81_chunk
-(1 row)
+ decompress_chunk 
+------------------
+(0 rows)
 
---disable compression on cagg after decompressing all chunks--
-ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
 SELECT cagg_name, mat_table_name
 FROM cagg_compression_status where cagg_name = 'search_query_count_3';
       cagg_name       |       mat_table_name        
@@ -1659,7 +1655,7 @@ FROM timescaledb_information.continuous_aggregates
 where view_name = 'search_query_count_3';
       view_name       | materialized_only | compression_enabled 
 ----------------------+-------------------+---------------------
- search_query_count_3 | f                 | f
+ search_query_count_3 | f                 | t
 (1 row)
 
 -- TEST caggs on table with more columns than in the cagg view defn --

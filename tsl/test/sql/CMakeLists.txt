@@ -14,7 +14,6 @@ set(TEST_FILES
     compressed_collation.sql
     compression_bgw.sql
     compression_conflicts.sql
-    compression_permissions.sql
     compression_qualpushdown.sql
     dist_param.sql
     dist_views.sql
@@ -49,7 +48,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_merge.sql
     compression_indexscan.sql
     compression_segment_meta.sql
-    compression.sql
     compress_table.sql
     cagg_bgw_drop_chunks.sql
     cagg_bgw.sql
@@ -66,7 +64,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_on_cagg_dist_ht.sql
     cagg_on_cagg_joins.sql
     cagg_on_cagg_joins_dist_ht.sql
-    continuous_aggs_deprecated.sql
     cagg_tableam.sql
     cagg_usage.sql
     cagg_policy_run.sql
@@ -108,7 +105,11 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql)
+    list(APPEND TEST_TEMPLATES continuous_aggs.sql.in
+         continuous_aggs_deprecated.sql)
   endif()
+  list(APPEND TEST_FILES compression.sql compression_update_delete.sql
+       compression_permissions.sql)
 endif()
 
 set(SOLO_TESTS
@@ -166,7 +167,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_partial_agg.sql.in
     dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in
-    continuous_aggs.sql.in
     cagg_joins.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)

@@ -167,9 +167,7 @@ BEGIN;
 insert into foo values( 11 , 10 , 20, 120);
 ROLLBACK;
 update foo set b =20 where a = 10;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 delete from foo where a = 10;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 --TEST2b try complex DML on compressed chunk
 create table foo_join ( a integer, newval integer);
 select table_name from create_hypertable('foo_join', 'a', chunk_time_interval=> 10);
@@ -192,18 +190,15 @@ insert into foo_join select generate_series(0,40, 10), 222;
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a and foo_join.a > 10;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 --here the chunk gets excluded , so succeeds --
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a and foo.a > 20;
 update foo
 set b = (select f1.newval from foo_join f1 left join lateral (select newval as newval2 from  foo_join2 f2 where f1.a= f2.a ) subq on true limit 1);
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 --upsert test --
 insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
@@ -212,8 +207,8 @@ SELECT * from foo ORDER BY a,b;
  a  |  b  | c  | d  
 ----+-----+----+----
  10 |  12 | 12 | 12
- 20 |  11 | 20 |   
- 30 | 222 | 40 |   
+ 20 | 111 | 20 |   
+ 30 | 111 | 40 |   
 (3 rows)
 
 --TEST2c Do DML directly on the chunk.
@@ -224,15 +219,13 @@ SELECT * from foo ORDER BY a,b;
  a  |  b  | c  | d  
 ----+-----+----+----
  10 |  24 | 12 | 12
- 20 |  11 | 20 |   
- 30 | 222 | 40 |   
+ 20 | 111 | 20 |   
+ 30 | 111 | 40 |   
 (3 rows)
 
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 delete from _timescaledb_internal._hyper_1_2_chunk;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 --TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
             decompress_chunk            
@@ -242,14 +235,12 @@ select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
 insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;
-ERROR:  duplicate key value violates unique constraint "_hyper_1_2_chunk_foo_uniq"
 select * from _timescaledb_internal._hyper_1_2_chunk order by a,b;
  a  | b  | c  |  d  
 ----+----+----+-----
- 10 | 10 | 20 |    
- 10 | 24 | 12 |  12
+ 10 | 20 | 20 |    
  11 | 10 | 20 | 120
-(3 rows)
+(2 rows)
 
 delete from foo where a = 10;
 select * from _timescaledb_internal._hyper_1_2_chunk order by a,b;
@@ -1018,12 +1009,10 @@ WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t AND rescan_test.t >= '20
 UPDATE rescan_test SET val = tmp.val
 FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045)]::rescan_test[]) AS x) AS tmp
 WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
-ERROR:  cannot update/delete rows from chunk "_hyper_16_36_chunk" as it is compressed
 -- bulk row update with FROM is blocked
 UPDATE rescan_test SET val = tmp.val
 FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045), (1, '2000-01-03 01:00:00+00', 8.045)]::rescan_test[]) AS x) AS tmp
 WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
-ERROR:  cannot update/delete rows from chunk "_hyper_16_36_chunk" as it is compressed
 \set ON_ERROR_STOP 1
 -- Test FK constraint drop and recreate during compression and decompression on a chunk
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -1073,7 +1062,6 @@ ORDER BY constraint_name;
 -- Delete data from compressed chunk directly fails
 \set ON_ERROR_STOP 0
 DELETE FROM hyper WHERE device_id = 3;
-ERROR:  cannot update/delete rows from chunk "_hyper_18_42_chunk" as it is compressed
 \set ON_ERROR_STOP 0
 -- Delete data from FK-referenced table deletes data from compressed chunk
 SELECT * FROM hyper ORDER BY time, device_id;
@@ -1081,11 +1069,9 @@ SELECT * FROM hyper ORDER BY time, device_id;
 ------+-----------+-----
     1 |         1 |   1
     2 |         2 |   1
-    3 |         3 |   1
-   10 |         3 |   2
    11 |         4 |   2
    11 |         5 |   2
-(6 rows)
+(4 rows)
 
 DELETE FROM meta WHERE device_id = 3;
 SELECT * FROM hyper ORDER BY time, device_id;
@@ -1235,22 +1221,28 @@ WITH compressed AS (
 DELETE FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
 ROLLBACK;
-\set ON_ERROR_STOP 0
--- test delete inside CTE is blocked
+-- test delete inside CTE
 WITH compressed AS (
   DELETE FROM compressed_ht RETURNING series_id
 )
 SELECT * FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
-ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compressed
+             time             | value | series_id 
+------------------------------+-------+-----------
+ Mon Apr 20 01:01:00 2020 PDT |   100 |         1
+ Wed May 20 01:01:00 2020 PDT |   100 |         1
+(2 rows)
+
 -- test update inside CTE is blocked
 WITH compressed AS (
   UPDATE compressed_ht SET value = 0.2 RETURNING *
 )
 SELECT * FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
-ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compressed
-\set ON_ERROR_STOP 1
+ time | value | series_id 
+------+-------+-----------
+(0 rows)
+
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;
 -- Test that pg_stats and pg_class stats for uncompressed chunks are frozen at compression time

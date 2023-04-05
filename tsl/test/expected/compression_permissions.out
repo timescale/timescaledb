@@ -135,7 +135,6 @@ select location from conditions where timec = '2019-04-01 00:00+0';
 update conditions
 set location = 'PNC'
 where location = 'SFO';
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 delete from conditions
 where timec = '2019-04-01 00:00+0'::timestamp with time zone;
 select location from conditions where timec = '2019-04-01 00:00+0';
