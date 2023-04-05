@@ -176,7 +176,7 @@ BEGIN
             WHERE
                 timescaledb_information.continuous_aggregates.view_schema = %4$L
                 AND timescaledb_information.continuous_aggregates.view_name = %5$L
-                AND %1$I < CAST(%6$L AS %2$s)
+                AND timescaledb_information.chunks.range_end < CAST(%6$L AS %2$s)
         )
         INSERT INTO
             _timescaledb_catalog.continuous_agg_migrate_plan_step (mat_hypertable_id, type, config)
