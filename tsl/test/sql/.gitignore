@@ -4,6 +4,7 @@
 /cagg_permissions-*.sql
 /cagg_query-*.sql
 /cagg_union_view-*.sql
+/compression_sorted_merge-*.sql
 /compression_insert-*.sql
 /compression_permissions-*.sql
 /continuous_aggs-*.sql

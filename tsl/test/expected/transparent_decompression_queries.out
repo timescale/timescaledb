@@ -187,19 +187,20 @@ WHERE check_equal_228(rtt) ORDER BY ts;
 EXPLAIN (analyze,costs off,timing off,summary off)
 SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: test_chartab.ts
-   Sort Method: quicksort 
-   ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
-         Chunks excluded during startup: 0
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
-               Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
-               Rows Removed by Filter: 2
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
+   Order: test_chartab.ts
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
+         Rows Removed by Filter: 2
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: compress_hyper_2_3_chunk._ts_meta_min_1
+               Sort Method: quicksort 
                ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
                      Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
-(10 rows)
+(11 rows)
 
 -- test pseudoconstant qual #3241
 CREATE TABLE pseudo(time timestamptz NOT NULL);

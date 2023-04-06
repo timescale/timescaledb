@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include <math.h>
 #include <postgres.h>
 #include <catalog/pg_operator.h>
 #include <miscadmin.h>
@@ -26,12 +27,14 @@
 #include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
 #include "compression/create.h"
+#include "nodes/decompress_chunk/sorted_merge.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
 #include "utils.h"
 
 #define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01
+
 #define DECOMPRESS_CHUNK_BATCH_SIZE 1000
 
 static CustomPathMethods decompress_chunk_path_methods = {
@@ -46,6 +49,13 @@ typedef struct SortInfo
 	bool can_pushdown_sort; /* sort can be pushed below DecompressChunk */
 	bool reverse;
 } SortInfo;
+
+typedef enum MergeBatchResult
+{
+	MERGE_NOT_POSSIBLE,
+	SCAN_FORWARD,
+	SCAN_BACKWARD
+} MergeBatchResult;
 
 static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
@@ -74,7 +84,7 @@ is_compressed_column(CompressionInfo *info, AttrNumber attno)
 
 /*
  * Like ts_make_pathkey_from_sortop but passes down the compressed relid so that existing
- * equivalence members that are marked as childen are properly checked.
+ * equivalence members that are marked as children are properly checked.
  */
 static PathKey *
 make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *expr, Oid ordering_op,
@@ -360,6 +370,196 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 }
 
+/*
+ * Calculate the costs for retrieving the decompressed in-order using
+ * a binary heap.
+ */
+static void
+cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpath,
+									Path *child_path)
+{
+	Path sort_path; /* dummy for result of cost_sort */
+
+	cost_sort(&sort_path,
+			  root,
+			  dcpath->compressed_pathkeys,
+			  child_path->total_cost,
+			  child_path->rows,
+			  child_path->pathtarget->width,
+			  0.0,
+			  work_mem,
+			  -1);
+
+	/* startup_cost is cost before fetching first tuple */
+	dcpath->cpath.path.startup_cost = sort_path.total_cost;
+
+	/*
+	 * The cost model for the normal chunk decompression produces the following total
+	 * costs.
+	 *
+	 * Segments  Total costs
+	 * 10         711.84
+	 * 50        4060.91
+	 * 100       8588.32
+	 * 10000   119281.84
+	 *
+	 * The cost model of the regular decompression is roughly linear. Opening multiple batches in
+	 * parallel needs resources and merging a high amount of batches becomes inefficient at some
+	 * point. So, we use a quadratic cost model here to have higher costs than the normal
+	 * decompression when more than ~100 batches are used. We set
+	 * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST to 0.8 to become most costly as soon as we have to
+	 * process more than 120 batches.
+	 *
+	 * Note: To behave similarly to the cost model of the regular decompression path, this cost
+	 * model does not consider the number of tuples.
+	 */
+	dcpath->cpath.path.total_cost =
+		sort_path.total_cost + pow(sort_path.rows, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
+
+	dcpath->cpath.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+}
+
+/*
+ * If the query 'order by' is prefix of the compression 'order by' (or equal), we can exploit
+ * the ordering of the individual batches to create a total ordered result without resorting
+ * the tuples. This speeds up all queries that use this ordering (because no sort node is
+ * needed). In particular, queries that use a LIMIT are speed-up because only the top elements
+ * of the affected batches needs to be decompressed. Without the optimization, the entire batches
+ * are decompressed, sorted, and then the top elements are taken from the result.
+ *
+ * The idea is to do something similar to the MergeAppend node; a BinaryHeap is used
+ * to merge the per segment by column sorted individual batches into a sorted result. So, we end
+ * up which a data flow which looks as follows:
+ *
+ * DecompressChunk
+ *   * Decompress Batch 1
+ *   * Decompress Batch 2
+ *   * Decompress Batch 3
+ *       [....]
+ *   * Decompress Batch N
+ *
+ * Using the presorted batches, we are able to open these batches dynamically. If we don't presort
+ * them, we would have to open all batches at the same time. This would be similar to the work the
+ * MergeAppend does, but this is not needed in our case and we could reduce the size of the heap and
+ * the amount of parallel open batches.
+ *
+ * The algorithm works as follows:
+ *
+ *   (1) A sort node is placed below the decompress scan node and on top of the scan
+ *       on the compressed chunk. This sort node uses the min/max values of the 'order by'
+ *       columns from the metadata of the batch to get them into an order which can be
+ *       used to merge them.
+ *
+ *       [Scan on compressed chunk] -> [Sort on min/max values] -> [Decompress and merge]
+ *
+ *       For example, the batches are sorted on the min value of the 'order by' metadata
+ *       column: [0, 3] [0, 5] [3, 7] [6, 10]
+ *
+ *   (2) The decompress chunk node initializes a binary heap, opens the first batch and
+ *       decompresses the first tuple from the batch. The tuple is put on the heap. In addition
+ *       the opened batch is marked as the most recent batch (MRB).
+ *
+ *   (3) As soon as a tuple is requested from the heap, the following steps are performed:
+ *       (3a) If the heap is empty, we are done.
+ *       (3b) The top tuple from the heap is taken. It is checked if this tuple is from the
+ *            MRB. If this is the case, the next batch is opened, the first tuple is decompressed,
+ *            placed on the heap and this batch is marked as MRB. This is repeated until the
+ *            top tuple from the heap is not from the MRB. After the top tuple is not from the
+ *            MRB, all batches (and one ahead) which might contain the most recent tuple are
+ *            opened and placed on the heap.
+ *
+ *            In the example above, the first three batches are opened because the first two
+ *            batches might contain tuples with a value of 0.
+ *       (3c) The top element from the heap is removed, the next tuple from the batch is
+ *            decompressed (if present) and placed on the heap.
+ *       (3d) The former top tuple of the heap is returned.
+ *
+ * This function checks if the compression 'order by' and the query 'order by' are
+ * compatible and the optimization can be used.
+ */
+static MergeBatchResult
+can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
+{
+	PathKey *pk;
+	Var *var;
+	Expr *expr;
+	char *column_name;
+	List *pathkeys = root->query_pathkeys;
+	FormData_hypertable_compression *ci;
+	MergeBatchResult merge_result = SCAN_FORWARD;
+
+	/* Ensure that we have path keys and the chunk is ordered */
+	if (pathkeys == NIL || ts_chunk_is_unordered(chunk) || ts_chunk_is_partial(chunk))
+		return MERGE_NOT_POSSIBLE;
+
+	int nkeys = list_length(pathkeys);
+
+	/*
+	 * Loop over the pathkeys of the query. These pathkeys need to match the
+	 * configured compress_orderby pathkeys.
+	 */
+	for (int pk_index = 0; pk_index < nkeys; pk_index++)
+	{
+		pk = list_nth(pathkeys, pk_index);
+		expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+
+		if (expr == NULL || !IsA(expr, Var))
+			return MERGE_NOT_POSSIBLE;
+
+		var = castNode(Var, expr);
+
+		if (var->varattno <= 0)
+			return MERGE_NOT_POSSIBLE;
+
+		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
+		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
+
+		if (ci->orderby_column_index != pk_index + 1)
+			return MERGE_NOT_POSSIBLE;
+
+		/* Check order, if the order of the first column do not match, switch to backward scan */
+		Assert(pk->pk_strategy == BTLessStrategyNumber ||
+			   pk->pk_strategy == BTGreaterStrategyNumber);
+
+		if (pk->pk_strategy != BTLessStrategyNumber)
+		{
+			/* Test that ORDER BY and NULLS first/last do match in forward scan */
+			if (!ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first &&
+				merge_result == SCAN_FORWARD)
+				continue;
+			/* Exact opposite in backward scan */
+			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+					 merge_result == SCAN_BACKWARD)
+				continue;
+			/* Switch scan direction on exact opposite order for first attribute */
+			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+					 pk_index == 0)
+				merge_result = SCAN_BACKWARD;
+			else
+				return MERGE_NOT_POSSIBLE;
+		}
+		else
+		{
+			/* Test that ORDER BY and NULLS first/last do match in forward scan */
+			if (ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first &&
+				merge_result == SCAN_FORWARD)
+				continue;
+			/* Exact opposite in backward scan */
+			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+					 merge_result == SCAN_BACKWARD)
+				continue;
+			/* Switch scan direction on exact opposite order for first attribute */
+			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+					 pk_index == 0)
+				merge_result = SCAN_BACKWARD;
+			else
+				return MERGE_NOT_POSSIBLE;
+		}
+	}
+
+	return merge_result;
+}
+
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 								   Chunk *chunk)
@@ -513,10 +713,38 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 		path = (Path *) decompress_chunk_path_create(root, info, 0, child_path);
 
-		/* If we can push down the sort below the DecompressChunk node, we set the pathkeys of the
-		 * decompress node to the query pathkeys, while remembering the compressed_pathkeys
-		 * corresponding to those query_pathkeys. We will determine whether to put a sort between
-		 * the decompression node and the scan during plan creation */
+		/*
+		 * Create a path for the sorted merge append optimization. This optimization performs a
+		 * merge append of the involved batches by using a binary heap and preserving the
+		 * compression order. This optimization is only taken into consideration if we can't push
+		 * down the sort to the compressed chunk. If we can push down the sort, the batches can be
+		 * directly consumed in this order and we don't need to use this optimization.
+		 */
+		if (ts_guc_enable_decompression_sorted_merge && !sort_info.can_pushdown_sort)
+		{
+			MergeBatchResult merge_result = can_sorted_merge_append(root, info, chunk);
+			if (merge_result != MERGE_NOT_POSSIBLE)
+			{
+				DecompressChunkPath *dcpath =
+					copy_decompress_chunk_path((DecompressChunkPath *) path);
+
+				dcpath->reverse = (merge_result != SCAN_FORWARD);
+				dcpath->sorted_merge_append = true;
+
+				/* The segment by optimization is only enabled if it can deliver the tuples in the
+				 * same order as the query requested it. So, we can just copy the pathkeys of the
+				 * query here.
+				 */
+				dcpath->cpath.path.pathkeys = root->query_pathkeys;
+				cost_decompress_sorted_merge_append(root, dcpath, child_path);
+				add_path(chunk_rel, &dcpath->cpath.path);
+			}
+		}
+
+		/* If we can push down the sort below the DecompressChunk node, we set the pathkeys of
+		 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
+		 * corresponding to those query_pathkeys. We will determine whether to put a sort
+		 * between the decompression node and the scan during plan creation */
 		if (sort_info.can_pushdown_sort)
 		{
 			DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
@@ -527,8 +755,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 			/*
 			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
-			 * path creation, but not add the sort path itself, that's done during plan creation.
-			 * Examples of this in: create_merge_append_path & create_merge_append_plan
+			 * path creation, but not add the sort path itself, that's done during plan
+			 * creation. Examples of this in: create_merge_append_path &
+			 * create_merge_append_plan
 			 */
 			if (!pathkeys_contained_in(dcpath->compressed_pathkeys, child_path->pathkeys))
 			{
@@ -543,6 +772,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						  0.0,
 						  work_mem,
 						  -1);
+
 				cost_decompress_chunk(&dcpath->cpath.path, &sort_path);
 			}
 			add_path(chunk_rel, &dcpath->cpath.path);
@@ -1256,6 +1486,7 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 
 	path->cpath.flags = 0;
 	path->cpath.methods = &decompress_chunk_path_methods;
+	path->sorted_merge_append = false;
 
 	/* To prevent a non-parallel path with this node appearing
 	 * in a parallel plan we only set parallel_safe to true
