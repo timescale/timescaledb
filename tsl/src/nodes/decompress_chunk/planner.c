@@ -227,6 +227,9 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 
 		path->decompression_map =
 			lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
+		path->is_segmentby_column =
+			lappend_int(path->is_segmentby_column,
+						compression_info && compression_info->segmentby_column_index != 0);
 	}
 
 	/*
@@ -472,7 +475,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	settings = list_make3_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse);
-	decompress_plan->custom_private = list_make2(settings, dcpath->decompression_map);
+	decompress_plan->custom_private =
+		list_make3(settings, dcpath->decompression_map, dcpath->is_segmentby_column);
 
 	return &decompress_plan->scan.plan;
 }
