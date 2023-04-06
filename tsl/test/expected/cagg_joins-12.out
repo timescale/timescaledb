@@ -193,10 +193,11 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    MAX(temperature),
    MIN(temperature),
-   name
+   name,
+   devices.device_id AS thermo_id
 FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
-GROUP BY name, bucket;
+GROUP BY name, bucket, thermo_id;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 CREATE MATERIALIZED VIEW conditions_summary_daily_reorder
@@ -297,7 +298,7 @@ select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q
 group by temperature WITH NO DATA;
 ERROR:  invalid continuous aggregate view
-DETAIL:  from clause can only have one hypertable and one normal table
+DETAIL:  lateral are not supported in FROM clause
 --Error out if from clause has view
 CREATE MATERIALIZED VIEW conditions_summary_daily_view
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -310,13 +311,15 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions, devices_view
 WHERE conditions.device_id = devices_view.device_id
 GROUP BY name, bucket, devices_view.device_id;
-ERROR:  joins for hierarchical continuous aggregates are not supported
+ERROR:  invalid continuous aggregate view
+DETAIL:  views are not supported in FROM clause
 -- Nested CAgg over a CAgg with join
 CREATE MATERIALIZED VIEW cagg_on_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
        SUM(avg) AS temperature
-FROM conditions_summary_daily
+FROM conditions_summary_daily, devices
+WHERE devices.device_id = conditions_summary_daily.thermo_id
 GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "cagg_on_cagg"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
@@ -337,7 +340,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions JOIN (SELECT * FROM devices WHERE location in (SELECT name from cities where currency = 'EUR')) dev ON conditions.device_id = dev.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  from clause can only have one hypertable and one normal table
+DETAIL:  sub-queries are not supported in FROM clause
 DROP TABLE cities CASCADE;
 --Error out when join is between two hypertables
 CREATE MATERIALIZED VIEW conditions_summary_daily_ht
@@ -350,7 +353,7 @@ FROM conditions, conditions_dup
 WHERE conditions.device_id = conditions_dup.device_id
 GROUP BY bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  from clause can only have one hypertable and one normal table
+DETAIL:  multiple hypertables or normal tables are not supported in FROM clause
 --Error out when join is between two normal tables
 CREATE MATERIALIZED VIEW conditions_summary_daily_nt
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -363,7 +366,7 @@ FROM devices, devices_dup
 WHERE devices.device_id = devices_dup.device_id
 GROUP BY devices.name, devices.location;
 ERROR:  invalid continuous aggregate view
-DETAIL:  from clause can only have one hypertable and one normal table
+DETAIL:  multiple hypertables or normal tables are not supported in FROM clause
 --Error out when join is on non-equality condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -432,25 +435,27 @@ WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket, devices.device_id;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily_cagg"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
---Errors out for join between cagg and normal table
+--Join between cagg and normal table
 CREATE MATERIALIZED VIEW conditions_summary_daily_nested
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
    devices.name
 FROM conditions_summary_daily_cagg cagg, devices
 WHERE cagg.device_id = devices.device_id
-GROUP BY devices.name, bucket;
-ERROR:  joins for hierarchical continuous aggregates are not supported
+GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "conditions_summary_daily_nested"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 --Error out for join between cagg and hypertable
-CREATE MATERIALIZED VIEW conditions_summary_daily_nested
+CREATE MATERIALIZED VIEW conditions_summary_daily_nested_ht
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
    cagg.name,
    conditions.temperature
 FROM conditions_summary_daily_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
-GROUP BY conditions.temperature, bucket, cagg.name;
-ERROR:  joins for hierarchical continuous aggregates are not supported
+GROUP BY 1,2,3;
+ERROR:  invalid continuous aggregate view
+DETAIL:  views are not supported in FROM clause
 \set VERBOSITY terse
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 15 other objects
@@ -459,8 +464,11 @@ NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
+ERROR:  cannot drop view conditions_summary_daily_cagg because other objects depend on it
 DROP TABLE devices CASCADE;
-NOTICE:  drop cascades to view devices_view
+NOTICE:  drop cascades to 18 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects
+ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP TABLE conditions_dup CASCADE;
 DROP TABLE devices_dup CASCADE;

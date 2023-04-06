@@ -1552,13 +1552,11 @@ SELECT * from search_query_count_3 ORDER BY 1, 2, 3;
 -- more data
 -- ).
 insert into raw_data select '2000-05-01 00:00+0','Q3', 0, 0;
---this one fails now
-\set ON_ERROR_STOP 0
+
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, '2000-06-01 00:00+0'::timestamptz);
-ERROR:  cannot update/delete rows from chunk "_hyper_41_79_chunk" as it is compressed
 CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
-ERROR:  cannot update/delete rows from chunk "_hyper_41_79_chunk" as it is compressed
-\set ON_ERROR_STOP 1
+NOTICE:  continuous aggregate "search_query_count_3" is already up-to-date
+
 --insert row
 insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
 --this should succeed since it does not refresh any compressed regions in the cagg
@@ -1585,7 +1583,7 @@ WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                  41 |  -9223372036854775808 |     -210866803200000001
-                 41 |       946857660000000 |         988675199999999
+                 41 |       959817600000000 |         988675199999999
                  41 |       991353600000000 |     9223372036854775807
 (3 rows)
 

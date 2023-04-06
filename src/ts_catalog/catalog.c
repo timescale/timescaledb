@@ -120,6 +120,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.table_name = JOB_ERRORS_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_WATERMARK] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_WATERMARK_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -250,6 +254,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
+		},
+	},
+	[CONTINUOUS_AGGS_WATERMARK] = {
+		.length = _MAX_CONTINUOUS_AGGS_WATERMARK_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_WATERMARK_PKEY] = "continuous_aggs_watermark_pkey",
 		},
 	},
 	[HYPERTABLE_COMPRESSION] = {

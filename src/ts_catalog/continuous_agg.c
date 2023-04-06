@@ -11,7 +11,6 @@
 
 #include <postgres.h>
 #include <access/htup_details.h>
-#include <access/xact.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
@@ -24,12 +23,12 @@
 #include <utils/date.h>
 #include <utils/lsyscache.h>
 #include <utils/timestamp.h>
-#include <miscadmin.h>
 
 #include "compat/compat.h"
 
 #include "bgw/job.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "cross_module_fn.h"
 #include "hypercube.h"
 #include "hypertable.h"
@@ -1094,6 +1093,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	catalog = ts_catalog_get();
 	LockRelationOid(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
+	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_WATERMARK), RowExclusiveLock);
 
 	raw_hypertable_has_other_caggs =
 		OidIsValid(raw_hypertable.objectId) &&
@@ -1164,6 +1164,9 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		{
 			invalidation_threshold_delete(form.raw_hypertable_id);
 		}
+
+		/* Delete watermark */
+		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
 	if (cadata->bucket_width == BUCKET_WIDTH_VARIABLE)
@@ -1543,152 +1546,6 @@ ts_continuous_agg_invalidate_chunk(Hypertable *ht, Chunk *chunk)
 	Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 		   chunk->cube->slices[0]->fd.dimension_id);
 	ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
-}
-
-typedef struct Watermark
-{
-	int32 hyper_id;
-	MemoryContext mctx;
-	MemoryContextCallback cb;
-	CommandId cid;
-	int64 value;
-} Watermark;
-
-/* Globally cache the watermark for better performance (by avoiding repeated
- * max bucket calculations). The watermark will be reset at the end of the
- * transaction, when the watermark function's input argument (materialized
- * hypertable ID) changes, or when a new command is executed. One could
- * potentially create a hashtable of watermarks keyed on materialized
- * hypertable ID, but this is left as a future optimization since it doesn't
- * seem to be common case that multiple continuous aggregates exist in the
- * same query. Besides, the planner can constify calls to the watermark
- * function during planning since the function is STABLE. Therefore, this is
- * only a fallback if the planner needs to constify it many times (e.g., if
- * used as an index condition on many chunks).
- */
-static Watermark *watermark = NULL;
-
-/*
- * Callback handler to reset the watermark after the transaction ends. This is
- * triggered by the deletion of the associated memory context.
- */
-static void
-reset_watermark(void *arg)
-{
-	watermark = NULL;
-}
-
-/*
- * Watermark is valid for the duration of one command execution on the same
- * materialized hypertable.
- */
-static bool
-watermark_valid(const Watermark *w, int32 hyper_id)
-{
-	return w != NULL && w->hyper_id == hyper_id && w->cid == GetCurrentCommandId(false);
-}
-
-static Watermark *
-watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
-{
-	Hypertable *ht;
-	const Dimension *dim;
-	Datum maxdat;
-	bool max_isnull;
-	Oid timetype;
-	Watermark *w;
-	MemoryContext mctx =
-		AllocSetContextCreate(top_mctx, "Watermark function", ALLOCSET_DEFAULT_SIZES);
-
-	w = MemoryContextAllocZero(mctx, sizeof(Watermark));
-	w->mctx = mctx;
-	w->hyper_id = cagg->data.mat_hypertable_id;
-	w->cid = GetCurrentCommandId(false);
-	w->cb.func = reset_watermark;
-	MemoryContextRegisterResetCallback(mctx, &w->cb);
-
-	ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-	Assert(NULL != ht);
-	dim = hyperspace_get_open_dimension(ht->space, 0);
-	timetype = ts_dimension_get_partition_type(dim);
-	maxdat = ts_hypertable_get_open_dim_max_value(ht, 0, &max_isnull);
-
-	if (!max_isnull)
-	{
-		int64 value = ts_time_value_to_internal(maxdat, timetype);
-
-		/* The materialized hypertable is already bucketed, which means the
-		 * max is the start of the last bucket. Add one bucket to move to the
-		 * point where the materialized data ends. */
-		if (ts_continuous_agg_bucket_width_variable(cagg))
-		{
-			/*
-			 * Since `value` is already bucketed, `bucketed = true` flag can
-			 * be added to ts_compute_beginning_of_the_next_bucket_variable() as
-			 * an optimization, if necessary.
-			 */
-			w->value =
-				ts_compute_beginning_of_the_next_bucket_variable(value, cagg->bucket_function);
-		}
-		else
-		{
-			w->value =
-				ts_time_saturating_add(value, ts_continuous_agg_bucket_width(cagg), timetype);
-		}
-	}
-	else
-	{
-		/* Nothing materialized, so return min */
-		w->value = ts_time_get_min(timetype);
-	}
-
-	return w;
-}
-
-TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
-
-/*
- * Get the watermark for a real-time aggregation query on a continuous
- * aggregate.
- *
- * The watermark determines where the materialization ends for a continuous
- * aggregate. It is used by real-time aggregation as the threshold between the
- * materialized data and real-time data in the UNION query.
- *
- * The watermark is defined as the end of the last (highest) bucket in the
- * materialized hypertable of a continuous aggregate.
- *
- * The materialized hypertable ID is given as input argument.
- */
-Datum
-ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
-{
-	const int32 hyper_id = PG_GETARG_INT32(0);
-	ContinuousAgg *cagg;
-	AclResult aclresult;
-
-	if (watermark != NULL)
-	{
-		if (watermark_valid(watermark, hyper_id))
-			PG_RETURN_INT64(watermark->value);
-
-		MemoryContextDelete(watermark->mctx);
-	}
-
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hyper_id);
-
-	if (NULL == cagg)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid materialized hypertable ID: %d", hyper_id)));
-
-	/* Preemptive permission check to ensure the function complains about lack
-	 * of permissions on the cagg rather than the materialized hypertable */
-	aclresult = pg_class_aclcheck(cagg->relid, GetUserId(), ACL_SELECT);
-	aclcheck_error(aclresult, OBJECT_MATVIEW, get_rel_name(cagg->relid));
-	watermark = watermark_create(cagg, TopTransactionContext);
-
-	PG_RETURN_INT64(watermark->value);
 }
 
 /* Determines if bucket width if variable for given continuous aggregate. */

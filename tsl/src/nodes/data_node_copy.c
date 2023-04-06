@@ -225,7 +225,6 @@ data_node_copy_exec(CustomScanState *node)
 			ResultRelInfo *rri_chunk = cds->rri;
 			const ChunkInsertState *cis = rri_chunk->ri_FdwState;
 			MemoryContext oldmctx;
-			bool success;
 			const TupleDesc rri_desc = RelationGetDescr(rri_chunk->ri_RelationDesc);
 
 			if (NULL != rri_chunk->ri_projectReturning && rri_desc->constr &&
@@ -234,25 +233,20 @@ data_node_copy_exec(CustomScanState *node)
 
 			ResetPerTupleExprContext(estate);
 			oldmctx = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
-			success = remote_copy_send_slot(dncs->copy_ctx, slot, cis);
+			remote_copy_send_slot(dncs->copy_ctx, slot, cis);
 			MemoryContextSwitchTo(oldmctx);
 
-			if (!success)
-				slot = ExecClearTuple(slot);
-			else
+			if (has_returning)
 			{
-				if (has_returning)
-				{
-					ExprContext *econtext;
+				ExprContext *econtext;
 
-					Assert(NULL != rri_saved->ri_projectReturning);
-					econtext = rri_saved->ri_projectReturning->pi_exprContext;
-					econtext->ecxt_scantuple = slot;
-				}
-
-				if (dncs->set_processed)
-					estate->es_processed++;
+				Assert(NULL != rri_saved->ri_projectReturning);
+				econtext = rri_saved->ri_projectReturning->pi_exprContext;
+				econtext->ecxt_scantuple = slot;
 			}
+
+			if (dncs->set_processed)
+				estate->es_processed++;
 		}
 	} while (!has_returning && !TupIsNull(slot));
 

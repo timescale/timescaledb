@@ -6,6 +6,7 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in
     reorder_vs_select.spec.in
     remote_create_chunk.spec.in
+    dist_su_copy_chunk.spec.in
     dist_ha_chunk_drop.spec.in
     dist_restore_point.spec.in
     dist_cmd_exec.spec.in
@@ -26,7 +27,8 @@ if(PG_VERSION VERSION_GREATER "12.7"
 endif()
 
 if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
-  list(APPEND TEST_TEMPLATES_MODULE_DEBUG freeze_chunk.spec.in)
+  list(APPEND TEST_TEMPLATES_MODULE_DEBUG freeze_chunk.spec.in
+       compression_dml_iso.spec)
 endif()
 
 list(

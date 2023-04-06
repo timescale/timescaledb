@@ -128,6 +128,8 @@ CROSSMODULE_WRAPPER(distributed_exec);
 CROSSMODULE_WRAPPER(create_distributed_restore_point);
 CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
 CROSSMODULE_WRAPPER(health_check);
+CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
+CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 Datum
@@ -162,8 +164,11 @@ error_no_default_fn_community(void)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("functionality not supported under the current \"%s\" license", ts_guc_license),
-			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
+			 errmsg("functionality not supported under the current \"%s\" license. Learn more at "
+					"https://timescale.com/.",
+					ts_guc_license),
+			 errhint("To get access to all features, and the best time-series experience try out "
+					 "Timescale Cloud.")));
 }
 
 static bool
@@ -382,12 +387,6 @@ func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
 }
 
 static void
-update_compressed_chunk_relstats_default(Oid uncompressed_relid, Oid compressed_relid)
-{
-	error_no_default_fn_community();
-}
-
-static void
 dist_update_stale_chunk_metadata_default(Chunk *new_chunk, List *chunk_data_nodes)
 {
 	error_no_default_fn_community();
@@ -560,8 +559,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.chunk_create_replica_table = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
-	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
 	.health_check = error_no_default_fn_pg_community,
+	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
+	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 	.mn_get_foreign_join_paths = mn_get_foreign_join_path_default_fn_pg_community,
 };
 

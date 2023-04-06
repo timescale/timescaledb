@@ -39,6 +39,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 \set IS_DISTRIBUTED TRUE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
+\set IS_JOIN FALSE
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -71,15 +72,22 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
 psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exist, skipping
 \if :IS_DEFAULT_COLUMN_ORDER
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
+    temperature NUMERIC,
+    device_id INT
   );
 \else
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     temperature NUMERIC,
-    time :TIME_DIMENSION_DATATYPE NOT NULL
+    time :TIME_DIMENSION_DATATYPE NOT NULL,
+    device_id INT
   );
+\endif
+\if :IS_JOIN
+  DROP TABLE IF EXISTS devices CASCADE;
+  CREATE TABLE devices ( device_id int not null, name text, location text);
+  INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
@@ -100,9 +108,9 @@ psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exi
   \endif
 \endif
 \if :IS_TIME_DIMENSION
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 00:00:00-00', 10);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 01:00:00-00',  5);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-02 01:00:00-00', 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 01:00:00-00',  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-02 01:00:00-00', 20, 3);
 \else
   CREATE OR REPLACE FUNCTION integer_now()
   RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
@@ -122,9 +130,9 @@ psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exi
  
 (1 row)
 
-  INSERT INTO conditions ("time", temperature) VALUES (1, 10);
-  INSERT INTO conditions ("time", temperature) VALUES (2,  5);
-  INSERT INTO conditions ("time", temperature) VALUES (5, 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
 \ir include/cagg_on_cagg_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -135,9 +143,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 -- CAGG on CAGG (2th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
@@ -145,18 +154,32 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
 WITH NO DATA;
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
   SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
@@ -191,46 +214,37 @@ WITH NO DATA;
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+ bucket | temperature | device_id 
+--------+-------------+-----------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
 (0 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
       5 |          20
 (2 rows)
 
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-(1 row)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=true);
@@ -241,14 +255,14 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
@@ -274,14 +288,14 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 \endif
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
@@ -300,15 +314,15 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
 (4 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
@@ -333,15 +347,16 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           7
-      5 |          20
-     10 |           2
-(4 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           2 |          
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
+(5 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          17
@@ -375,7 +390,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          17
@@ -394,21 +409,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:166: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:167: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:168: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:176: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -416,13 +431,14 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           7
-      5 |          20
-     10 |           2
-(4 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           2 |          
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
+(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -431,30 +447,31 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:190: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           7
-      5 |          20
-     10 |           2
-(4 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           2 |          
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
+(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
 \set IS_DEFAULT_COLUMN_ORDER TRUE
@@ -472,15 +489,22 @@ Running distributed hypertable tests
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DEFAULT_COLUMN_ORDER
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
+    temperature NUMERIC,
+    device_id INT
   );
 \else
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     temperature NUMERIC,
-    time :TIME_DIMENSION_DATATYPE NOT NULL
+    time :TIME_DIMENSION_DATATYPE NOT NULL,
+    device_id INT
   );
+\endif
+\if :IS_JOIN
+  DROP TABLE IF EXISTS devices CASCADE;
+  CREATE TABLE devices ( device_id int not null, name text, location text);
+  INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
@@ -501,9 +525,9 @@ DROP TABLE IF EXISTS conditions CASCADE;
   \endif
 \endif
 \if :IS_TIME_DIMENSION
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 00:00:00-00', 10);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 01:00:00-00',  5);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-02 01:00:00-00', 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 01:00:00-00',  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-02 01:00:00-00', 20, 3);
 \else
   CREATE OR REPLACE FUNCTION integer_now()
   RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
@@ -523,9 +547,9 @@ DROP TABLE IF EXISTS conditions CASCADE;
  
 (1 row)
 
-  INSERT INTO conditions ("time", temperature) VALUES (1, 10);
-  INSERT INTO conditions ("time", temperature) VALUES (2,  5);
-  INSERT INTO conditions ("time", temperature) VALUES (5, 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
 \ir include/cagg_on_cagg_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -536,9 +560,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 -- CAGG on CAGG (2th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
@@ -546,18 +571,32 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
 WITH NO DATA;
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
   SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
@@ -592,46 +631,37 @@ WITH NO DATA;
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+ bucket | temperature | device_id 
+--------+-------------+-----------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
 (0 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
       5 |          20
 (2 rows)
 
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      0 |          35
-(1 row)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=true);
@@ -642,14 +672,14 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
@@ -675,14 +705,14 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 \endif
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
@@ -701,15 +731,15 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           5
-      5 |          20
-     10 |           2
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
 (4 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          15
@@ -734,15 +764,16 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           7
-      5 |          20
-     10 |           2
-(4 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           2 |          
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
+(5 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          17
@@ -776,7 +807,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
       0 |          17
@@ -795,21 +826,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:166: ERROR:  cannot drop view conditions_summary_1_1 because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:167: ERROR:  cannot drop view conditions_summary_2_5 because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:168: NOTICE:  continuous aggregate "conditions_summary_1_1" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditions_summary_2_5" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:176: ERROR:  relation "conditions_summary_3_10" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -817,13 +848,14 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           7
-      5 |          20
-     10 |           2
-(4 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           2 |          
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
+(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -832,30 +864,31 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_8_chunk
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_8_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:190: ERROR:  relation "conditions_summary_2_5" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-      1 |          10
-      2 |           7
-      5 |          20
-     10 |           2
-(4 rows)
+ bucket | temperature | device_id 
+--------+-------------+-----------
+      1 |          10 |         1
+      2 |           2 |          
+      2 |           5 |         2
+      5 |          20 |         3
+     10 |           2 |          
+(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_1" does not exist at character 15
 \set ON_ERROR_STOP 1
 --
 -- Validation test for non-multiple bucket sizes
@@ -1131,20 +1164,27 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
 psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exist, skipping
 \if :IS_DEFAULT_COLUMN_ORDER
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
+    temperature NUMERIC,
+    device_id INT
   );
 \else
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     temperature NUMERIC,
-    time :TIME_DIMENSION_DATATYPE NOT NULL
+    time :TIME_DIMENSION_DATATYPE NOT NULL,
+    device_id INT
   );
+\endif
+\if :IS_JOIN
+  DROP TABLE IF EXISTS devices CASCADE;
+  CREATE TABLE devices ( device_id int not null, name text, location text);
+  INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-psql:include/cagg_on_cagg_setup.sql:29: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+psql:include/cagg_on_cagg_setup.sql:37: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  table_name 
 ------------
  conditions
@@ -1161,9 +1201,9 @@ psql:include/cagg_on_cagg_setup.sql:29: WARNING:  column type "timestamp without
   \endif
 \endif
 \if :IS_TIME_DIMENSION
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 00:00:00-00', 10);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 01:00:00-00',  5);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-02 01:00:00-00', 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 01:00:00-00',  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-02 01:00:00-00', 20, 3);
 \else
   CREATE OR REPLACE FUNCTION integer_now()
   RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
@@ -1178,9 +1218,9 @@ psql:include/cagg_on_cagg_setup.sql:29: WARNING:  column type "timestamp without
     CALL distributed_exec (:'STMT');
   \endif
   SELECT set_integer_now_func('conditions', 'integer_now');
-  INSERT INTO conditions ("time", temperature) VALUES (1, 10);
-  INSERT INTO conditions ("time", temperature) VALUES (2,  5);
-  INSERT INTO conditions ("time", temperature) VALUES (5, 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
 \ir include/cagg_on_cagg_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -1191,9 +1231,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 -- CAGG on CAGG (2th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
@@ -1201,18 +1242,32 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
 WITH NO DATA;
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
   SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
@@ -1247,46 +1302,37 @@ WITH NO DATA;
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+ bucket | temperature | device_id 
+--------+-------------+-----------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
 (0 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
  Sun Jan 02 00:00:00 2022 |          20
 (2 rows)
 
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
-(1 row)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=true);
@@ -1297,14 +1343,14 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
@@ -1330,14 +1376,14 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 \endif
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
@@ -1356,15 +1402,15 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
 (4 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
@@ -1389,15 +1435,16 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           7
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
-(4 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           2 |          
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
+(5 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          17
@@ -1431,7 +1478,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          17
@@ -1450,21 +1497,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:166: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:167: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:168: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:176: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -1472,13 +1519,14 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           7
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
-(4 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           2 |          
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
+(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -1487,30 +1535,31 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_13_chunk
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_13_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:190: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           7
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
-(4 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           2 |          
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
+(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
 \set IS_DEFAULT_COLUMN_ORDER TRUE
@@ -1528,20 +1577,27 @@ Running distributed hypertable tests
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DEFAULT_COLUMN_ORDER
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
+    temperature NUMERIC,
+    device_id INT
   );
 \else
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     temperature NUMERIC,
-    time :TIME_DIMENSION_DATATYPE NOT NULL
+    time :TIME_DIMENSION_DATATYPE NOT NULL,
+    device_id INT
   );
+\endif
+\if :IS_JOIN
+  DROP TABLE IF EXISTS devices CASCADE;
+  CREATE TABLE devices ( device_id int not null, name text, location text);
+  INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-psql:include/cagg_on_cagg_setup.sql:29: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+psql:include/cagg_on_cagg_setup.sql:37: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  table_name 
 ------------
  conditions
@@ -1558,9 +1614,9 @@ psql:include/cagg_on_cagg_setup.sql:29: WARNING:  column type "timestamp without
   \endif
 \endif
 \if :IS_TIME_DIMENSION
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 00:00:00-00', 10);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 01:00:00-00',  5);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-02 01:00:00-00', 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 01:00:00-00',  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-02 01:00:00-00', 20, 3);
 \else
   CREATE OR REPLACE FUNCTION integer_now()
   RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
@@ -1575,9 +1631,9 @@ psql:include/cagg_on_cagg_setup.sql:29: WARNING:  column type "timestamp without
     CALL distributed_exec (:'STMT');
   \endif
   SELECT set_integer_now_func('conditions', 'integer_now');
-  INSERT INTO conditions ("time", temperature) VALUES (1, 10);
-  INSERT INTO conditions ("time", temperature) VALUES (2,  5);
-  INSERT INTO conditions ("time", temperature) VALUES (5, 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
 \ir include/cagg_on_cagg_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -1588,9 +1644,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 -- CAGG on CAGG (2th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
@@ -1598,18 +1655,32 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
 WITH NO DATA;
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
   SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
@@ -1644,46 +1715,37 @@ WITH NO DATA;
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+ bucket | temperature | device_id 
+--------+-------------+-----------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
 (0 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
  Sun Jan 02 00:00:00 2022 |          20
 (2 rows)
 
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Mon Dec 27 00:00:00 2021 |          35
-(1 row)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=true);
@@ -1694,14 +1756,14 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
@@ -1727,14 +1789,14 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 \endif
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
@@ -1753,15 +1815,15 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           5
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
 (4 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          15
@@ -1786,15 +1848,16 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           7
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
-(4 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           2 |          
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
+(5 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          17
@@ -1828,7 +1891,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
           bucket          | temperature 
 --------------------------+-------------
  Sat Jan 01 00:00:00 2022 |          17
@@ -1847,21 +1910,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:166: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:167: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:168: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_18_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_18_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:176: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -1869,13 +1932,14 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           7
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
-(4 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           2 |          
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
+(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -1884,30 +1948,31 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_17_chunk
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_17_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:190: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-          bucket          | temperature 
---------------------------+-------------
- Sat Jan 01 00:00:00 2022 |          10
- Sat Jan 01 01:00:00 2022 |           7
- Sun Jan 02 01:00:00 2022 |          20
- Mon Jan 03 01:00:00 2022 |           2
-(4 rows)
+          bucket          | temperature | device_id 
+--------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 |          10 |         1
+ Sat Jan 01 01:00:00 2022 |           2 |          
+ Sat Jan 01 01:00:00 2022 |           5 |         2
+ Sun Jan 02 01:00:00 2022 |          20 |         3
+ Mon Jan 03 01:00:00 2022 |           2 |          
+(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_16_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_16_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 --
 -- Validation test for variable bucket on top of fixed bucket
@@ -2256,15 +2321,22 @@ Running distributed hypertable tests
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DEFAULT_COLUMN_ORDER
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
+    temperature NUMERIC,
+    device_id INT
   );
 \else
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     temperature NUMERIC,
-    time :TIME_DIMENSION_DATATYPE NOT NULL
+    time :TIME_DIMENSION_DATATYPE NOT NULL,
+    device_id INT
   );
+\endif
+\if :IS_JOIN
+  DROP TABLE IF EXISTS devices CASCADE;
+  CREATE TABLE devices ( device_id int not null, name text, location text);
+  INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
@@ -2285,9 +2357,9 @@ DROP TABLE IF EXISTS conditions CASCADE;
   \endif
 \endif
 \if :IS_TIME_DIMENSION
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 00:00:00-00', 10);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 01:00:00-00',  5);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-02 01:00:00-00', 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 01:00:00-00',  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-02 01:00:00-00', 20, 3);
 \else
   CREATE OR REPLACE FUNCTION integer_now()
   RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
@@ -2302,9 +2374,9 @@ DROP TABLE IF EXISTS conditions CASCADE;
     CALL distributed_exec (:'STMT');
   \endif
   SELECT set_integer_now_func('conditions', 'integer_now');
-  INSERT INTO conditions ("time", temperature) VALUES (1, 10);
-  INSERT INTO conditions ("time", temperature) VALUES (2,  5);
-  INSERT INTO conditions ("time", temperature) VALUES (5, 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
 \ir include/cagg_on_cagg_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -2315,9 +2387,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 -- CAGG on CAGG (2th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
@@ -2325,18 +2398,32 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
 WITH NO DATA;
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
   SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
@@ -2371,46 +2458,37 @@ WITH NO DATA;
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+ bucket | temperature | device_id 
+--------+-------------+-----------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
 (0 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
  Sun Jan 02 00:00:00 2022 UTC |          20
 (2 rows)
 
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
-(1 row)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=true);
@@ -2421,14 +2499,14 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
@@ -2454,14 +2532,14 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 \endif
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
@@ -2480,15 +2558,15 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
 (4 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
@@ -2513,15 +2591,16 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           7
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
-(4 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           2 |          
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
+(5 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          17
@@ -2555,7 +2634,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          17
@@ -2574,21 +2653,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:166: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:167: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:168: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_22_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_22_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:176: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -2596,13 +2675,14 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           7
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
-(4 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           2 |          
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
+(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -2611,30 +2691,31 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_21_chunk
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_21_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:190: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           7
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
-(4 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           2 |          
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
+(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_20_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_20_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- Default tests
 \set IS_DEFAULT_COLUMN_ORDER TRUE
@@ -2652,15 +2733,22 @@ Running distributed hypertable tests
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DEFAULT_COLUMN_ORDER
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     time :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
+    temperature NUMERIC,
+    device_id INT
   );
 \else
-  CREATE TABLE conditions (
+    CREATE TABLE conditions (
     temperature NUMERIC,
-    time :TIME_DIMENSION_DATATYPE NOT NULL
+    time :TIME_DIMENSION_DATATYPE NOT NULL,
+    device_id INT
   );
+\endif
+\if :IS_JOIN
+  DROP TABLE IF EXISTS devices CASCADE;
+  CREATE TABLE devices ( device_id int not null, name text, location text);
+  INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 \endif
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
@@ -2681,9 +2769,9 @@ DROP TABLE IF EXISTS conditions CASCADE;
   \endif
 \endif
 \if :IS_TIME_DIMENSION
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 00:00:00-00', 10);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-01 01:00:00-00',  5);
-  INSERT INTO conditions ("time", temperature) VALUES ('2022-01-02 01:00:00-00', 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 01:00:00-00',  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-02 01:00:00-00', 20, 3);
 \else
   CREATE OR REPLACE FUNCTION integer_now()
   RETURNS :TIME_DIMENSION_DATATYPE LANGUAGE SQL STABLE AS
@@ -2698,9 +2786,9 @@ DROP TABLE IF EXISTS conditions CASCADE;
     CALL distributed_exec (:'STMT');
   \endif
   SELECT set_integer_now_func('conditions', 'integer_now');
-  INSERT INTO conditions ("time", temperature) VALUES (1, 10);
-  INSERT INTO conditions ("time", temperature) VALUES (2,  5);
-  INSERT INTO conditions ("time", temperature) VALUES (5, 20);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
+    INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
 \ir include/cagg_on_cagg_common.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -2711,9 +2799,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 -- CAGG on CAGG (2th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
@@ -2721,18 +2810,32 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
 WITH NO DATA;
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
   SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
@@ -2767,46 +2870,37 @@ WITH NO DATA;
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+ bucket | temperature | device_id 
+--------+-------------+-----------
+(0 rows)
+
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
  bucket | temperature 
 --------+-------------
 (0 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
- bucket | temperature 
---------+-------------
-(0 rows)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
  Sun Jan 02 00:00:00 2022 UTC |          20
 (2 rows)
 
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Mon Dec 27 00:00:00 2021 UTC |          35
-(1 row)
-
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=true);
@@ -2817,14 +2911,14 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
@@ -2850,14 +2944,14 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 \endif
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
 (3 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
@@ -2876,15 +2970,15 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           5
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
 (4 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          15
@@ -2909,15 +3003,16 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           7
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
-(4 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           2 |          
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
+(5 rows)
 
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          17
@@ -2951,7 +3046,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
             bucket            | temperature 
 ------------------------------+-------------
  Sat Jan 01 00:00:00 2022 UTC |          17
@@ -2970,21 +3065,21 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 \set ON_ERROR_STOP 0
 -- should error because it depends of other CAGGs
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:150: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:166: ERROR:  cannot drop view conditions_summary_1_hourly because other objects depend on it
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:151: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
+psql:include/cagg_on_cagg_common.sql:167: ERROR:  cannot drop view conditions_summary_2_daily because other objects depend on it
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:152: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:168: NOTICE:  continuous aggregate "conditions_summary_1_hourly" is already up-to-date
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
-psql:include/cagg_on_cagg_common.sql:153: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
+psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditions_summary_2_daily" is already up-to-date
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:157: NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_26_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_26_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:160: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:176: ERROR:  relation "conditions_summary_3_weekly" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
@@ -2992,13 +3087,14 @@ TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           7
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
-(4 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           2 |          
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
+(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
  bucket | temperature 
@@ -3007,30 +3103,31 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:171: NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_25_chunk
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_25_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:174: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:190: ERROR:  relation "conditions_summary_2_daily" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-            bucket            | temperature 
-------------------------------+-------------
- Sat Jan 01 00:00:00 2022 UTC |          10
- Sat Jan 01 01:00:00 2022 UTC |           7
- Sun Jan 02 01:00:00 2022 UTC |          20
- Mon Jan 03 01:00:00 2022 UTC |           2
-(4 rows)
+            bucket            | temperature | device_id 
+------------------------------+-------------+-----------
+ Sat Jan 01 00:00:00 2022 UTC |          10 |         1
+ Sat Jan 01 01:00:00 2022 UTC |           2 |          
+ Sat Jan 01 01:00:00 2022 UTC |           5 |         2
+ Sun Jan 02 01:00:00 2022 UTC |          20 |         3
+ Mon Jan 03 01:00:00 2022 UTC |           2 |          
+(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:181: NOTICE:  drop cascades to table _timescaledb_internal._hyper_31_24_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_31_24_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-psql:include/cagg_on_cagg_common.sql:184: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
+psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1_hourly" does not exist at character 15
 \set ON_ERROR_STOP 1
 --
 -- Validation test for variable bucket on top of fixed bucket

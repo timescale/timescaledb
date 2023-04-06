@@ -510,22 +510,22 @@ decompress_chunk_exec(CustomScanState *node)
 
 	while (true)
 	{
-		TupleTableSlot *slot = decompress_chunk_create_tuple(state);
+		TupleTableSlot *decompressed_slot = decompress_chunk_create_tuple(state);
 
-		if (TupIsNull(slot))
+		if (TupIsNull(decompressed_slot))
 			return NULL;
 
-		econtext->ecxt_scantuple = slot;
+		econtext->ecxt_scantuple = decompressed_slot;
 
 		if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext))
 		{
 			InstrCountFiltered1(node, 1);
-			ExecClearTuple(slot);
+			ExecClearTuple(decompressed_slot);
 			continue;
 		}
 
 		if (!node->ss.ps.ps_ProjInfo)
-			return slot;
+			return decompressed_slot;
 
 		return ExecProject(node->ss.ps.ps_ProjInfo);
 	}
@@ -579,7 +579,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 
 		if (!state->initialized)
 		{
-			ExecClearTuple(slot);
+			ExecStoreAllNullTuple(decompressed_slot);
 
 			/*
 			 * Reset expression memory context to clean out any cruft from

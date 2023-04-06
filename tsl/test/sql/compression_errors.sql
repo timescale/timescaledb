@@ -364,3 +364,21 @@ INSERT INTO ts_table SELECT * FROM data_table;
 --cleanup tables
 DROP TABLE data_table cascade;
 DROP TABLE ts_table cascade;
+
+--invalid reads for row expressions after column dropped on compressed tables #5458
+CREATE TABLE readings(
+    "time"  TIMESTAMPTZ NOT NULL,
+    battery_status  TEXT,
+    battery_temperature  DOUBLE PRECISION
+);
+
+INSERT INTO readings ("time") VALUES ('2022-11-11 11:11:11-00');
+
+SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12 hour', migrate_data=>true);
+
+ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 'battery_temperature');
+SELECT compress_chunk(show_chunks('readings'));
+
+ALTER TABLE readings DROP COLUMN battery_status;
+INSERT INTO readings ("time", battery_temperature) VALUES ('2022-11-11 11:11:11', 0.2);
+SELECT readings FROM readings;

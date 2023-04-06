@@ -72,6 +72,12 @@ set(TEST_TEMPLATES
     parallel.sql.in
     query.sql.in)
 
+# Loader test must distinguish between Apache and TSL builds so we parametrize
+# this here
+set(LOADER_TEST_FILE loader-${TEST_LICENSE_SUFFIX})
+configure_file(loader.sql.in
+               ${CMAKE_CURRENT_SOURCE_DIR}/${LOADER_TEST_FILE}.sql)
+
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
 set(SOLO_TESTS
@@ -80,11 +86,12 @@ set(SOLO_TESTS
     bgw_launcher
     chunk_utils
     index
-    loader
     net
     pg_dump_unprivileged
     tablespace
     telemetry)
+
+list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -94,13 +101,13 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     c_unit_tests.sql
     copy_memory_usage.sql
     guc_options.sql
-    loader.sql
     metadata.sql
     multi_transaction_index.sql
     net.sql
     pg_dump.sql
     symbol_conflict.sql
-    test_utils.sql)
+    test_utils.sql
+    ${LOADER_TEST_FILE}.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
   endif()

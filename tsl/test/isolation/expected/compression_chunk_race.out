@@ -38,10 +38,10 @@ step s3_unlock_compression:
     SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND (locktype = 'advisory' or relation::regclass::text LIKE '%chunk') ORDER BY relation, locktype, mode, granted;
     SELECT debug_waitpoint_release('compress_chunk_impl_start');
 
-locktype|mode     |granted|     objid
---------+---------+-------+----------
-relation|ShareLock|f      |          
-advisory|ShareLock|f      |3379597659
+locktype|mode         |granted|     objid
+--------+-------------+-------+----------
+relation|ExclusiveLock|f      |          
+advisory|ShareLock    |f      |3379597659
 (2 rows)
 
 debug_waitpoint_release

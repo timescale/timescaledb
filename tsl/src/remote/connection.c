@@ -546,7 +546,7 @@ unset_libpq_envvar(void)
 	PQconninfoOption *lopt;
 	PQconninfoOption *options = PQconndefaults();
 
-	Assert(options != NULL);
+	TS_OOM_CHECK(options, "out of memory");
 
 	/* Explicitly unset all libpq environment variables.
 	 *
@@ -1024,6 +1024,7 @@ remote_connection_get_result(const TSConnection *conn, TimestampTz endtime)
 				if (PQconsumeInput(conn->pg_conn) == 0)
 				{
 					pgres = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+					TS_OOM_CHECK(pgres, "out of memory");
 					PQfireResultCreateEvents(conn->pg_conn, pgres);
 					return pgres;
 				}
@@ -1102,6 +1103,7 @@ remote_connection_exec_timeout(TSConnection *conn, const char *cmd, TimestampTz 
 			if (ret == 0)
 			{
 				res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+				TS_OOM_CHECK(res, "out of memory");
 				PQfireResultCreateEvents(conn->pg_conn, res);
 				return res;
 			}
@@ -2361,7 +2363,7 @@ err_end_copy:
 	return false;
 }
 
-bool
+int
 remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
 								TSConnectionError *err)
 {
@@ -2369,13 +2371,13 @@ remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t l
 
 	res = PQputCopyData(remote_connection_get_pg_conn(conn), buffer, len);
 
-	if (res != 1)
+	if (res == -1)
 		return fill_connection_error(err,
 									 ERRCODE_CONNECTION_EXCEPTION,
 									 "could not send COPY data",
 									 conn);
 
-	return true;
+	return res;
 }
 
 static bool
@@ -2522,7 +2524,6 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 		}
 	}
 
-	Assert(res == NULL);
 	remote_connection_set_status(conn, CONN_IDLE);
 
 	return success;

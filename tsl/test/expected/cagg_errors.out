@@ -631,3 +631,6 @@ ERROR:  invalid continuous aggregate query
 CREATE MATERIALIZED VIEW matv1 AS SELECT now() AS time;
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM matv1 GROUP BY 1;
 ERROR:  invalid continuous aggregate view
+-- No FROM clause in CAGG definition
+CREATE MATERIALIZED VIEW cagg1 with (timescaledb.continuous) AS SELECT 1 GROUP BY 1 WITH NO DATA;
+ERROR:  invalid continuous aggregate query

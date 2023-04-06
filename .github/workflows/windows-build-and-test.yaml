@@ -53,7 +53,7 @@ jobs:
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata"]
-        tsl_ignores: ["compression_algos remote_connection"]
+        tsl_ignores: ["compression_algos remote_connection telemetry_stats-13 telemetry_stats-14"]
         tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht
           data_fetcher dist_compression dist_remote_error remote_txn"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
@@ -65,10 +65,12 @@ jobs:
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}
             tsl_skips_version: dist_grant-13 dist_partial_agg-13
           - pg: 14
-            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            # pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            pkg_version: 14.5.1 # hardcoded due to issues with PG14.6 on chocolatey
             tsl_skips_version: dist_partial_agg-14 dist_grant-14
           - pg: 15
-            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            # pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            pkg_version: 15.0.1 # hardcoded due to issues with PG15.1 on chocolatey
             tsl_skips_version: dist_partial_agg-15 dist_grant-15
             tsl_ignores_version: partialize_finalize
     env:

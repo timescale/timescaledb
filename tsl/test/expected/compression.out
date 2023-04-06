@@ -167,9 +167,7 @@ BEGIN;
 insert into foo values( 11 , 10 , 20, 120);
 ROLLBACK;
 update foo set b =20 where a = 10;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 delete from foo where a = 10;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 --TEST2b try complex DML on compressed chunk
 create table foo_join ( a integer, newval integer);
 select table_name from create_hypertable('foo_join', 'a', chunk_time_interval=> 10);
@@ -192,30 +190,42 @@ insert into foo_join select generate_series(0,40, 10), 222;
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a and foo_join.a > 10;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 --here the chunk gets excluded , so succeeds --
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a and foo.a > 20;
 update foo
 set b = (select f1.newval from foo_join f1 left join lateral (select newval as newval2 from  foo_join2 f2 where f1.a= f2.a ) subq on true limit 1);
-ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
 --upsert test --
 insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b;
-ERROR:  INSERT with ON CONFLICT DO UPDATE is not supported on compressed chunks
+SELECT * from foo ORDER BY a,b;
+ a  |  b  | c  | d  
+----+-----+----+----
+ 10 |  12 | 12 | 12
+ 20 | 111 | 20 |   
+ 30 | 111 | 40 |   
+(3 rows)
+
 --TEST2c Do DML directly on the chunk.
-insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
+insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12)
+on conflict( a, b)
+do update set b = excluded.b + 12;
+SELECT * from foo ORDER BY a,b;
+ a  |  b  | c  | d  
+----+-----+----+----
+ 10 |  24 | 12 | 12
+ 20 | 111 | 20 |   
+ 30 | 111 | 40 |   
+(3 rows)
+
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 delete from _timescaledb_internal._hyper_1_2_chunk;
-ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 --TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
             decompress_chunk            
@@ -225,17 +235,15 @@ select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
 insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;
-ERROR:  duplicate key value violates unique constraint "_hyper_1_2_chunk_foo_uniq"
-select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a,b;
  a  | b  | c  |  d  
 ----+----+----+-----
- 10 | 12 | 12 |  12
- 10 | 10 | 20 |    
+ 10 | 20 | 20 |    
  11 | 10 | 20 | 120
-(3 rows)
+(2 rows)
 
 delete from foo where a = 10;
-select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a,b;
  a  | b  | c  |  d  
 ----+----+----+-----
  11 | 10 | 20 | 120
@@ -1001,12 +1009,10 @@ WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t AND rescan_test.t >= '20
 UPDATE rescan_test SET val = tmp.val
 FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045)]::rescan_test[]) AS x) AS tmp
 WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
-ERROR:  cannot update/delete rows from chunk "_hyper_16_36_chunk" as it is compressed
 -- bulk row update with FROM is blocked
 UPDATE rescan_test SET val = tmp.val
 FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045), (1, '2000-01-03 01:00:00+00', 8.045)]::rescan_test[]) AS x) AS tmp
 WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
-ERROR:  cannot update/delete rows from chunk "_hyper_16_36_chunk" as it is compressed
 \set ON_ERROR_STOP 1
 -- Test FK constraint drop and recreate during compression and decompression on a chunk
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -1056,7 +1062,6 @@ ORDER BY constraint_name;
 -- Delete data from compressed chunk directly fails
 \set ON_ERROR_STOP 0
 DELETE FROM hyper WHERE device_id = 3;
-ERROR:  cannot update/delete rows from chunk "_hyper_18_42_chunk" as it is compressed
 \set ON_ERROR_STOP 0
 -- Delete data from FK-referenced table deletes data from compressed chunk
 SELECT * FROM hyper ORDER BY time, device_id;
@@ -1064,11 +1069,9 @@ SELECT * FROM hyper ORDER BY time, device_id;
 ------+-----------+-----
     1 |         1 |   1
     2 |         2 |   1
-    3 |         3 |   1
-   10 |         3 |   2
    11 |         4 |   2
    11 |         5 |   2
-(6 rows)
+(4 rows)
 
 DELETE FROM meta WHERE device_id = 3;
 SELECT * FROM hyper ORDER BY time, device_id;
@@ -1218,22 +1221,28 @@ WITH compressed AS (
 DELETE FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
 ROLLBACK;
-\set ON_ERROR_STOP 0
--- test delete inside CTE is blocked
+-- test delete inside CTE
 WITH compressed AS (
   DELETE FROM compressed_ht RETURNING series_id
 )
 SELECT * FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
-ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compressed
+             time             | value | series_id 
+------------------------------+-------+-----------
+ Mon Apr 20 01:01:00 2020 PDT |   100 |         1
+ Wed May 20 01:01:00 2020 PDT |   100 |         1
+(2 rows)
+
 -- test update inside CTE is blocked
 WITH compressed AS (
   UPDATE compressed_ht SET value = 0.2 RETURNING *
 )
 SELECT * FROM uncompressed_ht
 WHERE series_id IN (SELECT series_id FROM compressed);
-ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compressed
-\set ON_ERROR_STOP 1
+ time | value | series_id 
+------+-------+-----------
+(0 rows)
+
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;
 -- Test that pg_stats and pg_class stats for uncompressed chunks are frozen at compression time
@@ -1269,13 +1278,14 @@ SELECT compress_chunk(c) FROM show_chunks('stattest') c;
 SELECT approximate_row_count('stattest');
  approximate_row_count 
 -----------------------
-                    26
+                     0
 (1 row)
 
-SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
  relpages | reltuples 
 ----------+-----------
-        1 |        26
+        0 |         0
 (1 row)
 
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
@@ -1310,17 +1320,19 @@ SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname =
 ------------------
 (0 rows)
 
-SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
  relpages | reltuples 
 ----------+-----------
-        1 |        26
+        0 |         0
 (1 row)
 
 -- verify that corresponding compressed chunk's stats is updated as well.
-SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
  relpages | reltuples 
 ----------+-----------
-        1 |         1
+        0 |         0
 (1 row)
 
 -- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
@@ -1337,14 +1349,14 @@ SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname =
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
  relpages | reltuples 
 ----------+-----------
-        1 |        26
+        0 |         0
 (1 row)
 
 -- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
-         reloptions         
-----------------------------
- {autovacuum_enabled=false}
+ reloptions 
+------------
+ 
 (1 row)
 
 SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
@@ -1354,9 +1366,9 @@ SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
 (1 row)
 
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
-        reloptions         
----------------------------
- {autovacuum_enabled=true}
+ reloptions 
+------------
+ 
 (1 row)
 
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
@@ -1366,9 +1378,9 @@ SELECT compress_chunk(c) FROM show_chunks('stattest') c;
 (1 row)
 
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
-         reloptions         
-----------------------------
- {autovacuum_enabled=false}
+ reloptions 
+------------
+ 
 (1 row)
 
 ALTER TABLE stattest SET (autovacuum_enabled = false);
@@ -1413,7 +1425,7 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 order by relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |       200 |        2 |             0
+ _hyper_29_58_chunk |         0 |        0 |             0
  _hyper_29_59_chunk |         0 |        0 |             0
 (2 rows)
 
@@ -1453,7 +1465,7 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 ORDER BY relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |       200 |        1 |             0
+ _hyper_29_58_chunk |         0 |        0 |             0
  _hyper_29_59_chunk |         0 |        0 |             0
 (2 rows)
 
@@ -1476,7 +1488,7 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |       200 |        1 |             0
+ _hyper_29_58_chunk |         0 |        0 |             0
  _hyper_29_59_chunk |       200 |        2 |             0
 (2 rows)
 

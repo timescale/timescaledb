@@ -1,0 +1,109 @@
+# This file and its contents are licensed under the Timescale License.
+# Please see the included NOTICE for copyright information and
+# LICENSE-TIMESCALE for a copy of the license.
+
+# Test that when the empty chunk is created as part of a copy or move chunk, that
+# its owner is a superuser and different from the original hypertable owner
+#
+# This change necessitated due to a security hole in logical replication in Postgres
+
+setup
+{
+    SET timescaledb_experimental.enable_distributed_ddl=off;
+
+	CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
+
+	CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
+
+    CREATE OR REPLACE FUNCTION remote_exec(srv_name name[], command text)
+    RETURNS VOID AS '@TSL_MODULE_PATHNAME@', 'ts_remote_exec' LANGUAGE C;
+
+    DROP ROLE IF EXISTS htowner1;
+    CREATE ROLE htowner1 LOGIN;
+    GRANT CREATE ON SCHEMA public TO htowner1;
+    SET ROLE htowner1;
+    CREATE TABLE test(time timestamp NOT NULL, device int, temp text);
+    RESET ROLE;
+    ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq RESTART;
+    ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq RESTART;
+}
+setup { SELECT node_name FROM add_data_node('dn_1', host => 'localhost', database => 'dn1', if_not_exists => true); }
+setup { SELECT node_name FROM add_data_node('dn_2', host => 'localhost', database => 'dn2', if_not_exists => true); }
+setup { CALL distributed_exec('GRANT CREATE ON SCHEMA public TO htowner1;'); }
+setup
+{
+    GRANT USAGE ON FOREIGN SERVER dn_1, dn_2 TO PUBLIC;
+    SET ROLE htowner1;
+    SET timescaledb_experimental.enable_distributed_ddl=on;
+}
+setup
+{
+    SELECT create_distributed_hypertable('test', 'time', 'device', 3, associated_schema_name => 'public');
+    INSERT INTO test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+}
+
+teardown
+{
+    DROP TABLE test CASCADE;
+}
+
+session "s1"
+setup
+{
+	SET application_name = 's1';
+}
+step "s1_wait1"      { SELECT debug_waitpoint_enable('chunk_copy_after_empty_chunk'); }
+step "s1_release1"    { SELECT debug_waitpoint_release('chunk_copy_after_empty_chunk'); }
+
+session "s2"
+setup
+{
+	SET application_name = 's2';
+    SET ROLE htowner1;
+}
+step "s2_copy1" {
+    CALL timescaledb_experimental.move_chunk(chunk=>'public._dist_hyper_1_1_chunk', source_node=> 'dn_1', destination_node => 'dn_2')
+}
+
+session "s3"
+setup
+{
+	SET application_name = 's3';
+}
+
+# this should show 1 on "dn_2" and nothing on "dn_1"
+step "s3_check1"
+{
+    SELECT * FROM remote_exec(ARRAY['dn_1', 'dn_2'], $DIST$
+      SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename =
+      '_dist_hyper_1_1_chunk' AND tableowner != 'htowner1'; $DIST$);
+}
+
+# this should show true on "dn_2" and false on "dn_1" on first invocation
+# it should show false on "dn_2" and nothing on "dn_1" after the move
+step "s3_check2"
+{
+    SELECT * FROM remote_exec(ARRAY['dn_1', 'dn_2'], $DIST$
+      SELECT usesuper FROM pg_user WHERE usename IN (SELECT tableowner FROM pg_catalog.pg_tables WHERE schemaname =
+      'public' AND tablename = '_dist_hyper_1_1_chunk'); $DIST$);
+}
+
+# this should fail on dn_2 since superuser owns the chunk object. Kinda superfluous since
+# we already checked for superuser above
+step "s3_check3"
+{
+    SET ROLE htowner1;
+    SELECT * FROM remote_exec(ARRAY['dn_2'], $DIST$
+      CREATE INDEX ON public._dist_hyper_1_1_chunk (lower(temp));
+      $DIST$);
+}
+
+#
+# Test that when the empty chunk is created as part of a copy or move chunk, that
+# its owner is a superuser and different from the original hypertable owner
+#
+# This change necessitated due to a security hole in logical replication in Postgres
+#
+permutation "s1_wait1" "s2_copy1" "s3_check1" "s3_check2" "s3_check3" "s1_release1" "s3_check2"

@@ -53,12 +53,6 @@
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/hypertable_compression.h"
 
-#define MAX_ROWS_PER_COMPRESSION 1000
-/* gap in sequence id between rows, potential for adding rows in gap later */
-#define SEQUENCE_NUM_GAP 10
-#define COMPRESSIONCOL_IS_SEGMENT_BY(col) ((col)->segmentby_column_index > 0)
-#define COMPRESSIONCOL_IS_ORDER_BY(col) ((col)->orderby_column_index > 0)
-
 static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORITHMS] = {
 	[COMPRESSION_ALGORITHM_ARRAY] = ARRAY_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DICTIONARY] = DICTIONARY_ALGORITHM_DEFINITION,
@@ -102,85 +96,8 @@ tsl_try_decompress_all(CompressionAlgorithms algorithm, Datum compressed_data, O
 	return NULL;
 }
 
-typedef struct SegmentInfo
-{
-	Datum val;
-	FmgrInfo eq_fn;
-	FunctionCallInfo eq_fcinfo;
-	int16 typlen;
-	bool is_null;
-	bool typ_by_val;
-	Oid collation;
-} SegmentInfo;
-
-typedef struct PerColumn
-{
-	/* the compressor to use for regular columns, NULL for segmenters */
-	Compressor *compressor;
-	/*
-	 * Information on the metadata we'll store for this column (currently only min/max).
-	 * Only used for order-by columns right now, will be {-1, NULL} for others.
-	 */
-	int16 min_metadata_attr_offset;
-	int16 max_metadata_attr_offset;
-	SegmentMetaMinMaxBuilder *min_max_metadata_builder;
-
-	/* segment info; only used if compressor is NULL */
-	SegmentInfo *segment_info;
-	int16 segmentby_column_index;
-} PerColumn;
-
-typedef struct RowCompressor
-{
-	/* memory context reset per-row is stored */
-	MemoryContext per_row_ctx;
-
-	/* the table we're writing the compressed data to */
-	Relation compressed_table;
-	BulkInsertState bistate;
-	/* segment by index Oid if any */
-	Oid index_oid;
-
-	/* in theory we could have more input columns than outputted ones, so we
-	   store the number of inputs/compressors seperately*/
-	int n_input_columns;
-
-	/* info about each column */
-	struct PerColumn *per_column;
-
-	/* the order of columns in the compressed data need not match the order in the
-	 * uncompressed. This array maps each attribute offset in the uncompressed
-	 * data to the corresponding one in the compressed
-	 */
-	int16 *uncompressed_col_to_compressed_col;
-	int16 count_metadata_column_offset;
-	int16 sequence_num_metadata_column_offset;
-
-	/* the number of uncompressed rows compressed into the current compressed row */
-	uint32 rows_compressed_into_current_value;
-	/* a unique monotonically increasing (according to order by) id for each compressed row */
-	int32 sequence_num;
-
-	/* cached arrays used to build the HeapTuple */
-	Datum *compressed_values;
-	bool *compressed_is_null;
-	int64 rowcnt_pre_compression;
-	int64 num_compressed_rows;
-} RowCompressor;
-
-static int16 *compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns,
-										   int n_columns, int *n_keys_out,
-										   const ColumnCompressionInfo ***keys_out);
 static Tuplesortstate *compress_chunk_sort_relation(Relation in_rel, int n_keys,
 													const ColumnCompressionInfo **keys);
-static void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
-								Relation compressed_table, int num_compression_infos,
-								const ColumnCompressionInfo **column_compression_info,
-								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate);
-static void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
-static void row_compressor_finish(RowCompressor *row_compressor);
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
 static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor,
 												   TupleTableSlot *row);
@@ -188,9 +105,6 @@ static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableS
 static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 								 bool changed_groups);
 
-static SegmentInfo *segment_info_new(Form_pg_attribute column_attr);
-static void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
-static bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null);
 static void run_analyze_on_chunk(Oid chunk_relid);
 
 /********************
@@ -208,70 +122,6 @@ get_compressed_data_header(Datum data)
 	return header;
 }
 
-static void
-capture_pgclass_stats(Oid table_oid, int *out_pages, int *out_visible, float *out_tuples)
-{
-	Relation pg_class = table_open(RelationRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_oid));
-	Form_pg_class classform;
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "could not find tuple for relation %u", table_oid);
-
-	classform = (Form_pg_class) GETSTRUCT(tuple);
-
-	*out_pages = classform->relpages;
-	*out_visible = classform->relallvisible;
-	*out_tuples = classform->reltuples;
-
-	heap_freetuple(tuple);
-	table_close(pg_class, RowExclusiveLock);
-}
-
-static void
-restore_pgclass_stats(Oid table_oid, int pages, int visible, float tuples)
-{
-	Relation pg_class;
-	HeapTuple tuple;
-	Form_pg_class classform;
-
-	pg_class = table_open(RelationRelationId, RowExclusiveLock);
-	tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_oid));
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "could not find tuple for relation %u", table_oid);
-	classform = (Form_pg_class) GETSTRUCT(tuple);
-
-	classform->relpages = pages;
-	classform->relallvisible = visible;
-	classform->reltuples = tuples;
-
-	CatalogTupleUpdate(pg_class, &tuple->t_self, tuple);
-
-	heap_freetuple(tuple);
-	table_close(pg_class, RowExclusiveLock);
-}
-
-/* Merge the relstats when merging chunks while compressing them.
- * We need to do this in order to update the relstats of the chunk
- * that is merged into since the compressed one will be dropped by
- * the merge.
- */
-extern void
-merge_chunk_relstats(Oid merged_relid, Oid compressed_relid)
-{
-	int comp_pages, merged_pages, comp_visible, merged_visible;
-	float comp_tuples, merged_tuples;
-
-	capture_pgclass_stats(compressed_relid, &comp_pages, &comp_visible, &comp_tuples);
-	capture_pgclass_stats(merged_relid, &merged_pages, &merged_visible, &merged_tuples);
-
-	merged_pages += comp_pages;
-	merged_visible += comp_visible;
-	merged_tuples += comp_tuples;
-
-	restore_pgclass_stats(merged_relid, merged_pages, merged_visible, merged_tuples);
-}
-
 /* Truncate the relation WITHOUT applying triggers. This is the
  * main difference with ExecuteTruncate. Triggers aren't applied
  * because the data remains, just in compressed form. Also don't
@@ -285,8 +135,6 @@ truncate_relation(Oid table_oid)
 	 *  be a lock upgrade. */
 	Relation rel = table_open(table_oid, AccessExclusiveLock);
 	Oid toast_relid;
-	int pages, visible;
-	float tuples;
 
 	/* Chunks should never have fks into them, but double check */
 	if (fks != NIL)
@@ -294,7 +142,6 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
-	capture_pgclass_stats(table_oid, &pages, &visible, &tuples);
 	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
 
 	toast_relid = rel->rd_rel->reltoastrelid;
@@ -317,7 +164,6 @@ truncate_relation(Oid table_oid)
 #endif
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
 	rel = table_open(table_oid, AccessExclusiveLock);
-	restore_pgclass_stats(table_oid, pages, visible, tuples);
 	CommandCounterIncrement();
 	table_close(rel, NoLock);
 }
@@ -502,7 +348,8 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 						column_compression_info,
 						in_column_offsets,
 						out_desc->natts,
-						true /*need_bistate*/);
+						true /*need_bistate*/,
+						false /*segmentwise_recompress*/);
 
 	if (matched_index_rel != NULL)
 	{
@@ -584,7 +431,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	return cstat;
 }
 
-static int16 *
+int16 *
 compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns, int n_columns,
 							 int *n_keys_out, const ColumnCompressionInfo ***keys_out)
 {
@@ -630,11 +477,6 @@ compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns
 
 	return column_offsets;
 }
-
-static void compress_chunk_populate_sort_info_for_column(Oid table,
-														 const ColumnCompressionInfo *column,
-														 AttrNumber *att_nums, Oid *sort_operator,
-														 Oid *collation, bool *nulls_first);
 
 static Tuplesortstate *
 compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressionInfo **keys)
@@ -699,7 +541,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 	return tuplesortstate;
 }
 
-static void
+void
 compress_chunk_populate_sort_info_for_column(Oid table, const ColumnCompressionInfo *column,
 											 AttrNumber *att_nums, Oid *sort_operator,
 											 Oid *collation, bool *nulls_first)
@@ -982,11 +824,12 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
  ** row_compressor **
  ********************/
 /* num_compression_infos is the number of columns we will write to in the compressed table */
-static void
+void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_columns_in_compressed_table, bool need_bistate)
+					int16 num_columns_in_compressed_table, bool need_bistate,
+					bool segmentwise_recompress)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
@@ -1030,6 +873,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
 		.sequence_num = SEQUENCE_NUM_GAP,
+		.segmentwise_recompress = segmentwise_recompress,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
@@ -1107,7 +951,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 								   row_compressor->n_input_columns);
 }
 
-static void
+void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
 								  TupleDesc sorted_desc)
 {
@@ -1198,15 +1042,19 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 	 * many segmentby columns.
 	 *
 	 */
-	row_compressor->sequence_num =
-		get_sequence_number_for_current_group(row_compressor->compressed_table,
-											  row_compressor->index_oid,
-											  row_compressor->uncompressed_col_to_compressed_col,
-											  row_compressor->per_column,
-											  row_compressor->n_input_columns,
-											  AttrOffsetGetAttrNumber(
+	if (!row_compressor->segmentwise_recompress)
+		row_compressor->sequence_num =
+			get_sequence_number_for_current_group(row_compressor->compressed_table,
+												  row_compressor->index_oid,
 												  row_compressor
-													  ->sequence_num_metadata_column_offset));
+													  ->uncompressed_col_to_compressed_col,
+												  row_compressor->per_column,
+												  row_compressor->n_input_columns,
+												  AttrOffsetGetAttrNumber(
+													  row_compressor
+														  ->sequence_num_metadata_column_offset));
+	else
+		row_compressor->sequence_num = SEQUENCE_NUM_GAP;
 }
 
 static bool
@@ -1407,7 +1255,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	MemoryContextReset(row_compressor->per_row_ctx);
 }
 
-static void
+void
 row_compressor_finish(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
@@ -1418,7 +1266,7 @@ row_compressor_finish(RowCompressor *row_compressor)
  ** segment_info **
  ******************/
 
-static SegmentInfo *
+SegmentInfo *
 segment_info_new(Form_pg_attribute column_attr)
 {
 	TypeCacheEntry *tce = lookup_type_cache(column_attr->atttypid, TYPECACHE_EQ_OPR_FINFO);
@@ -1448,7 +1296,7 @@ segment_info_new(Form_pg_attribute column_attr)
 	return segment_info;
 }
 
-static void
+void
 segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null)
 {
 	segment_info->is_null = is_null;
@@ -1458,7 +1306,7 @@ segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null)
 		segment_info->val = datumCopy(val, segment_info->typ_by_val, segment_info->typlen);
 }
 
-static bool
+bool
 segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null)
 {
 	Datum data_is_eq;
@@ -1489,66 +1337,11 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
  ** decompress_chunk **
  **********************/
 
-typedef struct PerCompressedColumn
-{
-	Oid decompressed_type;
-
-	/* the compressor to use for compressed columns, always NULL for segmenters
-	 * only use if is_compressed
-	 */
-	DecompressionIterator *iterator;
-
-	/* segment info; only used if !is_compressed */
-	Datum val;
-
-	/* is this a compressed column or a segment-by column */
-	bool is_compressed;
-
-	/* the value stored in the compressed table was NULL */
-	bool is_null;
-
-	/* the index in the decompressed table of the data -1,
-	 * if the data is metadata not found in the decompressed table
-	 */
-	int16 decompressed_column_offset;
-} PerCompressedColumn;
-
-typedef struct RowDecompressor
-{
-	PerCompressedColumn *per_compressed_cols;
-	int16 num_compressed_columns;
-
-	TupleDesc in_desc;
-	Relation in_rel;
-
-	TupleDesc out_desc;
-	Relation out_rel;
-	ResultRelInfo *indexstate;
-
-	CommandId mycid;
-	BulkInsertState bistate;
-
-	Datum *compressed_datums;
-	bool *compressed_is_nulls;
-
-	Datum *decompressed_datums;
-	bool *decompressed_is_nulls;
-
-	MemoryContext per_compressed_row_ctx;
-} RowDecompressor;
-
-static PerCompressedColumn *create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc,
-														 Oid out_relid,
-														 Oid compressed_data_type_oid);
-static void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
-													  int16 num_cols, Datum *compressed_datums,
-													  bool *compressed_is_nulls);
-static void row_decompressor_decompress_row(RowDecompressor *row_decompressor);
 static bool per_compressed_col_get_data(PerCompressedColumn *per_compressed_col,
 										Datum *decompressed_datums, bool *decompressed_is_nulls,
 										TupleDesc out_desc);
 
-static RowDecompressor
+RowDecompressor
 build_decompressor(Relation in_rel, Relation out_rel)
 {
 	TupleDesc in_desc = RelationGetDescr(in_rel);
@@ -1628,7 +1421,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		row_decompressor_decompress_row(&decompressor);
+		row_decompressor_decompress_row(&decompressor, NULL);
 	}
 
 	heap_endscan(heapScan);
@@ -1641,7 +1434,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	table_close(in_rel, NoLock);
 }
 
-static PerCompressedColumn *
+PerCompressedColumn *
 create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_relid,
 							 Oid compressed_data_type_oid)
 {
@@ -1700,7 +1493,7 @@ create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_reli
 	return per_compressed_cols;
 }
 
-static void
+void
 populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols, int16 num_cols,
 										  Datum *compressed_datums, bool *compressed_is_nulls)
 {
@@ -1732,8 +1525,8 @@ populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_co
 	}
 }
 
-static void
-row_decompressor_decompress_row(RowDecompressor *decompressor)
+void
+row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *tuplesortstate)
 {
 	/* each compressed row decompresses to at least one row,
 	 * even if all the data is NULL
@@ -1769,15 +1562,36 @@ row_decompressor_decompress_row(RowDecompressor *decompressor)
 			HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
 														   decompressor->decompressed_datums,
 														   decompressor->decompressed_is_nulls);
+			TupleTableSlot *slot = MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsVirtual);
 
-			heap_insert(decompressor->out_rel,
-						decompressed_tuple,
-						decompressor->mycid,
-						0 /*=options*/,
-						decompressor->bistate);
+			if (tuplesortstate == NULL)
+			{
+				heap_insert(decompressor->out_rel,
+							decompressed_tuple,
+							decompressor->mycid,
+							0 /*=options*/,
+							decompressor->bistate);
 
-			ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
+				ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
+			}
+			else
+			{
+				/* create the virtual tuple slot */
+				ExecClearTuple(slot);
+				for (int i = 0; i < decompressor->out_desc->natts; i++)
+				{
+					slot->tts_isnull[i] = decompressor->decompressed_is_nulls[i];
+					slot->tts_values[i] = decompressor->decompressed_datums[i];
+				}
 
+				ExecStoreVirtualTuple(slot);
+
+				slot_getallattrs(slot);
+
+				tuplesort_puttupleslot(tuplesortstate, slot);
+			}
+
+			ExecDropSingleTupleTableSlot(slot);
 			heap_freetuple(decompressed_tuple);
 			wrote_data = true;
 		}
@@ -2016,48 +1830,6 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
 	return definitions[algorithm].compressed_data_storage;
 }
 
-/* Get relstats from compressed chunk and insert into relstats for the
- * corresponding chunk (that held the uncompressed data) from raw hypertable
- */
-extern void
-update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
-{
-	double rowcnt;
-	int comp_pages, uncomp_pages, comp_visible, uncomp_visible;
-	float comp_tuples, uncomp_tuples, out_tuples;
-	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
-	Chunk *compressed_chunk = ts_chunk_get_by_relid(compressed_relid, true);
-
-	if (uncompressed_chunk->table_id != uncompressed_relid ||
-		uncompressed_chunk->fd.compressed_chunk_id != compressed_chunk->fd.id ||
-		compressed_chunk->table_id != compressed_relid)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("mismatched chunks for relstats update on compressed chunk \"%s\"",
-						get_rel_name(uncompressed_relid))));
-	}
-
-	capture_pgclass_stats(uncompressed_relid, &uncomp_pages, &uncomp_visible, &uncomp_tuples);
-
-	/* Before compressing a chunk in 2.0, we save its stats. Prior
-	 * releases do not support this. So the stats on uncompressed relid
-	 * could be invalid. In this case, do the best that we can.
-	 */
-	if (uncomp_tuples == 0)
-	{
-		/* we need page info from compressed relid */
-		capture_pgclass_stats(compressed_relid, &comp_pages, &comp_visible, &comp_tuples);
-		rowcnt = (double) ts_compression_chunk_size_row_count(uncompressed_chunk->fd.id);
-		if (rowcnt > 0)
-			out_tuples = (float4) rowcnt;
-		else
-			out_tuples = (float4) comp_tuples;
-		restore_pgclass_stats(uncompressed_relid, comp_pages, comp_visible, out_tuples);
-		CommandCounterIncrement();
-	}
-}
-
 /*
  * Build scankeys for decompression of specific batches. key_columns references the
  * columns of the uncompressed chunk.
@@ -2213,7 +1985,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		row_decompressor_decompress_row(&decompressor);
+		row_decompressor_decompress_row(&decompressor, NULL);
 
 		TM_FailureData tmfd;
 		TM_Result result pg_attribute_unused();
@@ -2237,3 +2009,330 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 	table_close(in_rel, NoLock);
 }
+
+#if PG14_GE
+/*
+ * Helper method which returns true if given column_name
+ * is configured as SEGMENT BY column in a compressed hypertable
+ */
+static bool
+is_segmentby_col(List *ht_compression_info, char *column_name)
+{
+	ListCell *lc;
+	foreach (lc, ht_compression_info)
+	{
+		FormData_hypertable_compression *fd = lfirst(lc);
+		if (namestrcmp(&fd->attname, column_name) == 0)
+		{
+			if (fd->segmentby_column_index > 0)
+				return true;
+			break;
+		}
+	}
+	return false;
+}
+
+/*
+ * This method will evaluate the predicates, extract
+ * left and right operands, check if one of the operands is
+ * a simple Var type. If its Var type extract its corresponding
+ * column name from hypertable_compression catalog table.
+ * If extracted column is a SEGMENT BY column then save column
+ * name, value specified in the predicate. This information will
+ * be used to build scan keys later.
+ */
+static void
+fill_predicate_context(Chunk *ch, List *predicates, List **segmentby_columns,
+					   List **segmentby_columns_value, List **is_null_check, List **is_null)
+{
+	List *ht_compression_info = ts_hypertable_compression_get(ch->fd.hypertable_id);
+	ListCell *lc;
+	foreach (lc, predicates)
+	{
+		Node *node = lfirst(lc);
+		if (node == NULL)
+			continue;
+
+		Var *var;
+		char *column_name;
+		switch (nodeTag(node))
+		{
+			case T_OpExpr:
+			{
+				OpExpr *opexpr = (OpExpr *) node;
+				Expr *leftop, *rightop;
+				Const *arg_value;
+
+				leftop = linitial(opexpr->args);
+				rightop = lsecond(opexpr->args);
+
+				if (IsA(leftop, RelabelType))
+					leftop = ((RelabelType *) leftop)->arg;
+				if (IsA(rightop, RelabelType))
+					rightop = ((RelabelType *) rightop)->arg;
+
+				if (IsA(leftop, Var) && IsA(rightop, Const))
+				{
+					var = (Var *) leftop;
+					arg_value = (Const *) rightop;
+				}
+				else if (IsA(rightop, Var) && IsA(leftop, Const))
+				{
+					var = (Var *) rightop;
+					arg_value = (Const *) leftop;
+				}
+				else
+					continue;
+
+				column_name = get_attname(ch->table_id, var->varattno, false);
+				if (is_segmentby_col(ht_compression_info, column_name))
+				{
+					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
+					int op_strategy = get_op_opfamily_strategy(opexpr->opno, tce->btree_opf);
+					if (op_strategy == BTEqualStrategyNumber)
+					{
+						/* save segment by column name and its corresponding value specified in
+						 * WHERE */
+						*segmentby_columns = lappend(*segmentby_columns, column_name);
+						*segmentby_columns_value = lappend(*segmentby_columns_value, arg_value);
+						/* this constraint is not IS [NOT] NULL, so mark is_null_check as 0 */
+						*is_null_check = lappend_int(*is_null_check, 0);
+					}
+				}
+			}
+			break;
+			case T_NullTest:
+			{
+				NullTest *ntest = (NullTest *) node;
+				if (IsA(ntest->arg, Var))
+				{
+					var = (Var *) ntest->arg;
+					column_name = get_attname(ch->table_id, var->varattno, false);
+					if (is_segmentby_col(ht_compression_info, column_name))
+					{
+						*segmentby_columns = lappend(*segmentby_columns, column_name);
+						*is_null_check = lappend_int(*is_null_check, 1);
+						if (ntest->nulltesttype == IS_NULL)
+							*is_null = lappend_int(*is_null, 1);
+						else
+							*is_null = lappend_int(*is_null, 0);
+					}
+				}
+			}
+			break;
+			default:
+				break;
+		}
+	}
+}
+
+/*
+ * This method will build scan keys for predicates including
+ * SEGMENT BY column with attribute number from compressed chunk
+ * if condition is like <segmentbycol> = <const value>, else
+ * OUT param null_columns is saved with column attribute number.
+ */
+static ScanKeyData *
+build_update_delete_scankeys(Chunk *chunk, List *segmentby_columns, List *segmentby_column_values,
+							 List *is_null_check, int *num_scankeys, Bitmapset **null_columns)
+{
+	Chunk *comp_chunk = NULL;
+	Relation comp_chunk_rel;
+	TupleDesc tupleDesc;
+	ListCell *col;
+	ListCell *is_null_or_not_null;
+	int key_index = 0;
+	int pos = 0;
+
+	ScanKeyData *scankeys = palloc0(segmentby_columns->length * sizeof(ScanKeyData));
+	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	comp_chunk_rel = table_open(comp_chunk->table_id, AccessShareLock);
+	tupleDesc = RelationGetDescr(comp_chunk_rel);
+
+	forboth (col, segmentby_columns, is_null_or_not_null, is_null_check)
+	{
+		char *column_name = lfirst(col);
+		AttrNumber attnum = get_attnum(RelationGetRelid(comp_chunk_rel), column_name);
+		if (attnum == InvalidAttrNumber)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" of relation \"%s\" does not exist",
+							column_name,
+							RelationGetRelationName(comp_chunk_rel))));
+		Form_pg_attribute attr = TupleDescAttr(tupleDesc, AttrNumberGetAttrOffset(attnum));
+		TypeCacheEntry *tce = lookup_type_cache(attr->atttypid, TYPECACHE_EQ_OPR_FINFO);
+		if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
+			elog(ERROR, "no equality function for column \"%s\"", column_name);
+
+		if (lfirst_int(is_null_or_not_null) == 0)
+		{
+			Const *const_value = list_nth(segmentby_column_values, pos++);
+			Datum value = (const_value ? const_value->constvalue : 0);
+			ScanKeyEntryInitialize(&scankeys[key_index++],
+								   0, /* flags */
+								   attnum,
+								   BTEqualStrategyNumber,
+								   InvalidOid, /* No strategy subtype. */
+								   attr->attcollation,
+								   tce->eq_opr_finfo.fn_oid,
+								   value);
+		}
+		else
+		{
+			*null_columns = bms_add_member(*null_columns, attnum);
+		}
+	}
+	*num_scankeys = key_index;
+	table_close(comp_chunk_rel, AccessShareLock);
+	return scankeys;
+}
+
+/*
+ * This method will:
+ *  1.scan compressed chunk
+ *  2.decompress the row
+ *  3.insert decompressed rows to uncompressed chunk
+ *  4.delete this row from compressed chunk
+ */
+static bool
+decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset *null_columns,
+				   List *is_nulls, bool *chunk_status_changed)
+{
+	Relation chunk_rel;
+	Relation comp_chunk_rel;
+	Chunk *comp_chunk;
+	HeapTuple compressed_tuple;
+	RowDecompressor decompressor;
+	Snapshot snapshot;
+
+	snapshot = GetTransactionSnapshot();
+	chunk_rel = table_open(ch->table_id, RowExclusiveLock);
+	comp_chunk = ts_chunk_get_by_id(ch->fd.compressed_chunk_id, true);
+	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
+	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
+
+	TableScanDesc heapScan = table_beginscan(comp_chunk_rel, snapshot, num_scankeys, scankeys);
+	while ((compressed_tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
+	{
+		bool skip_tuple = false;
+		int attrno = bms_next_member(null_columns, -1);
+		int pos = 0;
+		bool is_null_condition = 0;
+		bool seg_col_is_null = false;
+		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
+		{
+			is_null_condition = list_nth_int(is_nulls, pos);
+			seg_col_is_null = heap_attisnull(compressed_tuple, attrno, decompressor.in_desc);
+			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
+			{
+				/*
+				 * if segment by column in the scanned tuple has non null value
+				 * and IS NULL is specified, OR segment by column has null value
+				 * and IS NOT NULL is specified then skip this tuple
+				 */
+				skip_tuple = true;
+				break;
+			}
+			pos++;
+		}
+		if (skip_tuple)
+			continue;
+		heap_deform_tuple(compressed_tuple,
+						  decompressor.in_desc,
+						  decompressor.compressed_datums,
+						  decompressor.compressed_is_nulls);
+
+		row_decompressor_decompress_row(&decompressor, NULL);
+		TM_FailureData tmfd;
+		TM_Result result;
+		result = table_tuple_delete(comp_chunk_rel,
+									&compressed_tuple->t_self,
+									decompressor.mycid,
+									snapshot,
+									InvalidSnapshot,
+									true,
+									&tmfd,
+									false);
+
+		if (result == TM_Updated || result == TM_Deleted)
+		{
+			if (IsolationUsesXactSnapshot())
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			return false;
+		}
+		if (result == TM_Invisible)
+		{
+			elog(ERROR, "attempted to lock invisible tuple");
+			return false;
+		}
+		*chunk_status_changed = true;
+	}
+	if (scankeys)
+		pfree(scankeys);
+	table_endscan(heapScan);
+	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeBulkInsertState(decompressor.bistate);
+
+	table_close(chunk_rel, NoLock);
+	table_close(comp_chunk_rel, NoLock);
+	return true;
+}
+
+/*
+ * This method will:
+ *  1. Evaluate WHERE clauses and check if SEGMENT BY columns
+ *     are specified or not.
+ *  2. Build scan keys for SEGMENT BY columns.
+ *  3. Move scanned rows to staging area.
+ *  4. Update catalog table to change status of moved chunk.
+ */
+void
+decompress_batches_for_update_delete(List *chunks, List *predicates)
+{
+	List *segmentby_columns = NIL;
+	List *segmentby_columns_value = NIL;
+	List *is_null_check = NIL;
+	List *is_null = NIL;
+	ListCell *ch = NULL;
+	if (predicates)
+		fill_predicate_context(linitial(chunks),
+							   predicates,
+							   &segmentby_columns,
+							   &segmentby_columns_value,
+							   &is_null_check,
+							   &is_null);
+	foreach (ch, chunks)
+	{
+		bool chunk_status_changed = false;
+		ScanKeyData *scankeys = NULL;
+		Bitmapset *null_columns = NULL;
+		int num_scankeys = 0;
+
+		if (segmentby_columns)
+		{
+			scankeys = build_update_delete_scankeys(lfirst(ch),
+													segmentby_columns,
+													segmentby_columns_value,
+													is_null_check,
+													&num_scankeys,
+													&null_columns);
+		}
+		if (decompress_batches(lfirst(ch),
+							   scankeys,
+							   num_scankeys,
+							   null_columns,
+							   is_null,
+							   &chunk_status_changed))
+		{
+			/*
+			 * tuples from compressed chunk has been decompressed and moved
+			 * to staging area, thus mark this chunk as partially compressed
+			 */
+			if (chunk_status_changed == true)
+				ts_chunk_set_partial(lfirst(ch));
+		}
+	}
+}
+#endif

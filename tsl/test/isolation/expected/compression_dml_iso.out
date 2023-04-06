@@ -1,0 +1,62 @@
+unused step name: IN1
+unused step name: INc
+unused step name: S1
+unused step name: SA
+unused step name: SC1
+unused step name: SChunkStat
+Parsed test spec with 7 sessions
+
+starting permutation: CA1 CAc SH I1 Ic SH UPD1 UPDc SH DEL1 DELc SH UPD1 UPDc SH
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100);
+step Ic: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200;
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+

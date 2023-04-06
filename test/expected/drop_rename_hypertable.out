@@ -208,6 +208,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | continuous_aggs_hypertable_invalidation_log      | table | super_user
  _timescaledb_catalog | continuous_aggs_invalidation_threshold           | table | super_user
  _timescaledb_catalog | continuous_aggs_materialization_invalidation_log | table | super_user
+ _timescaledb_catalog | continuous_aggs_watermark                        | table | super_user
  _timescaledb_catalog | dimension                                        | table | super_user
  _timescaledb_catalog | dimension_partition                              | table | super_user
  _timescaledb_catalog | dimension_slice                                  | table | super_user
@@ -217,7 +218,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | metadata                                         | table | super_user
  _timescaledb_catalog | remote_txn                                       | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user
-(23 rows)
+(24 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

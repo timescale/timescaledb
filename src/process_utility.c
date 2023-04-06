@@ -768,30 +768,6 @@ typedef struct ChunkPair
 	Oid compressed_relid;
 } ChunkPair;
 
-static void
-add_compressed_chunk_to_vacuum(Hypertable *ht, Oid comp_chunk_relid, void *arg)
-{
-	VacuumCtx *ctx = (VacuumCtx *) arg;
-	Chunk *compressed_chunk = ts_chunk_get_by_relid(comp_chunk_relid, true);
-	VacuumRelation *chunk_vacuum_rel;
-
-	Chunk *chunk_parent;
-	/* chunk is from a compressed hypertable */
-	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
-
-	/*chunks for internal compression table have a parent */
-	chunk_parent = ts_chunk_get_compressed_chunk_parent(compressed_chunk);
-	Assert(chunk_parent != NULL);
-
-	ChunkPair *cp = palloc(sizeof(ChunkPair));
-	cp->uncompressed_relid = chunk_parent->table_id;
-	cp->compressed_relid = comp_chunk_relid;
-	ctx->chunk_pairs = lappend(ctx->chunk_pairs, cp);
-	/* analyze/vacuum the compressed rel instead */
-	chunk_vacuum_rel = makeVacuumRelation(NULL, comp_chunk_relid, NIL);
-	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
-}
-
 /* Adds a chunk to the list of tables to be vacuumed */
 static void
 add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
@@ -801,30 +777,11 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	VacuumRelation *chunk_vacuum_rel;
 	RangeVar *chunk_range_var;
 
-	/* If the chunk has an associated compressed chunk, analyze that instead
-	 * When we compress a chunk, we save stats for the raw chunk, do
-	 * not modify that. Data now lives in the compressed chunk, so
-	 * analyze it.
-	 */
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-	{
-		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-		ChunkPair *cp = palloc(sizeof(ChunkPair));
-		cp->uncompressed_relid = chunk_relid;
-		cp->compressed_relid = comp_chunk->table_id;
-		ctx->chunk_pairs = lappend(ctx->chunk_pairs, cp);
-		/* analyze/vacuum the compressed rel instead */
-		chunk_vacuum_rel = makeVacuumRelation(NULL, comp_chunk->table_id, NIL);
-		ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
-	}
-	else
-	{
-		chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
-		chunk_range_var->relname = NameStr(chunk->fd.table_name);
-		chunk_range_var->schemaname = NameStr(chunk->fd.schema_name);
-		chunk_vacuum_rel =
-			makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
-	}
+	chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
+	chunk_range_var->relname = NameStr(chunk->fd.table_name);
+	chunk_range_var->schemaname = NameStr(chunk->fd.schema_name);
+	chunk_vacuum_rel =
+		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 }
 
@@ -851,7 +808,6 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 	{
 		Form_pg_class classform = (Form_pg_class) GETSTRUCT(tuple);
 		Hypertable *ht;
-		Chunk *chunk;
 		Oid relid;
 
 		relid = classform->oid;
@@ -873,16 +829,8 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 
 		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 		if (ht)
-		{
 			if (hypertable_is_distributed(ht))
 				continue;
-		}
-		else
-		{
-			chunk = ts_chunk_get_by_relid(relid, false);
-			if (chunk && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-				continue;
-		}
 
 		/*
 		 * Build VacuumRelation(s) specifying the table OIDs to be processed.
@@ -950,17 +898,8 @@ process_vacuum(ProcessUtilityArgs *args)
 					 */
 					if (hypertable_is_distributed(ht))
 						continue;
-
-					if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-					{
-						ctx.ht_vacuum_rel = vacuum_rel;
-						foreach_chunk(ht, add_compressed_chunk_to_vacuum, &ctx);
-					}
-					else
-					{
-						ctx.ht_vacuum_rel = vacuum_rel;
-						foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
-					}
+					ctx.ht_vacuum_rel = vacuum_rel;
+					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
 				}
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
@@ -978,12 +917,6 @@ process_vacuum(ProcessUtilityArgs *args)
 
 		/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 		ExecVacuum(args->parse_state, stmt, is_toplevel);
-		foreach (lc, ctx.chunk_pairs)
-		{
-			ChunkPair *cp = (ChunkPair *) lfirst(lc);
-			ts_cm_functions->update_compressed_chunk_relstats(cp->uncompressed_relid,
-															  cp->compressed_relid);
-		}
 	}
 	/*
 	Restore original list. stmt->rels which has references to
@@ -2254,7 +2187,7 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	Oid hypertable_constraint_oid = *((Oid *) arg);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	ts_chunk_constraint_create_on_chunk(chunk, hypertable_constraint_oid);
+	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
 }
 
 static void
@@ -3164,7 +3097,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	ts_dimension_set_type(dim, new_type);
 	ts_process_utility_set_expect_chunk_modification(true);
-	ts_chunk_recreate_all_constraints_for_dimension(ht->space, dim->fd.id);
+	ts_chunk_recreate_all_constraints_for_dimension(ht, dim->fd.id);
 	ts_process_utility_set_expect_chunk_modification(false);
 }
 

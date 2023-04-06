@@ -57,6 +57,7 @@ typedef enum CatalogTable
 	CHUNK_COPY_OPERATION,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	JOB_ERRORS,
+	CONTINUOUS_AGGS_WATERMARK,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -1171,6 +1172,39 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
 
 #define Natts_continuous_aggs_materialization_invalidation_log_idx                                 \
 	(_Anum_continuous_aggs_materialization_invalidation_log_idx_max - 1)
+
+/****** CONTINUOUS_AGGS_WATERMARK_TABLE definitions*/
+#define CONTINUOUS_AGGS_WATERMARK_TABLE_NAME "continuous_aggs_watermark"
+typedef enum Anum_continuous_aggs_watermark
+{
+	Anum_continuous_aggs_watermark_mat_hypertable_id = 1,
+	Anum_continuous_aggs_watermark_watermark,
+	_Anum_continuous_aggs_watermark_max,
+} Anum_continuous_aggs_watermark;
+
+#define Natts_continuous_aggs_watermark (_Anum_continuous_aggs_watermark_max - 1)
+
+typedef struct FormData_continuous_aggs_watermark
+{
+	int32 mat_hypertable_id;
+	int64 watermark;
+} FormData_continuous_aggs_watermark;
+
+typedef FormData_continuous_aggs_watermark *Form_continuous_aggs_watermark;
+
+enum
+{
+	CONTINUOUS_AGGS_WATERMARK_PKEY = 0,
+	_MAX_CONTINUOUS_AGGS_WATERMARK_INDEX,
+};
+
+typedef enum Anum_continuous_aggs_watermark_pkey
+{
+	Anum_continuous_aggs_watermark_pkey_mat_hypertable_id = 1,
+	_Anum_continuous_aggs_watermark_pkey_max,
+} Anum_continuous_aggs_watermark_pkey;
+
+#define Natts_continuous_aggs_watermark_pkey (_Anum_continuous_aggs_watermark_pkey_max - 1)
 
 #define HYPERTABLE_COMPRESSION_TABLE_NAME "hypertable_compression"
 typedef enum Anum_hypertable_compression

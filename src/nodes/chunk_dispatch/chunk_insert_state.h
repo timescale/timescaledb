@@ -67,4 +67,5 @@ typedef struct ChunkDispatch ChunkDispatch;
 extern ChunkInsertState *ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 
+OnConflictAction chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
 #endif /* TIMESCALEDB_CHUNK_INSERT_STATE_H */

@@ -14,6 +14,7 @@
 
 #include "compat/compat.h"
 #include "utils.h"
+#include "debug_assert.h"
 
 /* aggregate histogram:
  *	 histogram(state, val, min, max, nbuckets) returns the histogram array with nbuckets
@@ -91,7 +92,11 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 													 Int32GetDatum(nbuckets)));
 
 	/* Increment the proper histogram bucket */
-	Assert(bucket < state->nbuckets);
+	if (bucket < 0 || bucket >= state->nbuckets)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("index %d from \"width_bucket\" out of range", bucket),
+				 errhint("You probably have a floating point overflow.")));
 	if (DatumGetInt32(state->buckets[bucket]) >= PG_INT32_MAX - 1)
 		elog(ERROR, "overflow in histogram");
 

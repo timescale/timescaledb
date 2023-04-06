@@ -1164,8 +1164,6 @@ SELECT decompress_chunk(schema_name || '.' || table_name)
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = :'MAT_HTID' and status = 1;
 
---disable compression on cagg after decompressing all chunks--
-ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
 SELECT cagg_name, mat_table_name
 FROM cagg_compression_status where cagg_name = 'search_query_count_3';
 SELECT view_name, materialized_only, compression_enabled
