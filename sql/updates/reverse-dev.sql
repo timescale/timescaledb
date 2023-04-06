@@ -99,5 +99,19 @@ BEGIN
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
+ALTER FUNCTION _timescaledb_functions.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hist_combinefunc(state1 INTERNAL, state2 INTERNAL) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hist_serializefunc(INTERNAL) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hist_deserializefunc(bytea, INTERNAL) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER) SET SCHEMA _timescaledb_internal;
+
+ALTER FUNCTION _timescaledb_functions.first_sfunc(internal, anyelement, "any") SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.first_combinefunc(internal, internal) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.last_sfunc(internal, anyelement, "any") SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.last_combinefunc(internal, internal) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.bookend_finalfunc(internal, anyelement, "any") SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.bookend_serializefunc(internal) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.bookend_deserializefunc(bytea, internal) SET SCHEMA _timescaledb_internal;
+
 DROP SCHEMA _timescaledb_functions;
 
