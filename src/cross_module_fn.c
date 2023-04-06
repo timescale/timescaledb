@@ -167,7 +167,7 @@ error_no_default_fn_community(void)
 			 errmsg("functionality not supported under the current \"%s\" license. Learn more at "
 					"https://timescale.com/.",
 					ts_guc_license),
-			 errhint("To get access to all features, and the best time-series experience try out "
+			 errhint("To access all features and the best time-series experience, try out "
 					 "Timescale Cloud.")));
 }
 
