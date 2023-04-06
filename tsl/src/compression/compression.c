@@ -1935,8 +1935,12 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 	bms_free(key_columns);
 
-	TableScanDesc heapScan =
-		table_beginscan(in_rel, GetTransactionSnapshot(), num_scankeys, scankeys);
+	/*
+	 * Using latest snapshot to scan the heap since we are doing this to build
+	 * the index on the uncompressed chunks in order to do speculative insertion
+	 * which is always built from all tuples (even in higher levels of isolation).
+	 */
+	TableScanDesc heapScan = table_beginscan(in_rel, GetLatestSnapshot(), num_scankeys, scankeys);
 
 	for (HeapTuple compressed_tuple = heap_getnext(heapScan, ForwardScanDirection);
 		 compressed_tuple != NULL;
