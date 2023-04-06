@@ -517,6 +517,15 @@ ROLLBACK;
 DROP TABLE trigger_test;
 
 -- test interaction between newly inserted batches and pathkeys/ordered append
+--
+-- The following test operates on a small relation. By using the
+-- timescaledb.enable_decompression_sorted_merge optimization, we are pushing a sort node
+-- below the DecompressChunk node, which operates on the batches. This could lead to flaky
+-- tests because the input data is small and PostgreSQL switches from IndexScans to
+-- SequentialScans. Disable the optimization for the following test to ensure we have
+-- stable query plans in all CI environments.
+SET timescaledb.enable_decompression_sorted_merge = 0;
+
 CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
 ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
@@ -555,6 +564,7 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
+SET timescaledb.enable_decompression_sorted_merge = 1;
 
 -- TEST cagg triggers with insert into compressed chunk
 CREATE TABLE conditions (

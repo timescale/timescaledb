@@ -489,7 +489,7 @@ can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 	MergeBatchResult merge_result = SCAN_FORWARD;
 
 	/* Ensure that we have path keys and the chunk is ordered */
-	if (pathkeys == NIL || ts_chunk_is_unordered(chunk) || ts_chunk_is_partial(chunk))
+	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
 		return MERGE_NOT_POSSIBLE;
 
 	int nkeys = list_length(pathkeys);
@@ -720,24 +720,31 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * down the sort to the compressed chunk. If we can push down the sort, the batches can be
 		 * directly consumed in this order and we don't need to use this optimization.
 		 */
+		DecompressChunkPath *batch_merge_path = NULL;
+
 		if (ts_guc_enable_decompression_sorted_merge && !sort_info.can_pushdown_sort)
 		{
 			MergeBatchResult merge_result = can_sorted_merge_append(root, info, chunk);
 			if (merge_result != MERGE_NOT_POSSIBLE)
 			{
-				DecompressChunkPath *dcpath =
-					copy_decompress_chunk_path((DecompressChunkPath *) path);
+				batch_merge_path = copy_decompress_chunk_path((DecompressChunkPath *) path);
 
-				dcpath->reverse = (merge_result != SCAN_FORWARD);
-				dcpath->sorted_merge_append = true;
+				batch_merge_path->reverse = (merge_result != SCAN_FORWARD);
+				batch_merge_path->sorted_merge_append = true;
 
 				/* The segment by optimization is only enabled if it can deliver the tuples in the
 				 * same order as the query requested it. So, we can just copy the pathkeys of the
 				 * query here.
 				 */
-				dcpath->cpath.path.pathkeys = root->query_pathkeys;
-				cost_decompress_sorted_merge_append(root, dcpath, child_path);
-				add_path(chunk_rel, &dcpath->cpath.path);
+				batch_merge_path->cpath.path.pathkeys = root->query_pathkeys;
+				cost_decompress_sorted_merge_append(root, batch_merge_path, child_path);
+
+				/* If the chunk is partially compressed, prepare the path only and add it later
+				 * to a merge append path when we are able to generate the ordered result for the
+				 * compressed and uncompressed part of the chunk.
+				 */
+				if (!ts_chunk_is_partial(chunk))
+					add_path(chunk_rel, &batch_merge_path->cpath.path);
 			}
 		}
 
@@ -806,6 +813,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				uncompressed_path = reparameterize_path(root, uncompressed_path, req_outer, 1.0);
 				if (!uncompressed_path)
 					continue;
+			}
+
+			/* If we were able to generate a batch merge path, create a merge append path
+			 * that combines the result of the compressed and uncompressed part of the chunk. The
+			 * uncompressed part will be sorted, the batch_merge_path is already properly sorted.
+			 */
+			if (batch_merge_path != NULL)
+			{
+				Path *merge_append_path =
+					(Path *) create_merge_append_path_compat(root,
+															 chunk_rel,
+															 list_make2(batch_merge_path,
+																		uncompressed_path),
+															 root->query_pathkeys,
+															 req_outer,
+															 NIL);
+
+				add_path(chunk_rel, merge_append_path);
 			}
 
 			/*
