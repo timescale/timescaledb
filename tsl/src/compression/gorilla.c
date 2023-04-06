@@ -825,15 +825,15 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 #undef LANE_INPUTS
 #undef LANE_OUTPUTS
 
-//typedef struct
+// typedef struct
 //{
 //	uint64 *restrict data;
 //	uint64 start_bit_absolute;
 //	uint64 this_word;
-//} SimpleBitArrayIterator;
+// } SimpleBitArrayIterator;
 //
-//pg_attribute_always_inline static uint64
-//simple_bit_array_next(SimpleBitArrayIterator *iter, uint8 bits)
+// pg_attribute_always_inline static uint64
+// simple_bit_array_next(SimpleBitArrayIterator *iter, uint8 bits)
 //{
 //	Assert(bits <= 64);
 //
@@ -868,7 +868,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 //	Assert(offs < 64);
 //	const uint64 next_word = iter->data[end_word_index];
 //	return ((this_word >> start_bit_in_word) | (next_word << offs)) & lower_mask;
-//}
+// }
 
 // pg_attribute_always_inline static uint64
 // simple_bit_array_next(SimpleBitArrayIterator *iter, uint8 bits)

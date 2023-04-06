@@ -627,8 +627,10 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 				Assert(column->compressed.iterator == NULL);
 				Assert(column->compressed.nulls != NULL);
 
-				decompressed_slot->tts_isnull[attr] = column->compressed.nulls[state->current_batch_row];
-				decompressed_slot->tts_values[attr] = column->compressed.datums[state->current_batch_row];
+				decompressed_slot->tts_isnull[attr] =
+					column->compressed.nulls[state->current_batch_row];
+				decompressed_slot->tts_values[attr] =
+					column->compressed.datums[state->current_batch_row];
 			}
 			else if (column->compressed.iterator != NULL)
 			{

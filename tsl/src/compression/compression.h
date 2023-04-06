@@ -411,7 +411,8 @@ extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
-extern ArrowArray *tsl_try_decompress_all(CompressionAlgorithms algorithm, Datum compressed_data, Oid element_type);
+extern ArrowArray *tsl_try_decompress_all(CompressionAlgorithms algorithm, Datum compressed_data,
+										  Oid element_type);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;

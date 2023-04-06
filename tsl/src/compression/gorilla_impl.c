@@ -47,12 +47,12 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	BitArrayIterator xors_iterator;
 	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
 
-//	/* Definitely slows things down, but why? Generated code is more simple. */
-//	SimpleBitArrayIterator simple_xors_iterator = {
-//		.start_bit_absolute = 0,
-//		.data = gorilla_data->xors.buckets.data,
-//		.this_word = gorilla_data->xors.buckets.data[0],
-//	};
+	//	/* Definitely slows things down, but why? Generated code is more simple. */
+	//	SimpleBitArrayIterator simple_xors_iterator = {
+	//		.start_bit_absolute = 0,
+	//		.data = gorilla_data->xors.buckets.data,
+	//		.this_word = gorilla_data->xors.buckets.data[0],
+	//	};
 
 	/* The first tag1 must be 1, so that we initialize the bit widths. */
 	if (simple8brle_bitmap_get_at(&tag1s, 0) == 0)
@@ -78,7 +78,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		if (simple8brle_bitmap_get_at(&tag1s, i) != 0)
 		{
 			/* Load new bit widths. */
-			Simple8bRleDecompressResult num_xor_bits = simple8brle_decompression_iterator_try_next_forward(&num_bits_used);
+			Simple8bRleDecompressResult num_xor_bits =
+				simple8brle_decompression_iterator_try_next_forward(&num_bits_used);
 			Assert(!num_xor_bits.is_done);
 			Assert(num_xor_bits.val <= 64);
 
