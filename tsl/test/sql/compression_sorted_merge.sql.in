@@ -313,22 +313,25 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 ------
--- Tests based on chunk state
+-- Tests based on compressed chunk state
 ------
 
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
 BEGIN TRANSACTION;
+
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10, 20, 30, 40, 50);
 
--- Should not be optimized because of the partially compressed chunk
+-- Should be optimized using a merge append path between the compressed and uncompressed part of the chunk
 :PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- The inserted value should be visible
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
 
 ROLLBACK;
-
--- Should be optimized again
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
-
 
 ------
 -- Tests on a larger relation
