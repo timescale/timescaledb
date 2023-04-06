@@ -135,6 +135,18 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		}
 
 		cis = ts_chunk_insert_state_create(chunk, dispatch);
+
+		/*
+		 * We might have been blocked by a compression operation
+		 * while trying to fetch the above lock so lets update the
+		 * chunk catalog data because the status might have changed.
+		 *
+		 * This works even in higher levels of isolation since
+		 * catalog data is always read from latest snapshot.
+		 */
+		chunk = ts_chunk_get_by_relid(chunk->table_id, true);
+		ts_set_compression_status(cis, chunk);
+
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 
 		if (found && ts_chunk_is_compressed(chunk) && !ts_chunk_is_distributed(chunk))

@@ -554,6 +554,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     200|  100
   10|     1|     100|   20
   11|     1|     100|   20
   12|     1|     100|   20
@@ -574,13 +575,13 @@ time|device|location|value
   27|     1|     100|   20
   28|     1|     100|   20
   29|     1|     100|   20
-(31 rows)
+(32 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 
