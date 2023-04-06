@@ -342,6 +342,10 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 
 				if (isnull)
 				{
+					/*
+					 * The column will have a default value for the entire batch,
+					 * set it now.
+					 */
 					column->compressed.iterator = NULL;
 					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 					decompressed_slot->tts_values[attr] =
@@ -463,6 +467,11 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *compressed_slot,
 			}
 			case SEGMENTBY_COLUMN:
 			{
+				/*
+				 * A segmentby column is not going to change during one batch,
+				 * and our output tuples are read-only, so it's enough to only
+				 * save it once per batch, which we do here.
+				 */
 				AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 				decompressed_slot->tts_values[attr] =
 					slot_getattr(compressed_slot,
@@ -551,7 +560,7 @@ decompress_chunk_end(CustomScanState *node)
 static TupleTableSlot *
 decompress_chunk_create_tuple(DecompressChunkState *state)
 {
-	TupleTableSlot *slot = state->csstate.ss.ss_ScanTupleSlot;
+	TupleTableSlot *decompressed_slot = state->csstate.ss.ss_ScanTupleSlot;
 
 	while (true)
 	{
@@ -591,12 +600,12 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 			ExprContext *econtext = state->csstate.ss.ps.ps_ExprContext;
 			ResetExprContext(econtext);
 
-			TupleTableSlot *subslot = ExecProcNode(linitial(state->csstate.custom_ps));
+			TupleTableSlot *compressed_slot = ExecProcNode(linitial(state->csstate.custom_ps));
 
-			if (TupIsNull(subslot))
+			if (TupIsNull(compressed_slot))
 				return NULL;
 
-			initialize_batch(state, subslot, slot);
+			initialize_batch(state, compressed_slot, decompressed_slot);
 		}
 
 		Assert(state->initialized);
@@ -618,8 +627,8 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 				Assert(column->compressed.iterator == NULL);
 				Assert(column->compressed.nulls != NULL);
 
-				slot->tts_isnull[attr] = column->compressed.nulls[state->current_batch_row];
-				slot->tts_values[attr] = column->compressed.datums[state->current_batch_row];
+				decompressed_slot->tts_isnull[attr] = column->compressed.nulls[state->current_batch_row];
+				decompressed_slot->tts_values[attr] = column->compressed.datums[state->current_batch_row];
 			}
 			else if (column->compressed.iterator != NULL)
 			{
@@ -631,23 +640,27 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 					elog(ERROR, "compressed column out of sync with batch counter");
 				}
 
-				slot->tts_isnull[attr] = result.is_null;
-				slot->tts_values[attr] = result.val;
+				decompressed_slot->tts_isnull[attr] = result.is_null;
+				decompressed_slot->tts_values[attr] = result.val;
 			}
 		}
 
 		/*
 		 * It's a virtual tuple slot, so no point in clearing/storing it
 		 * per each row, we can just update the values in-place. This saves
-		 * some CPU. We have to store it after ExecQual fails or after a new
-		 * batch.
+		 * some CPU. We have to store it after ExecQual returns false (the tuple
+		 * didn't pass the filter), or after a new batch. The standard protocol
+		 * is to clear and set the tuple slot for each row, but our output tuple
+		 * slots are read-only, and the memory is owned by this node, so it is
+		 * safe to violate this protocol.
 		 */
-		if (TTS_EMPTY(slot))
+		Assert(TTS_IS_VIRTUAL(decompressed_slot));
+		if (TTS_EMPTY(decompressed_slot))
 		{
-			ExecStoreVirtualTuple(slot);
+			ExecStoreVirtualTuple(decompressed_slot);
 		}
 
 		state->current_batch_row++;
-		return slot;
+		return decompressed_slot;
 	}
 }
