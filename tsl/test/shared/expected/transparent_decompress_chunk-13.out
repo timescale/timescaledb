@@ -216,12 +216,12 @@ QUERY PLAN
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(), 1, 3)) ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit (actual rows=10 loops=1)
-   ->  Sort (actual rows=10 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-               Filter: (device_id = length("substring"(version(), 1, 3)))
-               Rows Removed by Filter: 14392
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10 loops=1)
+         Filter: (device_id = length("substring"(version(), 1, 3)))
+         Rows Removed by Filter: 2392
+         ->  Sort (actual rows=6 loops=1)
+               Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
+               Sort Method: quicksort 
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (8 rows)
 
@@ -413,10 +413,10 @@ QUERY PLAN
 :PREFIX SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
 QUERY PLAN
  Limit (actual rows=10 loops=1)
-   ->  Sort (actual rows=10 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=6 loops=1)
+               Sort Key: compress_hyper_X_X_chunk._ts_meta_max_1 DESC
+               Sort Method: quicksort 
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (6 rows)
 
@@ -482,10 +482,10 @@ QUERY PLAN
    Sort Key: q.v1
    Sort Method: quicksort 
    ->  Subquery Scan on q (actual rows=17990 loops=1)
-         ->  Sort (actual rows=17990 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Sort (actual rows=20 loops=1)
+                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (9 rows)
 

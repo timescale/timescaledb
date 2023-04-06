@@ -18,6 +18,7 @@ accidentally triggering the load of a previous DB version.**
 * #5547 Skip Ordered Append when only 1 child node is present
 * #5510 Propagate vacuum/analyze to compressed chunks
 * #5584 Reduce decompression during constraint checking
+* #5530 Optimize compressed chunk resorting
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
