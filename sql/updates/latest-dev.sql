@@ -44,3 +44,9 @@ ALTER FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "an
 ALTER FUNCTION _timescaledb_internal.bookend_serializefunc(internal) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal) SET SCHEMA _timescaledb_functions;
 
+DROP FUNCTION IF EXISTS _timescaledb_internal.is_main_table(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_internal.is_main_table(name, name);
+DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_from_main_table(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_internal.main_table_from_hypertable(integer);
+DROP FUNCTION IF EXISTS _timescaledb_internal.time_literal_sql(bigint, regtype);
+
