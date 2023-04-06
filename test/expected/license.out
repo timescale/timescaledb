@@ -54,7 +54,7 @@ SELECT create_hypertable('metrics', 'time');
 
 ALTER TABLE metrics SET (timescaledb.compress);
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://timescale.com/.
-HINT:  To get access to all features, and the best time-series experience try out Timescale Cloud.
+HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
 INSERT INTO metrics
 VALUES ('2022-01-01 00:00:00', 1), ('2022-01-01 01:00:00', 2), ('2022-01-01 02:00:00', 3);
 CREATE MATERIALIZED VIEW metrics_hourly
@@ -67,7 +67,7 @@ FROM metrics
 GROUP BY bucket
 WITH NO DATA;
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://timescale.com/.
-HINT:  To get access to all features, and the best time-series experience try out Timescale Cloud.
+HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
 CREATE MATERIALIZED VIEW metrics_hourly
 AS
 SELECT time_bucket(INTERVAL '1 hour', time) AS bucket,
