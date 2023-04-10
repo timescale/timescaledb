@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         pg: [ 12, 13, 14, 15 ]
-        os: [ windows-2022 ]
+        os: [ windows-2019 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata"]
         tsl_ignores: ["compression_algos remote_connection telemetry_stats-13 telemetry_stats-14"]
