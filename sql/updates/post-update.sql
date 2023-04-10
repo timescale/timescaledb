@@ -142,9 +142,10 @@ BEGIN
         format('%I.%I', user_view_schema, user_view_name)
       FROM _timescaledb_catalog.continuous_agg
       WHERE finalized IS FALSE
+      AND current_setting('server_version_num')::int >= 150000
       ORDER BY 1
     LOOP
-      RAISE WARNING 'Continuous Aggregate: % with old format will not be supported with PG15. You should upgrade to the new format', cagg_name;
+      RAISE WARNING 'Continuous Aggregate: % with old format will not be supported on PostgreSQL version greater or equal to 15. You should upgrade to the new format', cagg_name;
     END LOOP;
 END $$;
 
