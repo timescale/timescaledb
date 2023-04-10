@@ -72,7 +72,7 @@ INSERT INTO weather VALUES
        ('2023-03-23 06:12:02.73765+00 ','city1', 9.7),
        ('2023-03-23 06:12:06.990998+00','city1',11.7);
 
--- This will currently generate an error.
+-- This used to generate an error, fixed by PG Upstream b0e9e4d76ca212d429d9cd615ae62ac73a9a89ba.
 \set ON_ERROR_STOP 0
 SELECT histogram(temperature, -1.79769e+308, 1.79769e+308,10) FROM weather GROUP BY city;
 \set ON_ERROR_STOP 1
