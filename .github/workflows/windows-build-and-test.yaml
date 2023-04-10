@@ -77,8 +77,8 @@ jobs:
       # PostgreSQL configuration
       PGPORT: 55432
       PGDATA: pgdata
-      TABLESPACE1: D:\tablespace1\
-      TABLESPACE2: D:\tablespace2\
+      TABLESPACE1: "\"D:\\tablespace1\\\""
+      TABLESPACE2: "\"D:\\tablespace2\\\""
     steps:
     - name: Setup WSL
       uses: Vampire/setup-wsl@v2

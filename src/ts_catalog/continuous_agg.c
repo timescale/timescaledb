@@ -1688,6 +1688,8 @@ generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 		timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
 	}
 
+	// elog(WARNING, "timestamp before addition OF INTERVAL was %s", DatumGetCString(DirectFunctionCall1(timestamp_out, timestamp)));
+	// elog(WARNING, "timestampTZ before addition OF INTERVAL was %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, timestamp)));
 	timestamp =
 		DirectFunctionCall2(timestamp_pl_interval, timestamp, IntervalPGetDatum(bf->bucket_width));
 
