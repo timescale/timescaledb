@@ -744,7 +744,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	is_raw_ht_distributed = hypertable_is_distributed(ht);
 
 	/* No bucketing when open ended */
-	if (!(start_isnull && end_isnull))
+	if (!start_isnull && !end_isnull)
 	{
 		if (ts_continuous_agg_bucket_width_variable(cagg))
 		{
