@@ -1313,3 +1313,31 @@ CREATE MATERIALIZED VIEW cagg_named_all WITH
 SELECT time_bucket(bucket_width => '1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
+
+-- Refreshing from the beginning (NULL) of a CAGG with variable time bucket and
+-- using an INTERVAL for the end timestamp (issue #5534)
+CREATE MATERIALIZED VIEW transactions_montly
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket(INTERVAL '1 month', time) AS bucket,
+       SUM(fiat_value),
+       MAX(fiat_value),
+       MIN(fiat_value)
+  FROM transactions
+GROUP BY 1
+WITH NO DATA;
+
+-- No rows
+SELECT * FROM transactions_montly ORDER BY bucket;
+
+-- Refresh from beginning of the CAGG for 1 month
+CALL refresh_continuous_aggregate('transactions_montly', NULL, INTERVAL '1 month');
+SELECT * FROM transactions_montly ORDER BY bucket;
+TRUNCATE transactions_montly;
+
+-- Partial refresh the CAGG from beginning to an specific timestamp
+CALL refresh_continuous_aggregate('transactions_montly', NULL, '2018-11-01 11:50:00-08'::timestamptz);
+SELECT * FROM transactions_montly ORDER BY bucket;
+
+-- Full refresh the CAGG
+CALL refresh_continuous_aggregate('transactions_montly', NULL, NULL);
+SELECT * FROM transactions_montly ORDER BY bucket;

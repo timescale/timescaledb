@@ -420,7 +420,7 @@ ts_time_get_nobegin(Oid timetype)
 	return ts_time_get_nobegin(coerce_to_time_type(timetype));
 }
 
-static int64
+int64
 ts_time_get_nobegin_or_min(Oid timetype)
 {
 	if (IS_TIMESTAMP_TYPE(timetype))
