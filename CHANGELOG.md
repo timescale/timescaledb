@@ -35,6 +35,7 @@ accidentally triggering the load of a previous DB version.**
 * #5556 Fix duplicated entries on timescaledb_experimental.policies view
 * #5433 Fix join rte in CAggs with joins
 * #5462 Fix segfault after column drop on compressed table
+* #5543 Copy scheduled_jobs list before sorting it
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
