@@ -50,3 +50,10 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_from_main_table(regclas
 DROP FUNCTION IF EXISTS _timescaledb_internal.main_table_from_hypertable(integer);
 DROP FUNCTION IF EXISTS _timescaledb_internal.time_literal_sql(bigint, regtype);
 
+ALTER FUNCTION _timescaledb_internal.compressed_data_in(CSTRING) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.compressed_data_out(_timescaledb_internal.compressed_data) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.compressed_data_send(_timescaledb_internal.compressed_data) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.compressed_data_recv(internal) SET SCHEMA _timescaledb_functions;
+
+ALTER FUNCTION _timescaledb_internal.rxid_in(cstring) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.rxid_out(@extschema@.rxid) SET SCHEMA _timescaledb_functions;

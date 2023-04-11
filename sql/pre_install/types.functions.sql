@@ -14,29 +14,29 @@
 -- validation constraint for columns of type ts_interval.
 
 --the textual input/output is simply base64 encoding of the binary representation
-CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_data_in(CSTRING)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_in(CSTRING)
    RETURNS _timescaledb_internal.compressed_data
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_in'
    LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_data_out(_timescaledb_internal.compressed_data)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_out(_timescaledb_internal.compressed_data)
    RETURNS CSTRING
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_out'
    LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_data_send(_timescaledb_internal.compressed_data)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_send(_timescaledb_internal.compressed_data)
    RETURNS BYTEA
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_send'
    LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_data_recv(internal)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_recv(internal)
    RETURNS _timescaledb_internal.compressed_data
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_recv'
    LANGUAGE C IMMUTABLE STRICT;
 
 -- Remote transation ID implementation
-CREATE OR REPLACE FUNCTION _timescaledb_internal.rxid_in(cstring) RETURNS @extschema@.rxid
+CREATE OR REPLACE FUNCTION _timescaledb_functions.rxid_in(cstring) RETURNS @extschema@.rxid
     AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.rxid_out(@extschema@.rxid) RETURNS cstring
+CREATE OR REPLACE FUNCTION _timescaledb_functions.rxid_out(@extschema@.rxid) RETURNS cstring
     AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

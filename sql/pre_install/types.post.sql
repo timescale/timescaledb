@@ -9,10 +9,10 @@ CREATE TYPE _timescaledb_internal.compressed_data (
   INTERNALLENGTH = VARIABLE,
   STORAGE = EXTERNAL,
   ALIGNMENT = double, --needed for alignment in ARRAY type compression
-  INPUT = _timescaledb_internal.compressed_data_in,
-  OUTPUT = _timescaledb_internal.compressed_data_out,
-  RECEIVE = _timescaledb_internal.compressed_data_recv,
-  SEND = _timescaledb_internal.compressed_data_send
+  INPUT = _timescaledb_functions.compressed_data_in,
+  OUTPUT = _timescaledb_functions.compressed_data_out,
+  RECEIVE = _timescaledb_functions.compressed_data_recv,
+  SEND = _timescaledb_functions.compressed_data_send
 );
 
 --
@@ -20,6 +20,6 @@ CREATE TYPE _timescaledb_internal.compressed_data (
 --
 CREATE TYPE @extschema@.rxid (
   internallength = 16,
-  input = _timescaledb_internal.rxid_in,
-  output = _timescaledb_internal.rxid_out
+  input = _timescaledb_functions.rxid_in,
+  output = _timescaledb_functions.rxid_out
 );
