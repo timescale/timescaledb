@@ -40,6 +40,7 @@ accidentally triggering the load of a previous DB version.**
 * #5543 Copy scheduled_jobs list before sorting it
 * #5570 Improve interpolate error message on datatype mismatch
 * #5558 Use regrole for job owner
+* #5542 Enable indexscan on uncompressed part of partially compressed chunks
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
