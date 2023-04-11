@@ -113,6 +113,14 @@ ALTER FUNCTION _timescaledb_functions.bookend_finalfunc(internal, anyelement, "a
 ALTER FUNCTION _timescaledb_functions.bookend_serializefunc(internal) SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.bookend_deserializefunc(bytea, internal) SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.compressed_data_in(CSTRING) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.compressed_data_out(_timescaledb_internal.compressed_data) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.compressed_data_send(_timescaledb_internal.compressed_data) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.compressed_data_recv(internal) SET SCHEMA _timescaledb_internal;
+
+ALTER FUNCTION _timescaledb_functions.rxid_in(cstring) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.rxid_out(@extschema@.rxid) SET SCHEMA _timescaledb_internal;
+
 DROP SCHEMA _timescaledb_functions;
 
 CREATE FUNCTION _timescaledb_internal.is_main_table(
