@@ -1345,13 +1345,16 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 					ts_get_private_reloptinfo(rel)->compressed = true;
 
-					/* Planning indexes are expensive, and if this is a compressed chunk, we
+					/* Planning indexes is expensive, and if this is a fully compressed chunk, we
 					 * know we'll never need to use indexes on the uncompressed version, since
 					 * all the data is in the compressed chunk anyway. Therefore, it is much
 					 * faster if we simply trash the indexlist here and never plan any useless
-					 * IndexPaths at all
+					 * IndexPaths at all.
+					 * If the chunk is partially compressed, then we should enable indexScan
+					 * on the uncompressed part.
 					 */
-					rel->indexlist = NIL;
+					if (!ts_chunk_is_partial(chunk))
+						rel->indexlist = NIL;
 					table_close(uncompressed_chunk, NoLock);
 				}
 			}
