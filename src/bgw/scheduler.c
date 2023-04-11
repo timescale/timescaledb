@@ -575,7 +575,7 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 	ordered_scheduled_jobs = list_qsort(scheduled_jobs, cmp_next_start);
 #else
 	/* PG13 does in-place sort */
-	ordered_scheduled_jobs = scheduled_jobs;
+	ordered_scheduled_jobs = list_copy(scheduled_jobs);
 	list_sort(ordered_scheduled_jobs, cmp_next_start);
 #endif
 
@@ -588,9 +588,7 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 			scheduled_ts_bgw_job_start(sjob, bgw_register);
 	}
 
-#if PG13_LT
 	list_free(ordered_scheduled_jobs);
-#endif
 }
 
 /* Returns the earliest time the scheduler should start a job that is waiting to be started */

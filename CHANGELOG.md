@@ -37,6 +37,7 @@ accidentally triggering the load of a previous DB version.**
 * #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
 * #5556 Fix duplicated entries on timescaledb_experimental.policies view
 * #5433 Fix join rte in CAggs with joins
+* #5543 Copy scheduled_jobs list before sorting it
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher

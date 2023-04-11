@@ -626,3 +626,65 @@ SELECT count(*) = 0
 
 -- cleanup
 DROP TABLE sensor_data;
+
+-- Github issue #5537
+-- Proc that waits until the given job enters the expected state
+CREATE OR REPLACE PROCEDURE wait_for_job_status(job_param_id INTEGER, expected_status TEXT, spins INTEGER=:TEST_SPINWAIT_ITERS)
+LANGUAGE PLPGSQL AS $$
+DECLARE
+  jobstatus TEXT;
+BEGIN
+  FOR i in 1..spins
+  LOOP
+    SELECT job_status FROM timescaledb_information.job_stats WHERE job_id = job_param_id INTO jobstatus;
+    IF jobstatus = expected_status THEN
+      RETURN;
+    END IF;
+    PERFORM pg_sleep(0.1);
+    ROLLBACK;
+  END LOOP;
+  RAISE EXCEPTION 'wait_for_job_status(%): timeout after % tries', job_param_id, spins;
+END;
+$$;
+
+-- Proc that sleeps for 1m - to keep the test jobs in running state
+CREATE OR REPLACE PROCEDURE proc_that_sleeps(job_id INT, config JSONB)
+LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    PERFORM pg_sleep(60);
+END
+$$;
+
+-- create new jobs and ensure that the second one gets scheduled
+-- before the first one by adjusting the initial_start values
+SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz + interval '2s') AS job_id_1 \gset
+SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz - interval '2s') AS job_id_2 \gset
+
+-- wait for the jobs to start running job_2 will start running first
+CALL wait_for_job_status(:job_id_2, 'Running');
+CALL wait_for_job_status(:job_id_1, 'Running');
+
+-- add a new job and wait for it to start
+SELECT add_job('proc_that_sleeps', '1h') AS job_id_3 \gset
+CALL wait_for_job_status(:job_id_3, 'Running');
+
+-- verify that none of the jobs crashed
+SELECT job_id, job_status, next_start,
+       total_runs, total_successes, total_failures
+  FROM timescaledb_information.job_stats
+  WHERE job_id IN (:job_id_1, :job_id_2, :job_id_3)
+  ORDER BY job_id;
+SELECT job_id, err_message
+  FROM timescaledb_information.job_errors
+  WHERE job_id IN (:job_id_1, :job_id_2, :job_id_3);
+
+-- cleanup
+SELECT _timescaledb_internal.stop_background_workers();
+CALL wait_for_job_status(:job_id_1, 'Scheduled');
+CALL wait_for_job_status(:job_id_2, 'Scheduled');
+CALL wait_for_job_status(:job_id_3, 'Scheduled');
+SELECT delete_job(:job_id_1);
+SELECT delete_job(:job_id_2);
+SELECT delete_job(:job_id_3);
+
