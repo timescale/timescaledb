@@ -642,7 +642,7 @@ AND time <= '2000-01-05 23:55:00+0';
 
 -- force index scans to check index mapping
 -- this verifies that we are actually using compressed chunk index scans
--- currently we cannot use indexes on uncompressed chunks due to a bug:
+-- previously we could not use indexes on uncompressed chunks due to a bug:
 -- https://github.com/timescale/timescaledb/issues/5432
 --
 -- this check basically makes sure that the indexes are built properly

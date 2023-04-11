@@ -1442,7 +1442,7 @@ AND time <= '2000-01-05 23:55:00+0';
 
 -- force index scans to check index mapping
 -- this verifies that we are actually using compressed chunk index scans
--- currently we cannot use indexes on uncompressed chunks due to a bug:
+-- previously we could not use indexes on uncompressed chunks due to a bug:
 -- https://github.com/timescale/timescaledb/issues/5432
 --
 -- this check basically makes sure that the indexes are built properly
@@ -1451,28 +1451,26 @@ SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
    Group Key: _hyper_31_107_chunk.device_id
-   ->  Sort
-         Sort Key: _hyper_31_107_chunk.device_id
-         ->  Append
-               ->  Custom Scan (DecompressChunk) on _hyper_31_107_chunk
-                     ->  Index Scan using compress_hyper_32_108_chunk__compressed_hypertable_32_device_id on compress_hyper_32_108_chunk
-               ->  Seq Scan on _hyper_31_107_chunk
-(8 rows)
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_31_107_chunk
+               ->  Index Scan using compress_hyper_32_108_chunk__compressed_hypertable_32_device_id on compress_hyper_32_108_chunk
+         ->  Index Only Scan using _hyper_31_107_chunk_compression_insert_device_id_time_idx on _hyper_31_107_chunk
+(6 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
  device_id | count 
 -----------+-------
-         1 |  3596
-         2 |  3596
          3 |  3596
-         4 |  3596
          5 |  3596
+         4 |  3596
+         2 |  3596
+         1 |  3596
 (5 rows)
 
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
@@ -1526,33 +1524,28 @@ SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
    Group Key: _hyper_31_107_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_107_chunk.device_id
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_31_107_chunk
                ->  Index Scan using compress_hyper_32_108_chunk__compressed_hypertable_32_device_id on compress_hyper_32_108_chunk
-         ->  Sort
-               Sort Key: _hyper_31_109_chunk.device_id
-               ->  Custom Scan (DecompressChunk) on _hyper_31_109_chunk
-                     ->  Index Scan using compress_hyper_32_110_chunk__compressed_hypertable_32_device_id on compress_hyper_32_110_chunk
-         ->  Sort
-               Sort Key: _hyper_31_109_chunk.device_id
-               ->  Seq Scan on _hyper_31_109_chunk
-(13 rows)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_109_chunk
+               ->  Index Scan using compress_hyper_32_110_chunk__compressed_hypertable_32_device_id on compress_hyper_32_110_chunk
+         ->  Index Only Scan using _hyper_31_109_chunk_compression_insert_device_id_time_idx on _hyper_31_109_chunk
+(8 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
  device_id | count 
 -----------+-------
-         1 |  7192
-         2 |  7192
          3 |  7192
-         4 |  7192
          5 |  7192
+         4 |  7192
+         2 |  7192
+         1 |  7192
 (5 rows)
 
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
@@ -1606,35 +1599,30 @@ SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
    Group Key: _hyper_31_107_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_107_chunk.device_id
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_31_107_chunk
                ->  Index Scan using compress_hyper_32_108_chunk__compressed_hypertable_32_device_id on compress_hyper_32_108_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_31_109_chunk
                ->  Index Scan using compress_hyper_32_110_chunk__compressed_hypertable_32_device_id on compress_hyper_32_110_chunk
-         ->  Sort
-               Sort Key: _hyper_31_111_chunk.device_id
-               ->  Custom Scan (DecompressChunk) on _hyper_31_111_chunk
-                     ->  Index Scan using compress_hyper_32_112_chunk__compressed_hypertable_32_device_id on compress_hyper_32_112_chunk
-         ->  Sort
-               Sort Key: _hyper_31_111_chunk.device_id
-               ->  Seq Scan on _hyper_31_111_chunk
-(15 rows)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_111_chunk
+               ->  Index Scan using compress_hyper_32_112_chunk__compressed_hypertable_32_device_id on compress_hyper_32_112_chunk
+         ->  Index Only Scan using _hyper_31_111_chunk_compression_insert_device_id_time_idx on _hyper_31_111_chunk
+(10 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
  device_id | count 
 -----------+-------
-         1 | 10788
-         2 | 10788
          3 | 10788
-         4 | 10788
          5 | 10788
+         4 | 10788
+         2 | 10788
+         1 | 10788
 (5 rows)
 
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
@@ -1688,37 +1676,32 @@ SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
    Group Key: _hyper_31_107_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_107_chunk.device_id
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_31_107_chunk
                ->  Index Scan using compress_hyper_32_108_chunk__compressed_hypertable_32_device_id on compress_hyper_32_108_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_31_109_chunk
                ->  Index Scan using compress_hyper_32_110_chunk__compressed_hypertable_32_device_id on compress_hyper_32_110_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_31_111_chunk
                ->  Index Scan using compress_hyper_32_112_chunk__compressed_hypertable_32_device_id on compress_hyper_32_112_chunk
-         ->  Sort
-               Sort Key: _hyper_31_113_chunk.device_id
-               ->  Custom Scan (DecompressChunk) on _hyper_31_113_chunk
-                     ->  Index Scan using compress_hyper_32_114_chunk__compressed_hypertable_32_device_id on compress_hyper_32_114_chunk
-         ->  Sort
-               Sort Key: _hyper_31_113_chunk.device_id
-               ->  Seq Scan on _hyper_31_113_chunk
-(17 rows)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_113_chunk
+               ->  Index Scan using compress_hyper_32_114_chunk__compressed_hypertable_32_device_id on compress_hyper_32_114_chunk
+         ->  Index Only Scan using _hyper_31_113_chunk_compression_insert_device_id_time_idx on _hyper_31_113_chunk
+(12 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
  device_id | count 
 -----------+-------
-         1 | 14384
-         2 | 14384
          3 | 14384
-         4 | 14384
          5 | 14384
+         4 | 14384
+         2 | 14384
+         1 | 14384
 (5 rows)
 
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
@@ -1772,12 +1755,11 @@ SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
    Group Key: _hyper_31_107_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_107_chunk.device_id
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_31_107_chunk
                ->  Index Scan using compress_hyper_32_108_chunk__compressed_hypertable_32_device_id on compress_hyper_32_108_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_31_109_chunk
@@ -1786,25 +1768,21 @@ GROUP BY device_id;
                ->  Index Scan using compress_hyper_32_112_chunk__compressed_hypertable_32_device_id on compress_hyper_32_112_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_31_113_chunk
                ->  Index Scan using compress_hyper_32_114_chunk__compressed_hypertable_32_device_id on compress_hyper_32_114_chunk
-         ->  Sort
-               Sort Key: _hyper_31_115_chunk.device_id
-               ->  Custom Scan (DecompressChunk) on _hyper_31_115_chunk
-                     ->  Index Scan using compress_hyper_32_116_chunk__compressed_hypertable_32_device_id on compress_hyper_32_116_chunk
-         ->  Sort
-               Sort Key: _hyper_31_115_chunk.device_id
-               ->  Seq Scan on _hyper_31_115_chunk
-(19 rows)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_115_chunk
+               ->  Index Scan using compress_hyper_32_116_chunk__compressed_hypertable_32_device_id on compress_hyper_32_116_chunk
+         ->  Index Only Scan using _hyper_31_115_chunk_compression_insert_device_id_time_idx on _hyper_31_115_chunk
+(14 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id;
  device_id | count 
 -----------+-------
-         1 | 17980
-         2 | 17980
          3 | 17980
-         4 | 17980
          5 | 17980
+         4 | 17980
+         2 | 17980
+         1 | 17980
 (5 rows)
 
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
