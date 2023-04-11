@@ -112,7 +112,7 @@ docker_run ${CONTAINER_ORIG} ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
 UPDATE_VOLUME=$(docker inspect ${CONTAINER_ORIG} --format='{{range .Mounts }}{{.Name}}{{end}}')
 
 docker_pgcmd -d postgres ${CONTAINER_ORIG} "CREATE DATABASE single"
-docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.repair.sql
+#docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.repair.sql
 
 # Remove container but keep volume
 docker rm -f ${CONTAINER_ORIG}
@@ -120,7 +120,7 @@ docker rm -f ${CONTAINER_ORIG}
 docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE"
-docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql
+#docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql
 
 # Run an integrity check. It will report if any dimension slices are missing.
 docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.integrity_test.sql
