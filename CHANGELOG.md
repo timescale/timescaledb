@@ -39,6 +39,9 @@ accidentally triggering the load of a previous DB version.**
 * #5497 Allow named time_bucket arguments in Cagg definition
 * #5570 Improve interpolate error message on datatype mismatch
 * #5558 Use regrole for job owner
+* #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
+
+* #5542 Enable indexscan on uncompressed part of partially compressed chunks
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
