@@ -81,6 +81,7 @@ extern TSDLLEXPORT int64 ts_time_get_max(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_end(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_end_or_max(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_nobegin(Oid timetype);
+extern TSDLLEXPORT int64 ts_time_get_nobegin_or_min(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_noend(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_noend_or_max(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype);
