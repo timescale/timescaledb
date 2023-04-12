@@ -59,6 +59,23 @@ SELECT add_retention_policy('int_tab', 20);
 SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
 SELECT remove_retention_policy('int_tab');
 
+-- Test for duplicated policies (issue #5492)
+CREATE MATERIALIZED VIEW mat_m2( a, sumb )
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+as
+SELECT a, sum(b)
+FROM int_tab
+GROUP BY time_bucket(1, a), a WITH NO DATA;
+
+-- add refresh policy
+SELECT timescaledb_experimental.add_policies('mat_m2', refresh_start_offset => 10, refresh_end_offset => 1);
+SELECT timescaledb_experimental.show_policies('mat_m2');
+-- check for only one refresh policy for each cagg
+SELECT * FROM timescaledb_experimental.policies WHERE proc_name ~ 'refresh' ORDER BY relation_name, proc_name;
+
+SELECT timescaledb_experimental.remove_all_policies('mat_m2');
+DROP MATERIALIZED VIEW mat_m2;
+
 -- Alter policies
 SELECT timescaledb_experimental.alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
 SELECT timescaledb_experimental.show_policies('mat_m1');
