@@ -104,6 +104,41 @@ SELECT remove_retention_policy('int_tab');
  
 (1 row)
 
+-- Test for duplicated policies (issue #5492)
+CREATE MATERIALIZED VIEW mat_m2( a, sumb )
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+as
+SELECT a, sum(b)
+FROM int_tab
+GROUP BY time_bucket(1, a), a WITH NO DATA;
+-- add refresh policy
+SELECT timescaledb_experimental.add_policies('mat_m2', refresh_start_offset => 10, refresh_end_offset => 1);
+ add_policies 
+--------------
+ t
+(1 row)
+
+SELECT timescaledb_experimental.show_policies('mat_m2');
+                                                                show_policies                                                                
+---------------------------------------------------------------------------------------------------------------------------------------------
+ {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": 1, "refresh_start_offset": 10}
+(1 row)
+
+-- check for only one refresh policy for each cagg
+SELECT * FROM timescaledb_experimental.policies WHERE proc_name ~ 'refresh' ORDER BY relation_name, proc_name;
+ relation_name | relation_schema | schedule_interval |      proc_schema      |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
+---------------+-----------------+-------------------+-----------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
+ mat_m1        | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
+ mat_m2        | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 4} | _timescaledb_internal | _materialized_hypertable_4
+(2 rows)
+
+SELECT timescaledb_experimental.remove_all_policies('mat_m2');
+ remove_all_policies 
+---------------------
+ t
+(1 row)
+
+DROP MATERIALIZED VIEW mat_m2;
 -- Alter policies
 SELECT timescaledb_experimental.alter_policies('mat_m1',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
  alter_policies 
@@ -197,7 +232,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
 ERROR:  continuous aggregate policy already exists for "mat_m1"
-DETAIL:  Only one continuous aggregate policy can be created per continuous aggregate and a policy with job id 1008 already exists for "mat_m1".
+DETAIL:  Only one continuous aggregate policy can be created per continuous aggregate and a policy with job id 1009 already exists for "mat_m1".
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
 WARNING:  continuous aggregate policy already exists for "mat_m1"
 DETAIL:  A policy already exists with different arguments.
@@ -272,7 +307,7 @@ SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
 NOTICE:  adding not-null constraint to column "time"
             create_hypertable             
 ------------------------------------------
- (4,public,continuous_agg_max_mat_date,t)
+ (5,public,continuous_agg_max_mat_date,t)
 (1 row)
 
 CREATE MATERIALIZED VIEW max_mat_view_date
@@ -488,7 +523,7 @@ SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 SELECT add_retention_policy('continuous_agg_max_mat_date', '25 days'::interval);
  add_retention_policy 
 ----------------------
-                 1024
+                 1025
 (1 row)
 
 SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_start_offset =>'25 days'::interval);
@@ -545,8 +580,8 @@ SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
    relation_name   | relation_schema | schedule_interval |      proc_schema      |              proc_name              |                                     config                                     |   hypertable_schema   |      hypertable_name       
 -------------------+-----------------+-------------------+-----------------------+-------------------------------------+--------------------------------------------------------------------------------+-----------------------+----------------------------
- max_mat_view_date | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 5} | _timescaledb_internal | _materialized_hypertable_5
- max_mat_view_date | public          | @ 1 day           | _timescaledb_internal | policy_retention                    | {"drop_after": "@ 25 days", "hypertable_id": 5}                                | _timescaledb_internal | _materialized_hypertable_5
+ max_mat_view_date | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 6} | _timescaledb_internal | _materialized_hypertable_6
+ max_mat_view_date | public          | @ 1 day           | _timescaledb_internal | policy_retention                    | {"drop_after": "@ 25 days", "hypertable_id": 6}                                | _timescaledb_internal | _materialized_hypertable_6
 (2 rows)
 
 SELECT timescaledb_experimental.remove_all_policies(NULL); -- should fail
@@ -578,13 +613,13 @@ SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial
 SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id, 'max_mat_view_date'::regclass);
  alter_job_set_hypertable_id 
 -----------------------------
-                        1026
+                        1027
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
  job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |  proc_name  |       owner       | scheduled | fixed_schedule |        config        |          next_start          |        initial_start         |   hypertable_schema   |      hypertable_name       | check_schema | check_name 
 --------+----------------------------+-------------------+-------------+-------------+--------------+-------------+-------------+-------------------+-----------+----------------+----------------------+------------------------------+------------------------------+-----------------------+----------------------------+--------------+------------
-   1026 | User-Defined Action [1026] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | _timescaledb_internal | _materialized_hypertable_5 |              | 
+   1027 | User-Defined Action [1027] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | _timescaledb_internal | _materialized_hypertable_6 |              | 
 (1 row)
 
 SELECT timescaledb_experimental.remove_all_policies('max_mat_view_date', true); -- ignore custom job
@@ -630,7 +665,7 @@ DETAIL:  The start and end offsets must cover at least two buckets in the valid 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-1 day', '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1027
+                            1028
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -643,7 +678,7 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_date');
 SELECT add_continuous_aggregate_policy('max_mat_view_date', NULL, NULL, '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1028
+                            1029
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -657,7 +692,7 @@ SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
                                      config                                     
 --------------------------------------------------------------------------------
- {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 5}
+ {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 6}
 (1 row)
 
 INSERT INTO continuous_agg_max_mat_date
@@ -673,7 +708,7 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
- (7,public,continuous_agg_timestamp,t)
+ (8,public,continuous_agg_timestamp,t)
 (1 row)
 
 CREATE MATERIALIZED VIEW max_mat_view_timestamp
@@ -686,7 +721,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1030
+                            1031
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
@@ -716,7 +751,7 @@ SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
                                      config                                      
 ---------------------------------------------------------------------------------
- {"end_offset": "@ 1 hour", "start_offset": "@ 15 days", "mat_hypertable_id": 8}
+ {"end_offset": "@ 1 hour", "start_offset": "@ 15 days", "mat_hypertable_id": 9}
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1051,13 +1086,13 @@ ERROR:  compress_after value for compression policy should be greater than the s
 SELECT add_compression_policy('mat_smallint', 5::smallint);
  add_compression_policy 
 ------------------------
-                   1050
+                   1051
 (1 row)
 
 SELECT add_compression_policy('mat_bigint', 20::bigint);
  add_compression_policy 
 ------------------------
-                   1051
+                   1052
 (1 row)
 
 -- end of coverage tests
@@ -1074,7 +1109,7 @@ CREATE TABLE metrics (
 SELECT create_hypertable('metrics', 'time');
    create_hypertable   
 -----------------------
- (17,public,metrics,t)
+ (18,public,metrics,t)
 (1 row)
 
 INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
@@ -1091,7 +1126,7 @@ ALTER TABLE metrics SET ( timescaledb.compress );
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_17_19_chunk
+ _timescaledb_internal._hyper_18_19_chunk
 (1 row)
 
 CREATE MATERIALIZED VIEW metrics_cagg WITH (timescaledb.continuous,
@@ -1117,7 +1152,7 @@ NOTICE:  defaulting compress_orderby to dayb
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
  COMP_JOB 
 ----------
-     1053
+     1054
 (1 row)
 
 SELECT remove_compression_policy('metrics_cagg');
@@ -1183,7 +1218,7 @@ cpu DOUBLE PRECISION);
 SELECT create_hypertable('sensor_data','time');
      create_hypertable     
 ---------------------------
- (21,public,sensor_data,t)
+ (22,public,sensor_data,t)
 (1 row)
 
 INSERT INTO sensor_data(time, sensor_id, cpu, temperature)

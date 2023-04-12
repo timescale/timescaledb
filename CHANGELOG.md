@@ -34,6 +34,7 @@ accidentally triggering the load of a previous DB version.**
 * #5499 Do not segfault on large histogram() parameters
 * #5500 Fix when no FROM clause in continuous aggregate definition
 * #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
+* #5556 Fix duplicated entries on timescaledb_experimental.policies view
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
@@ -41,6 +42,7 @@ accidentally triggering the load of a previous DB version.**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
 * @geezhu for reporting issue on segfault in historgram()
 * @H25E for reporting error refreshing from beginning of a Continuous Aggregate with variable time bucket
+* @mwahlhuetter for reporting issue with duplicated entries on timescaledb_experimental.policies view
 
 ## 2.10.1 (2023-03-07)
 
