@@ -14,19 +14,6 @@
 #include "segment_meta.h"
 #include "datum_serialize.h"
 
-typedef struct SegmentMetaMinMaxBuilder
-{
-	Oid type_oid;
-	bool empty;
-	bool has_null;
-
-	SortSupportData ssup;
-	bool type_by_val;
-	int16 type_len;
-	Datum min;
-	Datum max;
-} SegmentMetaMinMaxBuilder;
-
 SegmentMetaMinMaxBuilder *
 segment_meta_min_max_builder_create(Oid type_oid, Oid collation)
 {

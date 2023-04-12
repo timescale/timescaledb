@@ -1282,3 +1282,34 @@ WHERE user_view_name = 'cashflows'
 \d+ 'cashflows'
 
 SELECT * FROM cashflows;
+
+-- test cagg creation with named arguments in time_bucket
+-- note that positional arguments cannot follow named arguments
+-- 1. test named origin
+-- 2. test named timezone
+-- 3. test named ts
+-- 4. test named bucket width
+-- named origin
+CREATE MATERIALIZED VIEW cagg_named_origin WITH
+(timescaledb.continuous) AS
+SELECT time_bucket('1h', time, 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
+avg(amount) as avg_amount
+FROM transactions GROUP BY 1 WITH NO DATA;
+-- named timezone
+CREATE MATERIALIZED VIEW cagg_named_tz_origin WITH
+(timescaledb.continuous) AS
+SELECT time_bucket('1h', time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
+avg(amount) as avg_amount
+FROM transactions GROUP BY 1 WITH NO DATA;
+-- named ts
+CREATE MATERIALIZED VIEW cagg_named_ts_tz_origin WITH
+(timescaledb.continuous) AS
+SELECT time_bucket('1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
+avg(amount) as avg_amount
+FROM transactions GROUP BY 1 WITH NO DATA;
+-- named bucket width
+CREATE MATERIALIZED VIEW cagg_named_all WITH
+(timescaledb.continuous) AS
+SELECT time_bucket(bucket_width => '1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
+avg(amount) as avg_amount
+FROM transactions GROUP BY 1 WITH NO DATA;

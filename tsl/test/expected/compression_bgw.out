@@ -435,7 +435,6 @@ SELECT count(*) from test2;
 \set ON_ERROR_STOP 0
 START TRANSACTION;
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:62: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);
@@ -483,7 +482,7 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
             9 | _hyper_14_62_chunk
-            0 | _hyper_14_65_chunk
+            0 | _hyper_14_64_chunk
 (2 rows)
 
 SELECT add_compression_policy AS job_id
@@ -498,7 +497,7 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
             1 | _hyper_14_62_chunk
-            1 | _hyper_14_65_chunk
+            1 | _hyper_14_64_chunk
 (2 rows)
 
 \set ON_ERROR_STOP 0

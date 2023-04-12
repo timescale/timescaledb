@@ -27,6 +27,8 @@ typedef struct HypertableModifyState
 	CustomScanState cscan_state;
 	ModifyTable *mt;
 	List *serveroids;
+	bool comp_chunks_processed;
+	Snapshot snapshot;
 	FdwRoutine *fdwroutine;
 } HypertableModifyState;
 

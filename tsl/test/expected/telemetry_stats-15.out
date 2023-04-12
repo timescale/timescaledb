@@ -420,7 +420,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "indexes_size": 122880,                    +
          "num_children": 9,                         +
          "num_relations": 1,                        +
-         "num_reltuples": 697                       +
+         "num_reltuples": 413                       +
      },                                             +
      "materialized_views": {                        +
          "toast_size": 8192,                        +
@@ -454,7 +454,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "indexes_size": 180224,                    +
          "num_children": 4,                         +
          "num_relations": 2,                        +
-         "num_reltuples": 452,                      +
+         "num_reltuples": 0,                        +
          "num_caggs_nested": 0,                     +
          "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
@@ -792,7 +792,7 @@ FROM relations;
      "indexes_size": 0,                         +
      "num_children": 18,                        +
      "num_relations": 1,                        +
-     "num_reltuples": 697,                      +
+     "num_reltuples": 581,                      +
      "num_replica_chunks": 0,                   +
      "num_replicated_distributed_hypertables": 0+
  }
@@ -829,7 +829,7 @@ distributed_hypertables_dn
     "indexes_size": 278528,
     "num_children": 9,
     "num_relations": 1,
-    "num_reltuples": 368
+    "num_reltuples": 312
 }
 (1 row)
 
@@ -859,7 +859,7 @@ distributed_hypertables_dn
     "indexes_size": 278528,
     "num_children": 9,
     "num_relations": 1,
-    "num_reltuples": 329
+    "num_reltuples": 269
 }
 (1 row)
 
@@ -903,7 +903,7 @@ FROM relations;
      "indexes_size": 0,                         +
      "num_children": 36,                        +
      "num_relations": 2,                        +
-     "num_reltuples": 697,                      +
+     "num_reltuples": 581,                      +
      "num_replica_chunks": 18,                  +
      "num_replicated_distributed_hypertables": 1+
  }
@@ -951,10 +951,10 @@ FROM relations;
          "uncompressed_toast_size": 0,         +
          "uncompressed_indexes_size": 81920    +
      },                                        +
-     "indexes_size": 409600,                   +
+     "indexes_size": 393216,                   +
      "num_children": 8,                        +
      "num_relations": 4,                       +
-     "num_reltuples": 452,                     +
+     "num_reltuples": 0,                       +
      "num_caggs_nested": 0,                    +
      "num_caggs_finalized": 2,                 +
      "num_caggs_on_distributed_hypertables": 2,+

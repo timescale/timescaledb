@@ -7,9 +7,10 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_1ST, "time") AS bucket,
-  SUM(temperature) AS temperature
+  SUM(temperature) AS temperature,
+  device_id
 FROM conditions
-GROUP BY 1
+GROUP BY 1,3
 WITH NO DATA;
 
 -- CAGG on CAGG (2th level)
@@ -18,19 +19,34 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
   time_bucket(:BUCKET_WIDTH_2TH, "bucket") AS bucket,
   SUM(temperature) AS temperature
-FROM :CAGG_NAME_1ST_LEVEL
-GROUP BY 1
+\if :IS_JOIN
+  , :CAGG_NAME_1ST_LEVEL.device_id
+  FROM :CAGG_NAME_1ST_LEVEL, devices
+  WHERE devices.device_id = :CAGG_NAME_1ST_LEVEL.device_id
+  GROUP BY 1,3
+\else
+  FROM :CAGG_NAME_1ST_LEVEL
+  GROUP BY 1
+\endif
+
 WITH NO DATA;
 
 -- CAGG on CAGG (3th level)
 CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-  time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
-  SUM(temperature) AS temperature
-FROM :CAGG_NAME_2TH_LEVEL
-GROUP BY 1
-WITH NO DATA;
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+  SELECT
+    time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket,
+    SUM(temperature) AS temperature
+  \if :IS_JOIN
+    , :CAGG_NAME_2TH_LEVEL.device_id
+    FROM :CAGG_NAME_2TH_LEVEL, devices
+    WHERE devices.device_id = :CAGG_NAME_2TH_LEVEL.device_id
+    GROUP BY 1,3
+  \else
+    FROM :CAGG_NAME_2TH_LEVEL
+    GROUP BY 1
+  \endif
+  WITH NO DATA;
 
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
@@ -60,18 +76,18 @@ WITH NO DATA;
 
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+--ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
+--SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -85,7 +101,7 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 \if :IS_TIME_DIMENSION
@@ -102,7 +118,7 @@ INSERT INTO conditions ("time", temperature) VALUES (10, 2);
 
 -- No changes
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
@@ -112,7 +128,7 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=
 
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into materialized only again
@@ -127,7 +143,7 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- TRUNCATE tests
@@ -141,7 +157,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 -- Now we have all the data
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- DROP tests

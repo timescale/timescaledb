@@ -2902,7 +2902,7 @@ ts_hypertable_func_call_on_data_nodes(const Hypertable *ht, FunctionCallInfo fci
 /*
  * Get the max value of an open dimension.
  */
-Datum
+int64
 ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, bool *isnull)
 {
 	StringInfo command;
@@ -2910,11 +2910,14 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	int res;
 	bool max_isnull;
 	Datum maxdat;
+	Oid timetype;
 
 	dim = hyperspace_get_open_dimension(ht->space, dimension_index);
 
 	if (NULL == dim)
 		elog(ERROR, "invalid open dimension index %d", dimension_index);
+
+	timetype = ts_dimension_get_partition_type(dim);
 
 	/*
 	 * Query for the last bucket in the materialized hypertable.
@@ -2941,7 +2944,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == ts_dimension_get_partition_type(dim),
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
 		   ts_dimension_get_partition_type(dim));
@@ -2953,7 +2956,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	if ((res = SPI_finish()) != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 
-	return maxdat;
+	return max_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(maxdat, timetype);
 }
 
 bool

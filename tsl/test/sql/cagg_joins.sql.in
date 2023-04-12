@@ -96,10 +96,11 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    MAX(temperature),
    MIN(temperature),
-   name
+   name,
+   devices.device_id AS thermo_id
 FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
-GROUP BY name, bucket;
+GROUP BY name, bucket, thermo_id;
 
 CREATE MATERIALIZED VIEW conditions_summary_daily_reorder
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -211,7 +212,8 @@ CREATE MATERIALIZED VIEW cagg_on_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
        SUM(avg) AS temperature
-FROM conditions_summary_daily
+FROM conditions_summary_daily, devices
+WHERE devices.device_id = conditions_summary_daily.thermo_id
 GROUP BY 1;
 
 \set VERBOSITY terse
@@ -319,24 +321,24 @@ FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket, devices.device_id;
 
---Errors out for join between cagg and normal table
+--Join between cagg and normal table
 CREATE MATERIALIZED VIEW conditions_summary_daily_nested
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
    devices.name
 FROM conditions_summary_daily_cagg cagg, devices
 WHERE cagg.device_id = devices.device_id
-GROUP BY devices.name, bucket;
+GROUP BY 1,2;
 
 --Error out for join between cagg and hypertable
-CREATE MATERIALIZED VIEW conditions_summary_daily_nested
+CREATE MATERIALIZED VIEW conditions_summary_daily_nested_ht
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
    cagg.name,
    conditions.temperature
 FROM conditions_summary_daily_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
-GROUP BY conditions.temperature, bucket, cagg.name;
+GROUP BY 1,2,3;
 
 \set VERBOSITY terse
 DROP TABLE conditions CASCADE;

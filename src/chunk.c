@@ -13,6 +13,7 @@
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_class.h>
+#include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
@@ -33,6 +34,7 @@
 #include <utils/datum.h>
 #include <utils/hsearch.h>
 #include <utils/lsyscache.h>
+#include <utils/palloc.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
@@ -65,6 +67,7 @@
 #include "ts_catalog/chunk_data_node.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "ts_catalog/hypertable_data_node.h"
 #include "utils.h"
 
@@ -79,9 +82,6 @@ TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
-#if PG14_GE
-static bool ts_chunk_clear_status(Chunk *chunk, int32 status);
-#endif
 
 static const char *
 DatumGetNameString(Datum datum)
@@ -124,7 +124,7 @@ chunk_stub_is_valid(const ChunkStub *stub, int16 expected_slices)
 }
 
 typedef ChunkResult (*on_chunk_stub_func)(ChunkScanCtx *ctx, ChunkStub *stub);
-static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *point);
+static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hypertable *ht, const Point *point);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
@@ -139,48 +139,6 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
 static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
-
-/*
- * The chunk status field values are persisted in the database and must never be changed.
- * Those values are used as flags and must always be powers of 2 to allow bitwise operations.
- * When adding new status values we must make sure to add special handling for these values
- * to the downgrade script as previous versions will not know how to deal with those.
- */
-#define CHUNK_STATUS_DEFAULT 0
-/*
- * Setting a Data-Node chunk as CHUNK_STATUS_COMPRESSED means that the corresponding
- * compressed_chunk_id field points to a chunk that holds the compressed data. Otherwise,
- * the corresponding compressed_chunk_id is NULL.
- *
- * However, for Access-Nodes compressed_chunk_id is always NULL. CHUNK_STATUS_COMPRESSED being set
- * means that a remote compress_chunk() operation has taken place for this distributed
- * meta-chunk. On the other hand, if CHUNK_STATUS_COMPRESSED is cleared, then it is probable
- * that a remote compress_chunk() has not taken place, but not certain.
- *
- * For the above reason, this flag should not be assumed to be consistent (when it is cleared)
- * for Access-Nodes. When used in distributed hypertables one should take advantage of the
- * idempotent properties of remote compress_chunk() and distributed compression policy to
- * make progress.
- */
-#define CHUNK_STATUS_COMPRESSED 1
-/*
- * When inserting into a compressed chunk the configured compress_orderby is not retained.
- * Any such chunks need an explicit Sort step to produce ordered output until the chunk
- * ordering has been restored by recompress_chunk. This flag can only exist on compressed
- * chunks.
- */
-#define CHUNK_STATUS_COMPRESSED_UNORDERED 2
-/*
- * A chunk is in frozen state (i.e no inserts/updates/deletes into this chunk are
- * permitted. Other chunk level operations like dropping chunk etc. are also blocked.
- *
- */
-#define CHUNK_STATUS_FROZEN 4
-/*
- * A chunk is in this state when it is compressed but also has uncompressed tuples
- * in the uncompressed chunk.
- */
-#define CHUNK_STATUS_COMPRESSED_PARTIAL 8
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -355,7 +313,7 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	CollisionInfo *info = scanctx->data;
 	Hypercube *cube = info->cube;
-	const Hyperspace *space = scanctx->space;
+	const Hyperspace *space = scanctx->ht->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
 
@@ -461,7 +419,7 @@ do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	CollisionInfo *info = scanctx->data;
 	Hypercube *cube = info->cube;
-	const Hyperspace *space = scanctx->space;
+	const Hyperspace *space = scanctx->ht->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
 
@@ -503,7 +461,7 @@ check_for_collisions(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	CollisionInfo *info = scanctx->data;
 	Hypercube *cube = info->cube;
-	const Hyperspace *space = scanctx->space;
+	const Hyperspace *space = scanctx->ht->space;
 
 	/* Check if this chunk collides with our hypercube */
 	if (stub->cube->num_slices == space->num_dimensions && ts_hypercubes_collide(cube, stub->cube))
@@ -530,7 +488,7 @@ chunk_collides(const Hypertable *ht, const Hypercube *hc)
 		.colliding_chunk = NULL,
 	};
 
-	chunk_scan_ctx_init(&scanctx, ht->space, NULL);
+	chunk_scan_ctx_init(&scanctx, ht, NULL);
 
 	/* Scan for all chunks that collide with the hypercube of the new chunk */
 	chunk_collision_scan(&scanctx, hc);
@@ -598,7 +556,7 @@ chunk_collision_resolve(const Hypertable *ht, Hypercube *cube, const Point *p)
 		.colliding_chunk = NULL,
 	};
 
-	chunk_scan_ctx_init(&scanctx, ht->space, p);
+	chunk_scan_ctx_init(&scanctx, ht, p);
 
 	/* Scan for all chunks that collide with the hypercube of the new chunk */
 	chunk_collision_scan(&scanctx, cube);
@@ -1048,14 +1006,10 @@ chunk_insert_into_metadata_after_lock(const Chunk *chunk)
 }
 
 static void
-chunk_create_table_constraints(const Chunk *chunk)
+chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 {
 	/* Create the chunk's constraints, triggers, and indexes */
-	ts_chunk_constraints_create(chunk->constraints,
-								chunk->table_id,
-								chunk->fd.id,
-								chunk->hypertable_relid,
-								chunk->fd.hypertable_id);
+	ts_chunk_constraints_create(ht, chunk);
 
 	if (chunk->relkind == RELKIND_RELATION && !IS_OSM_CHUNK(chunk))
 	{
@@ -1218,7 +1172,7 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
-	chunk_create_table_constraints(chunk);
+	chunk_create_table_constraints(ht, chunk);
 
 	return chunk;
 }
@@ -1323,7 +1277,7 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_add_inheritance(chunk, ht);
-	chunk_create_table_constraints(chunk);
+	chunk_create_table_constraints(ht, chunk);
 
 	return chunk;
 }
@@ -1538,7 +1492,7 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 	List *chunk_ids = NIL;
 
 	ChunkScanCtx ctx;
-	chunk_scan_ctx_init(&ctx, ht->space, /* point = */ NULL);
+	chunk_scan_ctx_init(&ctx, ht, /* point = */ NULL);
 
 	ScanIterator iterator = ts_chunk_constraint_scan_iterator_create(CurrentMemoryContext);
 
@@ -1801,7 +1755,7 @@ chunk_create_from_stub(ChunkStubScanCtx *stubctx)
  * tables during scans.
  */
 static void
-chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *point)
+chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hypertable *ht, const Point *point)
 {
 	struct HASHCTL hctl = {
 		.keysize = sizeof(int32),
@@ -1811,7 +1765,7 @@ chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *point)
 
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->htab = hash_create("chunk-scan-context", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
-	ctx->space = hs;
+	ctx->ht = ht;
 	ctx->point = point;
 	ctx->lockmode = NoLock;
 }
@@ -1864,7 +1818,7 @@ chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube)
 	int i;
 
 	/* Scan all dimensions for colliding slices */
-	for (i = 0; i < scanctx->space->num_dimensions; i++)
+	for (i = 0; i < scanctx->ht->space->num_dimensions; i++)
 	{
 		DimensionVec *vec;
 		DimensionSlice *slice = cube->slices[i];
@@ -1994,7 +1948,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 				chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
 		}
 		chunk->table_id = chunk_create_table(chunk, ht);
-		chunk_create_table_constraints(chunk);
+		chunk_create_table_constraints(ht, chunk);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
@@ -2053,13 +2007,14 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 
 	/* The scan context will keep the state accumulated during the scan */
 	ChunkScanCtx ctx;
-	chunk_scan_ctx_init(&ctx, ht->space, p);
+	chunk_scan_ctx_init(&ctx, ht, p);
 
 	/* Scan all dimensions for slices enclosing the point */
 	List *all_slices = NIL;
-	for (int dimension_index = 0; dimension_index < ctx.space->num_dimensions; dimension_index++)
+	for (int dimension_index = 0; dimension_index < ctx.ht->space->num_dimensions;
+		 dimension_index++)
 	{
-		ts_dimension_slice_scan_list(ctx.space->dimensions[dimension_index].fd.id,
+		ts_dimension_slice_scan_list(ctx.ht->space->dimensions[dimension_index].fd.id,
 									 p->coordinates[dimension_index],
 									 &all_slices);
 	}
@@ -2105,7 +2060,7 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 			 * i.e., a complete hypercube. Only one chunk matches a given hyperspace
 			 * point, so we can stop early.
 			 */
-			if (entry->num_dimension_constraints == ctx.space->num_dimensions)
+			if (entry->num_dimension_constraints == ctx.ht->space->num_dimensions)
 			{
 				matching_chunk_id = entry->chunk_id;
 				break;
@@ -2153,7 +2108,7 @@ chunks_find_all_in_range_limit(const Hypertable *ht, const Dimension *time_dim,
 												 tuplock);
 
 	/* The scan context will keep the state accumulated during the scan */
-	chunk_scan_ctx_init(ctx, ht->space, NULL);
+	chunk_scan_ctx_init(ctx, ht, NULL);
 
 	/* No abort when the first chunk is found */
 	ctx->early_abort = false;
@@ -3277,26 +3232,21 @@ ts_chunk_get_all_chunk_ids(LOCKMODE lockmode)
 static ChunkResult
 chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 {
-	ChunkConstraints *ccs = stub->constraints;
 	ChunkStubScanCtx stubctx = {
 		.stub = stub,
 	};
-	Chunk *chunk;
-	int i;
-
-	chunk = chunk_create_from_stub(&stubctx);
+	Chunk *chunk = chunk_create_from_stub(&stubctx);
 
 	if (stubctx.is_dropped)
 		elog(ERROR, "should not be recreating constraints on dropped chunks");
 
-	for (i = 0; i < ccs->num_constraints; i++)
-		ts_chunk_constraint_recreate(&ccs->constraints[i], chunk->table_id);
+	ts_chunk_constraints_recreate(ctx->ht, chunk);
 
 	return CHUNK_PROCESSED;
 }
 
 void
-ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id)
+ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id)
 {
 	DimensionVec *slices;
 	ChunkScanCtx chunkctx;
@@ -3307,7 +3257,7 @@ ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_
 	if (NULL == slices)
 		return;
 
-	chunk_scan_ctx_init(&chunkctx, hs, NULL);
+	chunk_scan_ctx_init(&chunkctx, ht, NULL);
 
 	for (i = 0; i < slices->num_slices; i++)
 		ts_chunk_constraint_scan_by_dimension_slice(slices->slices[i],
@@ -3352,7 +3302,7 @@ ts_chunk_drop_fks(const Chunk *const chunk)
  * are dropped during compression.
  */
 void
-ts_chunk_create_fks(const Chunk *const chunk)
+ts_chunk_create_fks(const Hypertable *ht, const Chunk *const chunk)
 {
 	Relation rel;
 	List *fks;
@@ -3366,7 +3316,7 @@ ts_chunk_create_fks(const Chunk *const chunk)
 	foreach (lc, fks)
 	{
 		ForeignKeyCacheInfo *fk = lfirst_node(ForeignKeyCacheInfo, lc);
-		ts_chunk_constraint_create_on_chunk(chunk, fk->conoid);
+		ts_chunk_constraint_create_on_chunk(ht, chunk, fk->conoid);
 	}
 }
 
@@ -3580,11 +3530,10 @@ ts_chunk_is_frozen(Chunk *chunk)
 #endif
 }
 
-#if PG14_GE
-/* only caller is ts_chunk_unset_frozen. This code is in PG14 block as we run into
- * defined but unsed error in CI/CD builds for PG < 14.
+/* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
+ * defined but unsed error in CI/CD builds for PG < 14. But now called from recompress as well
  */
-static bool
+bool
 ts_chunk_clear_status(Chunk *chunk, int32 status)
 {
 	/* only frozen status can be cleared for a frozen chunk */
@@ -3603,7 +3552,6 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 	chunk->fd.status = mstatus;
 	return chunk_update_status(&chunk->fd);
 }
-#endif
 
 static bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
@@ -3893,7 +3841,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	Chunk *chunks;
 	const char *schema_name, *table_name;
 	const int32 hypertable_id = ht->fd.id;
-	bool has_continuous_aggs;
+	bool has_continuous_aggs, is_materialization_hypertable;
 	const MemoryContext oldcontext = CurrentMemoryContext;
 	ScanTupLock tuplock = {
 		.waitpolicy = LockWaitBlock,
@@ -3913,13 +3861,17 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	 * well. Do not unlock - let the transaction semantics take care of it. */
 	lock_referenced_tables(ht->main_table_relid);
 
+	is_materialization_hypertable = false;
+
 	switch (ts_continuous_agg_hypertable_status(hypertable_id))
 	{
 		case HypertableIsMaterialization:
 			has_continuous_aggs = false;
+			is_materialization_hypertable = true;
 			break;
 		case HypertableIsMaterializationAndRaw:
 			has_continuous_aggs = true;
+			is_materialization_hypertable = true;
 			break;
 		case HypertableIsRawTable:
 			has_continuous_aggs = true;
@@ -4027,6 +3979,14 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			ChunkDataNode *cdn = lfirst(lc);
 			data_nodes = list_append_unique_oid(data_nodes, cdn->foreign_server_oid);
 		}
+	}
+
+	/* When dropping chunks for a given CAgg then force set the watermark */
+	if (is_materialization_hypertable)
+	{
+		bool isnull;
+		int64 watermark = ts_hypertable_get_open_dim_max_value(ht, 0, &isnull);
+		ts_cagg_watermark_update(ht, watermark, isnull, true);
 	}
 
 	if (affected_data_nodes)
@@ -4664,7 +4624,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 														   chunk->fd.id,
 														   chunk->relkind,
 														   chunk->hypertable_relid);
-	chunk_create_table_constraints(chunk);
+	chunk_create_table_constraints(parent_ht, chunk);
 	/* Add dimension constriants for the chunk */
 	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
@@ -4672,10 +4632,11 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 }
 
 void
-ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk, int32 dimension_id)
+ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *merge_chunk,
+							int32 dimension_id)
 {
 	const DimensionSlice *slice, *merge_slice;
-	int num_ccs, i;
+	int num_ccs = 0;
 	bool dimension_slice_found = false;
 
 	if (chunk->hypertable_relid != merge_chunk->hypertable_relid)
@@ -4756,8 +4717,24 @@ ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk, int32 dimens
 
 	ts_chunk_constraint_update_slice_id(chunk->fd.id, slice->fd.id, new_slice->fd.id);
 	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
-	num_ccs =
-		ts_chunk_constraint_scan_by_dimension_slice_id(new_slice->fd.id, ccs, CurrentMemoryContext);
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, CurrentMemoryContext);
+
+	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, new_slice->fd.id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum d;
+
+		d = slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_constraint_chunk_id, &isnull);
+
+		if (!isnull && DatumGetInt32(d) == chunk->fd.id)
+		{
+			num_ccs++;
+			ts_chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
+		}
+	}
 
 	if (num_ccs <= 0)
 		ereport(ERROR,
@@ -4766,20 +4743,44 @@ ts_chunk_merge_on_dimension(Chunk *chunk, const Chunk *merge_chunk, int32 dimens
 						 get_rel_name(chunk->table_id),
 						 new_slice->fd.id)));
 
-	/* We have to recreate the chunk constraints since we are changing
-	 * table constraints when updating the slice.
-	 */
-	for (i = 0; i < ccs->capacity; i++)
+	/* Update the slice in the chunk's hypercube. Needed to make recreate constraints work. */
+	for (int i = 0; i < chunk->cube->num_slices; i++)
 	{
-		ChunkConstraint cc = ccs->constraints[i];
-		if (cc.fd.chunk_id == chunk->fd.id)
+		if (chunk->cube->slices[i]->fd.dimension_id == dimension_id)
 		{
-			ts_process_utility_set_expect_chunk_modification(true);
-			ts_chunk_constraint_recreate(&cc, chunk->table_id);
-			ts_process_utility_set_expect_chunk_modification(false);
+			chunk->cube->slices[i] = new_slice;
 			break;
 		}
 	}
+
+	/* Delete the old constraint */
+	for (int i = 0; i < chunk->constraints->num_constraints; i++)
+	{
+		const ChunkConstraint *cc = &chunk->constraints->constraints[i];
+
+		if (cc->fd.dimension_slice_id == slice->fd.id)
+		{
+			ObjectAddress constrobj = {
+				.classId = ConstraintRelationId,
+				.objectId = get_relation_constraint_oid(chunk->table_id,
+														NameStr(cc->fd.constraint_name),
+														false),
+			};
+
+			performDeletion(&constrobj, DROP_RESTRICT, 0);
+			break;
+		}
+	}
+
+	/* We have to recreate the chunk constraints since we are changing
+	 * table constraints when updating the slice.
+	 */
+	ChunkConstraints *oldccs = chunk->constraints;
+	chunk->constraints = ccs;
+	ts_process_utility_set_expect_chunk_modification(true);
+	ts_chunk_constraints_create(ht, chunk);
+	ts_process_utility_set_expect_chunk_modification(false);
+	chunk->constraints = oldccs;
 
 	ts_chunk_drop(merge_chunk, DROP_RESTRICT, 1);
 }

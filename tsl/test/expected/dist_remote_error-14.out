@@ -322,20 +322,20 @@ select * from metrics_dist_ss;
                Output: metrics_dist_ss_1."time", metrics_dist_ss_1.device_id, metrics_dist_ss_1.v0, metrics_dist_ss_1.v1, metrics_dist_ss_1.v2, metrics_dist_ss_1.v3
                Data node: db_dist_remote_error_1
                Fetcher Type: Prepared statement
-               Chunks: _dist_hyper_5_96_chunk, _dist_hyper_5_99_chunk, _dist_hyper_5_102_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[54, 55, 56])
+               Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
                Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
                Data node: db_dist_remote_error_2
                Fetcher Type: Prepared statement
-               Chunks: _dist_hyper_5_97_chunk, _dist_hyper_5_100_chunk, _dist_hyper_5_103_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[48, 49, 50])
+               Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
                Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
                Data node: db_dist_remote_error_3
                Fetcher Type: Prepared statement
-               Chunks: _dist_hyper_5_98_chunk, _dist_hyper_5_101_chunk, _dist_hyper_5_104_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[32, 33, 34])
+               Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
 (21 rows)
 
 set timescaledb.remote_data_fetcher = 'copy';
@@ -350,20 +350,20 @@ select * from metrics_dist_ss;
                Output: metrics_dist_ss_1."time", metrics_dist_ss_1.device_id, metrics_dist_ss_1.v0, metrics_dist_ss_1.v1, metrics_dist_ss_1.v2, metrics_dist_ss_1.v3
                Data node: db_dist_remote_error_1
                Fetcher Type: COPY
-               Chunks: _dist_hyper_5_96_chunk, _dist_hyper_5_99_chunk, _dist_hyper_5_102_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[54, 55, 56])
+               Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
                Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
                Data node: db_dist_remote_error_2
                Fetcher Type: COPY
-               Chunks: _dist_hyper_5_97_chunk, _dist_hyper_5_100_chunk, _dist_hyper_5_103_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[48, 49, 50])
+               Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
                Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
                Data node: db_dist_remote_error_3
                Fetcher Type: COPY
-               Chunks: _dist_hyper_5_98_chunk, _dist_hyper_5_101_chunk, _dist_hyper_5_104_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[32, 33, 34])
+               Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
 (21 rows)
 
 set timescaledb.remote_data_fetcher = 'cursor';
@@ -378,20 +378,20 @@ select * from metrics_dist_ss;
                Output: metrics_dist_ss_1."time", metrics_dist_ss_1.device_id, metrics_dist_ss_1.v0, metrics_dist_ss_1.v1, metrics_dist_ss_1.v2, metrics_dist_ss_1.v3
                Data node: db_dist_remote_error_1
                Fetcher Type: Cursor
-               Chunks: _dist_hyper_5_96_chunk, _dist_hyper_5_99_chunk, _dist_hyper_5_102_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[54, 55, 56])
+               Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
                Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
                Data node: db_dist_remote_error_2
                Fetcher Type: Cursor
-               Chunks: _dist_hyper_5_97_chunk, _dist_hyper_5_100_chunk, _dist_hyper_5_103_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[48, 49, 50])
+               Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
                Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
                Data node: db_dist_remote_error_3
                Fetcher Type: Cursor
-               Chunks: _dist_hyper_5_98_chunk, _dist_hyper_5_101_chunk, _dist_hyper_5_104_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[32, 33, 34])
+               Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
 (21 rows)
 
 -- Incorrect int output, to cover the error handling in tuplefactory.

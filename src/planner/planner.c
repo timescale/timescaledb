@@ -893,6 +893,12 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
 					return false;
 
+				/* cannot support ordered append with OSM chunks. OSM chunk
+				 * ranges are not recorded with the catalog
+				 */
+				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
+					return false;
+
 				/*
 				 * Check for partial compressed chunks.
 				 *
@@ -913,11 +919,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					}
 				}
 
-				/* cannot support ordered append with OSM chunks. OSM chunk
-				 * ranges are not recorded with the catalog
-				 */
-				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
-					return false;
 				pk = linitial_node(PathKey, path->pathkeys);
 
 				/*
@@ -1332,20 +1333,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 					 * IndexPaths at all
 					 */
 					rel->indexlist = NIL;
-
-					/* Relation size estimates are messed up on compressed chunks due to there
-					 * being no actual pages for the table in the storage manager.
-					 */
-					rel->pages = (BlockNumber) uncompressed_chunk->rd_rel->relpages;
-					rel->tuples = (double) uncompressed_chunk->rd_rel->reltuples;
-					if (rel->pages == 0)
-						rel->allvisfrac = 0.0;
-					else if (uncompressed_chunk->rd_rel->relallvisible >= (int32) rel->pages)
-						rel->allvisfrac = 1.0;
-					else
-						rel->allvisfrac =
-							(double) uncompressed_chunk->rd_rel->relallvisible / rel->pages;
-
 					table_close(uncompressed_chunk, NoLock);
 				}
 			}

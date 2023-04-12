@@ -165,7 +165,7 @@ extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(const
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(const Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(const Hypertable *ht,
 															  FunctionCallInfo fcinfo);
-extern TSDLLEXPORT Datum ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
+extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
 extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);

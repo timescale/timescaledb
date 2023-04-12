@@ -18,7 +18,6 @@ setup
       EXECUTE format('SELECT count(*) FROM ONLY %s', tbl) INTO c_only;
       RETURN QUERY SELECT c,c_only;
     END; $$ LANGUAGE plpgsql;
-
 }
 teardown
 {
@@ -43,6 +42,8 @@ session "S"
 step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch ORDER BY ch::text LIMIT 1; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
+step "SA" { SELECT * FROM ts_device_table; }
+
 
 session "LCT"
 step "LockChunkTuple" {
@@ -101,7 +102,7 @@ step "CA1" {
 }
 step "CAc" { COMMIT; }
 
-session "RecompressChunk"
+session "RecompressChunk1"
 step "RC1" {
   DO $$
   DECLARE
@@ -116,6 +117,23 @@ step "RC1" {
   END;
   $$;
 }
+
+session "RecompressChunk2"
+step "RC2" {
+  DO $$
+  DECLARE
+    chunk_name text;
+  BEGIN
+  FOR chunk_name IN
+      SELECT ch FROM show_chunks('ts_device_table') ch
+       ORDER BY ch::text LIMIT 1
+     LOOP
+         CALL recompress_chunk(chunk_name);
+     END LOOP;
+  END;
+  $$;
+}
+
 #if insert in progress, compress  is blocked
 permutation "LockChunk1" "I1" "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1"
 
@@ -126,22 +144,25 @@ permutation "LockChunk1" "C1" "I1" "UnlockChunk" "Cc" "Ic"
 permutation "LockChunk1" "A1" "C1" "UnlockChunk" "Cc" "A2"
 permutation "LockChunk1" "A1" "C1" "UnlockChunk" "A2" "Cc"
 
-#concurrent compress/deocmpress on same chunk errors
+#concurrent compress/decompress on same chunk errors
 permutation "LockChunk1" "C1" "D1" "UnlockChunk" "Cc" "Dc"
 
 #concurrent compress and select should execute concurrently
 permutation "LockChunk1" "C1" "S1" "UnlockChunk" "Cc" "SH"
 permutation "LockChunk1" "C1" "S1" "UnlockChunk" "SH" "Cc"
 
-#concurrent inserts into compressed chunk will wait to update chunk status
+# concurrent inserts into compressed chunk will wait to update chunk status
 # and not error out.
 permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat"
 
 # Testing concurrent recompress and insert.
-#
+
 # Insert will succeed after first phase of recompress completes.
-#
+
 # - First compress chunk and insert into chunk
 # - Then start concurrent processes both recompress_chunk and insert
 # - Wait for lock on the chunk.
-permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "INc" "SH"
+permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "INc" "SH" "SA" "SChunkStat"
+
+# Test concurrent recompress operations
+permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "RC2"  "UnlockChunk" "SH" "SA" "SChunkStat"

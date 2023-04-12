@@ -404,6 +404,18 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_invalidation_threshold', '');
 
+CREATE TABLE _timescaledb_catalog.continuous_aggs_watermark (
+  mat_hypertable_id integer NOT NULL,
+  watermark bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_watermark_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_watermark', '');
+
+
+
 -- this does not have an FK on the materialization table since INSERTs to this
 -- table are performance critical
 CREATE TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (
