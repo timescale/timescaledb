@@ -357,6 +357,7 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * DECOMPRESS_CHUNK_CPU_TUPLE_COST;
 	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	
 }
 
 void
@@ -547,6 +548,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				cost_decompress_chunk(&dcpath->cpath.path, &sort_path);
 			}
 			add_path(chunk_rel, &dcpath->cpath.path);
+		} else {
+			DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
+			SortPath* sortpath = create_sort_path(root, chunk_rel, &dcpath->cpath.path, root->sort_pathkeys, root->limit_tuples);
+			add_path(chunk_rel, &sortpath->path);
 		}
 
 		/*
