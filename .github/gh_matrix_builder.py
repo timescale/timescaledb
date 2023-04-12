@@ -139,14 +139,13 @@ def macos_config(overrides):
 
 # common installcheck_args for all pg15 tests
 # partialize_finalize is ignored due to #4937
-pg15_installcheck_args = "IGNORES='partialize_finalize transparent_decompress_chunk-15'"
+pg15_installcheck_args = "IGNORES='partialize_finalize'"
 
-# transparent_decompress_chunk-[12,13,14] is ignored due to #5118
-pg14_installcheck_args = "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed partialize_finalize transparent_decompress_chunk-14'"
+pg14_installcheck_args = "IGNORES='partialize_finalize transparent_decompress_chunk-14'"
 
-pg13_installcheck_args = "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed partialize_finalize transparent_decompress_chunk-13'"
+pg13_installcheck_args = "IGNORES='partialize_finalize'"
 
-pg12_installcheck_args = "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed partialize_finalize transparent_decompress_chunk-12'"
+pg12_installcheck_args = "IGNORES='partialize_finalize'"
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(
