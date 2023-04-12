@@ -186,6 +186,7 @@ CREATE OR REPLACE VIEW compressed_view AS SELECT time, device_id, v1, v2 FROM :T
 
 DROP VIEW compressed_view;
 
+SET parallel_leader_participation TO off;
 -- test INNER JOIN
 :PREFIX
 SELECT *
@@ -253,7 +254,6 @@ ORDER BY m1.time,
     m2.device_id
 LIMIT 100;
 
-SET parallel_leader_participation TO false;
 -- test implicit self-join
 :PREFIX
 SELECT *
