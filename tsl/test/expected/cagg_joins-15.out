@@ -269,7 +269,7 @@ FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket, devices.device_id;
 ERROR:  old format of continuous aggregate is not supported with joins
-HINT:  set timescaledb.finalized to TRUE
+HINT:  Set timescaledb.finalized to TRUE.
 CREATE MATERIALIZED VIEW conditions_summary_daily_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -282,7 +282,7 @@ FROM conditions JOIN devices
 ON conditions.device_id = devices.device_id
 GROUP BY name, bucket, devices.device_id;
 ERROR:  old format of continuous aggregate is not supported with joins
-HINT:  set timescaledb.finalized to TRUE
+HINT:  Set timescaledb.finalized to TRUE.
 CREATE  TABLE mat_t1( a integer, b integer,c TEXT);
 -- Error out LATERAL multiple tables old format
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
@@ -291,7 +291,7 @@ select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q
 group by temperature WITH NO DATA;
 ERROR:  old format of continuous aggregate is not supported with joins
-HINT:  set timescaledb.finalized to TRUE
+HINT:  Set timescaledb.finalized to TRUE.
 -- Error out for LATERAL multiple tables in new format
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
 as
@@ -299,7 +299,7 @@ select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q
 group by temperature WITH NO DATA;
 ERROR:  invalid continuous aggregate view
-DETAIL:  lateral are not supported in FROM clause
+DETAIL:  Lateral joins are not supported in FROM clause.
 --Error out if from clause has view
 CREATE MATERIALIZED VIEW conditions_summary_daily_view
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -313,7 +313,7 @@ FROM conditions, devices_view
 WHERE conditions.device_id = devices_view.device_id
 GROUP BY name, bucket, devices_view.device_id;
 ERROR:  invalid continuous aggregate view
-DETAIL:  views are not supported in FROM clause
+DETAIL:  Views are not supported in FROM clause.
 -- Nested CAgg over a CAgg with join
 CREATE MATERIALIZED VIEW cagg_on_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -341,7 +341,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions JOIN (SELECT * FROM devices WHERE location in (SELECT name from cities where currency = 'EUR')) dev ON conditions.device_id = dev.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  sub-queries are not supported in FROM clause
+DETAIL:  Sub-queries are not supported in FROM clause.
 DROP TABLE cities CASCADE;
 --Error out when join is between two hypertables
 CREATE MATERIALIZED VIEW conditions_summary_daily_ht
@@ -354,7 +354,7 @@ FROM conditions, conditions_dup
 WHERE conditions.device_id = conditions_dup.device_id
 GROUP BY bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  multiple hypertables or normal tables are not supported in FROM clause
+DETAIL:  Multiple hypertables or normal tables are not supported in FROM clause.
 --Error out when join is between two normal tables
 CREATE MATERIALIZED VIEW conditions_summary_daily_nt
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -367,7 +367,7 @@ FROM devices, devices_dup
 WHERE devices.device_id = devices_dup.device_id
 GROUP BY devices.name, devices.location;
 ERROR:  invalid continuous aggregate view
-DETAIL:  multiple hypertables or normal tables are not supported in FROM clause
+DETAIL:  Multiple hypertables or normal tables are not supported in FROM clause.
 --Error out when join is on non-equality condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -380,7 +380,7 @@ FROM conditions, devices
 WHERE conditions.device_id <> devices.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  only equality conditions are supported in continuous aggregates
+DETAIL:  Only equality conditions are supported in continuous aggregates.
 --Unsupported join condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -394,8 +394,8 @@ WHERE conditions.device_id = devices.device_id AND
       conditions.city like '%cow*'
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  unsupported expression in join clause
-HINT:  only equality condition is supported
+DETAIL:  Unsupported expression in join clause.
+HINT:  Only equality conditions are supported in continuous aggregates.
 --Unsupported join condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -409,8 +409,8 @@ WHERE conditions.device_id = devices.device_id OR
       conditions.city like '%cow*'
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  unsupported expression in join clause
-HINT:  only equality condition is supported
+DETAIL:  Unsupported expression in join clause.
+HINT:  Only equality conditions are supported in continuous aggregates.
 --Error out when join type is not inner
 CREATE MATERIALIZED VIEW conditions_summary_daily_outer
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -456,7 +456,7 @@ FROM conditions_summary_daily_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
 GROUP BY 1,2,3;
 ERROR:  invalid continuous aggregate view
-DETAIL:  views are not supported in FROM clause
+DETAIL:  Views are not supported in FROM clause.
 \set VERBOSITY terse
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 24 other objects

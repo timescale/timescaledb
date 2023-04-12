@@ -947,8 +947,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("only immutable expressions allowed in time bucket function"),
-						 errhint("Use an immutable expression as first argument"
-								 " to the time bucket function.")));
+						 errhint("Use an immutable expression as first argument to the time bucket "
+								 "function.")));
 
 			if (tbinfo->interval && tbinfo->interval->month)
 			{
@@ -1271,7 +1271,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("old format of continuous aggregate is not supported with joins"),
-					 errhint("set timescaledb.finalized to TRUE")));
+					 errhint("Set timescaledb.finalized to TRUE.")));
 
 		if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
 		{
@@ -1280,7 +1280,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate view"),
 						 errdetail(
-							 "from clause can only have one hypertable and one normal table")));
+							 "From clause can only have one hypertable and one normal table.")));
 
 			rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
 			rte = list_nth(query->rtable, rtref->rtindex - 1);
@@ -1307,8 +1307,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("invalid continuous aggregate view"),
 								 errdetail(
-									 "joins with using clause in continuous aggregate definition"
-									 " work for Postgres versions 13 and above")));
+									 "Joins with USING clause in continuous aggregate definition"
+									 " work for Postgres versions 13 and above.")));
 #endif
 					jointype = join->jointype;
 					op = (OpExpr *) join->quals;
@@ -1318,7 +1318,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("invalid continuous aggregate view"),
-								 errdetail("sub-queries are not supported in FROM clause")));
+								 errdetail("Sub-queries are not supported in FROM clause.")));
 					RangeTblEntry *jrte = rt_fetch(join->rtindex, query->rtable);
 					if (jrte->joinaliasvars == NIL)
 						ereport(ERROR,
@@ -1336,20 +1336,20 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("lateral are not supported in FROM clause")));
+					 errdetail("Lateral joins are not supported in FROM clause.")));
 		if ((rte->relkind == RELKIND_VIEW && ts_is_hypertable(rte_other->relid)) ||
 			(rte_other->relkind == RELKIND_VIEW && ts_is_hypertable(rte->relid)))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("views are not supported in FROM clause")));
+					 errdetail("Views are not supported in FROM clause.")));
 		if (rte->relkind != RELKIND_VIEW && rte_other->relkind != RELKIND_VIEW &&
 			(ts_is_hypertable(rte->relid) == ts_is_hypertable(rte_other->relid)))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("multiple hypertables or normal tables"
-							   " are not supported in FROM clause")));
+					 errdetail("Multiple hypertables or normal tables are not supported in FROM "
+							   "clause.")));
 
 		/* Only inner joins are allowed. */
 		if (jointype != JOIN_INNER)
@@ -1368,14 +1368,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate view"),
 						 errdetail(
-							 "only equality conditions are supported in continuous aggregates")));
+							 "Only equality conditions are supported in continuous aggregates.")));
 		}
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("unsupported expression in join clause"),
-					 errhint("only equality condition is supported")));
+					 errdetail("Unsupported expression in join clause."),
+					 errhint("Only equality conditions are supported in continuous aggregates.")));
 		/*
 		 * Record the table oid of the normal table. This is required so
 		 * that we know which one is hypertable to carry out the related
@@ -1422,8 +1422,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate query"),
-						 errhint("continuous aggregate needs to query hypertable or another "
-								 "continuous aggregate")));
+						 errhint("Continuous aggregate needs to query hypertable or another "
+								 "continuous aggregate.")));
 			}
 
 			if (!ContinuousAggIsFinalized(cagg_parent))
@@ -1509,8 +1509,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("custom time function required on hypertable \"%s\"",
 								get_rel_name(ht->main_table_relid)),
-						 errdetail("An integer-based hypertable requires a custom time"
-								   " function to support continuous aggregates."),
+						 errdetail("An integer-based hypertable requires a custom time function to "
+								   "support continuous aggregates."),
 						 errhint("Set a custom time function on the hypertable.")));
 		}
 
@@ -2871,8 +2871,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_TABLE),
 					 errmsg("continuous aggregate \"%s\" already exists", stmt->into->rel->relname),
-					 errhint("Drop or rename the existing continuous aggregate"
-							 " first or use another name.")));
+					 errhint("Drop or rename the existing continuous aggregate first or use "
+							 "another name.")));
 		}
 	}
 
@@ -3081,9 +3081,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 						"\"%s.%s\"",
 						schema,
 						relname),
-				 errdetail("Continuous aggregate data possibly corrupted.\n"
-						   "You may need to recreate the continuous aggregate with"
-						   "CREATE MATERIALIZED VIEW.")));
+				 errdetail("Continuous aggregate data possibly corrupted."),
+				 errhint("You may need to recreate the continuous aggregate with CREATE "
+						 "MATERIALIZED VIEW.")));
 	}
 	else
 	{
