@@ -3799,15 +3799,10 @@ SELECT "time", dist_device, temp FROM public.dist_device ORDER BY "time" ASC NUL
    Chunks: _dist_hyper_15_37_chunk
    Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[22]) ORDER BY "time" ASC NULLS LAST
    Remote EXPLAIN: 
-     Custom Scan (ChunkAppend) on public.dist_device
-       Output: dist_device."time", dist_device.dist_device, dist_device.temp
-       Order: dist_device."time"
-       Startup Exclusion: false
-       Runtime Exclusion: false
-       ->  Index Scan Backward using _dist_hyper_15_37_chunk_dist_device_time_idx on _timescaledb_internal._dist_hyper_15_37_chunk
-             Output: _dist_hyper_15_37_chunk."time", _dist_hyper_15_37_chunk.dist_device, _dist_hyper_15_37_chunk.temp
+     Index Scan Backward using _dist_hyper_15_37_chunk_dist_device_time_idx on _timescaledb_internal._dist_hyper_15_37_chunk
+       Output: _dist_hyper_15_37_chunk."time", _dist_hyper_15_37_chunk.dist_device, _dist_hyper_15_37_chunk.temp
  
-(14 rows)
+(9 rows)
 
 SELECT * FROM dist_device;
              time             | dist_device | temp 

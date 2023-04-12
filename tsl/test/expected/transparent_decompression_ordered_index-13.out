@@ -141,32 +141,28 @@ ORDER BY c.id;
 --all queries have only prefix of compress_orderby in ORDER BY clause
 -- should have ordered DecompressChunk path because segmentby columns have equality constraints
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 (actual rows=10 loops=1)
-         Order: metrics_ordered_idx2."time" DESC
-         ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=10 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_4_12_chunk._ts_meta_sequence_num DESC
-                     Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
-                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
-(9 rows)
+   ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: compress_hyper_4_12_chunk._ts_meta_sequence_num DESC
+               Sort Method: quicksort 
+               ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 asc LIMIT 10;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 (actual rows=10 loops=1)
-         Order: metrics_ordered_idx2."time" DESC, metrics_ordered_idx2.v0
-         ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=10 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_4_12_chunk._ts_meta_sequence_num DESC
-                     Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
-                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
-(9 rows)
+   ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: compress_hyper_4_12_chunk._ts_meta_sequence_num DESC
+               Sort Method: quicksort 
+               ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 desc LIMIT 10;
                                                                        QUERY PLAN                                                                        
