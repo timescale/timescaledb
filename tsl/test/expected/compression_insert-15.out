@@ -762,12 +762,10 @@ ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby
 INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
-   ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
-(3 rows)
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
+(1 row)
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
               compress_chunk              
@@ -777,15 +775,13 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-         ->  Sort
-               Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_14_21_chunk
-(6 rows)
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+   ->  Sort
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+         ->  Seq Scan on compress_hyper_14_21_chunk
+(4 rows)
 
 INSERT INTO test_ordering SELECT 1;
 -- should not be ordered append

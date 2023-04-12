@@ -900,6 +900,25 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					return false;
 
 				/*
+				 * If we only have 1 child node there is no need for the
+				 * ordered append optimization. We might still benefit from
+				 * a ChunkAppend node here due to runtime chunk exclusion
+				 * when we have non-immutable constraints.
+				 */
+				if (list_length(merge->subpaths) == 1)
+				{
+					foreach (lc, rel->baserestrictinfo)
+					{
+						RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+						if (contain_mutable_functions((Node *) rinfo->clause) ||
+							ts_contain_param((Node *) rinfo->clause))
+							return true;
+					}
+					return false;
+				}
+
+				/*
 				 * Check for partial compressed chunks.
 				 *
 				 * When partial compressed chunks are present we can not do 1-level
