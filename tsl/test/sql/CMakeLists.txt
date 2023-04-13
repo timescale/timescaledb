@@ -137,10 +137,9 @@ set(SOLO_TESTS
     remote_txn_resolve
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})
-
-# In PG15.0 and PG15.1, dist_move_chunk can get stuck when run in parallel with
-# other tests as mentioned in #4972.
-if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "2")
+# In PG versions 15.0 to 15.2, dist_move_chunk can cause a deadlock when run in
+# parallel with other tests as mentioned in #4972.
+if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "3")
   list(APPEND SOLO_TESTS dist_move_chunk)
 endif()
 
