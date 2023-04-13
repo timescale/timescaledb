@@ -328,24 +328,24 @@ $$);
 NOTICE:  [db_dist_triggers_3]: 
     SELECT test.show_triggers('hyper')
 NOTICE:  [db_dist_triggers_3]:
-show_triggers                                             
-----------------------------------------------------------
-(_0_test_trigger_delete,11,test_trigger)                  
-(_0_test_trigger_delete_after,9,test_trigger)             
-(_0_test_trigger_delete_s_after,8,test_trigger)           
-(_0_test_trigger_delete_s_before,10,test_trigger)         
-(_0_test_trigger_insert,7,test_trigger)                   
-(_0_test_trigger_insert_after,5,test_trigger)             
-(_0_test_trigger_insert_after_when_dev1,5,test_trigger)   
-(_0_test_trigger_insert_s_after,4,test_trigger)           
-(_0_test_trigger_insert_s_before,6,test_trigger)          
-(_0_test_trigger_update,19,test_trigger)                  
-(_0_test_trigger_update_after,17,test_trigger)            
-(_0_test_trigger_update_s_after,16,test_trigger)          
-(_0_test_trigger_update_s_before,18,test_trigger)         
-(ts_insert_blocker,7,_timescaledb_internal.insert_blocker)
-(z_test_trigger_all,31,test_trigger)                      
-(z_test_trigger_all_after,29,test_trigger)                
+show_triggers                                              
+-----------------------------------------------------------
+(_0_test_trigger_delete,11,test_trigger)                   
+(_0_test_trigger_delete_after,9,test_trigger)              
+(_0_test_trigger_delete_s_after,8,test_trigger)            
+(_0_test_trigger_delete_s_before,10,test_trigger)          
+(_0_test_trigger_insert,7,test_trigger)                    
+(_0_test_trigger_insert_after,5,test_trigger)              
+(_0_test_trigger_insert_after_when_dev1,5,test_trigger)    
+(_0_test_trigger_insert_s_after,4,test_trigger)            
+(_0_test_trigger_insert_s_before,6,test_trigger)           
+(_0_test_trigger_update,19,test_trigger)                   
+(_0_test_trigger_update_after,17,test_trigger)             
+(_0_test_trigger_update_s_after,16,test_trigger)           
+(_0_test_trigger_update_s_before,18,test_trigger)          
+(ts_insert_blocker,7,_timescaledb_functions.insert_blocker)
+(z_test_trigger_all,31,test_trigger)                       
+(z_test_trigger_all_after,29,test_trigger)                 
 (16 rows)
 
 
@@ -489,10 +489,10 @@ CREATE TRIGGER _0_temp_increment
 SELECT test.remote_exec(ARRAY[:'DATA_NODE_3'], $$ SELECT test.show_triggers('disttable') $$);
 NOTICE:  [db_dist_triggers_3]:  SELECT test.show_triggers('disttable') 
 NOTICE:  [db_dist_triggers_3]:
-show_triggers                                             
-----------------------------------------------------------
-(_0_temp_increment,7,temp_increment_trigger)              
-(ts_insert_blocker,7,_timescaledb_internal.insert_blocker)
+show_triggers                                              
+-----------------------------------------------------------
+(_0_temp_increment,7,temp_increment_trigger)               
+(ts_insert_blocker,7,_timescaledb_functions.insert_blocker)
 (2 rows)
 
 

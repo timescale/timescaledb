@@ -26,7 +26,7 @@ INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, NULL, '','','','',
 -- create the trigger
 CREATE TRIGGER continuous_agg_insert_trigger
     AFTER INSERT ON continuous_agg_test
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger(1);
+    FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(1);
 
 -- inserting into the table still doesn't change the watermark since there's no
 -- continuous_aggs_invalidation_threshold. We treat that case as a invalidation_watermark of

@@ -1,0 +1,1 @@
+Fixes: #5562 Move trigger functions to _timescaledb_functions schema

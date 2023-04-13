@@ -30,3 +30,18 @@ RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL,
 next_start TIMESTAMPTZ, check_config TEXT, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT)
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
+
+-- when upgrading from old versions on PG13 this function might not be present
+-- since there is no ALTER FUNCTION IF EXISTS we have to work around it with a DO block
+DO $$
+BEGIN
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'drop_dist_ht_invalidation_trigger' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigger(integer) SET SCHEMA _timescaledb_functions;
+  END IF;
+END;
+$$;
+
+ALTER FUNCTION _timescaledb_internal.insert_blocker() SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger() SET SCHEMA _timescaledb_functions;
+

@@ -303,10 +303,10 @@ SELECT * FROM test.show_indexes('disttable');
 (3 rows)
 
 SELECT * FROM test.show_triggers('disttable');
-        Trigger         | Type |               Function               
-------------------------+------+--------------------------------------
+        Trigger         | Type |               Function                
+------------------------+------+---------------------------------------
  _0_test_trigger_insert |    7 | test_trigger
- ts_insert_blocker      |    7 | _timescaledb_internal.insert_blocker
+ ts_insert_blocker      |    7 | _timescaledb_functions.insert_blocker
 (2 rows)
 
 -- Drop a column. This will make the attribute numbers of the
@@ -2224,9 +2224,9 @@ SELECT * FROM _timescaledb_catalog.dimension;
 (5 rows)
 
 SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
-      Trigger      | Type |               Function               
--------------------+------+--------------------------------------
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
+      Trigger      | Type |               Function                
+-------------------+------+---------------------------------------
+ ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
 (1 row)
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
@@ -2263,9 +2263,9 @@ NOTICE:  [db_dist_hypertable_1]:
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid
 NOTICE:  [db_dist_hypertable_1]:
-tgname           |tgtype|tgfoid                              
------------------+------+------------------------------------
-ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
+tgname           |tgtype|tgfoid                               
+-----------------+------+-------------------------------------
+ts_insert_blocker|     7|_timescaledb_functions.insert_blocker
 (1 row)
 
 
@@ -2297,9 +2297,9 @@ NOTICE:  [db_dist_hypertable_2]:
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid
 NOTICE:  [db_dist_hypertable_2]:
-tgname           |tgtype|tgfoid                              
------------------+------+------------------------------------
-ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
+tgname           |tgtype|tgfoid                               
+-----------------+------+-------------------------------------
+ts_insert_blocker|     7|_timescaledb_functions.insert_blocker
 (1 row)
 
 
@@ -2331,9 +2331,9 @@ NOTICE:  [db_dist_hypertable_3]:
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid
 NOTICE:  [db_dist_hypertable_3]:
-tgname           |tgtype|tgfoid                              
------------------+------+------------------------------------
-ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
+tgname           |tgtype|tgfoid                               
+-----------------+------+-------------------------------------
+ts_insert_blocker|     7|_timescaledb_functions.insert_blocker
 (1 row)
 
 
