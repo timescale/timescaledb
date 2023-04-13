@@ -118,13 +118,15 @@ SELECT delete_job(1000);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- background workers are disabled, so the job will not run --
 SELECT add_job( proc=>'custom_func',
-     schedule_interval=>'1h', initial_start =>'2018-01-01 10:00:00-05');
+     schedule_interval=>'1h', initial_start =>'2018-01-01 10:00:00-05') AS job_id_1 \gset
 
 SELECT job_id, next_start, scheduled, schedule_interval
 FROM timescaledb_information.jobs WHERE job_id > 1000;
 \x
 SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1000;
 \x
+
+SELECT delete_job(:job_id_1);
 
 -- tests for #3545
 CREATE FUNCTION wait_for_job_to_run(job_param_id INTEGER, expected_runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
@@ -275,6 +277,8 @@ where hypertable_id = (select id from _timescaledb_catalog.hypertable
                        where table_name = 'conditions')
 order by id;
 
+-- Drop the compression job
+SELECT delete_job(:job_id_4);
 
 -- Decompress chunks before create the cagg
 SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
@@ -318,6 +322,10 @@ DROP MATERIALIZED VIEW conditions_summary_daily;
 
 SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+
+-- Cleanup
+DROP TABLE conditions;
+DROP TABLE custom_log;
 
 -- Stop Background Workers
 SELECT _timescaledb_internal.stop_background_workers();
@@ -532,9 +540,6 @@ BEGIN
 END
 $$ LANGUAGE PLPGSQL;
 
-create table jsonb_values (j jsonb, i int);
-insert into jsonb_values values ('{"refresh_after":"2 weeks"}', 1), ('{"compress_after":"2 weeks"}', 2), ('{"drop_after":"2 weeks"}', 3);
-
 CREATE AGGREGATE sum_jsb (jsonb)
 (
     sfunc = jsonb_add,
@@ -544,6 +549,9 @@ CREATE AGGREGATE sum_jsb (jsonb)
 
 -- for test coverage, check unsupported aggregate type
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
+
+-- Cleanup jobs
+TRUNCATE _timescaledb_config.bgw_job CASCADE;
 
 -- github issue 4610
 CREATE TABLE sensor_data
@@ -576,7 +584,6 @@ SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 -- create new chunks
-
 INSERT INTO sensor_data
 	SELECT
 		time + (INTERVAL '1 minute' * random()) AS time,
@@ -588,11 +595,34 @@ INSERT INTO sensor_data
 		generate_series(1, 30, 1 ) AS g2(sensor_id)
 	ORDER BY
 		time;
--- change compression status so that this chunk is skipped when policy is run
-update _timescaledb_catalog.chunk set status=3 where table_name = '_hyper_4_17_chunk';
 
+-- get the name of a new uncompressed chunk
+SELECT chunk_name AS new_uncompressed_chunk_name
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data' AND NOT is_compressed LIMIT 1 \gset
+
+-- change compression status so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompressed_chunk_name';
+
+-- verify that there are other uncompressed new chunks that need to be compressed
+SELECT count(*) > 1
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data' AND NOT is_compressed;
+
+-- disable notice/warning as the new_uncompressed_chunk_name
+-- is dynamic and it will be printed in those messages.
+SET client_min_messages TO ERROR;
 CALL run_job(:compressjob_id);
--- check compression status is not changed
-SELECT status FROM _timescaledb_catalog.chunk where table_name = '_hyper_4_17_chunk';
+SET client_min_messages TO NOTICE;
+
+-- check compression status is not changed for the chunk whose status was manually updated
+SELECT status FROM _timescaledb_catalog.chunk where table_name = :'new_uncompressed_chunk_name';
+
+-- confirm all the other new chunks are now compressed despite
+-- facing an error when trying to compress :'new_uncompressed_chunk_name'
+SELECT count(*) = 0
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data' AND NOT is_compressed;
+
 -- cleanup
-DROP TABLE sensor_data CASCADE;
+DROP TABLE sensor_data;
