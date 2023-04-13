@@ -327,7 +327,7 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		.trigname = CAGGINVAL_TRIGGER_NAME,
 		.relation = makeRangeVar(schema, relname, -1),
 		.funcname =
-			list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
+			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
 		.args = NIL, /* to be filled in later */
 		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};

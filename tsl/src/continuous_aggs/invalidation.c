@@ -1620,7 +1620,7 @@ remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id)
 	Oid func_oid;
 
 	static const Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 								 makeString(DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME));
 
 	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);

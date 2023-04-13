@@ -30,3 +30,8 @@ RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL,
 next_start TIMESTAMPTZ, check_config TEXT)
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
+
+ALTER FUNCTION _timescaledb_functions.insert_blocker() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.drop_dist_ht_invalidation_trigger(integer) SET SCHEMA _timescaledb_internal;
+

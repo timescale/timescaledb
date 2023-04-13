@@ -1617,7 +1617,7 @@ insert_blocker_trigger_add(Oid relid)
 		.trigname = INSERT_BLOCKER_NAME,
 		.relation = makeRangeVar(schema, relname, -1),
 		.funcname =
-			list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
+			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
 		.args = NIL,
 		.events = TRIGGER_TYPE_INSERT,
 	};

@@ -1359,7 +1359,7 @@ WHERE uc_hypertable.table_name like 'metric' \gset
 Indexes:
     "_compressed_hypertable_24_series_id_value__ts_meta_sequence_idx" btree (series_id, value, _ts_meta_sequence_num)
 Triggers:
-    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._compressed_hypertable_24 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
+    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._compressed_hypertable_24 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
 
 -- #5290 Compression can't be enabled on caggs
 CREATE TABLE "tEst2" (

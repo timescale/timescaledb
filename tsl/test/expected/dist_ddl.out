@@ -65,9 +65,9 @@ SELECT * FROM test.show_indexes('disttable');
 (3 rows)
 
 SELECT * FROM test.show_triggers('disttable');
-      Trigger      | Type |               Function               
--------------------+------+--------------------------------------
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
+      Trigger      | Type |               Function                
+-------------------+------+---------------------------------------
+ ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$
@@ -111,9 +111,9 @@ disttable_time_idx     |{time}     |    |f     |f      |f        |
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_triggers('disttable')
 NOTICE:  [db_dist_ddl_1]:
-Trigger          |Type|Function                            
------------------+----+------------------------------------
-ts_insert_blocker|   7|_timescaledb_internal.insert_blocker
+Trigger          |Type|Function                             
+-----------------+----+-------------------------------------
+ts_insert_blocker|   7|_timescaledb_functions.insert_blocker
 (1 row)
 
 
@@ -152,9 +152,9 @@ disttable_time_idx     |{time}     |    |f     |f      |f        |
 NOTICE:  [db_dist_ddl_2]: 
 SELECT * FROM test.show_triggers('disttable')
 NOTICE:  [db_dist_ddl_2]:
-Trigger          |Type|Function                            
------------------+----+------------------------------------
-ts_insert_blocker|   7|_timescaledb_internal.insert_blocker
+Trigger          |Type|Function                             
+-----------------+----+-------------------------------------
+ts_insert_blocker|   7|_timescaledb_functions.insert_blocker
 (1 row)
 
 
@@ -193,9 +193,9 @@ disttable_time_idx     |{time}     |    |f     |f      |f        |
 NOTICE:  [db_dist_ddl_3]: 
 SELECT * FROM test.show_triggers('disttable')
 NOTICE:  [db_dist_ddl_3]:
-Trigger          |Type|Function                            
------------------+----+------------------------------------
-ts_insert_blocker|   7|_timescaledb_internal.insert_blocker
+Trigger          |Type|Function                             
+-----------------+----+-------------------------------------
+ts_insert_blocker|   7|_timescaledb_functions.insert_blocker
 (1 row)
 
 

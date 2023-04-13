@@ -160,10 +160,10 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function               
--------------------+------+--------------------------------------
+      Trigger      | Type |               Function                
+-------------------+------+---------------------------------------
  restore_trigger   |    7 | test_trigger
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
+ ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
 (2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
@@ -414,10 +414,10 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function               
--------------------+------+--------------------------------------
+      Trigger      | Type |               Function                
+-------------------+------+---------------------------------------
  restore_trigger   |    7 | test_trigger
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
+ ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
 (2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
