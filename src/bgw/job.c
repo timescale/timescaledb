@@ -291,8 +291,7 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 				   NameStr(
 					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])
-		namestrcpy(&job->fd.owner,
-				   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])));
+		job->fd.owner = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]);
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)])
 		job->fd.scheduled = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)]);
@@ -977,9 +976,7 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 void
 ts_bgw_job_permission_check(BgwJob *job)
 {
-	Oid owner_oid = get_role_oid(NameStr(job->fd.owner), false);
-
-	if (!has_privs_of_role(GetUserId(), owner_oid))
+	if (!has_privs_of_role(GetUserId(), job->fd.owner))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("insufficient permissions to alter job %d", job->fd.id)));
@@ -1329,7 +1326,7 @@ int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
-						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
+						   Oid owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
 						   Jsonb *config, TimestampTz initial_start, const char *timezone)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -1363,7 +1360,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	else
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = BoolGetDatum(fixed_schedule);
 	/* initial_start must have a value if the schedule is fixed */
@@ -1406,6 +1403,13 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
+
+	/* This is where we would add a call to recordDependencyOnOwner, but it
+	 * cannot support dependencies on anything but built-in classes since
+	 * getObjectClass() have a lot of hard-coded checks in place.
+	 *
+	 * Instead we have a check in process_utility.c that prevents dropping the
+	 * user if there is a dependent job. */
 
 	table_close(rel, NoLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];

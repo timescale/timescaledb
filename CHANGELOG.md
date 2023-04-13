@@ -39,6 +39,7 @@ accidentally triggering the load of a previous DB version.**
 * #5433 Fix join rte in CAggs with joins
 * #5543 Copy scheduled_jobs list before sorting it
 * #5570 Improve interpolate error message on datatype mismatch
+* #5558 Use regrole for job owner
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
