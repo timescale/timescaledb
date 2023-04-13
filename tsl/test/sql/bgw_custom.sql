@@ -530,6 +530,9 @@ select * from alter_job(:job_id_owner, check_config => 'test_schema.test_config_
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP SCHEMA test_schema CASCADE;
+
+-- Delete all jobs with that owner before we can drop the user.
+DELETE FROM _timescaledb_config.bgw_job WHERE owner = 'user_noexec'::regrole;
 DROP ROLE user_noexec;
 
 -- test with aggregate check proc

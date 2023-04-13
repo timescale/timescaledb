@@ -24,7 +24,16 @@ CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BO
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 -- we use insert_job instead of add_job because we want to be able to set and use max_retries, max_runtime, retry_period which are not part of the add_job api
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT true)
+CREATE OR REPLACE FUNCTION insert_job(
+       application_name NAME,
+       job_type NAME,
+       schedule_interval INTERVAL,
+       max_runtime INTERVAL,
+       retry_period INTERVAL,
+       owner regrole DEFAULT current_role::regrole,
+       scheduled BOOL DEFAULT true,
+       fixed_schedule BOOL DEFAULT true
+)
 RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
   INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,

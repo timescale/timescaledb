@@ -37,6 +37,8 @@ accidentally triggering the load of a previous DB version.**
 * #5462 Fix segfault after column drop on compressed table
 * #5543 Copy scheduled_jobs list before sorting it
 * #5497 Allow named time_bucket arguments in Cagg definition
+* #5570 Improve interpolate error message on datatype mismatch
+* #5558 Use regrole for job owner
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
