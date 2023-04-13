@@ -360,6 +360,12 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 	
 }
 
+
+extern
+List *
+get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel,
+                                                                 bool require_parallel_safe);
+
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 								   Chunk *chunk)
@@ -548,17 +554,13 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				cost_decompress_chunk(&dcpath->cpath.path, &sort_path);
 			}
 			add_path(chunk_rel, &dcpath->cpath.path);
-		} else {
-			DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
-			SortPath* sortpath = create_sort_path(root, chunk_rel, &dcpath->cpath.path, root->sort_pathkeys, root->limit_tuples);
-			add_path(chunk_rel, &sortpath->path);
 		}
 
 		/*
 		 * If this is a partially compressed chunk we have to combine data
 		 * from compressed and uncompressed chunk.
 		 */
-		if (ts_chunk_is_partial(chunk))
+//		if (ts_chunk_is_partial(chunk))
 			path = (Path *) create_append_path_compat(root,
 													  chunk_rel,
 													  list_make2(path, uncompressed_path),
@@ -569,6 +571,17 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 													  false,
 													  false,
 													  path->rows + uncompressed_path->rows);
+
+
+        List *useful_pathkeys_list = get_useful_pathkeys_for_relation(root, chunk_rel, true);
+
+        foreach(lc, useful_pathkeys_list) {
+			List       *useful_pathkeys = lfirst(lc);
+			DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
+			SortPath* sortpath = create_sort_path(root, chunk_rel, &dcpath->cpath.path, useful_pathkeys, root->limit_tuples);
+			add_path(chunk_rel, &sortpath->path);
+		}
+
 		/* this has to go after the path is copied for the ordered path since path can get freed in
 		 * add_path */
 		add_path(chunk_rel, path);
