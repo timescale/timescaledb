@@ -360,11 +360,63 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 	
 }
 
-
-extern
-List *
+static List *
 get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel,
-                                                                 bool require_parallel_safe);
+                                                                 bool require_parallel_safe)
+{
+        List       *useful_pathkeys_list = NIL;
+
+        /*
+         * Considering query_pathkeys is always worth it, because it might allow
+         * us to avoid a total sort when we have a partially presorted path
+         * available or to push the total sort into the parallel portion of the
+         * query.
+         */
+        if (root->query_pathkeys)
+        {
+                ListCell   *lc;
+                int                     npathkeys = 0;  /* useful pathkeys */
+
+                foreach(lc, root->query_pathkeys)
+                {
+                        PathKey    *pathkey = (PathKey *) lfirst(lc);
+                        EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
+
+                        /*
+                         * We can only build a sort for pathkeys that contain a
+                         * safe-to-compute-early EC member computable from the current
+                         * relation's reltarget, so ignore the remainder of the list as
+                         * soon as we find a pathkey without such a member.
+                         *
+                         * It's still worthwhile to return any prefix of the pathkeys list
+                         * that meets this requirement, as we may be able to do an
+                         * incremental sort.
+                         *
+                         * If requested, ensure the sort expression is parallel-safe too.
+                         */
+                        if (!relation_can_be_sorted_early(root, rel, pathkey_ec,
+                                                                                          require_parallel_safe))
+                                break;
+
+                        npathkeys++;
+                }
+
+                /*
+                 * The whole query_pathkeys list matches, so append it directly, to
+                 * allow comparing pathkeys easily by comparing list pointer. If we
+                 * have to truncate the pathkeys, we gotta do a copy though.
+                 */
+                if (npathkeys == list_length(root->query_pathkeys))
+                        useful_pathkeys_list = lappend(useful_pathkeys_list,
+                                                                                   root->query_pathkeys);
+                else if (npathkeys > 0)
+                        useful_pathkeys_list = lappend(useful_pathkeys_list,
+                                                                                   list_truncate(list_copy(root->query_pathkeys),
+                                                                                                                 npathkeys));
+        }
+
+        return useful_pathkeys_list;
+}
 
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
@@ -560,7 +612,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * If this is a partially compressed chunk we have to combine data
 		 * from compressed and uncompressed chunk.
 		 */
-//		if (ts_chunk_is_partial(chunk))
+		if (ts_chunk_is_partial(chunk))
 			path = (Path *) create_append_path_compat(root,
 													  chunk_rel,
 													  list_make2(path, uncompressed_path),
