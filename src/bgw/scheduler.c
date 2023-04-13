@@ -251,7 +251,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 #endif
 
 	BgwJobStat *job_stat;
-	Oid owner_uid;
 
 	switch (new_state)
 	{
@@ -314,7 +313,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			else
 				sjob->timeout_at = DT_NOEND;
 
-			owner_uid = get_role_oid(NameStr(sjob->job.fd.owner), false);
 			CommitTransactionCommand();
 			MemoryContextSwitchTo(scratch_mctx);
 
@@ -323,7 +321,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				 sjob->job.fd.id,
 				 NameStr(sjob->job.fd.application_name));
 
-			sjob->handle = ts_bgw_job_start(&sjob->job, owner_uid);
+			sjob->handle = ts_bgw_job_start(&sjob->job, sjob->job.fd.owner);
 			if (sjob->handle == NULL)
 			{
 				elog(WARNING,

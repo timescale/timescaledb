@@ -272,12 +272,11 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Retention Policy");
-	NameData proc_name, proc_schema, check_schema, check_name, owner;
+	NameData proc_name, proc_schema, check_schema, check_name;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&check_name, POLICY_RETENTION_CHECK_NAME);
 	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
-	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&default_schedule_interval,
@@ -288,7 +287,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										&proc_name,
 										&check_schema,
 										&check_name,
-										&owner,
+										owner_id,
 										true,
 										fixed_schedule,
 										hypertable->fd.id,

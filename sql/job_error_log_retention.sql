@@ -65,7 +65,7 @@ VALUES
     INTERVAL '1h',
     '_timescaledb_internal',
     'policy_job_error_retention',
-    CURRENT_ROLE,
+    current_role::regrole,
     true,
     '{"drop_after":"1 month"}',
     '_timescaledb_internal',

@@ -864,6 +864,8 @@ ERROR:  permission denied for function "test_config_check_func_privileges"
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP SCHEMA test_schema CASCADE;
 NOTICE:  drop cascades to function test_schema.test_config_check_func_privileges(jsonb)
+-- Delete all jobs with that owner before we can drop the user.
+DELETE FROM _timescaledb_config.bgw_job WHERE owner = 'user_noexec'::regrole;
 DROP ROLE user_noexec;
 -- test with aggregate check proc
 create function jsonb_add (j1 jsonb, j2 jsonb) returns jsonb

@@ -13,6 +13,7 @@
 #include <catalog/index.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_authid.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
@@ -71,6 +72,7 @@
 #include "compression_with_clause.h"
 #include "partitioning.h"
 #include "debug_point.h"
+#include "debug_assert.h"
 
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
@@ -1696,6 +1698,62 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("mixing continuous aggregates and other objects not allowed"),
 				 errhint("Drop continuous aggregates and other objects in separate statements.")));
+}
+
+static bool
+fetch_role_info(RoleSpec *rolespec, Oid *roleid)
+{
+	/* Special role specifiers should not be present when dropping a role,
+	 * but if they are, we just ignore them */
+	if (rolespec->roletype != ROLESPEC_CSTRING)
+		return false;
+
+	/* Fetch the heap tuple from system table. If heaptuple is not valid it
+	 * means we did not find a role. We ignore it since the real execution
+	 * will handle this. */
+	HeapTuple tuple = SearchSysCache1(AUTHNAME, PointerGetDatum(rolespec->rolename));
+	if (!HeapTupleIsValid(tuple))
+		return false;
+
+	Form_pg_authid roleform = (Form_pg_authid) GETSTRUCT(tuple);
+	*roleid = roleform->oid;
+	ReleaseSysCache(tuple);
+	return true;
+}
+
+static DDLResult
+process_drop_role(ProcessUtilityArgs *args)
+{
+	DropRoleStmt *stmt = (DropRoleStmt *) args->parsetree;
+	ListCell *cell;
+	foreach (cell, stmt->roles)
+	{
+		RoleSpec *rolespec = lfirst(cell);
+		Oid roleid;
+
+		if (!fetch_role_info(rolespec, &roleid))
+			continue;
+
+		ScanIterator iterator =
+			ts_scan_iterator_create(BGW_JOB, AccessShareLock, CurrentMemoryContext);
+		ts_scanner_foreach(&iterator)
+		{
+			bool isnull;
+			TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+			Datum value = slot_getattr(ti->slot, Anum_bgw_job_owner, &isnull);
+			if (!isnull && DatumGetObjectId(value) == roleid)
+			{
+				Datum value = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull);
+				Ensure(!isnull, "job id was null");
+				ereport(ERROR,
+						(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+						 errmsg("role \"%s\" cannot be dropped because some objects depend on it",
+								rolespec->rolename),
+						 errdetail("owner of job %d", DatumGetInt32(value))));
+			}
+		}
+	}
+	return DDL_CONTINUE;
 }
 
 static DDLResult
@@ -4097,6 +4155,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			 * way.
 			 */
 			handler = process_drop_start;
+			break;
+		case T_DropRoleStmt:
+			handler = process_drop_role;
 			break;
 		case T_DropTableSpaceStmt:
 			handler = process_drop_tablespace;

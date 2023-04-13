@@ -16,7 +16,16 @@ CREATE OR REPLACE FUNCTION ts_bgw_params_destroy() RETURNS VOID AS :MODULE_PATHN
 CREATE OR REPLACE FUNCTION ts_bgw_test_job_sleep(job_id INT, config JSONB) RETURNS VOID AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, fixed_schedule BOOL DEFAULT false) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
+CREATE OR REPLACE FUNCTION insert_job(
+       application_name NAME,
+       job_type NAME,
+       schedule_interval INTERVAL,
+       max_runtime INTERVAL,
+       retry_period INTERVAL,
+       owner regrole DEFAULT CURRENT_ROLE::regrole,
+       scheduled BOOL DEFAULT true,
+       fixed_schedule BOOL DEFAULT false
+) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
   INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,
   retry_period,proc_name,proc_schema,owner,scheduled,fixed_schedule)
@@ -1603,6 +1612,35 @@ consecutive_crashes     | 0
 flags                   | 0
 
 \x off
+-- Test renaming a user and see that the owner of the job changes.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE USER another_user;
+SET ROLE another_user;
+SELECT insert_job('another_one', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
+SELECT proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+   proc_name    |    owner     
+----------------+--------------
+ bgw_test_job_1 | another_user
+(1 row)
+
+RESET ROLE;
+ALTER USER another_user RENAME TO renamed_user;
+SELECT proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+   proc_name    |    owner     
+----------------+--------------
+ bgw_test_job_1 | renamed_user
+(1 row)
+
+-- This should fail since the job is dependent on the owner
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+DROP USER renamed_user;
+ERROR:  role "renamed_user" cannot be dropped because some objects depend on it
+DETAIL:  owner of job 1026
+\set ON_ERROR_STOP 1
+DELETE FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+-- This should succeed
+DROP USER renamed_user;
 -- clean up jobs
 SELECT _timescaledb_internal.stop_background_workers();
  stop_background_workers 

@@ -281,7 +281,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										&proc_name,
 										&check_schema,
 										&check_name,
-										&owner,
+										owner_id,
 										true,
 										fixed_schedule,
 										hypertable_id,
