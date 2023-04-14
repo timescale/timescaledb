@@ -5,6 +5,12 @@
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 
+\set ECHO none
+\o /dev/null
+\ir ../../../test/sql/include/test_utils.sql
+\o
+\set ECHO all
+
 --table with special column names --
 create table foo2 (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('foo2', 'a', chunk_time_interval=> 10);
@@ -382,3 +388,34 @@ SELECT compress_chunk(show_chunks('readings'));
 ALTER TABLE readings DROP COLUMN battery_status;
 INSERT INTO readings ("time", battery_temperature) VALUES ('2022-11-11 11:11:11', 0.2);
 SELECT readings FROM readings;
+
+-- Unique constraints are not always respected on compressed tables #5553
+CREATE TABLE main_table AS
+SELECT '2011-11-11 11:11:11'::timestamptz AS time, 'foo' AS device_id;
+
+CREATE UNIQUE INDEX xm ON main_table(time, device_id);
+
+SELECT create_hypertable('main_table', 'time', chunk_time_interval => interval '12 hour', migrate_data => TRUE);
+
+ALTER TABLE main_table SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'device_id',
+    timescaledb.compress_orderby = '');
+
+SELECT compress_chunk(show_chunks('main_table'));
+
+-- insert rejected
+\set ON_ERROR_STOP 0
+INSERT INTO main_table VALUES
+    ('2011-11-11 11:11:11', 'foo');
+
+-- insert rejected in case 1st row doesn't violate constraint with different segmentby
+INSERT INTO main_table VALUES
+    ('2011-11-11 11:12:11', 'bar'),
+    ('2011-11-11 11:11:11', 'foo');
+
+\set ON_ERROR_STOP 1
+SELECT assert_equal(count(1), 1::bigint) FROM main_table;
+
+-- no unique check failure during decompression
+SELECT decompress_chunk(show_chunks('main_table'), TRUE);

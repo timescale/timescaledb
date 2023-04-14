@@ -49,6 +49,7 @@ accidentally triggering the load of a previous DB version.**
 * #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
 * #5558 Use regrole for job owner
 * #5542 Enable indexscan on uncompressed part of partially compressed chunks
+* #5573 Fix unique constraint on compressed tables
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
