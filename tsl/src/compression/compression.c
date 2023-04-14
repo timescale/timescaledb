@@ -1805,8 +1805,9 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
  * columns of the uncompressed chunk.
  */
 static ScanKeyData *
-build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key_columns,
-			   Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys)
+build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decompressor,
+			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
+			   int *num_scankeys)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;
@@ -1821,7 +1822,9 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 			char *attname = get_attname(decompressor.out_rel->rd_id, attno, false);
 			FormData_hypertable_compression *fd =
 				ts_hypertable_compression_get_by_pkey(hypertable_id, attname);
-
+			bool isnull;
+			AttrNumber ht_attno = get_attnum(hypertable_relid, attname);
+			Datum value = slot_getattr(slot, ht_attno, &isnull);
 			/*
 			 * There are 3 possible scenarios we have to consider
 			 * when dealing with columns which are part of unique
@@ -1838,11 +1841,8 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 			 * batch filtering as the values are compressed and
 			 * we have no metadata.
 			 */
-
 			if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
 			{
-				bool isnull;
-				Datum value = slot_getattr(slot, attno, &isnull);
 				key_index = create_segment_filter_scankey(&decompressor,
 														  attname,
 														  BTEqualStrategyNumber,
@@ -1854,9 +1854,6 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 			}
 			if (COMPRESSIONCOL_IS_ORDER_BY(fd))
 			{
-				bool isnull;
-				Datum value = slot_getattr(slot, attno, &isnull);
-
 				/* Cannot optimize orderby columns with NULL values since those
 				 * are not visible in metadata
 				 */
@@ -1967,6 +1964,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 	int num_scankeys;
 	ScanKeyData *scankeys = build_scankeys(chunk->fd.hypertable_id,
+										   chunk->hypertable_relid,
 										   decompressor,
 										   key_columns,
 										   &null_columns,

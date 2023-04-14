@@ -28,6 +28,7 @@ accidentally triggering the load of a previous DB version.**
 * #5573 Fix unique constraint on compressed tables
 * #5615 Add permission checks to run_job()
 * #5614 Enable run_job() for telemetry job
+* #5578 Fix on-insert decompression after schema changes
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
