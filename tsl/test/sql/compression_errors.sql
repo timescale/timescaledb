@@ -371,7 +371,7 @@ INSERT INTO ts_table SELECT * FROM data_table;
 DROP TABLE data_table cascade;
 DROP TABLE ts_table cascade;
 
---invalid reads for row expressions after column dropped on compressed tables #5458
+-- #5458 invalid reads for row expressions after column dropped on compressed tables
 CREATE TABLE readings(
     "time"  TIMESTAMPTZ NOT NULL,
     battery_status  TEXT,
@@ -382,6 +382,7 @@ INSERT INTO readings ("time") VALUES ('2022-11-11 11:11:11-00');
 
 SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12 hour', migrate_data=>true);
 
+create unique index readings_uniq_idx on readings("time",battery_temperature);
 ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 'battery_temperature');
 SELECT compress_chunk(show_chunks('readings'));
 
@@ -389,7 +390,25 @@ ALTER TABLE readings DROP COLUMN battery_status;
 INSERT INTO readings ("time", battery_temperature) VALUES ('2022-11-11 11:11:11', 0.2);
 SELECT readings FROM readings;
 
--- Unique constraints are not always respected on compressed tables #5553
+-- #5577 On-insert decompression after schema changes may not work properly
+
+SELECT decompress_chunk(show_chunks('readings'),true);
+SELECT compress_chunk(show_chunks('readings'),true);
+
+\set ON_ERROR_STOP 0
+INSERT INTO readings ("time", battery_temperature) VALUES
+    ('2022-11-11 11:11:11',0.2) -- same record as inserted
+;
+
+\set ON_ERROR_STOP 1
+
+SELECT * from readings;
+SELECT assert_equal(count(1), 2::bigint) FROM readings;
+
+-- no unique check failure during decompression
+SELECT decompress_chunk(show_chunks('readings'),true);
+
+-- #5553 Unique constraints are not always respected on compressed tables
 CREATE TABLE main_table AS
 SELECT '2011-11-11 11:11:11'::timestamptz AS time, 'foo' AS device_id;
 
@@ -419,3 +438,33 @@ SELECT assert_equal(count(1), 1::bigint) FROM main_table;
 
 -- no unique check failure during decompression
 SELECT decompress_chunk(show_chunks('main_table'), TRUE);
+
+
+DROP TABLE IF EXISTS readings;
+
+CREATE TABLE readings(
+    "time" timestamptz NOT NULL,
+    battery_status text,
+    candy integer,
+    battery_status2 text,
+    battery_temperature text
+);
+
+SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12 hour');
+
+CREATE UNIQUE INDEX readings_uniq_idx ON readings("time", battery_temperature);
+
+ALTER TABLE readings SET (timescaledb.compress, timescaledb.compress_segmentby = 'battery_temperature');
+
+ALTER TABLE readings DROP COLUMN battery_status;
+ALTER TABLE readings DROP COLUMN battery_status2;
+
+INSERT INTO readings("time", candy, battery_temperature)
+    VALUES ('2022-11-11 11:11:11', 88, '0.2');
+
+SELECT compress_chunk(show_chunks('readings'), TRUE);
+
+-- no error happens
+INSERT INTO readings("time", candy, battery_temperature)
+    VALUES ('2022-11-11 11:11:11', 33, 0.3)
+;
