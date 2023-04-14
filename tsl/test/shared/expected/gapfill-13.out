@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set EXPLAIN 'EXPLAIN (COSTS OFF)'
+-- we want to see error details in the output
+\set VERBOSITY default
 -- simple example
 :EXPLAIN
 SELECT
@@ -331,6 +333,7 @@ FROM :METRICS
 WHERE time =0 AND time < 2
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- test with 2 tables and where clause doesnt match gapfill argument
 SELECT
   time_bucket_gapfill(1,m2.time)
@@ -338,6 +341,7 @@ FROM :METRICS m, :METRICS m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- test inner join and where clause doesnt match gapfill argument
 SELECT
   time_bucket_gapfill(1,m2.time)
@@ -345,6 +349,7 @@ FROM :METRICS m1 INNER JOIN :METRICS m2 ON m1.time=m2.time
 WHERE m1.time >=0 AND m1.time < 2
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- test outer join with constraints in join condition
 -- not usable as start/stop
 SELECT
@@ -352,6 +357,7 @@ SELECT
 FROM :METRICS m1 LEFT OUTER JOIN :METRICS m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 \set ON_ERROR_STOP 1
 \ir include/gapfill_metrics_query.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -938,7 +944,10 @@ SELECT
   locf(min(time),treat_null_as_missing:=1)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
-ERROR:  function locf(integer, treat_null_as_missing => integer) does not exist at character 46
+ERROR:  function locf(integer, treat_null_as_missing => integer) does not exist
+LINE 3:   locf(min(time),treat_null_as_missing:=1)
+          ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 -- test locf with treat_null_as_missing not literal
 SELECT
   time_bucket_gapfill(1,time,1,11),
@@ -979,12 +988,14 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 ERROR:  first argument of interpolate returned record must match used timestamp datatype
+DETAIL:  Returned type double precision does not match expected type integer.
 SELECT
   time_bucket_gapfill(1,time,1,11),
   interpolate(min(time),prev=>(SELECT (10::float,10)))
 FROM (VALUES (2),(3)) v(time)
 GROUP BY 1;
 ERROR:  first argument of interpolate returned record must match used timestamp datatype
+DETAIL:  Returned type double precision does not match expected type integer.
 -- test interpolate lookup query with mismatching value datatype
 SELECT
   time_bucket_gapfill(1,time,1,11),
@@ -992,25 +1003,33 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 ERROR:  second argument of interpolate returned record must match used interpolate datatype
+DETAIL:  Returned type double precision does not match expected type integer.
 SELECT
   time_bucket_gapfill(1,time,1,11),
   interpolate(min(time),prev=>(SELECT (10,10::float)))
 FROM (VALUES (2),(3)) v(time)
 GROUP BY 1;
 ERROR:  second argument of interpolate returned record must match used interpolate datatype
+DETAIL:  Returned type double precision does not match expected type integer.
 -- test interpolate with unsupported datatype
 SELECT
   time_bucket_gapfill(1,time,1,11),
   interpolate(text 'text')
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
-ERROR:  function interpolate(text) does not exist at character 46
+ERROR:  function interpolate(text) does not exist
+LINE 3:   interpolate(text 'text')
+          ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 SELECT
   time_bucket_gapfill(1,time,1,11),
   interpolate(interval '1d')
 FROM (VALUES (2),(3)) v(time)
 GROUP BY 1;
-ERROR:  function interpolate(interval) does not exist at character 46
+ERROR:  function interpolate(interval) does not exist
+LINE 3:   interpolate(interval '1d')
+          ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 -- test multiple time_bucket_gapfill calls
 SELECT
   time_bucket_gapfill(1,time,1,11),time_bucket_gapfill(1,time,1,11)
@@ -1058,7 +1077,9 @@ SELECT
   avg(avg(min(time)) OVER ()) OVER ()
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
-ERROR:  window function calls cannot be nested at character 50
+ERROR:  window function calls cannot be nested
+LINE 3:   avg(avg(min(time)) OVER ()) OVER ()
+              ^
 -- test multiple window functions in single column
 SELECT
   time_bucket_gapfill(1,time,1,11),
@@ -1096,11 +1117,13 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 SELECT
   time_bucket_gapfill(1,time,1,NULL)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 SELECT
   time_bucket_gapfill(NULL,time,'Europe/Berlin','2000-06-01','2001-06-01')
 FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
@@ -2378,6 +2401,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- NULL start/finish and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,NULL,NULL)
@@ -2385,6 +2409,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- no start and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,finish:=1)
@@ -2392,6 +2417,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- NULL start expression and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END,1)
@@ -2399,6 +2425,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: start cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- unsupported start expression and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,t,1)
@@ -2413,6 +2440,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- NULL finish expression and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
@@ -2420,6 +2448,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: finish cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- unsupported finish expression and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,1,t)
@@ -2434,6 +2463,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- NULL finish and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,1,NULL)
@@ -2441,6 +2471,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- expression with column reference on right side
 SELECT
   time_bucket_gapfill(1,t)
@@ -2448,6 +2479,7 @@ FROM (VALUES (1),(2)) v(t)
 WHERE t > t AND t < 2
 GROUP BY 1;
 ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- expression with cast
 SELECT
   time_bucket_gapfill(1,t1::int8)
@@ -2455,6 +2487,7 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 >= 1 AND t1 <= 2
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- expression with multiple column references
 SELECT
   time_bucket_gapfill(1,t1+t2)
@@ -2462,6 +2495,7 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > 1 AND t1 < 2
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- expression with NULL start in WHERE clause, we use CASE to wrap the NULL so it doesnt get folded
 SELECT
   time_bucket_gapfill(1,t1)
@@ -2469,6 +2503,7 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > CASE WHEN length(version()) > 0 THEN NULL::int ELSE NULL::int END AND t1 < 4
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: start cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- expression with NULL finish in WHERE clause, we use CASE to wrap the NULL so it doesnt get folded
 SELECT
   time_bucket_gapfill(1,t1)
@@ -2476,6 +2511,7 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > 0 AND t1 < CASE WHEN length(version()) > 0 THEN NULL::int ELSE NULL::int END
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: finish cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- non-Const NULL as start argument, we use CASE to wrap the NULL so it doesnt get folded
 SELECT
   time_bucket_gapfill(1,t1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
@@ -2483,6 +2519,7 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > 0 AND t1 < 2
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: start cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- non-Const NULL as finish argument, we use CASE to wrap the NULL so it doesnt get folded
 SELECT
   time_bucket_gapfill(1,t1,NULL,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
@@ -2490,6 +2527,7 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > 0 AND t1 < 2
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: finish cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- time_bucket_gapfill with constraints ORed
 SELECT
  time_bucket_gapfill(1::int8,t::int8)
@@ -2498,6 +2536,7 @@ WHERE
  t >= -1 OR t < 3
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
 \set ON_ERROR_STOP 1
 -- int32 time_bucket_gapfill with no start/finish
 SELECT
@@ -3284,3 +3323,4 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01
 (6 rows)
 
 RESET timezone;
+DROP INDEX gapfill_plan_test_indx;

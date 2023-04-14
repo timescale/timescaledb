@@ -38,6 +38,7 @@ accidentally triggering the load of a previous DB version.**
 * #5556 Fix duplicated entries on timescaledb_experimental.policies view
 * #5433 Fix join rte in CAggs with joins
 * #5543 Copy scheduled_jobs list before sorting it
+* #5570 Improve interpolate error message on datatype mismatch
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
@@ -47,6 +48,7 @@ accidentally triggering the load of a previous DB version.**
 * @H25E for reporting error refreshing from beginning of a Continuous Aggregate with variable time bucket
 * @mwahlhuetter for reporting issue with duplicated entries on timescaledb_experimental.policies view
 * @mwahlthuetter for reporting the issue with joins in CAggs
+* @ollz272 for reporting an issue with interpolate error messages
 
 ## 2.10.1 (2023-03-07)
 

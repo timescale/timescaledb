@@ -3,6 +3,8 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \set EXPLAIN 'EXPLAIN (COSTS OFF)'
+-- we want to see error details in the output
+\set VERBOSITY default
 
 -- simple example
 :EXPLAIN
@@ -1501,4 +1503,6 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01
 SET timezone TO 'Europe/Berlin';
 SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
 RESET timezone;
+
+DROP INDEX gapfill_plan_test_indx;
 

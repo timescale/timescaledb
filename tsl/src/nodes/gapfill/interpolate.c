@@ -123,14 +123,20 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("first argument of interpolate returned record must match used timestamp "
-						"datatype")));
+						"datatype"),
+				 errdetail("Returned type %s does not match expected type %s.",
+						   format_type_be(TupleDescAttr(tupdesc, 0)->atttypid),
+						   format_type_be(column->base.typid))));
 
 	/* check second element in record matches interpolate datatype */
 	if (TupleDescAttr(tupdesc, 1)->atttypid != column->base.typid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("second argument of interpolate returned record must match used "
-						"interpolate datatype")));
+						"interpolate datatype"),
+				 errdetail("Returned type %s does not match expected type %s.",
+						   format_type_be(TupleDescAttr(tupdesc, 1)->atttypid),
+						   format_type_be(column->base.typid))));
 
 	value = heap_getattr(&tuple, 1, tupdesc, &sample->isnull);
 	if (!sample->isnull)
