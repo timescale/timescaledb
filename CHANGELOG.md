@@ -10,8 +10,6 @@ accidentally triggering the load of a previous DB version.**
 * #5212 Allow pushdown of reference table joins
 * #5221 Improve Realtime Continuous Aggregate performance
 * #5252 Improve unique constraint support on compressed hypertables
-* #5312 Add timeout support to ping_data_node()
-* #5312 Add timeout support to the ping_data_node()
 * #5339 Support UPDATE/DELETE on compressed hypertables
 * #5344 Enable JOINS for Hierarchical Continuous Aggregates
 * #5361 Add parallel support for partialize_agg()
@@ -21,36 +19,44 @@ accidentally triggering the load of a previous DB version.**
 * #5510 Propagate vacuum/analyze to compressed chunks
 
 **Bugfixes**
-* #5233 Out of on_proc_exit slots on guc license change
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
-* #5410 Fix file trailer handling in the COPY fetcher
 * #5427 Handle user-defined FDW options properly
-* #5428 Use consistent snapshots when scanning metadata
 * #5442 Decompression may have lost DEFAULT values
-* #5446 Add checks for malloc failure in libpq calls
 * #5459 Fix issue creating dimensional constraints
-* #5462 Fix segfault after column drop on compressed table
-* #5470 Ensure superuser perms during copy/move chunk
-* #5497 Allow named time_bucket arguments in Cagg definition
-* #5499 Do not segfault on large histogram() parameters
-* #5500 Fix when no FROM clause in continuous aggregate definition
-* #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
-* #5556 Fix duplicated entries on timescaledb_experimental.policies view
-* #5433 Fix join rte in CAggs with joins
-* #5543 Copy scheduled_jobs list before sorting it
 * #5570 Improve interpolate error message on datatype mismatch
+
+**Thanks**
+* @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
+* @ollz272 for reporting an issue with interpolate error messages
+
+
+## 2.10.2 (2023-04-20)
+
+**Bugfixes**
+* #5410 Fix file trailer handling in the COPY fetcher
+* #5446 Add checks for malloc failure in libpq calls
+* #5233 Out of on_proc_exit slots on guc license change
+* #5428 Use consistent snapshots when scanning metadata
+* #5499 Do not segfault on large histogram() parameters
+* #5470 Ensure superuser perms during copy/move chunk
+* #5500 Fix when no FROM clause in continuous aggregate definition
+* #5433 Fix join rte in CAggs with joins
+* #5556 Fix duplicated entries on timescaledb_experimental.policies view
+* #5462 Fix segfault after column drop on compressed table
+* #5543 Copy scheduled_jobs list before sorting it
+* #5497 Allow named time_bucket arguments in Cagg definition
+* #5544 Fix refresh from beginning of Continuous Aggregate with variable time bucket
 * #5558 Use regrole for job owner
 * #5542 Enable indexscan on uncompressed part of partially compressed chunks
 
 **Thanks**
 * @nikolaps for reporting an issue with the COPY fetcher
 * @S-imo-n for reporting the issue on Background Worker Scheduler crash
-* @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
 * @geezhu for reporting issue on segfault in historgram()
-* @H25E for reporting error refreshing from beginning of a Continuous Aggregate with variable time bucket
+* @mwahlhuetter for reporting the issue with joins in CAggs
 * @mwahlhuetter for reporting issue with duplicated entries on timescaledb_experimental.policies view
-* @mwahlthuetter for reporting the issue with joins in CAggs
-* @ollz272 for reporting an issue with interpolate error messages
+* @H25E for reporting error refreshing from beginning of a Continuous Aggregate with variable time bucket
+
 
 ## 2.10.1 (2023-03-07)
 
@@ -68,12 +74,13 @@ We recommend that you upgrade at the next available opportunity.
 * #5364 Fix num_chunks inconsistency in hypertables view
 * #5367 Fix column name handling in old-style continuous aggregates
 * #5378 Fix multinode DML HA performance regression
-* #5304 Fix sub-second intervals in hierarchical caggs
+* #5384 Fix Hierarchical Continuous Aggregates chunk_interval_size
 
 **Thanks**
 * @justinozavala for reporting an issue with PL/Python procedures in the background worker
 * @Medvecrab for discovering an issue with copying NameData when forming heap tuples.
 * @pushpeepkmonroe for discovering an issue in upgrading old-style continuous aggregates with renamed columns
+
 
 ## 2.10.0 (2023-02-21)
 
@@ -102,15 +109,8 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 * #5246 Make connection establishment interruptible
 * #5253 Make data node command execution interruptible
 * #5262 Extend enabling compression on a continuous aggregrate with 'compress_segmentby' and 'compress_orderby' parameters
-* #5343 Set PortalContext when starting job
-* #5312 Add timeout support to the ping_data_node()
-* #5212 Allow pushdown of reference table joins
-* #5344 Enable JOINS for Hierarchical continuous aggregates
 
 **Bugfixes**
-* #4926 Fix corruption when inserting into compressed chunks
-* #5118 Enable auto vacuum for uncompressed chunks
-* #5218 Add role-level security to job error log
 * #5214 Fix use of prepared statement in async module
 * #5218 Add role-level security to job error log
 * #5239 Fix next_start calculation for fixed schedules
@@ -118,6 +118,7 @@ Sooner to that time, we will announce the specific version of TimescaleDB in whi
 
 **Thanks**
 * @henriquegelio for reporting the issue on fixed schedules
+
 
 ## 2.9.3 (2023-02-03)
 
