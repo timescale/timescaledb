@@ -681,17 +681,15 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Nested Loop
-         ->  Gather Merge
-               Workers Planned: 1
-               ->  Sort
-                     Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+         ->  Sort
+               Sort Key: m1."time", m1.device_id
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                     ->  Seq Scan on compress_hyper_X_X_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
                Filter: (m1."time" = "time")
                ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
                      Index Cond: (device_id = m1.device_id)
-(12 rows)
+(10 rows)
 
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -708,12 +706,10 @@ QUERY PLAN
    ->  Nested Loop
          ->  Nested Loop
                Join Filter: (m1."time" = m3."time")
-               ->  Gather Merge
-                     Workers Planned: 1
-                     ->  Sort
-                           Sort Key: m1."time", m1.device_id
-                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                                 ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+               ->  Sort
+                     Sort Key: m1."time", m1.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                           ->  Seq Scan on compress_hyper_X_X_chunk
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
                      ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
                            Index Cond: (device_id = 3)
@@ -721,7 +717,7 @@ QUERY PLAN
                Filter: (m1."time" = "time")
                ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
                      Index Cond: (device_id = m1.device_id)
-(17 rows)
+(15 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
@@ -796,15 +792,13 @@ QUERY PLAN
  Limit
    ->  Nested Loop Left Join
          Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
-         ->  Gather Merge
-               Workers Planned: 1
-               ->  Sort
-                     Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+         ->  Sort
+               Sort Key: m1."time", m1.device_id
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                     ->  Seq Scan on compress_hyper_X_X_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
                ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(11 rows)
+(9 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
@@ -822,12 +816,12 @@ QUERY PLAN
  Limit
    ->  Incremental Sort
          Sort Key: m1."time", m1.device_id, m2."time", m2.device_id
-         Presorted Key: m1."time"
+         Presorted Key: m1."time", m1.device_id
          ->  Merge Left Join
                Merge Cond: (m1."time" = m2."time")
                Join Filter: (m1.device_id = 1)
                ->  Sort
-                     Sort Key: m1."time"
+                     Sort Key: m1."time", m1.device_id
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Seq Scan on compress_hyper_X_X_chunk
                ->  Sort
@@ -852,11 +846,11 @@ QUERY PLAN
  Limit
    ->  Incremental Sort
          Sort Key: m1."time", m1.device_id, m2.device_id
-         Presorted Key: m1."time"
+         Presorted Key: m1."time", m1.device_id
          ->  Merge Join
                Merge Cond: (m1."time" = m2."time")
                ->  Sort
-                     Sort Key: m1."time"
+                     Sort Key: m1."time", m1.device_id
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Seq Scan on compress_hyper_X_X_chunk
                ->  Sort
@@ -882,11 +876,11 @@ QUERY PLAN
  Limit
    ->  Incremental Sort
          Sort Key: m1."time", m1.device_id, m2.device_id
-         Presorted Key: m1."time"
+         Presorted Key: m1."time", m1.device_id
          ->  Merge Join
                Merge Cond: (m1."time" = m2."time")
                ->  Sort
-                     Sort Key: m1."time"
+                     Sort Key: m1."time", m1.device_id
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Seq Scan on compress_hyper_X_X_chunk
                ->  Sort
