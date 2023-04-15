@@ -700,3 +700,5 @@ DROP USER renamed_user;
 -- clean up jobs
 SELECT _timescaledb_functions.stop_background_workers();
 
+
+
