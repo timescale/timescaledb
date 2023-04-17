@@ -237,6 +237,8 @@ FROM
   disthyper
 GROUP BY hour, device;
 
+VACUUM;
+
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT
 	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates

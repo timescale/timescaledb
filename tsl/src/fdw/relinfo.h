@@ -153,6 +153,12 @@ typedef struct TsFdwRelInfo
 
 	/* OIDs of join reference tables. */
 	List *join_reference_tables;
+
+	/*
+	 * Parameterizations of this relation for which we can perform an index scan.
+	 * Encoded by requied_outer bitmapsets.
+	 */
+	List *indexed_parameterizations;
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
