@@ -10,7 +10,7 @@ ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_startup_cost '200');
 EXPLAIN (COSTS) SELECT * FROM one_batch;
 
 -- Set custom tuple cost
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '1');
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '2');
 EXPLAIN (COSTS) SELECT * FROM one_batch;
 
 -- Update startup cost
