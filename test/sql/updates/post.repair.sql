@@ -6,11 +6,9 @@ SELECT extversion < '2.10.0' AS test_repair_dimension
 FROM pg_extension
 WHERE extname = 'timescaledb' \gset
 
-SELECT extversion >= '2.10.0' AS has_cagg_joins
+SELECT extversion >= '2.10.0' AND :'TEST_VERSION' >= 'v8' AS test_repair_cagg_joins
 FROM pg_extension
 WHERE extname = 'timescaledb' \gset
-
-SELECT :'TEST_VERSION' >= 'v8' AS is_GTE_v8 \gset
 
 \if :test_repair_dimension
     -- Re-add the dropped foreign key constraint that was dropped for
@@ -20,7 +18,7 @@ SELECT :'TEST_VERSION' >= 'v8' AS is_GTE_v8 \gset
     FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id);
 \endif
 
-\if :has_cagg_joins AND :is_GTE_v8
+\if :test_repair_cagg_joins
 --Check if the repaired cagg with joins work alright now
 \ir post.repair.cagg_joins.sql
 \endif
