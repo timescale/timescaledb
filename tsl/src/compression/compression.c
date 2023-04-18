@@ -90,6 +90,10 @@ static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableS
 static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 								 bool changed_groups);
 
+static int create_segment_metadata_scankey(RowDecompressor *decompressor,
+										   char *segment_meta_col_name, AttrNumber in_attno,
+										   StrategyNumber strategy, ScanKeyData *scankeys,
+										   int num_scankeys, Datum value);
 static void run_analyze_on_chunk(Oid chunk_relid);
 
 /********************
@@ -1898,11 +1902,88 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 					key_index++;
 				}
 			}
+			if (COMPRESSIONCOL_IS_ORDER_BY(fd))
+			{
+				bool isnull;
+				Datum value = slot_getattr(slot, attno, &isnull);
+
+				/* Cannot optimize orderby columns with NULL values since those
+				 * are not visible in metadata
+				 */
+				if (isnull)
+					continue;
+
+				key_index = create_segment_metadata_scankey(&decompressor,
+															compression_column_segment_min_name(fd),
+															attno,
+															BTLessEqualStrategyNumber,
+															scankeys,
+															key_index,
+															value);
+				key_index = create_segment_metadata_scankey(&decompressor,
+															compression_column_segment_max_name(fd),
+															attno,
+															BTGreaterEqualStrategyNumber,
+															scankeys,
+															key_index,
+															value);
+			}
 		}
 	}
 
 	*num_scankeys = key_index;
 	return scankeys;
+}
+
+static int
+create_segment_metadata_scankey(RowDecompressor *decompressor, char *segment_meta_col_name,
+								AttrNumber in_attno, StrategyNumber strategy, ScanKeyData *scankeys,
+								int num_scankeys, Datum value)
+{
+	AttrNumber segment_meta_attr_number =
+		get_attnum(decompressor->in_rel->rd_id, segment_meta_col_name);
+	Assert(segment_meta_attr_number != InvalidAttrNumber);
+
+	/* This should never happen but if it does happen, we can't generate a scan key for
+	 * the orderby column so just skip it */
+	if (segment_meta_attr_number == InvalidAttrNumber)
+		return num_scankeys;
+
+	Oid atttypid = decompressor->out_desc->attrs[AttrNumberGetAttrOffset(in_attno)].atttypid;
+
+	/* Orderby column type should match in compressed metadata columns and uncompressed
+	 * chunk attribute */
+	Assert(
+		atttypid ==
+		decompressor->in_desc->attrs[AttrNumberGetAttrOffset(segment_meta_attr_number)].atttypid);
+
+	TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
+	if (!OidIsValid(tce->btree_opf))
+		elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
+
+	Oid opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
+	Assert(OidIsValid(opr));
+	/* We should never end up here but: no operator, no optimization */
+	if (!OidIsValid(opr))
+		return num_scankeys;
+
+	opr = get_opcode(opr);
+	Assert(OidIsValid(opr));
+	/* We should never end up here but: no opcode, no optimization */
+	if (!OidIsValid(opr))
+		return num_scankeys;
+
+	ScanKeyEntryInitialize(&scankeys[num_scankeys++],
+						   0, /* flags */
+						   segment_meta_attr_number,
+						   strategy,
+						   InvalidOid, /* No strategy subtype. */
+						   decompressor->out_desc->attrs[AttrNumberGetAttrOffset(in_attno)]
+							   .attcollation,
+						   opr,
+						   value);
+
+	return num_scankeys;
 }
 
 void
