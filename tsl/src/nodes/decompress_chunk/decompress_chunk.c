@@ -22,6 +22,7 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "debug_assert.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
 #include "compression/create.h"
@@ -385,10 +386,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
 
-	Path *uncompressed_path = chunk_rel->pathlist ? (Path *) linitial(chunk_rel->pathlist) : NULL;
-	Path *uncompressed_partial_path =
-		chunk_rel->partial_pathlist ? (Path *) linitial(chunk_rel->partial_pathlist) : NULL;
-	Assert(uncompressed_path);
+	List *initial_pathlist = chunk_rel->pathlist;
+	List *initial_partial_pathlist = chunk_rel->partial_pathlist;
 	chunk_rel->pathlist = NIL;
 	chunk_rel->partial_pathlist = NIL;
 
@@ -554,20 +553,41 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * from compressed and uncompressed chunk.
 		 */
 		if (ts_chunk_is_partial(chunk))
+		{
+			Bitmapset *req_outer = PATH_REQ_OUTER(path);
+			Path *uncompressed_path =
+				get_cheapest_path_for_pathkeys(initial_pathlist, NIL, req_outer, TOTAL_COST, false);
+
+			/*
+			 * All children of an append path are required to have the same parameterization
+			 * so we reparameterize here when we couldn't get a path with the parameterization
+			 * we need. Reparameterization should always succeed here since uncompressed_path
+			 * should always be a scan.
+			 */
+			if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
+			{
+				uncompressed_path = reparameterize_path(root, uncompressed_path, req_outer, 1.0);
+				if (!uncompressed_path)
+					continue;
+			}
+
 			path = (Path *) create_append_path_compat(root,
 													  chunk_rel,
 													  list_make2(path, uncompressed_path),
 													  NIL /* partial paths */,
 													  NIL /* pathkeys */,
-													  PATH_REQ_OUTER(uncompressed_path),
+													  req_outer,
 													  0,
 													  false,
 													  false,
 													  path->rows + uncompressed_path->rows);
+		}
+
 		/* this has to go after the path is copied for the ordered path since path can get freed in
 		 * add_path */
 		add_path(chunk_rel, path);
 	}
+
 	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
 	 * if it's planned */
 	compressed_rel->pathlist = NIL;
@@ -589,18 +609,51 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * from compressed and uncompressed chunk.
 			 */
 			path = (Path *) decompress_chunk_path_create(root, info, parallel_workers, child_path);
-			if (ts_chunk_is_partial(chunk) && uncompressed_partial_path)
-				path =
-					(Path *) create_append_path_compat(root,
-													   chunk_rel,
-													   NIL,
-													   list_make2(path, uncompressed_partial_path),
-													   NIL /* pathkeys */,
-													   PATH_REQ_OUTER(uncompressed_partial_path),
-													   parallel_workers,
-													   false,
-													   NIL,
-													   path->rows + uncompressed_path->rows);
+
+			if (ts_chunk_is_partial(chunk))
+			{
+				Bitmapset *req_outer = PATH_REQ_OUTER(path);
+				Path *uncompressed_path = NULL;
+
+				if (initial_partial_pathlist)
+					uncompressed_path = get_cheapest_path_for_pathkeys(initial_partial_pathlist,
+																	   NIL,
+																	   req_outer,
+																	   TOTAL_COST,
+																	   true);
+
+				if (!uncompressed_path)
+					uncompressed_path = get_cheapest_path_for_pathkeys(initial_pathlist,
+																	   NIL,
+																	   req_outer,
+																	   TOTAL_COST,
+																	   true);
+
+				/*
+				 * All children of an append path are required to have the same parameterization
+				 * so we reparameterize here when we couldn't get a path with the parameterization
+				 * we need. Reparameterization should always succeed here since uncompressed_path
+				 * should always be a scan.
+				 */
+				if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
+				{
+					uncompressed_path =
+						reparameterize_path(root, uncompressed_path, req_outer, 1.0);
+					if (!uncompressed_path)
+						continue;
+				}
+
+				path = (Path *) create_append_path_compat(root,
+														  chunk_rel,
+														  NIL,
+														  list_make2(path, uncompressed_path),
+														  NIL /* pathkeys */,
+														  req_outer,
+														  parallel_workers,
+														  false,
+														  NIL,
+														  path->rows + uncompressed_path->rows);
+			}
 			add_partial_path(chunk_rel, path);
 		}
 		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
@@ -611,7 +664,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	compressed_rel->reloptkind = RELOPT_DEADREL;
 
 	/* We should never get in the situation with no viable paths. */
-	Assert(chunk_rel->pathlist != NIL);
+	Ensure(chunk_rel->pathlist, "could not create decompression path");
 }
 
 /*
