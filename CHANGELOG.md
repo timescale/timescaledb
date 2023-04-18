@@ -17,6 +17,7 @@ accidentally triggering the load of a previous DB version.**
 * #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
 * #5547 Skip Ordered Append when only 1 child node is present
 * #5510 Propagate vacuum/analyze to compressed chunks
+* #5584 Reduce decompression during constraint checking
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
