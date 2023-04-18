@@ -4,6 +4,34 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Features**
+* #5212 Allow pushdown of reference table joins
+* #5221 Improve Realtime Continuous Aggregate performance
+* #5252 Improve unique constraint support on compressed hypertables
+* #5339 Support UPDATE/DELETE on compressed hypertables
+* #5344 Enable JOINS for Hierarchical Continuous Aggregates
+* #5361 Add parallel support for partialize_agg()
+* #5417 Refactor and optimize distributed COPY
+* #5454 Add support for ON CONFLICT DO UPDATE for compressed hypertables
+* #5547 Skip Ordered Append when only 1 child node is present
+* #5510 Propagate vacuum/analyze to compressed chunks
+* #5584 Reduce decompression during constraint checking
+
+**Bugfixes**
+* #5396 Fix SEGMENTBY columns predicates to be pushed down
+* #5427 Handle user-defined FDW options properly
+* #5442 Decompression may have lost DEFAULT values
+* #5459 Fix issue creating dimensional constraints
+* #5570 Improve interpolate error message on datatype mismatch
+* #5583 Fix parameterization in DecompressChunk path generation
+
+**Thanks**
+* @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
+* @ollz272 for reporting an issue with interpolate error messages
+
+
 ## 2.10.2 (2023-04-20)
 
 **Bugfixes**
