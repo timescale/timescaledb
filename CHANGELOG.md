@@ -24,6 +24,7 @@ accidentally triggering the load of a previous DB version.**
 * #5442 Decompression may have lost DEFAULT values
 * #5459 Fix issue creating dimensional constraints
 * #5570 Improve interpolate error message on datatype mismatch
+* #5583 Fix parameterization in DecompressChunk path generation
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates

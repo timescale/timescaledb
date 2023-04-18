@@ -33,3 +33,30 @@ QUERY PLAN
 (13 rows)
 
 DROP TABLE compressed_join_temp;
+-- test join with partially compressed chunks
+CREATE TABLE partial_join(time timestamptz,device text);
+SELECT table_name FROM create_hypertable('partial_join','time');
+NOTICE:  adding not-null constraint to column "time"
+  table_name  
+ partial_join
+(1 row)
+
+ALTER TABLE partial_join set(timescaledb.compress,timescaledb.compress_segmentby='device');
+INSERT INTO partial_join SELECT '2000-01-01','d1';
+SELECT count(*) FROM (SELECT compress_chunk(show_chunks('partial_join'),true)) compress;
+ count 
+     1
+(1 row)
+
+-- make chunk partially compressed
+INSERT INTO partial_join SELECT '2000-01-01','d1';
+SELECT * FROM partial_join m1 INNER JOIN partial_join m2 ON m1.device = m2.device;
+             time             | device |             time             | device 
+------------------------------+--------+------------------------------+--------
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+(4 rows)
+
+DROP TABLE partial_join;
