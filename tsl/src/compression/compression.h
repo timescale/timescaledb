@@ -248,6 +248,8 @@ typedef struct RowCompressor
 	int64 num_compressed_rows;
 	/* if recompressing segmentwise, we must know this so we can reset the sequence number */
 	bool segmentwise_recompress;
+	/* flag for checking if we are working on the first tuple */
+	bool first_iteration;
 } RowCompressor;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
