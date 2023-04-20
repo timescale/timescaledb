@@ -83,6 +83,8 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 
 static Tuplesortstate *compress_chunk_sort_relation(Relation in_rel, int n_keys,
 													const ColumnCompressionInfo **keys);
+static void row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
+												CommandId mycid);
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
 static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor,
 												   TupleTableSlot *row);
@@ -168,9 +170,6 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	Relation matched_index_rel = NULL;
 	TupleTableSlot *slot;
 	IndexScanDesc index_scan;
-	bool first_iteration = true;
-	bool changed_groups, compressed_row_is_full;
-	MemoryContext old_ctx;
 	CommandId mycid = GetCurrentCommandId(true);
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
@@ -355,28 +354,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 		index_rescan(index_scan, NULL, 0, NULL, 0);
 		while (index_getnext_slot(index_scan, indexscan_direction, slot))
 		{
-			slot_getallattrs(slot);
-			old_ctx = MemoryContextSwitchTo(row_compressor.per_row_ctx);
-			/* first time through */
-			if (first_iteration)
-			{
-				row_compressor_update_group(&row_compressor, slot);
-				first_iteration = false;
-			}
-			changed_groups = row_compressor_new_row_is_in_new_group(&row_compressor, slot);
-			compressed_row_is_full =
-				row_compressor.rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
-			if (compressed_row_is_full || changed_groups)
-			{
-				if (row_compressor.rows_compressed_into_current_value > 0)
-					row_compressor_flush(&row_compressor, mycid, changed_groups);
-				if (changed_groups)
-					row_compressor_update_group(&row_compressor, slot);
-			}
-
-			row_compressor_append_row(&row_compressor, slot);
-			MemoryContextSwitchTo(old_ctx);
-			ExecClearTuple(slot);
+			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 		}
 
 		run_analyze_on_chunk(in_rel->rd_id);
@@ -863,6 +841,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.num_compressed_rows = 0,
 		.sequence_num = SEQUENCE_NUM_GAP,
 		.segmentwise_recompress = segmentwise_recompress,
+		.first_iteration = true,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
@@ -947,7 +926,6 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	CommandId mycid = GetCurrentCommandId(true);
 	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, &TTSOpsMinimalTuple);
 	bool got_tuple;
-	bool first_iteration = true;
 
 	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
@@ -961,38 +939,41 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 											slot,
 											NULL /*=abbrev*/))
 	{
-		bool changed_groups, compressed_row_is_full;
-		MemoryContext old_ctx;
-		slot_getallattrs(slot);
-		old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
-
-		/* first time through */
-		if (first_iteration)
-		{
-			row_compressor_update_group(row_compressor, slot);
-			first_iteration = false;
-		}
-
-		changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
-		compressed_row_is_full =
-			row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
-		if (compressed_row_is_full || changed_groups)
-		{
-			if (row_compressor->rows_compressed_into_current_value > 0)
-				row_compressor_flush(row_compressor, mycid, changed_groups);
-			if (changed_groups)
-				row_compressor_update_group(row_compressor, slot);
-		}
-
-		row_compressor_append_row(row_compressor, slot);
-		MemoryContextSwitchTo(old_ctx);
-		ExecClearTuple(slot);
+		row_compressor_process_ordered_slot(row_compressor, slot, mycid);
 	}
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
 		row_compressor_flush(row_compressor, mycid, true);
 
 	ExecDropSingleTupleTableSlot(slot);
+}
+
+static void
+row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
+									CommandId mycid)
+{
+	MemoryContext old_ctx;
+	slot_getallattrs(slot);
+	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
+	if (row_compressor->first_iteration)
+	{
+		row_compressor_update_group(row_compressor, slot);
+		row_compressor->first_iteration = false;
+	}
+	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
+	bool compressed_row_is_full =
+		row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
+	if (compressed_row_is_full || changed_groups)
+	{
+		if (row_compressor->rows_compressed_into_current_value > 0)
+			row_compressor_flush(row_compressor, mycid, changed_groups);
+		if (changed_groups)
+			row_compressor_update_group(row_compressor, slot);
+	}
+
+	row_compressor_append_row(row_compressor, slot);
+	MemoryContextSwitchTo(old_ctx);
+	ExecClearTuple(slot);
 }
 
 static void
