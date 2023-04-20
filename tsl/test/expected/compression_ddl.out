@@ -62,6 +62,13 @@ DROP INDEX new_index;
 ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
+-- make sure we cannot create constraints or unique indexes on compressed hypertables
+\set ON_ERROR_STOP 0
+ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
+ERROR:  operation not supported on hypertables that have compression enabled
+CREATE UNIQUE INDEX unique_index ON test1(time,i);
+ERROR:  operation not supported on hypertables that have compression enabled
+\set ON_ERROR_STOP 1
 --test adding boolean columns with default and not null
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
