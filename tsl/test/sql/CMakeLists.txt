@@ -69,6 +69,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_tableam.sql
     cagg_usage.sql
     cagg_policy_run.sql
+    cagg_repair.sql
     data_fetcher.sql
     data_node_bootstrap.sql
     data_node.sql
