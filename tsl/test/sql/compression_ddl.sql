@@ -404,6 +404,14 @@ WHERE chunk.id IS NULL;
 
 
 --can turn compression back on
+-- this will fail because current table owner does not have permission to create compressed hypertable
+-- in the current tablespace, as they do not own it
+\set ON_ERROR_STOP 0
+ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
+-- now change the owner and repeat, should work
+ALTER TABLESPACE tablespace2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\set ON_ERROR_STOP 1
+
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
 
 SELECT COUNT(*) AS count_compressed
@@ -489,7 +497,9 @@ FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 13:00', '1 hour
 
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = 'i', timescaledb.compress_orderby = 'timec');
 
-SELECT relname FROM pg_class
+-- the toast table and its index will have a different name depending on
+-- the order the tests run, so anonymize it
+SELECT regexp_replace(relname, 'pg_toast_[0-9]+', 'pg_toast_XXX') FROM pg_class
 WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
 

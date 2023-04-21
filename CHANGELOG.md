@@ -31,6 +31,7 @@ accidentally triggering the load of a previous DB version.**
 * #5614 Enable run_job() for telemetry job
 * #5578 Fix on-insert decompression after schema changes
 * #5613 Quote username identifier appropriately
+* #5525 Fix tablespace for compressed hypertable and corresponding toast
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
