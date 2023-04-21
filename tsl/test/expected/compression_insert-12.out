@@ -801,17 +801,19 @@ INSERT INTO test_ordering VALUES (105),(104),(103);
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_13_20_chunk."time"
-   ->  Sort
+ Custom Scan (ChunkAppend) on test_ordering
+   Order: test_ordering."time"
+   ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Seq Scan on compress_hyper_14_21_chunk
-   ->  Sort
-         Sort Key: _hyper_13_20_chunk."time"
-         ->  Seq Scan on _hyper_13_20_chunk
+         ->  Sort
+               Sort Key: _hyper_13_20_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+                     ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Sort
+               Sort Key: _hyper_13_20_chunk."time"
+               ->  Seq Scan on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
-(10 rows)
+(12 rows)
 
 --insert into compressed + uncompressed chunk
 INSERT INTO test_ordering VALUES (21), (22),(113);
@@ -856,20 +858,22 @@ NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_13_20_chunk."time"
-   ->  Sort
+ Custom Scan (ChunkAppend) on test_ordering
+   Order: test_ordering."time"
+   ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Seq Scan on compress_hyper_14_21_chunk
-   ->  Sort
-         Sort Key: _hyper_13_20_chunk."time"
-         ->  Seq Scan on _hyper_13_20_chunk
+         ->  Sort
+               Sort Key: _hyper_13_20_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+                     ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Sort
+               Sort Key: _hyper_13_20_chunk."time"
+               ->  Seq Scan on _hyper_13_20_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
          ->  Sort
                Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
                ->  Seq Scan on compress_hyper_14_23_chunk
-(13 rows)
+(15 rows)
 
 -- TEST cagg triggers with insert into compressed chunk
 CREATE TABLE conditions (
