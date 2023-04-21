@@ -3011,9 +3011,6 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	ListCell *lc1, *lc2;
 	int sec_ctx;
 	Oid uid, saved_uid;
-	RangeTblRef *rtref = NULL;
-	RangeTblEntry *rte = NULL;
-	Query *subquery = NULL;
 
 	/* Cagg view created by the user. */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
@@ -3021,7 +3018,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	Query *user_query = get_view_query(user_view_rel);
 
 	bool finalized = ContinuousAggIsFinalized(agg);
-	bool has_joins = false;
+	bool rebuild_cagg_with_joins = false;
 
 	/* Extract final query from user view query. */
 	Query *final_query = copyObject(user_query);
@@ -3030,48 +3027,13 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	if (finalized && !force_rebuild)
 	{
 		/* This continuous aggregate does not have partials, do not check for defects. */
-		relation_close(user_view_rel, NoLock);
-		return;
-	}
+		elog(DEBUG1,
+			 "[cagg_rebuild_view_definition] %s.%s does not have partials, do not check for "
+			 "defects!",
+			 NameStr(agg->data.user_view_schema),
+			 NameStr(agg->data.user_view_name)
 
-	/*
-	 * If there is a join in CAggs then rebuild it definitley,
-	 * because v 2.10.0 has created the definition with missing structs.
-	 */
-	if (final_query->jointree && final_query->jointree->fromlist)
-	{
-		ListCell *l;
-		foreach (l, final_query->jointree->fromlist)
-		{
-			Node *jtnode = (Node *) lfirst(l);
-			if (IsA(jtnode, JoinExpr))
-				has_joins = true;
-		}
-	}
-	else
-	{
-		/*
-		 * In case of caggs with join and realtime aggregate enabled,
-		 * the actual stuff is in subquery. Check how the union query is
-		 * build in build_union_query.
-		 */
-		rtref = linitial_node(RangeTblRef, final_query->rtable);
-		rte = list_nth(final_query->rtable, rtref->rtindex - 1);
-		subquery = castNode(Query, rte->subquery);
-		if (subquery->jointree && subquery->jointree->fromlist)
-		{
-			ListCell *l;
-			foreach (l, subquery->jointree->fromlist)
-			{
-				Node *jtnode = (Node *) lfirst(l);
-				if (IsA(jtnode, JoinExpr))
-					has_joins = true;
-			}
-		}
-	}
-	if (!has_joins && !finalized)
-	{
-		/* No joins in Cagg, no need to rebuild for this case */
+		);
 		relation_close(user_view_rel, NoLock);
 		return;
 	}
@@ -3091,6 +3053,42 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 	remove_old_and_new_rte_from_query(direct_query);
+
+	/*
+	 * If there is a join in CAggs then rebuild it definitley,
+	 * because v2.10.0 has created the definition with missing structs.
+	 */
+	if (force_rebuild && direct_query->jointree != NULL)
+	{
+		ListCell *l;
+		foreach (l, direct_query->jointree->fromlist)
+		{
+			Node *jtnode = (Node *) lfirst(l);
+			if (IsA(jtnode, JoinExpr))
+				rebuild_cagg_with_joins = true;
+		}
+	}
+
+	if (!rebuild_cagg_with_joins)
+	{
+		/* There's nothing to fix, so no need to rebuild */
+		elog(DEBUG1,
+			 "[cagg_rebuild_view_definition] %s.%s does not have JOINS, so no need to rebuild the "
+			 "definition!",
+			 NameStr(agg->data.user_view_schema),
+			 NameStr(agg->data.user_view_name)
+
+		);
+		relation_close(user_view_rel, NoLock);
+		relation_close(direct_view_rel, NoLock);
+		return;
+	}
+	else
+		elog(DEBUG1,
+			 "[cagg_rebuild_view_definition] %s.%s has being rebuilded!",
+			 NameStr(agg->data.user_view_schema),
+			 NameStr(agg->data.user_view_name));
+
 	CAggTimebucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
 							finalized,
@@ -3109,7 +3107,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 		mattablecolumninfo_addinternal(&mattblinfo);
 
 	Query *view_query = NULL;
-	if (has_joins)
+	if (rebuild_cagg_with_joins)
 	{
 		view_query = finalizequery_get_select_query(&fqi,
 													mattblinfo.matcollist,
