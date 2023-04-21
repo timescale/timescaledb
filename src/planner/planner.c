@@ -919,12 +919,15 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				}
 
 				/*
-				 * Check for partial compressed chunks.
+				 * Check for partially compressed chunks with space partitioning.
 				 *
-				 * When partial compressed chunks are present we can not do 1-level
-				 * ordered append. We instead need nested Appends to correctly preserve
+				 * When partially compressed chunks are present on a hypertable with
+				 * more than 1 dimension, we can not do 1-level ordered append.
+				 * We instead need nested Appends to correctly preserve
 				 * ordering. For now we skip ordered append optimization when we encounter
-				 * partial chunks.
+				 * partial chunks on space-partitioned hypertables.
+				 * When there is no space partitioning, we move the check for partial chunks
+				 * to the place where we do chunk append for space partitioned hypertables.
 				 */
 				foreach (lc, merge->subpaths)
 				{
@@ -933,7 +936,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					if (chunk_rel->fdw_private)
 					{
 						TimescaleDBPrivate *private = chunk_rel->fdw_private;
-						if (private->chunk && ts_chunk_is_partial(private->chunk))
+						/* for all partially compressed chunks in the plan */
+						if (private->chunk && ts_chunk_is_partial(private->chunk) &&
+							ht->space->num_dimensions > 1)
 							return false;
 					}
 				}
