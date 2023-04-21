@@ -925,6 +925,8 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * ordered append. We instead need nested Appends to correctly preserve
 				 * ordering. For now we skip ordered append optimization when we encounter
 				 * partial chunks.
+				 * Now we do not skip it, we move the check for partial chunks to the place
+				 * where we do the chunk append for space partitioned hypertables.
 				 */
 				foreach (lc, merge->subpaths)
 				{
@@ -933,7 +935,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					if (chunk_rel->fdw_private)
 					{
 						TimescaleDBPrivate *private = chunk_rel->fdw_private;
-						if (private->chunk && ts_chunk_is_partial(private->chunk))
+						/* for all partially compressed chunks in the plan, */
+						if (private->chunk && ts_chunk_is_partial(private->chunk) &&
+							ht->space->num_dimensions > 1)
 							return false;
 					}
 				}

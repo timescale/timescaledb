@@ -852,3 +852,65 @@ ORDER BY device_id;
 SET enable_seqscan = default;
 
 DROP TABLE compression_insert;
+
+-- check Chunk Append plans for partially compressed chunks
+-- F: fully compressed, P : partially compressed, U: uncompressed
+create table test_partials (time timestamptz not null, a int, b int);
+select create_hypertable('test_partials', 'time');
+
+insert into test_partials values
+-- chunk1
+('2020-01-01 00:00'::timestamptz, 1, 2),
+('2020-01-01 00:01'::timestamptz, 2, 2),
+('2020-01-01 00:04'::timestamptz, 1, 2),
+-- chunk2
+('2021-01-01 00:00'::timestamptz, 1, 2),
+('2021-01-01 00:04'::timestamptz, 1, 2),
+-- chunk3
+('2022-01-01 00:00'::timestamptz, 1, 2),
+('2022-01-01 00:04'::timestamptz, 1, 2);
+
+-- enable compression, compress all chunks
+alter table test_partials set (timescaledb.compress);
+select compress_chunk(show_chunks('test_partials'));
+-- fully compressed
+explain (costs off) select * from test_partials order by time;
+-- test P, F, F
+insert into test_partials values ('2020-01-01 00:03', 1, 2);
+explain (costs off) select * from test_partials order by time;
+-- verify correct results
+select * from test_partials order by time;
+-- make second chunk partially compressed
+-- P, P, F
+insert into test_partials values ('2021-01-01 00:03', 1, 2);
+explain (costs off) select * from test_partials order by time;
+-- verify correct results
+select * from test_partials order by time;
+-- third chunk partially compressed and add new chunk
+-- P, P, P, U
+insert into test_partials values ('2022-01-01 00:03', 1, 2);
+insert into test_partials values ('2023-01-01 00:03', 1, 2);
+explain (costs off) select * from test_partials order by time;
+-- F, F, P, U
+-- recompress all chunks
+DO $$
+DECLARE
+  chunk regclass;
+BEGIN
+  FOR chunk IN
+  SELECT format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL AND NOT dropped
+  LOOP
+    EXECUTE format('select decompress_chunk(''%s'');', chunk::text);
+    EXECUTE format('select compress_chunk(''%s'');', chunk::text);
+  END LOOP;
+END
+$$;
+insert into test_partials values ('2022-01-01 00:02', 1, 2);
+explain (costs off) select * from test_partials order by time;
+-- F, F, P, F, F
+insert into test_partials values ('2024-01-01 00:02', 1, 2);
+select compress_chunk(c) from show_chunks('test_partials', newer_than => '2022-01-01') c;
+explain (costs off) select * from test_partials order by time;
+-- verify result correctness
+select * from test_partials order by time;

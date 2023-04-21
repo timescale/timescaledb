@@ -210,6 +210,11 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				castNode(Result, lfirst(lc_plan))->resconstantqual == NULL)
 				lfirst(lc_plan) = ((Plan *) lfirst(lc_plan))->lefttree;
 
+			/*
+			 * This could be a MergeAppend due to space partitioning, or
+			 * due to partially compressed chunks. In the second case, there is
+			 * no need to inject sort nodes
+			 */
 			if (IsA(lfirst(lc_plan), MergeAppend))
 			{
 				ListCell *lc_childpath, *lc_childplan;
@@ -226,15 +231,31 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				merge_plan->sortOperators = sortOperators;
 				merge_plan->collations = collations;
 				merge_plan->nullsFirst = nullsFirst;
+				bool partial_chunks = false;
+
+				/* to determine if we have partial chunks */
+				if (list_length(merge_path->subpaths) == 2)
+				{
+					Path *child1 = (Path *) linitial(merge_path->subpaths);
+					Path *child2 = (Path *) lsecond(merge_path->subpaths);
+					if (child1->parent->relid == child2->parent->relid)
+						partial_chunks = true;
+				}
 
 				forboth (lc_childpath, merge_path->subpaths, lc_childplan, merge_plan->mergeplans)
 				{
-					lfirst(lc_childplan) = adjust_childscan(root,
-															lfirst(lc_childplan),
-															lfirst(lc_childpath),
-															pathkeys,
-															tlist,
-															sortColIdx);
+					/*
+					 * Skip this invocation in the existence of partial chunks because it
+					 * will add an unnecessary sort node, create_merge_append_plan has already
+					 * adjusted the childscan with a sort node if required
+					 */
+					if (!partial_chunks)
+						lfirst(lc_childplan) = adjust_childscan(root,
+																lfirst(lc_childplan),
+																lfirst(lc_childpath),
+																pathkeys,
+																tlist,
+																sortColIdx);
 				}
 			}
 			else

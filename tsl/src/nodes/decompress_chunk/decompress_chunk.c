@@ -801,6 +801,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					continue;
 			}
 
+			/*
+			 * Ideally, we would like for this to be a MergeAppend path.
+			 * However, accumulate_append_subpath will cut out MergeAppend
+			 * and directly add its children, so we have to combine the children
+			 * into a MergeAppend node later, at the chunk append level.
+			 */
 			path = (Path *) create_append_path_compat(root,
 													  chunk_rel,
 													  list_make2(path, uncompressed_path),
