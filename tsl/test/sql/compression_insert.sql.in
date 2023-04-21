@@ -531,6 +531,12 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 INSERT INTO test_ordering SELECT 1;
 
 -- should not be ordered append
+-- regression introduced by #5599:
+-- for the case of a single chunk, there is an additional redundant sort node below decompress chunk
+-- this is due to pushing down the sort node below decompress chunk. In most cases that is beneficial,
+-- but here a more optimal plan would have been a mergeAppend.
+-- It was hard to include a path without pushed down sort for consideration, as `add_path` would reject
+-- the path with sort pushdown, which is desirable in most cases
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 
 INSERT INTO test_ordering VALUES (105),(104),(103);

@@ -775,7 +775,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 				cost_decompress_chunk(&dcpath->cpath.path, &sort_path);
 			}
-			add_path(chunk_rel, &dcpath->cpath.path);
+			/*
+			 * if chunk is partially compressed don't add this now but add an append path later
+			 * combining the uncompressed and compressed parts of the chunk
+			 */
+			if (!ts_chunk_is_partial(chunk))
+				add_path(chunk_rel, &dcpath->cpath.path);
+			else
+				path = &dcpath->cpath.path;
 		}
 
 		/*
@@ -801,6 +808,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					continue;
 			}
 
+			/*
+			 * Ideally, we would like for this to be a MergeAppend path.
+			 * However, accumulate_append_subpath will cut out MergeAppend
+			 * and directly add its children, so we have to combine the children
+			 * into a MergeAppend node later, at the chunk append level.
+			 */
 			path = (Path *) create_append_path_compat(root,
 													  chunk_rel,
 													  list_make2(path, uncompressed_path),
@@ -1719,7 +1732,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 	ListCell *lc = list_head(pathkeys);
 	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
 
-	if (pathkeys == NIL || ts_chunk_is_unordered(chunk) || ts_chunk_is_partial(chunk))
+	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
 		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
