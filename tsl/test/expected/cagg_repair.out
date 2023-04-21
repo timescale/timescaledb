@@ -1,0 +1,314 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE PROCEDURE _timescaledb_internal.cagg_try_repair (
+    cagg_view REGCLASS,
+    force_rebuild BOOLEAN
+) AS :MODULE_PATHNAME, 'ts_cagg_try_repair' LANGUAGE C SET client_min_messages TO DEBUG1;
+CREATE TABLE conditions (
+    "time" TIMESTAMPTZ NOT NULL,
+    city TEXT NOT NULL,
+    temperature INTEGER NOT NULL,
+    device_id INTEGER NOT NULL
+);
+SELECT table_name FROM create_hypertable('conditions', 'time');
+ table_name 
+------------
+ conditions
+(1 row)
+
+INSERT INTO
+    conditions ("time", city, temperature, device_id)
+VALUES
+  ('2021-06-14 00:00:00-00', 'Moscow', 26,1),
+  ('2021-06-15 00:00:00-00', 'Berlin', 22,2),
+  ('2021-06-16 00:00:00-00', 'Stockholm', 24,3),
+  ('2021-06-17 00:00:00-00', 'London', 24,4),
+  ('2021-06-18 00:00:00-00', 'London', 27,4),
+  ('2021-06-19 00:00:00-00', 'Moscow', 28,4),
+  ('2021-06-20 00:00:00-00', 'Moscow', 30,1),
+  ('2021-06-21 00:00:00-00', 'Berlin', 31,1),
+  ('2021-06-22 00:00:00-00', 'Stockholm', 34,1),
+  ('2021-06-23 00:00:00-00', 'Stockholm', 34,2),
+  ('2021-06-24 00:00:00-00', 'Moscow', 34,2),
+  ('2021-06-25 00:00:00-00', 'London', 32,3),
+  ('2021-06-26 00:00:00-00', 'Moscow', 32,3),
+  ('2021-06-27 00:00:00-00', 'Moscow', 31,3);
+CREATE TABLE devices (
+    id INTEGER NOT NULL,
+    name TEXT,
+    location TEXT
+);
+INSERT INTO
+    devices (id, name, location)
+VALUES
+    (1, 'thermo_1', 'Moscow'),
+    (2, 'thermo_2', 'Berlin'),
+    (3, 'thermo_3', 'London'),
+    (4, 'thermo_4', 'Stockholm');
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+    devices.name AS device_name,
+    MIN(temperature),
+    MAX(temperature),
+    SUM(temperature)
+FROM
+    conditions
+    JOIN devices ON devices.id = conditions.device_id
+GROUP BY
+    1, 2
+WITH NO DATA;
+\d+ conditions_summary
+                                 View "public.conditions_summary"
+   Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
+-------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain    | 
+ device_name | text                     |           |          |         | extended | 
+ min         | integer                  |           |          |         | plain    | 
+ max         | integer                  |           |          |         | plain    | 
+ sum         | bigint                   |           |          |         | plain    | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_name,
+    _materialized_hypertable_2.min,
+    _materialized_hypertable_2.max,
+    _materialized_hypertable_2.sum
+   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2;
+
+CALL refresh_continuous_aggregate('conditions_summary', NULL, '2021-06-22 00:00:00-00');
+SELECT * FROM conditions_summary ORDER BY bucket, device_name;
+            bucket            | device_name | min | max | sum 
+------------------------------+-------------+-----+-----+-----
+ Sun Jun 13 17:00:00 2021 PDT | thermo_1    |  26 |  30 |  56
+ Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
+ Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
+ Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
+(4 rows)
+
+-- Execute repair for materialized only cagg
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary', FALSE);
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary does not have partials, do not check for defects!
+\d+ conditions_summary
+                                 View "public.conditions_summary"
+   Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
+-------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain    | 
+ device_name | text                     |           |          |         | extended | 
+ min         | integer                  |           |          |         | plain    | 
+ max         | integer                  |           |          |         | plain    | 
+ sum         | bigint                   |           |          |         | plain    | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_name,
+    _materialized_hypertable_2.min,
+    _materialized_hypertable_2.max,
+    _materialized_hypertable_2.sum
+   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2;
+
+SELECT * FROM conditions_summary ORDER BY bucket, device_name;
+            bucket            | device_name | min | max | sum 
+------------------------------+-------------+-----+-----+-----
+ Sun Jun 13 17:00:00 2021 PDT | thermo_1    |  26 |  30 |  56
+ Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
+ Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
+ Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
+(4 rows)
+
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has being rebuilded!
+\d+ conditions_summary
+                                 View "public.conditions_summary"
+   Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
+-------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain    | 
+ device_name | text                     |           |          |         | extended | 
+ min         | integer                  |           |          |         | plain    | 
+ max         | integer                  |           |          |         | plain    | 
+ sum         | bigint                   |           |          |         | plain    | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_name,
+    _materialized_hypertable_2.min,
+    _materialized_hypertable_2.max,
+    _materialized_hypertable_2.sum
+   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2;
+
+SELECT * FROM conditions_summary ORDER BY bucket, device_name;
+            bucket            | device_name | min | max | sum 
+------------------------------+-------------+-----+-----+-----
+ Sun Jun 13 17:00:00 2021 PDT | thermo_1    |  26 |  30 |  56
+ Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
+ Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
+ Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
+(4 rows)
+
+-- Switch to realtime cagg
+ALTER MATERIALIZED VIEW conditions_summary SET (timescaledb.materialized_only=false);
+\d+ conditions_summary
+                                 View "public.conditions_summary"
+   Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
+-------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain    | 
+ device_name | text                     |           |          |         | extended | 
+ min         | integer                  |           |          |         | plain    | 
+ max         | integer                  |           |          |         | plain    | 
+ sum         | bigint                   |           |          |         | plain    | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_name,
+    _materialized_hypertable_2.min,
+    _materialized_hypertable_2.max,
+    _materialized_hypertable_2.sum
+   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
+  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
+    devices.name AS device_name,
+    min(conditions.temperature) AS min,
+    max(conditions.temperature) AS max,
+    sum(conditions.temperature) AS sum
+   FROM conditions
+     JOIN devices ON devices.id = conditions.device_id
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, conditions."time")), devices.name;
+
+SELECT * FROM conditions_summary ORDER BY bucket, device_name;
+            bucket            | device_name | min | max | sum 
+------------------------------+-------------+-----+-----+-----
+ Sun Jun 13 17:00:00 2021 PDT | thermo_1    |  26 |  30 |  56
+ Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
+ Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
+ Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
+ Sun Jun 20 17:00:00 2021 PDT | thermo_1    |  31 |  34 |  65
+ Sun Jun 20 17:00:00 2021 PDT | thermo_2    |  34 |  34 |  68
+ Sun Jun 20 17:00:00 2021 PDT | thermo_3    |  31 |  32 |  95
+(7 rows)
+
+-- Execute repair for realtime cagg
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary', FALSE);
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary does not have partials, do not check for defects!
+\d+ conditions_summary
+                                 View "public.conditions_summary"
+   Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
+-------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain    | 
+ device_name | text                     |           |          |         | extended | 
+ min         | integer                  |           |          |         | plain    | 
+ max         | integer                  |           |          |         | plain    | 
+ sum         | bigint                   |           |          |         | plain    | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_name,
+    _materialized_hypertable_2.min,
+    _materialized_hypertable_2.max,
+    _materialized_hypertable_2.sum
+   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
+  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
+    devices.name AS device_name,
+    min(conditions.temperature) AS min,
+    max(conditions.temperature) AS max,
+    sum(conditions.temperature) AS sum
+   FROM conditions
+     JOIN devices ON devices.id = conditions.device_id
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, conditions."time")), devices.name;
+
+SELECT * FROM conditions_summary ORDER BY bucket, device_name;
+            bucket            | device_name | min | max | sum 
+------------------------------+-------------+-----+-----+-----
+ Sun Jun 13 17:00:00 2021 PDT | thermo_1    |  26 |  30 |  56
+ Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
+ Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
+ Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
+ Sun Jun 20 17:00:00 2021 PDT | thermo_1    |  31 |  34 |  65
+ Sun Jun 20 17:00:00 2021 PDT | thermo_2    |  34 |  34 |  68
+ Sun Jun 20 17:00:00 2021 PDT | thermo_3    |  31 |  32 |  95
+(7 rows)
+
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has being rebuilded!
+\d+ conditions_summary
+                                 View "public.conditions_summary"
+   Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
+-------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket      | timestamp with time zone |           |          |         | plain    | 
+ device_name | text                     |           |          |         | extended | 
+ min         | integer                  |           |          |         | plain    | 
+ max         | integer                  |           |          |         | plain    | 
+ sum         | bigint                   |           |          |         | plain    | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_name,
+    _materialized_hypertable_2.min,
+    _materialized_hypertable_2.max,
+    _materialized_hypertable_2.sum
+   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
+  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
+    devices.name AS device_name,
+    min(conditions.temperature) AS min,
+    max(conditions.temperature) AS max,
+    sum(conditions.temperature) AS sum
+   FROM conditions
+     JOIN devices ON devices.id = conditions.device_id
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, conditions."time")), devices.name;
+
+SELECT * FROM conditions_summary ORDER BY bucket, device_name;
+            bucket            | device_name | min | max | sum 
+------------------------------+-------------+-----+-----+-----
+ Sun Jun 13 17:00:00 2021 PDT | thermo_1    |  26 |  30 |  56
+ Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
+ Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
+ Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
+ Sun Jun 20 17:00:00 2021 PDT | thermo_1    |  31 |  34 |  65
+ Sun Jun 20 17:00:00 2021 PDT | thermo_2    |  34 |  34 |  68
+ Sun Jun 20 17:00:00 2021 PDT | thermo_3    |  31 |  32 |  95
+(7 rows)
+
+-- Tests without join
+CREATE MATERIALIZED VIEW conditions_summary_nojoin
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+    MIN(temperature),
+    MAX(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    1
+WITH NO DATA;
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary_nojoin', TRUE);
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary_nojoin does not have JOINS, so no need to rebuild the definition!
+\d+ conditions_summary_nojoin
+                          View "public.conditions_summary_nojoin"
+ Column |           Type           | Collation | Nullable | Default | Storage | Description 
+--------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket | timestamp with time zone |           |          |         | plain   | 
+ min    | integer                  |           |          |         | plain   | 
+ max    | integer                  |           |          |         | plain   | 
+ sum    | bigint                   |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.min,
+    _materialized_hypertable_3.max,
+    _materialized_hypertable_3.sum
+   FROM _timescaledb_internal._materialized_hypertable_3
+  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
+    min(conditions.temperature) AS min,
+    max(conditions.temperature) AS max,
+    sum(conditions.temperature) AS sum
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, conditions."time"));
+
+DROP PROCEDURE _timescaledb_internal.cagg_try_repair (REGCLASS, BOOLEAN);
