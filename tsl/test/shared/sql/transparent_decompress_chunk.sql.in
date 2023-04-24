@@ -5,6 +5,7 @@
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 \set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
+\set PREFIX_NO_VERBOSE 'EXPLAIN (costs off)'
 
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 
@@ -188,7 +189,7 @@ DROP VIEW compressed_view;
 
 SET parallel_leader_participation TO off;
 -- test INNER JOIN
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
     INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time
@@ -197,7 +198,7 @@ FROM :TEST_TABLE m1
         m1.device_id
     LIMIT 10;
 
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
     INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time
@@ -208,7 +209,7 @@ FROM :TEST_TABLE m1
         m1.device_id
     LIMIT 10;
 
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
     INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time
@@ -220,7 +221,7 @@ FROM :TEST_TABLE m1
         m2.device_id
     LIMIT 100;
 
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM metrics m1
     INNER JOIN metrics_space m2 ON m1.time = m2.time
@@ -233,7 +234,7 @@ FROM metrics m1
     LIMIT 100;
 
 -- test OUTER JOIN
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
     LEFT OUTER JOIN :TEST_TABLE m2 ON m1.time = m2.time
@@ -242,7 +243,7 @@ ORDER BY m1.time,
     m1.device_id
 LIMIT 10;
 
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
     LEFT OUTER JOIN :TEST_TABLE m2 ON m1.time = m2.time
@@ -255,7 +256,7 @@ ORDER BY m1.time,
 LIMIT 100;
 
 -- test implicit self-join
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1,
     :TEST_TABLE m2
@@ -267,7 +268,7 @@ ORDER BY m1.time,
 LIMIT 20;
 
 -- test self-join with sub-query
-:PREFIX
+:PREFIX_NO_VERBOSE
 SELECT *
 FROM (
     SELECT *

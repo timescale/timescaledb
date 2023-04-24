@@ -141,7 +141,7 @@ def macos_config(overrides):
 # partialize_finalize is ignored due to #4937
 pg15_installcheck_args = "IGNORES='partialize_finalize'"
 
-pg14_installcheck_args = "IGNORES='partialize_finalize transparent_decompress_chunk-14'"
+pg14_installcheck_args = "IGNORES='partialize_finalize'"
 
 pg13_installcheck_args = "IGNORES='partialize_finalize'"
 
