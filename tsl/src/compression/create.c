@@ -106,18 +106,14 @@ get_default_algorithm_id(Oid typeoid)
 }
 
 static char *
-compression_column_segment_metadata_name(const FormData_hypertable_compression *fd,
-										 const char *type)
+compression_column_segment_metadata_name(int16 column_index, const char *type)
 {
 	char *buf = palloc(sizeof(char) * NAMEDATALEN);
 	int ret;
 
-	Assert(fd->orderby_column_index > 0);
-	ret = snprintf(buf,
-				   NAMEDATALEN,
-				   COMPRESSION_COLUMN_METADATA_PREFIX "%s_%d",
-				   type,
-				   fd->orderby_column_index);
+	Assert(column_index > 0);
+	ret =
+		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PREFIX "%s_%d", type, column_index);
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
@@ -127,15 +123,29 @@ compression_column_segment_metadata_name(const FormData_hypertable_compression *
 }
 
 char *
+column_segment_min_name(int16 column_index)
+{
+	return compression_column_segment_metadata_name(column_index,
+													COMPRESSION_COLUMN_METADATA_MIN_COLUMN_NAME);
+}
+
+char *
+column_segment_max_name(int16 column_index)
+{
+	return compression_column_segment_metadata_name(column_index,
+													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
+}
+
+char *
 compression_column_segment_min_name(const FormData_hypertable_compression *fd)
 {
-	return compression_column_segment_metadata_name(fd, "min");
+	return column_segment_min_name(fd->orderby_column_index);
 }
 
 char *
 compression_column_segment_max_name(const FormData_hypertable_compression *fd)
 {
-	return compression_column_segment_metadata_name(fd, "max");
+	return column_segment_max_name(fd->orderby_column_index);
 }
 
 static void
