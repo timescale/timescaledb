@@ -92,7 +92,7 @@ SELECT chunk_status,
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
--- recompress the paritial chunks
+-- recompress the partial chunks
 CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 
@@ -731,3 +731,213 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 IS NULL;
 
 DROP TABLE sample_table;
+
+-- test filtering with ORDER BY columns
+CREATE TABLE sample_table(time timestamptz, c1 int, c2 int, c3 int, c4 int);
+SELECT create_hypertable('sample_table','time');
+ALTER TABLE sample_table SET (timescaledb.compress,timescaledb.compress_segmentby='c4', timescaledb.compress_orderby='c1,c2,time');
+INSERT INTO sample_table
+SELECT t, c1, c2, c3, c4
+FROM generate_series(:'start_date'::timestamptz - INTERVAL '9 hours',
+            :'start_date'::timestamptz,
+            INTERVAL '1 hour') t,
+    generate_series(0,9,1) c1,
+    generate_series(0,9,1) c2,
+    generate_series(0,9,1) c3,
+    generate_series(0,9,1) c4;
+SELECT compress_chunk(show_chunks('sample_table'));
+
+-- get FIRST chunk
+SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
+ORDER BY ch1.id \gset
+
+-- get FIRST compressed chunk
+SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
+ORDER BY ch1.id \gset
+
+-- check that you uncompress and delete only for exact SEGMENTBY value
+BEGIN;
+-- report 10 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
+-- report 10k rows
+SELECT COUNT(*) FROM sample_table WHERE c4 = 5;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 \gset
+-- delete 10k rows
+DELETE FROM sample_table WHERE c4 = 5;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 = 5;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunk
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only for less than SEGMENTBY value
+BEGIN;
+-- report 50 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 < 5;
+-- report 50k rows
+SELECT COUNT(*) FROM sample_table WHERE c4 < 5;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 < 5 \gset
+-- delete 50k rows
+DELETE FROM sample_table WHERE c4 < 5;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 < 5;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunk
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 < 5;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only for greater and equal than SEGMENTBY value
+BEGIN;
+-- report 50 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 >= 5;
+-- report 50k rows
+SELECT COUNT(*) FROM sample_table WHERE c4 >= 5;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 >= 5 \gset
+-- delete 50k rows
+DELETE FROM sample_table WHERE c4 >= 5;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 >= 5;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunk
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 >= 5;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only for exact ORDERBY value
+-- this will uncompress segments which have min <= value and max >= value
+BEGIN;
+-- report 10k rows
+SELECT COUNT(*) FROM sample_table WHERE c2 = 3;
+-- report 100 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c2 = 3 \gset
+-- delete 10k rows
+DELETE FROM sample_table WHERE c2 = 3;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c2 = 3;
+-- report 90k rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only for less then ORDERBY value
+-- this will uncompress segments which have min < value
+BEGIN;
+-- report 20k rows
+SELECT COUNT(*) FROM sample_table WHERE c1 < 2;
+-- report 20 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_max_1 < 2;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 < 2 \gset
+-- delete 20k rows
+DELETE FROM sample_table WHERE c1 < 2;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c1 < 2;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunk
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_max_1 < 2;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only for greater or equal then ORDERBY value
+-- this will uncompress segments which have max >= value
+BEGIN;
+-- report 30k rows
+SELECT COUNT(*) FROM sample_table WHERE c1 >= 7;
+-- report 30 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_1 >= 7;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 >= 7 \gset
+-- delete 30k rows
+DELETE FROM sample_table WHERE c1 >= 7;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c1 >= 7;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunks
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_1 >= 7;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only tuples which satisfy SEGMENTBY
+-- and ORDERBY qualifiers, segments only contain one distinct value for
+-- these qualifiers, everything should be deleted that was decompressed
+BEGIN;
+-- report 1k rows
+SELECT COUNT(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
+-- report 1 row in compressed chunks
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 and c1 = 5 \gset
+-- delete 1k rows
+DELETE FROM sample_table WHERE c4 = 5 and c1 = 5;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunks
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;
+
+-- check that you uncompress and delete only tuples which satisfy SEGMENTBY
+-- and ORDERBY qualifiers, segments contain more than one distinct value for
+-- these qualifiers, not everything should be deleted that was decompressed
+BEGIN;
+-- report 4k rows
+SELECT COUNT(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
+-- report 40 rows in compressed chunks
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
+-- fetch total and number of affected rows
+SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 > 5 and c2 = 5 \gset
+-- delete 4k rows
+DELETE FROM sample_table WHERE c4 > 5 and c2 = 5;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
+-- report 36k rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 0 rows in compressed chunks
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
+-- validate correct number of rows was deleted
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
+ROLLBACK;

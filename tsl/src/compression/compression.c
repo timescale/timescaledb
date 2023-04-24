@@ -92,10 +92,10 @@ static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableS
 static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 								 bool changed_groups);
 
-static int create_segment_metadata_scankey(RowDecompressor *decompressor,
-										   char *segment_meta_col_name, AttrNumber in_attno,
-										   StrategyNumber strategy, ScanKeyData *scankeys,
-										   int num_scankeys, Datum value);
+static int create_segment_filter_scankey(RowDecompressor *decompressor,
+										 char *segment_filter_col_name, StrategyNumber strategy,
+										 ScanKeyData *scankeys, int num_scankeys,
+										 Bitmapset **null_columns, Datum value, bool isnull);
 static void run_analyze_on_chunk(Oid chunk_relid);
 
 /********************
@@ -1819,7 +1819,6 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 		{
 			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 			char *attname = get_attname(decompressor.out_rel->rd_id, attno, false);
-			AttrNumber cmp_attno = get_attnum(decompressor.in_rel->rd_id, attname);
 			FormData_hypertable_compression *fd =
 				ts_hypertable_compression_get_by_pkey(hypertable_id, attname);
 
@@ -1844,44 +1843,14 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 			{
 				bool isnull;
 				Datum value = slot_getattr(slot, attno, &isnull);
-				Oid atttypid = decompressor.out_desc->attrs[attno - 1].atttypid;
-
-				TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_EQ_OPR_FINFO);
-
-				/* Segmentby column type should match in compressed and uncompressed chunk */
-				Assert(decompressor.out_desc->attrs[AttrNumberGetAttrOffset(attno)].atttypid ==
-					   decompressor.in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid);
-
-				if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
-					elog(ERROR, "no equality function for type \"%s\"", format_type_be(atttypid));
-
-				/*
-				 * In PG versions <= 14 NULL values are always considered distinct
-				 * from other NULL values and therefore NULLABLE multi-columnn
-				 * unique constraints might expose unexpected behaviour in the
-				 * presence of NULL values.
-				 * Since SK_SEARCHNULL is not supported by heap scans we cannot
-				 * build a ScanKey for NOT NULL and instead have to do those
-				 * checks manually.
-				 */
-				if (isnull)
-				{
-					*null_columns = bms_add_member(*null_columns, cmp_attno);
-				}
-				else
-				{
-					ScanKeyEntryInitialize(&scankeys[key_index],
-										   0, /* flags */
-										   cmp_attno,
-										   BTEqualStrategyNumber,
-										   InvalidOid, /* No strategy subtype. */
-										   decompressor.out_desc
-											   ->attrs[AttrNumberGetAttrOffset(attno)]
-											   .attcollation,
-										   tce->eq_opr_finfo.fn_oid,
-										   value);
-					key_index++;
-				}
+				key_index = create_segment_filter_scankey(&decompressor,
+														  attname,
+														  BTEqualStrategyNumber,
+														  scankeys,
+														  key_index,
+														  null_columns,
+														  value,
+														  isnull);
 			}
 			if (COMPRESSIONCOL_IS_ORDER_BY(fd))
 			{
@@ -1894,20 +1863,22 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 				if (isnull)
 					continue;
 
-				key_index = create_segment_metadata_scankey(&decompressor,
-															compression_column_segment_min_name(fd),
-															attno,
-															BTLessEqualStrategyNumber,
-															scankeys,
-															key_index,
-															value);
-				key_index = create_segment_metadata_scankey(&decompressor,
-															compression_column_segment_max_name(fd),
-															attno,
-															BTGreaterEqualStrategyNumber,
-															scankeys,
-															key_index,
-															value);
+				key_index = create_segment_filter_scankey(&decompressor,
+														  compression_column_segment_min_name(fd),
+														  BTLessEqualStrategyNumber,
+														  scankeys,
+														  key_index,
+														  null_columns,
+														  value,
+														  false); /* is_null_check */
+				key_index = create_segment_filter_scankey(&decompressor,
+														  compression_column_segment_max_name(fd),
+														  BTGreaterEqualStrategyNumber,
+														  scankeys,
+														  key_index,
+														  null_columns,
+														  value,
+														  false); /* is_null_check */
 			}
 		}
 	}
@@ -1917,26 +1888,33 @@ build_scankeys(int32 hypertable_id, RowDecompressor decompressor, Bitmapset *key
 }
 
 static int
-create_segment_metadata_scankey(RowDecompressor *decompressor, char *segment_meta_col_name,
-								AttrNumber in_attno, StrategyNumber strategy, ScanKeyData *scankeys,
-								int num_scankeys, Datum value)
+create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filter_col_name,
+							  StrategyNumber strategy, ScanKeyData *scankeys, int num_scankeys,
+							  Bitmapset **null_columns, Datum value, bool is_null_check)
 {
-	AttrNumber segment_meta_attr_number =
-		get_attnum(decompressor->in_rel->rd_id, segment_meta_col_name);
-	Assert(segment_meta_attr_number != InvalidAttrNumber);
-
+	AttrNumber cmp_attno = get_attnum(decompressor->in_rel->rd_id, segment_filter_col_name);
+	Assert(cmp_attno != InvalidAttrNumber);
 	/* This should never happen but if it does happen, we can't generate a scan key for
-	 * the orderby column so just skip it */
-	if (segment_meta_attr_number == InvalidAttrNumber)
+	 * the filter column so just skip it */
+	if (cmp_attno == InvalidAttrNumber)
 		return num_scankeys;
 
-	Oid atttypid = decompressor->out_desc->attrs[AttrNumberGetAttrOffset(in_attno)].atttypid;
+	/*
+	 * In PG versions <= 14 NULL values are always considered distinct
+	 * from other NULL values and therefore NULLABLE multi-columnn
+	 * unique constraints might expose unexpected behaviour in the
+	 * presence of NULL values.
+	 * Since SK_SEARCHNULL is not supported by heap scans we cannot
+	 * build a ScanKey for NOT NULL and instead have to do those
+	 * checks manually.
+	 */
+	if (is_null_check)
+	{
+		*null_columns = bms_add_member(*null_columns, cmp_attno);
+		return num_scankeys;
+	}
 
-	/* Orderby column type should match in compressed metadata columns and uncompressed
-	 * chunk attribute */
-	Assert(
-		atttypid ==
-		decompressor->in_desc->attrs[AttrNumberGetAttrOffset(segment_meta_attr_number)].atttypid);
+	Oid atttypid = decompressor->in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid;
 
 	TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 	if (!OidIsValid(tce->btree_opf))
@@ -1956,10 +1934,10 @@ create_segment_metadata_scankey(RowDecompressor *decompressor, char *segment_met
 
 	ScanKeyEntryInitialize(&scankeys[num_scankeys++],
 						   0, /* flags */
-						   segment_meta_attr_number,
+						   cmp_attno,
 						   strategy,
 						   InvalidOid, /* No strategy subtype. */
-						   decompressor->out_desc->attrs[AttrNumberGetAttrOffset(in_attno)]
+						   decompressor->in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)]
 							   .attcollation,
 						   opr,
 						   value);
@@ -2062,27 +2040,21 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 }
 
 #if PG14_GE
-/*
- * Helper method which returns true if given column_name
- * is configured as SEGMENT BY column in a compressed hypertable
- */
-static bool
-is_segmentby_col(List *ht_compression_info, char *column_name)
+static SegmentFilter *
+add_filter_column_strategy(char *column_name, StrategyNumber strategy, Const *value,
+						   bool is_null_check)
 {
-	ListCell *lc;
-	foreach (lc, ht_compression_info)
-	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (namestrcmp(&fd->attname, column_name) == 0)
-		{
-			if (fd->segmentby_column_index > 0)
-				return true;
-			break;
-		}
-	}
-	return false;
-}
+	SegmentFilter *segment_filter = palloc0(sizeof(*segment_filter));
 
+	*segment_filter = (SegmentFilter){
+		.strategy = strategy,
+		.value = value,
+		.is_null_check = is_null_check,
+	};
+	namestrcpy(&segment_filter->column_name, column_name);
+
+	return segment_filter;
+}
 /*
  * This method will evaluate the predicates, extract
  * left and right operands, check if one of the operands is
@@ -2093,10 +2065,8 @@ is_segmentby_col(List *ht_compression_info, char *column_name)
  * be used to build scan keys later.
  */
 static void
-fill_predicate_context(Chunk *ch, List *predicates, List **segmentby_columns,
-					   List **segmentby_columns_value, List **is_null_check, List **is_null)
+fill_predicate_context(Chunk *ch, List *predicates, List **filters, List **is_null)
 {
-	List *ht_compression_info = ts_hypertable_compression_get(ch->fd.hypertable_id);
 	ListCell *lc;
 	foreach (lc, predicates)
 	{
@@ -2136,18 +2106,75 @@ fill_predicate_context(Chunk *ch, List *predicates, List **segmentby_columns,
 					continue;
 
 				column_name = get_attname(ch->table_id, var->varattno, false);
-				if (is_segmentby_col(ht_compression_info, column_name))
+				FormData_hypertable_compression *fd =
+					ts_hypertable_compression_get_by_pkey(ch->fd.hypertable_id, column_name);
+				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
+				int op_strategy = get_op_opfamily_strategy(opexpr->opno, tce->btree_opf);
+				if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
 				{
-					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
-					int op_strategy = get_op_opfamily_strategy(opexpr->opno, tce->btree_opf);
-					if (op_strategy == BTEqualStrategyNumber)
+					switch (op_strategy)
 					{
-						/* save segment by column name and its corresponding value specified in
-						 * WHERE */
-						*segmentby_columns = lappend(*segmentby_columns, column_name);
-						*segmentby_columns_value = lappend(*segmentby_columns_value, arg_value);
-						/* this constraint is not IS [NOT] NULL, so mark is_null_check as 0 */
-						*is_null_check = lappend_int(*is_null_check, 0);
+						case BTEqualStrategyNumber:
+						case BTLessStrategyNumber:
+						case BTLessEqualStrategyNumber:
+						case BTGreaterStrategyNumber:
+						case BTGreaterEqualStrategyNumber:
+						{
+							/* save segment by column name and its corresponding value specified in
+							 * WHERE */
+							*filters =
+								lappend(*filters,
+										add_filter_column_strategy(column_name,
+																   op_strategy,
+																   arg_value,
+																   false)); /* is_null_check */
+						}
+					}
+				}
+				else if (COMPRESSIONCOL_IS_ORDER_BY(fd))
+				{
+					switch (op_strategy)
+					{
+						case BTEqualStrategyNumber:
+						{
+							/* orderby col = value implies min <= value and max >= value */
+							*filters = lappend(
+								*filters,
+								add_filter_column_strategy(compression_column_segment_min_name(fd),
+														   BTLessEqualStrategyNumber,
+														   arg_value,
+														   false)); /* is_null_check */
+							*filters = lappend(
+								*filters,
+								add_filter_column_strategy(compression_column_segment_max_name(fd),
+														   BTGreaterEqualStrategyNumber,
+														   arg_value,
+														   false)); /* is_null_check */
+						}
+						break;
+						case BTLessStrategyNumber:
+						case BTLessEqualStrategyNumber:
+						{
+							/* orderby col <[=] value implies min <[=] value */
+							*filters = lappend(
+								*filters,
+								add_filter_column_strategy(compression_column_segment_min_name(fd),
+														   op_strategy,
+														   arg_value,
+														   false)); /* is_null_check */
+						}
+						break;
+						case BTGreaterStrategyNumber:
+						case BTGreaterEqualStrategyNumber:
+						{
+							/* orderby col >[=] value implies max >[=] value */
+							*filters = lappend(
+								*filters,
+								add_filter_column_strategy(compression_column_segment_max_name(fd),
+														   op_strategy,
+														   arg_value,
+														   false)); /* is_null_check */
+						}
 					}
 				}
 			}
@@ -2159,15 +2186,26 @@ fill_predicate_context(Chunk *ch, List *predicates, List **segmentby_columns,
 				{
 					var = (Var *) ntest->arg;
 					column_name = get_attname(ch->table_id, var->varattno, false);
-					if (is_segmentby_col(ht_compression_info, column_name))
+					FormData_hypertable_compression *fd =
+						ts_hypertable_compression_get_by_pkey(ch->fd.hypertable_id, column_name);
+					if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
 					{
-						*segmentby_columns = lappend(*segmentby_columns, column_name);
-						*is_null_check = lappend_int(*is_null_check, 1);
+						*filters = lappend(*filters,
+										   add_filter_column_strategy(column_name,
+																	  InvalidStrategy,
+																	  NULL,
+																	  true)); /* is_null_check */
+
 						if (ntest->nulltesttype == IS_NULL)
 							*is_null = lappend_int(*is_null, 1);
 						else
 							*is_null = lappend_int(*is_null, 0);
 					}
+					/* We cannot optimize filtering decompression using ORDERBY
+					 * metadata and null check qualifiers. We could possibly do that by checking the
+					 * compressed data in combination with the ORDERBY nulls first setting and
+					 * verifying that the first or last tuple of a segment contains a NULL value.
+					 * This is left for future optimization */
 				}
 			}
 			break;
@@ -2184,57 +2222,36 @@ fill_predicate_context(Chunk *ch, List *predicates, List **segmentby_columns,
  * OUT param null_columns is saved with column attribute number.
  */
 static ScanKeyData *
-build_update_delete_scankeys(Chunk *chunk, List *segmentby_columns, List *segmentby_column_values,
-							 List *is_null_check, int *num_scankeys, Bitmapset **null_columns)
+build_update_delete_scankeys(RowDecompressor *decompressor, List *filters, int *num_scankeys,
+							 Bitmapset **null_columns)
 {
-	Chunk *comp_chunk = NULL;
-	Relation comp_chunk_rel;
-	TupleDesc tupleDesc;
-	ListCell *col;
-	ListCell *is_null_or_not_null;
+	ListCell *lc;
+	SegmentFilter *filter;
 	int key_index = 0;
-	int pos = 0;
 
-	ScanKeyData *scankeys = palloc0(segmentby_columns->length * sizeof(ScanKeyData));
-	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	comp_chunk_rel = table_open(comp_chunk->table_id, AccessShareLock);
-	tupleDesc = RelationGetDescr(comp_chunk_rel);
+	ScanKeyData *scankeys = palloc0(filters->length * sizeof(ScanKeyData));
 
-	forboth (col, segmentby_columns, is_null_or_not_null, is_null_check)
+	foreach (lc, filters)
 	{
-		char *column_name = lfirst(col);
-		AttrNumber attnum = get_attnum(RelationGetRelid(comp_chunk_rel), column_name);
-		if (attnum == InvalidAttrNumber)
+		filter = lfirst(lc);
+		AttrNumber attno = get_attnum(decompressor->in_rel->rd_id, NameStr(filter->column_name));
+		if (attno == InvalidAttrNumber)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" of relation \"%s\" does not exist",
-							column_name,
-							RelationGetRelationName(comp_chunk_rel))));
-		Form_pg_attribute attr = TupleDescAttr(tupleDesc, AttrNumberGetAttrOffset(attnum));
-		TypeCacheEntry *tce = lookup_type_cache(attr->atttypid, TYPECACHE_EQ_OPR_FINFO);
-		if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
-			elog(ERROR, "no equality function for column \"%s\"", column_name);
+							NameStr(filter->column_name),
+							RelationGetRelationName(decompressor->in_rel))));
 
-		if (lfirst_int(is_null_or_not_null) == 0)
-		{
-			Const *const_value = list_nth(segmentby_column_values, pos++);
-			Datum value = (const_value ? const_value->constvalue : 0);
-			ScanKeyEntryInitialize(&scankeys[key_index++],
-								   0, /* flags */
-								   attnum,
-								   BTEqualStrategyNumber,
-								   InvalidOid, /* No strategy subtype. */
-								   attr->attcollation,
-								   tce->eq_opr_finfo.fn_oid,
-								   value);
-		}
-		else
-		{
-			*null_columns = bms_add_member(*null_columns, attnum);
-		}
+		key_index = create_segment_filter_scankey(decompressor,
+												  NameStr(filter->column_name),
+												  filter->strategy,
+												  scankeys,
+												  key_index,
+												  null_columns,
+												  filter->value ? filter->value->constvalue : 0,
+												  filter->is_null_check);
 	}
 	*num_scankeys = key_index;
-	table_close(comp_chunk_rel, AccessShareLock);
 	return scankeys;
 }
 
@@ -2246,23 +2263,14 @@ build_update_delete_scankeys(Chunk *chunk, List *segmentby_columns, List *segmen
  *  4.delete this row from compressed chunk
  */
 static bool
-decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset *null_columns,
-				   List *is_nulls, bool *chunk_status_changed)
+decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+				   Bitmapset *null_columns, List *is_nulls, bool *chunk_status_changed)
 {
-	Relation chunk_rel;
-	Relation comp_chunk_rel;
-	Chunk *comp_chunk;
 	HeapTuple compressed_tuple;
-	RowDecompressor decompressor;
-	Snapshot snapshot;
+	Snapshot snapshot = GetTransactionSnapshot();
 
-	snapshot = GetTransactionSnapshot();
-	chunk_rel = table_open(ch->table_id, RowExclusiveLock);
-	comp_chunk = ts_chunk_get_by_id(ch->fd.compressed_chunk_id, true);
-	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
-	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
-
-	TableScanDesc heapScan = table_beginscan(comp_chunk_rel, snapshot, num_scankeys, scankeys);
+	TableScanDesc heapScan =
+		table_beginscan(decompressor->in_rel, snapshot, num_scankeys, scankeys);
 	while ((compressed_tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
 	{
 		bool skip_tuple = false;
@@ -2273,7 +2281,7 @@ decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset
 		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
 		{
 			is_null_condition = list_nth_int(is_nulls, pos);
-			seg_col_is_null = heap_attisnull(compressed_tuple, attrno, decompressor.in_desc);
+			seg_col_is_null = heap_attisnull(compressed_tuple, attrno, decompressor->in_desc);
 			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
 			{
 				/*
@@ -2289,16 +2297,16 @@ decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset
 		if (skip_tuple)
 			continue;
 		heap_deform_tuple(compressed_tuple,
-						  decompressor.in_desc,
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
+						  decompressor->in_desc,
+						  decompressor->compressed_datums,
+						  decompressor->compressed_is_nulls);
 
-		row_decompressor_decompress_row(&decompressor, NULL);
+		row_decompressor_decompress_row(decompressor, NULL);
 		TM_FailureData tmfd;
 		TM_Result result;
-		result = table_tuple_delete(comp_chunk_rel,
+		result = table_tuple_delete(decompressor->in_rel,
 									&compressed_tuple->t_self,
-									decompressor.mycid,
+									decompressor->mycid,
 									snapshot,
 									InvalidSnapshot,
 									true,
@@ -2323,11 +2331,6 @@ decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset
 	if (scankeys)
 		pfree(scankeys);
 	table_endscan(heapScan);
-	ts_catalog_close_indexes(decompressor.indexstate);
-	FreeBulkInsertState(decompressor.bistate);
-
-	table_close(chunk_rel, NoLock);
-	table_close(comp_chunk_rel, NoLock);
 	return true;
 }
 
@@ -2342,35 +2345,38 @@ decompress_batches(Chunk *ch, ScanKeyData *scankeys, int num_scankeys, Bitmapset
 void
 decompress_batches_for_update_delete(List *chunks, List *predicates)
 {
-	List *segmentby_columns = NIL;
-	List *segmentby_columns_value = NIL;
-	List *is_null_check = NIL;
+	List *filters = NIL;
 	List *is_null = NIL;
 	ListCell *ch = NULL;
+	ListCell *lc = NULL;
+
+	Relation chunk_rel;
+	Relation comp_chunk_rel;
+	Chunk *chunk, *comp_chunk;
+	RowDecompressor decompressor;
+	SegmentFilter *filter;
+
 	if (predicates)
-		fill_predicate_context(linitial(chunks),
-							   predicates,
-							   &segmentby_columns,
-							   &segmentby_columns_value,
-							   &is_null_check,
-							   &is_null);
+		fill_predicate_context(linitial(chunks), predicates, &filters, &is_null);
 	foreach (ch, chunks)
 	{
+		chunk = (Chunk *) lfirst(ch);
 		bool chunk_status_changed = false;
 		ScanKeyData *scankeys = NULL;
 		Bitmapset *null_columns = NULL;
 		int num_scankeys = 0;
 
-		if (segmentby_columns)
+		chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
+		comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
+		decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
+
+		if (filters)
 		{
-			scankeys = build_update_delete_scankeys(lfirst(ch),
-													segmentby_columns,
-													segmentby_columns_value,
-													is_null_check,
-													&num_scankeys,
-													&null_columns);
+			scankeys =
+				build_update_delete_scankeys(&decompressor, filters, &num_scankeys, &null_columns);
 		}
-		if (decompress_batches(lfirst(ch),
+		if (decompress_batches(&decompressor,
 							   scankeys,
 							   num_scankeys,
 							   null_columns,
@@ -2384,6 +2390,18 @@ decompress_batches_for_update_delete(List *chunks, List *predicates)
 			if (chunk_status_changed == true)
 				ts_chunk_set_partial(lfirst(ch));
 		}
+
+		ts_catalog_close_indexes(decompressor.indexstate);
+		FreeBulkInsertState(decompressor.bistate);
+
+		table_close(chunk_rel, NoLock);
+		table_close(comp_chunk_rel, NoLock);
+	}
+
+	foreach (lc, filters)
+	{
+		filter = lfirst(lc);
+		pfree(filter);
 	}
 }
 #endif
