@@ -252,6 +252,19 @@ typedef struct RowCompressor
 	bool first_iteration;
 } RowCompressor;
 
+/* SegmentFilter is used for filtering segments based on qualifiers */
+typedef struct SegmentFilter
+{
+	/* Column which we use for filtering */
+	NameData column_name;
+	/* Filter operation used */
+	StrategyNumber strategy;
+	/* Value to compare with */
+	Const *value;
+	/* IS NULL or IS NOT NULL */
+	bool is_null_check;
+} SegmentFilter;
+
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_send(PG_FUNCTION_ARGS);
