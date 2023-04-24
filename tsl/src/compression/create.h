@@ -15,6 +15,8 @@
 #define COMPRESSION_COLUMN_METADATA_COUNT_NAME COMPRESSION_COLUMN_METADATA_PREFIX "count"
 #define COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME                                              \
 	COMPRESSION_COLUMN_METADATA_PREFIX "sequence_num"
+#define COMPRESSION_COLUMN_METADATA_MIN_COLUMN_NAME "min"
+#define COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME "max"
 
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
@@ -25,5 +27,8 @@ Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid tabl
 
 char *compression_column_segment_min_name(const FormData_hypertable_compression *fd);
 char *compression_column_segment_max_name(const FormData_hypertable_compression *fd);
+
+char *column_segment_min_name(int16 column_index);
+char *column_segment_max_name(int16 column_index);
 
 #endif /* TIMESCALEDB_TSL_COMPRESSION_CREATE_H */
