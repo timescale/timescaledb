@@ -263,6 +263,8 @@ job_run(PG_FUNCTION_ARGS)
 	int32 job_id = PG_GETARG_INT32(0);
 	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false);
 
+	ts_bgw_job_permission_check(job, "run");
+
 	job_execute(job);
 
 	PG_RETURN_VOID();
@@ -326,7 +328,7 @@ job_alter(PG_FUNCTION_ARGS)
 	if (job == NULL)
 		PG_RETURN_NULL();
 
-	ts_bgw_job_permission_check(job);
+	ts_bgw_job_permission_check(job, "alter");
 
 	if (!PG_ARGISNULL(1))
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);
@@ -463,7 +465,8 @@ job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
 	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false /* missing_ok */);
 	if (job == NULL)
 		PG_RETURN_NULL();
-	ts_bgw_job_permission_check(job);
+
+	ts_bgw_job_permission_check(job, "alter");
 
 	if (!PG_ARGISNULL(1))
 	{

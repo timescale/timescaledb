@@ -4,6 +4,7 @@ include(GenerateTestSchedule)
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
     bgw_custom.sql
+    bgw_security.sql
     bgw_policy.sql
     cagg_errors.sql
     cagg_invalidation.sql
