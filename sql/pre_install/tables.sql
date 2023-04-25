@@ -280,7 +280,7 @@ CREATE TABLE _timescaledb_config.bgw_job (
   retry_period interval NOT NULL,
   proc_schema name NOT NULL,
   proc_name name NOT NULL,
-  owner regrole NOT NULL DEFAULT current_role::regrole,
+  owner regrole NOT NULL DEFAULT pg_catalog.quote_ident(current_role)::regrole,
   scheduled bool NOT NULL DEFAULT TRUE,
   fixed_schedule bool not null default true,
   initial_start timestamptz,

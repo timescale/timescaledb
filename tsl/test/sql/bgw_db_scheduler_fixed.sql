@@ -30,7 +30,7 @@ CREATE OR REPLACE FUNCTION insert_job(
        schedule_interval INTERVAL,
        max_runtime INTERVAL,
        retry_period INTERVAL,
-       owner regrole DEFAULT current_role::regrole,
+       owner regrole DEFAULT pg_catalog.quote_ident(current_role)::regrole,
        scheduled BOOL DEFAULT true,
        fixed_schedule BOOL DEFAULT true
 )
