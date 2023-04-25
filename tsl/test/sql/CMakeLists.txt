@@ -28,6 +28,10 @@ set(TEST_FILES
     skip_scan.sql
     size_utils_tsl.sql)
 
+if(USE_TELEMETRY)
+  list(APPEND TEST_FILES bgw_telemetry.sql)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND

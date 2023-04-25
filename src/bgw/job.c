@@ -48,13 +48,8 @@
 #include "jsonb_utils.h"
 #include "debug_assert.h"
 
-#define TELEMETRY_INITIAL_NUM_RUNS 12
-
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
-#ifdef USE_TELEMETRY
-static bool is_telemetry_job(BgwJob *job);
-#endif
 
 typedef enum JobLockLifetime
 {
@@ -377,7 +372,7 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 
 #ifdef USE_TELEMETRY
 		/* ignore telemetry jobs if telemetry is disabled */
-		if (!ts_telemetry_on() && is_telemetry_job(job))
+		if (!ts_telemetry_on() && ts_is_telemetry_job(job))
 		{
 			pfree(job);
 			continue;
@@ -1009,9 +1004,12 @@ ts_bgw_job_validate_job_owner(Oid owner)
 	ReleaseSysCache(role_tup);
 }
 
+/*
+ * Is the job the telemetry job?
+ */
 #ifdef USE_TELEMETRY
-static bool
-is_telemetry_job(BgwJob *job)
+bool
+ts_is_telemetry_job(BgwJob *job)
 {
 	return namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0 &&
 		   namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0;
@@ -1022,7 +1020,9 @@ bool
 ts_bgw_job_execute(BgwJob *job)
 {
 #ifdef USE_TELEMETRY
-	if (is_telemetry_job(job))
+	/* The telemetry job has a separate code path since we want to be able to
+	 * use telemetry even if the TSL code is not installed. */
+	if (ts_is_telemetry_job(job))
 	{
 		/*
 		 * In the first 12 hours, we want telemetry to ping every
@@ -1033,7 +1033,9 @@ ts_bgw_job_execute(BgwJob *job)
 		return ts_bgw_job_run_and_set_next_start(job,
 												 ts_telemetry_main_wrapper,
 												 TELEMETRY_INITIAL_NUM_RUNS,
-												 &one_hour);
+												 &one_hour,
+												 /* atomic */ true,
+												 /* mark */ false);
 	}
 #endif
 
@@ -1300,22 +1302,42 @@ ts_bgw_job_set_job_entrypoint_function_name(char *func_name)
 	job_entrypoint_function_name = func_name;
 }
 
+/*
+ * Run job and set next start.
+ *
+ * job: Job to run and update
+ * func: Function to execute for the job
+ * initial_runs: Limit on the number of runs to do
+ * next_interval: Interval to use when computing next start
+ * atomic: Should be executed as a single transaction.
+ * mark: Mark the start and end of the function execution in job_stats
+ */
 bool
 ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
-								  Interval *next_interval)
+								  Interval *next_interval, bool atomic, bool mark)
 {
 	BgwJobStat *job_stat;
-	bool ret = func();
+	bool had_error;
+
+	if (atomic)
+		StartTransactionCommand();
+
+	if (mark)
+		ts_bgw_job_stat_mark_start(job->fd.id);
+
+	had_error = func();
+
+	if (mark)
+		ts_bgw_job_stat_mark_end(job, had_error ? JOB_FAILURE : JOB_SUCCESS);
 
 	/* Now update next_start. */
-	StartTransactionCommand();
-
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
 
 	/*
 	 * Note that setting next_start explicitly from this function will
 	 * override any backoff calculation due to failure.
 	 */
+	Ensure(job_stat != NULL, "job status for job %d not found", job->fd.id);
 	if (job_stat->fd.total_runs < initial_runs)
 	{
 		TimestampTz next_start =
@@ -1325,9 +1347,11 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 
 		ts_bgw_job_stat_set_next_start(job->fd.id, next_start);
 	}
-	CommitTransactionCommand();
 
-	return ret;
+	if (atomic)
+		CommitTransactionCommand();
+
+	return had_error;
 }
 
 /* Insert a new job in the bgw_job relation */
