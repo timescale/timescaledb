@@ -25,12 +25,18 @@ accidentally triggering the load of a previous DB version.**
 * #5442 Decompression may have lost DEFAULT values
 * #5459 Fix issue creating dimensional constraints
 * #5570 Improve interpolate error message on datatype mismatch
-* #5583 Fix parameterization in DecompressChunk path generation
-* #5602 Fix broken CAgg with JOIN repair function
+* #5573 Fix unique constraint on compressed tables
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
 * @ollz272 for reporting an issue with interpolate error messages
+
+
+## 2.10.3 (2023-04-26)
+
+**Bugfixes**
+* #5583 Fix parameterization in DecompressChunk path generation
+* #5602 Fix broken CAgg with JOIN repair function
 
 
 ## 2.10.2 (2023-04-20)
