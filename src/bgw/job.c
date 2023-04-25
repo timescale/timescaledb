@@ -974,12 +974,21 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 }
 
 void
-ts_bgw_job_permission_check(BgwJob *job)
+ts_bgw_job_permission_check(BgwJob *job, const char *cmd)
 {
 	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	{
+		const char *owner_name = GetUserNameFromId(job->fd.owner, false);
+		const char *user_name = GetUserNameFromId(GetUserId(), false);
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("insufficient permissions to alter job %d", job->fd.id)));
+				 errmsg("insufficient permissions to %s job %d", cmd, job->fd.id),
+				 errdetail("Job %d is owned by role \"%s\" but user \"%s\" does not belong to that "
+						   "role.",
+						   job->fd.id,
+						   owner_name,
+						   user_name)));
+	}
 }
 
 void

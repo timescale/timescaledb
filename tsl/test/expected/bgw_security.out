@@ -1,0 +1,32 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ROLE_ADMIN :TEST_DBNAME _admin
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE ROLE :ROLE_ADMIN;
+GRANT :ROLE_ADMIN TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE custom_log (ts integer, msg text);
+GRANT ALL ON custom_log TO PUBLIC;
+CREATE PROCEDURE custom_job(integer, jsonb) AS $$
+  INSERT INTO custom_log values($1, 'custom_job');
+$$ LANGUAGE SQL;
+SELECT add_job('custom_job', '1h') AS job_id \gset
+-- Set the owner of the job to the admin role
+UPDATE _timescaledb_config.bgw_job SET owner = :'ROLE_ADMIN' WHERE id = :job_id;
+SELECT id, proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+  id  | proc_name  |         owner         
+------+------------+-----------------------
+ 1000 | custom_job | db_bgw_security_admin
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+-- We should fail to execute the job since we do not own it or belong
+-- to the group that owns it.
+\set ON_ERROR_STOP 0
+CALL run_job(:job_id);
+ERROR:  insufficient permissions to run job 1000
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- This should succeed since the role belongs to the job owner group.
+CALL run_job(:job_id);
