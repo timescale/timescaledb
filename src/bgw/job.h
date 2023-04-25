@@ -13,6 +13,8 @@
 #include "export.h"
 #include "ts_catalog/catalog.h"
 
+#define TELEMETRY_INITIAL_NUM_RUNS 12
+
 typedef struct BgwJob
 {
 	FormData_bgw_job fd;
@@ -57,9 +59,14 @@ extern TSDLLEXPORT void ts_bgw_job_run_config_check(Oid check, int32 job_id, Jso
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
 extern void ts_bgw_job_set_scheduler_test_hook(scheduler_test_hook_type hook);
 extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
-extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
-											  Interval *next_interval);
+extern TSDLLEXPORT bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func,
+														  int64 initial_runs,
+														  Interval *next_interval, bool atomic,
+														  bool mark);
 extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *job_err);
 extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule_interval);
 extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
+
+extern TSDLLEXPORT bool ts_is_telemetry_job(BgwJob *job);
+
 #endif /* BGW_JOB_H */
