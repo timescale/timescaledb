@@ -53,3 +53,5 @@ ALTER FUNCTION _timescaledb_internal.compressed_data_recv(internal) SET SCHEMA _
 ALTER FUNCTION _timescaledb_internal.rxid_in(cstring) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.rxid_out(@extschema@.rxid) SET SCHEMA _timescaledb_functions;
 
+ALTER TABLE _timescaledb_config.bgw_job
+    ALTER COLUMN owner SET DEFAULT pg_catalog.quote_ident(current_role)::regrole;
