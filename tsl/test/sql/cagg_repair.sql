@@ -109,4 +109,22 @@ WITH NO DATA;
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary_nojoin', TRUE);
 \d+ conditions_summary_nojoin
 
+-- Tests with old cagg format
+CREATE MATERIALIZED VIEW conditions_summary_old_format
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+    MIN(temperature),
+    MAX(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    1
+WITH NO DATA;
+
+-- Should rebuild without forcing
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary_old_format', FALSE);
+\d+ conditions_summary_old_format
+
 DROP PROCEDURE _timescaledb_internal.cagg_try_repair (REGCLASS, BOOLEAN);
