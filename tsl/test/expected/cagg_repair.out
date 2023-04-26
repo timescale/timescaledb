@@ -118,7 +118,7 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
 (4 rows)
 
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
-DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has being rebuilded!
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has been rebuilt!
 \d+ conditions_summary
                                  View "public.conditions_summary"
    Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
@@ -231,7 +231,7 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
 (7 rows)
 
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
-DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has being rebuilded!
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has been rebuilt!
 \d+ conditions_summary
                                  View "public.conditions_summary"
    Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
@@ -309,6 +309,47 @@ UNION ALL
     sum(conditions.temperature) AS sum
    FROM conditions
   WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, conditions."time"));
+
+-- Tests with old cagg format
+CREATE MATERIALIZED VIEW conditions_summary_old_format
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+    MIN(temperature),
+    MAX(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    1
+WITH NO DATA;
+-- Should rebuild without forcing
+CALL _timescaledb_internal.cagg_try_repair('conditions_summary_old_format', FALSE);
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary_old_format has been rebuilt!
+\d+ conditions_summary_old_format
+                        View "public.conditions_summary_old_format"
+ Column |           Type           | Collation | Nullable | Default | Storage | Description 
+--------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket | timestamp with time zone |           |          |         | plain   | 
+ min    | integer                  |           |          |         | plain   | 
+ max    | integer                  |           |          |         | plain   | 
+ sum    | bigint                   |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_2_2, NULL::integer) AS min,
+    _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_3_3, NULL::integer) AS max,
+    _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_4_4, NULL::bigint) AS sum
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY _materialized_hypertable_4.bucket
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
+    min(conditions.temperature) AS min,
+    max(conditions.temperature) AS max,
+    sum(conditions.temperature) AS sum
+   FROM conditions
+  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time"));
 
 DROP PROCEDURE _timescaledb_internal.cagg_try_repair (REGCLASS, BOOLEAN);
