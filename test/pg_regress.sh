@@ -75,7 +75,7 @@ elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
   if [[ -n ${IGNORES} ]]; then
     for test_pattern in ${IGNORES}; do
       for test_name in ${ALL_TESTS}; do
-        if [[ $test_name == $test_pattern ]]; then
+        if [[ -n ${test_name} ]] && [[ $test_name == $test_pattern ]]; then
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
       done
