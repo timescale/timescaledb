@@ -554,6 +554,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  _timescaledb_catalog.chunk_copy_operation_id_seq
  _timescaledb_catalog.compression_algorithm
  _timescaledb_catalog.tablespace_id_seq
+ _timescaledb_catalog.telemetry_event
  _timescaledb_internal.bgw_job_stat
  _timescaledb_internal.bgw_policy_chunk_stats
  _timescaledb_internal.compressed_chunk_stats
@@ -569,7 +570,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  timescaledb_information.job_errors
  timescaledb_information.job_stats
  timescaledb_information.jobs
-(19 rows)
+(20 rows)
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

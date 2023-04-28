@@ -19,6 +19,7 @@ accidentally triggering the load of a previous DB version.**
 * #5510 Propagate vacuum/analyze to compressed chunks
 * #5584 Reduce decompression during constraint checking
 * #5530 Optimize compressed chunk resorting
+* #5639 Support sending telemetry event reports
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down

@@ -264,3 +264,12 @@ SELECT key from _timescaledb_catalog.metadata;
 \set ON_ERROR_STOP 0
 -- test that the telemetry gathering code doesn't break nonexistent statements
 EXECUTE noexistent_statement;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Insert some data into the telemetry event table
+INSERT INTO _timescaledb_catalog.telemetry_event(tag, body) VALUES
+    ('ummagumma', '{"title": "Careful with that Axe Eugene!"}'),
+    ('kaboom', '{"title": "Where is that kaboom?"}');
+
+-- Check that it is present in the telemetry report
+SELECT * FROM jsonb_to_recordset(get_telemetry_report()->'db_telemetry_events') AS x(tag name, body text);

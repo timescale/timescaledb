@@ -74,6 +74,7 @@
 #define REQ_NUM_USER_DEFINED_ACTIONS "num_user_defined_actions"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
 #define REQ_METADATA "db_metadata"
+#define REQ_TELEMETRY_EVENT "db_telemetry_events"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
 #define REQ_LICENSE_EDITION_COMMUNITY "community"
 #define REQ_TS_LAST_TUNE_TIME "last_tuned_time"
@@ -956,6 +957,13 @@ build_telemetry_report()
 	ts_telemetry_metadata_add_values(parse_state);
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
+	/* Add telemetry events */
+	key.type = jbvString;
+	key.val.string.val = REQ_TELEMETRY_EVENT;
+	key.val.string.len = strlen(REQ_TELEMETRY_EVENT);
+	pushJsonbValue(&parse_state, WJB_KEY, &key);
+	ts_telemetry_events_add(parse_state);
+
 	/* Add function call telemetry */
 	key.type = jbvString;
 	key.val.string.val = REQ_FUNCTIONS_USED;
@@ -1101,6 +1109,7 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	}
 
 	ts_function_telemetry_reset_counts();
+	ts_telemetry_event_truncate();
 
 	/*
 	 * Do the version-check. Response is the body of a well-formed HTTP
