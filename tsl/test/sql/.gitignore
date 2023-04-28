@@ -7,6 +7,7 @@
 /compression_insert-*.sql
 /compression_permissions-*.sql
 /continuous_aggs-*.sql
+/continuous_aggs_deprecated-*.sql
 /dist_grant-*.sql
 /dist_query-*.sql
 /dist_hypertable-*.sql

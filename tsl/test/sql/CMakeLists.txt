@@ -111,8 +111,6 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql)
-    list(APPEND TEST_TEMPLATES continuous_aggs.sql.in
-         continuous_aggs_deprecated.sql)
   endif()
   list(APPEND TEST_FILES compression.sql compression_update_delete.sql
        compression_permissions.sql)
@@ -172,6 +170,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_partial_agg.sql.in
     dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in
+    continuous_aggs.sql.in
+    continuous_aggs_deprecated.sql.in
     cagg_joins.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
