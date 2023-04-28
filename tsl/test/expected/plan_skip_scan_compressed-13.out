@@ -1,0 +1,1973 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set PREFIX 'EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX_EXPLAIN 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+--DROP TABLE sensor_data;
+--DROP TABLE sensor_data_ht cascade;
+CREATE TABLE sensor_data(
+time timestamptz not null,
+sensor_id integer not null,
+cpu_id integer not null,
+cpu double precision null,
+temperature double precision null );
+INSERT INTO sensor_data
+SELECT
+time,
+sensor_id,
+cpu_id,
+cpu,
+temperature
+FROM
+generate_series('2000-01-01 00:00:00-00', '2000-01-02 00:00:00-00', INTERVAL '4 hour') AS g1(time),
+generate_series(1, 10, 1) AS g2(sensor_id),
+generate_series(10, 0, -1) AS g3(cpu_id),
+generate_series(1, 10, 1) AS g4(cpu),
+generate_series(45, 55, 1) AS g5(temperature)
+ORDER BY
+time;
+CREATE TABLE sensor_data_ht(
+time timestamptz not null,
+sensor_id integer not null,
+cpu_id integer not null,
+cpu double precision null,
+temperature double precision null );
+SELECT FROM CREATE_hypertable('sensor_data_ht','time', chunk_time_interval=> INTERVAL '8 hours');
+--
+(1 row)
+
+INSERT INTO sensor_data_ht
+SELECT * FROM sensor_data;
+CREATE INDEX ON sensor_data (sensor_id);
+CREATE INDEX ON sensor_data_ht (sensor_id);
+SELECT show_chunks('sensor_data_ht');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+(4 rows)
+
+ALTER TABLE sensor_data_ht SET(timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='sensor_id, cpu_id');
+VACUUM sensor_data;
+VACUUM sensor_data_ht;
+SET enable_seqscan = FALSE;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=40 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_1_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_2_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_3_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_4_chunk (actual rows=10 loops=1)
+(11 rows)
+
+SET enable_seqscan = TRUE;
+SELECT compress_chunk(i) FROM show_chunks('sensor_data_ht')i;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+(4 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht LIMIT 5;
+ sensor_id 
+-----------
+         1
+         2
+         3
+         4
+         5
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 LIMIT 5;
+ sensor_id 
+-----------
+         1
+         2
+         3
+         4
+         5
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 DESC;
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id DESC
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 DESC LIMIT 5;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 DESC LIMIT 5;
+ sensor_id 
+-----------
+        10
+         9
+         8
+         7
+         6
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ;
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Merge Append (actual rows=3850 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+(19 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(20 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 LIMIT 5;
+ sensor_id 
+-----------
+         6
+         7
+         8
+         9
+        10
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1;
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Merge Append (actual rows=3850 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+(19 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(20 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 LIMIT 5;
+ sensor_id 
+-----------
+         6
+         7
+         8
+         9
+        10
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 DESC;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Merge Append (actual rows=3850 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id DESC
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           Index Cond: (sensor_id > 5)
+(19 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 DESC LIMIT 5;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(20 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 DESC LIMIT 5;
+ sensor_id 
+-----------
+        10
+         9
+         8
+         7
+         6
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=3500 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=500 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 600
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(23 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 LIMIT 3;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=3 loops=1)
+   ->  Unique (actual rows=3 loops=1)
+         ->  Merge Append (actual rows=701 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=201 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 241
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=3 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=201 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 241
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=201 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 241
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=3 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=101 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 120
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=3 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=3 loops=1)
+(24 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 LIMIT 3;
+ sensor_id 
+-----------
+         1
+         2
+         3
+(3 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=3500 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=500 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 600
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(23 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1 LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=1401 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=401 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 501
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=401 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 501
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=401 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 501
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=201 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 240
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(24 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1 LIMIT 5;
+ sensor_id 
+-----------
+         1
+         2
+         3
+         4
+         5
+(5 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1 DESC;
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=3500 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id DESC
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1000 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 1200
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=500 loops=1)
+               Filter: (temperature > '50'::double precision)
+               Rows Removed by Filter: 600
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(23 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5  AND temperature > 50 ORDER BY 1 DESC LIMIT 5;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=1401 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=401 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 488
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=401 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 488
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=401 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 488
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=201 loops=1)
+                     Filter: (temperature > '50'::double precision)
+                     Rows Removed by Filter: 259
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(28 rows)
+
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5  AND temperature > 50 ORDER BY 1 DESC LIMIT 5;
+ sensor_id 
+-----------
+        10
+         9
+         8
+         7
+         6
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time, tableoid FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht LIMIT 5;
+ sensor_id | cpu_id |             time             
+-----------+--------+------------------------------
+         1 |      0 | Fri Dec 31 16:00:00 1999 PST
+         2 |      0 | Sat Jan 01 08:00:00 2000 PST
+         3 |      0 | Sat Jan 01 16:00:00 2000 PST
+         4 |      0 | Fri Dec 31 16:00:00 1999 PST
+         5 |      0 | Sat Jan 01 08:00:00 2000 PST
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now();
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=7700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=7700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(22 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() LIMIT 5;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(23 rows)
+
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() LIMIT 5;
+ sensor_id | cpu_id |             time             
+-----------+--------+------------------------------
+         1 |      0 | Fri Dec 31 16:00:00 1999 PST
+         2 |      0 | Sat Jan 01 08:00:00 2000 PST
+         3 |      0 | Sat Jan 01 16:00:00 2000 PST
+         4 |      0 | Fri Dec 31 16:00:00 1999 PST
+         5 |      0 | Sat Jan 01 08:00:00 2000 PST
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=7700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=7700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(22 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=7700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=7700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(22 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 LIMIT 5;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(23 rows)
+
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 LIMIT 5;
+ sensor_id | cpu_id |             time             
+-----------+--------+------------------------------
+         1 |      0 | Fri Dec 31 16:00:00 1999 PST
+         2 |      0 | Sat Jan 01 08:00:00 2000 PST
+         3 |      0 | Sat Jan 01 16:00:00 2000 PST
+         4 |      0 | Fri Dec 31 16:00:00 1999 PST
+         5 |      0 | Sat Jan 01 08:00:00 2000 PST
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1, 2;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=7700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=7700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id, _hyper_1_1_chunk.cpu_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(22 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1, 2 LIMIT 5;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id, _hyper_1_1_chunk.cpu_id
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(23 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2 DESC;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=7700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=7700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(22 rows)
+
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=84700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=84700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=24200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_5_chunk.sensor_id DESC, compress_hyper_2_5_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=24200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_6_chunk.sensor_id DESC, compress_hyper_2_6_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=24200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_7_chunk.sensor_id DESC, compress_hyper_2_7_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=12100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_8_chunk.sensor_id DESC, compress_hyper_2_8_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=110 loops=1)
+(30 rows)
+
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1, 2 DESC;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=84700 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=84700 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id, _hyper_1_1_chunk.cpu_id DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=24200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_5_chunk.sensor_id, compress_hyper_2_5_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=24200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_6_chunk.sensor_id, compress_hyper_2_6_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=24200 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_7_chunk.sensor_id, compress_hyper_2_7_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=12100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=110 loops=1)
+                           Sort Key: compress_hyper_2_8_chunk.sensor_id, compress_hyper_2_8_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=110 loops=1)
+(30 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2 DESC LIMIT 5;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id DESC
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(23 rows)
+
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2 DESC LIMIT 5;
+ sensor_id | cpu_id |             time             
+-----------+--------+------------------------------
+        10 |     10 | Fri Dec 31 16:00:00 1999 PST
+         9 |     10 | Sat Jan 01 08:00:00 2000 PST
+         8 |     10 | Sat Jan 01 16:00:00 2000 PST
+         7 |     10 | Fri Dec 31 16:00:00 1999 PST
+         6 |     10 | Sat Jan 01 08:00:00 2000 PST
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=3850 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=3850 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(26 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 LIMIT 5;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+(27 rows)
+
+SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 LIMIT 5;
+ sensor_id |             time             
+-----------+------------------------------
+         6 | Fri Dec 31 16:00:00 1999 PST
+         7 | Sat Jan 01 08:00:00 2000 PST
+         8 | Sat Jan 01 16:00:00 2000 PST
+         9 | Fri Dec 31 16:00:00 1999 PST
+        10 | Sat Jan 01 08:00:00 2000 PST
+(5 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=3850 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=3850 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(26 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 LIMIT 5;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+(27 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC LIMIT 5;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id DESC
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+(27 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1, 2;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=3850 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=3850 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id, _hyper_1_1_chunk.cpu_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(26 rows)
+
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1, 2;
+ sensor_id | cpu_id |             time             
+-----------+--------+------------------------------
+         6 |      0 | Fri Dec 31 16:00:00 1999 PST
+         7 |      0 | Sat Jan 01 08:00:00 2000 PST
+         8 |      0 | Sat Jan 01 16:00:00 2000 PST
+         9 |      0 | Fri Dec 31 16:00:00 1999 PST
+        10 |      0 | Sat Jan 01 08:00:00 2000 PST
+(5 rows)
+
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC, 2;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=3850 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=3850 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_5_chunk.sensor_id DESC, compress_hyper_2_5_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_6_chunk.sensor_id DESC, compress_hyper_2_6_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_7_chunk.sensor_id DESC, compress_hyper_2_7_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_8_chunk.sensor_id DESC, compress_hyper_2_8_chunk.cpu_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+(38 rows)
+
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1, 2 DESC;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=3850 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=3850 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id, _hyper_1_1_chunk.cpu_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_5_chunk.sensor_id, compress_hyper_2_5_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_6_chunk.sensor_id, compress_hyper_2_6_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_7_chunk.sensor_id, compress_hyper_2_7_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_8_chunk.sensor_id, compress_hyper_2_8_chunk.cpu_id DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+(38 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC, 2 DESC;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=3850 loops=1)
+         Hypertable: sensor_data_ht
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=3850 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=550 loops=1)
+                     Filter: ("time" < now())
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 Index Cond: (sensor_id > 5)
+(26 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC, 2 DESC LIMIT 5;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3081 loops=1)
+               Hypertable: sensor_data_ht
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=3081 loops=1)
+                     Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id DESC
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+                     ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                           Filter: ("time" < now())
+                           ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                                       Index Cond: (sensor_id > 5)
+(27 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht LIMIT 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC;
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.sensor_id DESC
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC LIMIT 5;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+--No SkipScan for this case
+:PREFIX_EXPLAIN SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id, time DESC LIMIT 5;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Limit
+   ->  Unique
+         ->  Gather Merge
+               Workers Planned: 2
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.sensor_id, _hyper_1_1_chunk."time" DESC
+                     ->  Parallel Append
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                                 ->  Parallel Seq Scan on compress_hyper_2_5_chunk
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk
+                                 ->  Parallel Seq Scan on compress_hyper_2_8_chunk
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
+                                 ->  Parallel Seq Scan on compress_hyper_2_6_chunk
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                                 ->  Parallel Seq Scan on compress_hyper_2_7_chunk
+(15 rows)
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC, cpu_id DESC, time DESC LIMIT 5;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=3081 loops=1)
+               Sort Key: _hyper_1_1_chunk.sensor_id DESC, _hyper_1_1_chunk.cpu_id DESC, _hyper_1_1_chunk."time" DESC
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=881 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=5 loops=1)
+(16 rows)
+
+SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC, cpu_id DESC, time DESC LIMIT 5;
+             time             | sensor_id | cpu_id | cpu | temperature 
+------------------------------+-----------+--------+-----+-------------
+ Sat Jan 01 16:00:00 2000 PST |        10 |     10 |   8 |          49
+ Sat Jan 01 16:00:00 2000 PST |         9 |     10 |   1 |          51
+ Sat Jan 01 16:00:00 2000 PST |         8 |     10 |  10 |          51
+ Sat Jan 01 16:00:00 2000 PST |         7 |     10 |  10 |          53
+ Sat Jan 01 16:00:00 2000 PST |         6 |     10 |   2 |          50
+(5 rows)
+
+:PREFIX SELECT count(*) FROM sensor_data_ht WHERE sensor_id in (SELECT DISTINCT sensor_id FROM sensor_data_ht);
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Hash Join (actual rows=84700 loops=1)
+         Hash Cond: (_hyper_1_1_chunk.sensor_id = _hyper_1_1_chunk_1.sensor_id)
+         ->  Append (actual rows=84700 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=24200 loops=1)
+                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=24200 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=24200 loops=1)
+                     ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=110 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=12100 loops=1)
+                     ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=110 loops=1)
+         ->  Hash (actual rows=10 loops=1)
+               Buckets: 1024  Batches: 1 
+               ->  Unique (actual rows=10 loops=1)
+                     ->  Merge Append (actual rows=7700 loops=1)
+                           Sort Key: _hyper_1_1_chunk_1.sensor_id
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=2200 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk compress_hyper_2_5_chunk_1 (actual rows=10 loops=1)
+                                       ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk compress_hyper_2_5_chunk_1 (actual rows=10 loops=1)
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=2200 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=10 loops=1)
+                                       ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=10 loops=1)
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=2200 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=10 loops=1)
+                                       ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=10 loops=1)
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1100 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=10 loops=1)
+                                       ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=10 loops=1)
+(29 rows)
+
+:PREFIX SELECT max(cpu) FROM sensor_data_ht WHERE sensor_id in (SELECT DISTINCT sensor_id FROM sensor_data_ht LIMIT 5);
+                                                                                                QUERY PLAN                                                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Nested Loop (actual rows=42350 loops=1)
+         ->  Limit (actual rows=5 loops=1)
+               ->  Unique (actual rows=5 loops=1)
+                     ->  Merge Append (actual rows=3081 loops=1)
+                           Sort Key: _hyper_1_1_chunk_1.sensor_id
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=881 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk compress_hyper_2_5_chunk_1 (actual rows=5 loops=1)
+                                       ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk compress_hyper_2_5_chunk_1 (actual rows=5 loops=1)
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=881 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=5 loops=1)
+                                       ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=5 loops=1)
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=881 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=5 loops=1)
+                                       ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=5 loops=1)
+                           ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=441 loops=1)
+                                 ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=5 loops=1)
+                                       ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=5 loops=1)
+         ->  Append (actual rows=8470 loops=5)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2420 loops=5)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=11 loops=5)
+                           Index Cond: (sensor_id = _hyper_1_1_chunk_1.sensor_id)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=2420 loops=5)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=11 loops=5)
+                           Index Cond: (sensor_id = _hyper_1_1_chunk_1.sensor_id)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=2420 loops=5)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=11 loops=5)
+                           Index Cond: (sensor_id = _hyper_1_1_chunk_1.sensor_id)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=1210 loops=5)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=11 loops=5)
+                           Index Cond: (sensor_id = _hyper_1_1_chunk_1.sensor_id)
+(31 rows)
+
+-- test system columns
+-- all system columns except for tableoid should error
+\set ON_ERROR_STOP 0
+SELECT DISTINCT sensor_id, xmin FROM sensor_data_ht;
+ERROR:  transparent decompression only supports tableoid system column
+SELECT DISTINCT on (sensor_id) sensor_id, ctid FROM sensor_data_ht;
+ERROR:  transparent decompression only supports tableoid system column
+SELECT DISTINCT ON (sensor_id)sensor_id, time from sensor_data_ht WHERE tableoid > 1;
+ sensor_id |             time             
+-----------+------------------------------
+         1 | Fri Dec 31 16:00:00 1999 PST
+         2 | Sat Jan 01 08:00:00 2000 PST
+         3 | Sat Jan 01 16:00:00 2000 PST
+         4 | Fri Dec 31 16:00:00 1999 PST
+         5 | Sat Jan 01 08:00:00 2000 PST
+         6 | Sat Jan 01 16:00:00 2000 PST
+         7 | Fri Dec 31 16:00:00 1999 PST
+         8 | Sat Jan 01 08:00:00 2000 PST
+         9 | Sat Jan 01 16:00:00 2000 PST
+        10 | Fri Dec 31 16:00:00 1999 PST
+(10 rows)
+
+SELECT DISTINCT ON (sensor_id)* from sensor_data_ht WHERE tableoid > 1;
+             time             | sensor_id | cpu_id | cpu | temperature 
+------------------------------+-----------+--------+-----+-------------
+ Fri Dec 31 16:00:00 1999 PST |         1 |      0 |   3 |          48
+ Sat Jan 01 08:00:00 2000 PST |         2 |      0 |   9 |          51
+ Sat Jan 01 16:00:00 2000 PST |         3 |      0 |   3 |          52
+ Fri Dec 31 16:00:00 1999 PST |         4 |      0 |   3 |          47
+ Sat Jan 01 08:00:00 2000 PST |         5 |      0 |   4 |          48
+ Sat Jan 01 16:00:00 2000 PST |         6 |      0 |   1 |          50
+ Fri Dec 31 16:00:00 1999 PST |         7 |      0 |   1 |          54
+ Sat Jan 01 08:00:00 2000 PST |         8 |      0 |   4 |          53
+ Sat Jan 01 16:00:00 2000 PST |         9 |      0 |   6 |          49
+ Fri Dec 31 16:00:00 1999 PST |        10 |      0 |   2 |          53
+(10 rows)
+
+\set ON_ERROR_STOP 1
+--chunk level distinct queries
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM _timescaledb_internal._hyper_1_3_chunk;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+         ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+               ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+(4 rows)
+
+:PREFIX SELECT DISTINCT  sensor_id FROM _timescaledb_internal._hyper_1_3_chunk WHERE sensor_id > 5;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=1100 loops=1)
+         ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     Index Cond: (sensor_id > 5)
+(5 rows)
+
+--After COLUMN Rename
+ALTER TABLE sensor_data_ht RENAME COLUMN sensor_id to s_id;
+:PREFIX SELECT DISTINCT ON (s_id)* FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7700 loops=1)
+         Sort Key: _hyper_1_1_chunk.s_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+(15 rows)
+
+INSERT INTO sensor_data
+SELECT
+time,
+sensor_id,
+cpu_id,
+cpu,
+temperature
+FROM
+generate_series('2000-01-01 00:00:00-00', '2000-01-02 00:00:00-00', INTERVAL '8 hour') AS g1(time),
+generate_series(1, 10, 1) AS g2(sensor_id),
+generate_series(10, 0, -1) AS g3(cpu_id),
+generate_series(1, 10, 1) AS g4(cpu),
+generate_series(45, 55, 1) AS g5(temperature)
+ORDER BY
+time;
+VACUUM sensor_data;
+SET enable_seqscan = FALSE;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Custom Scan (SkipScan) on sensor_data (actual rows=10 loops=1)
+         ->  Index Scan using sensor_data_sensor_id_idx on sensor_data (actual rows=10 loops=1)
+(3 rows)
+
+SET enable_seqscan = TRUE;
+INSERT INTO sensor_data_ht
+SELECT * FROM sensor_data;
+VACUUM sensor_data_ht;
+SET enable_seqscan = FALSE;
+\set ON_ERROR_STOP 0
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht;
+ERROR:  column "sensor_id" does not exist at character 75
+SET enable_seqscan = TRUE;
+\set ON_ERROR_STOP 1
+SET enable_seqscan = FALSE;
+\set ON_ERROR_STOP 0
+:PREFIX SELECT DISTINCT ON (s_id)* FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=7740 loops=1)
+         Sort Key: _hyper_1_1_chunk.s_id
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_5_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_1_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_2_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_3_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_4_chunk (actual rows=10 loops=1)
+(23 rows)
+
+SET enable_seqscan = TRUE;
+\set ON_ERROR_STOP 1
+--Decompress few chunk
+SELECT decompress_chunk(i) FROM show_chunks('sensor_data_ht')i LIMIT 1;
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+:PREFIX SELECT DISTINCT ON (s_id)* FROM sensor_data_ht;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=102310 loops=1)
+         Sort Key: _hyper_1_1_chunk.s_id
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_sensor_data_ht_sensor_id_idx on _hyper_1_1_chunk (actual rows=10 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_2_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_6_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=36300 loops=1)
+               Sort Key: _hyper_1_2_chunk.s_id
+               Sort Method: quicksort 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=36300 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_3_chunk (actual rows=2200 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_7_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=36300 loops=1)
+               Sort Key: _hyper_1_3_chunk.s_id
+               Sort Method: quicksort 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=36300 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_4_chunk (actual rows=1100 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_sensor_id_cpu on compress_hyper_2_8_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=24200 loops=1)
+               Sort Key: _hyper_1_4_chunk.s_id
+               Sort Method: quicksort 
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=24200 loops=1)
+(26 rows)
+
+--Common Table Expression and Join
+CREATE TABLE ht1(
+time timestamptz not null,
+sensor_id integer not null,
+cpu double precision null,
+temperature double precision null );
+SELECT FROM CREATE_hypertable('ht1','time', chunk_time_interval=> INTERVAL '30 day');
+--
+(1 row)
+
+INSERT INTO ht1
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+sensor_id,
+random() AS cpu,
+random()* 100 AS temperature
+FROM
+generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-04-28 1:00', '2 hour') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY
+time;
+SELECT show_chunks('ht1');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+(3 rows)
+
+CREATE TABLE ht2(
+time timestamptz not null,
+sensor_id integer not null,
+cpu double precision null,
+temperature double precision null );
+SELECT FROM CREATE_hypertable('ht2','time', chunk_time_interval=> INTERVAL '30 day');
+--
+(1 row)
+
+INSERT INTO ht2
+SELECT * FROM ht1;
+SELECT show_chunks('ht2');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_4_12_chunk
+ _timescaledb_internal._hyper_4_13_chunk
+ _timescaledb_internal._hyper_4_14_chunk
+(3 rows)
+
+CREATE INDEX ON ht1 (sensor_id);
+CREATE INDEX ON ht2 (sensor_id);
+ALTER TABLE ht1 SET(timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='sensor_id');
+ALTER TABLE ht2 SET(timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='sensor_id');
+SELECT compress_chunk(i) FROM show_chunks('ht1')i;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+(3 rows)
+
+SELECT compress_chunk(i) FROM show_chunks('ht2')i;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_4_12_chunk
+ _timescaledb_internal._hyper_4_13_chunk
+ _timescaledb_internal._hyper_4_14_chunk
+(3 rows)
+
+:PREFIX WITH query_params as (
+SELECT DISTINCT on (sensor_id)sensor_id, cpu
+FROM ht2
+WHERE ht2.sensor_id IN (1,2,3,4,5)
+)
+SELECT
+    distinct on (ht1.sensor_id)ht1.sensor_id,
+    ht1.sensor_id = q.sensor_id as "this should never be false",
+    ht1.sensor_id,
+    ht1.cpu,
+    q.*
+FROM
+ht1 INNER JOIN query_params q
+    on q.sensor_id = ht1.sensor_id AND q.cpu = ht1.cpu
+WHERE ht1.time BETWEEN '2018-01-01 00:00' AND now()
+ORDER BY ht1.sensor_id;
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=5 loops=1)
+   ->  Sort (actual rows=5 loops=1)
+         Sort Key: ht1.sensor_id
+         Sort Method: quicksort 
+         ->  Hash Join (actual rows=5 loops=1)
+               Hash Cond: ((ht1.sensor_id = _hyper_4_12_chunk.sensor_id) AND (ht1.cpu = _hyper_4_12_chunk.cpu))
+               ->  Custom Scan (ChunkAppend) on ht1 (actual rows=68400 loops=1)
+                     Chunks excluded during startup: 0
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_9_chunk (actual rows=21200 loops=1)
+                           Filter: (("time" >= 'Mon Jan 01 00:00:00 2018 PST'::timestamp with time zone) AND ("time" <= now()))
+                           ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=100 loops=1)
+                                 Filter: (_ts_meta_max_1 >= 'Mon Jan 01 00:00:00 2018 PST'::timestamp with time zone)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_10_chunk (actual rows=36000 loops=1)
+                           Filter: (("time" >= 'Mon Jan 01 00:00:00 2018 PST'::timestamp with time zone) AND ("time" <= now()))
+                           ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=100 loops=1)
+                                 Filter: (_ts_meta_max_1 >= 'Mon Jan 01 00:00:00 2018 PST'::timestamp with time zone)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=11200 loops=1)
+                           Filter: (("time" >= 'Mon Jan 01 00:00:00 2018 PST'::timestamp with time zone) AND ("time" <= now()))
+                           ->  Seq Scan on compress_hyper_5_17_chunk (actual rows=100 loops=1)
+                                 Filter: (_ts_meta_max_1 >= 'Mon Jan 01 00:00:00 2018 PST'::timestamp with time zone)
+               ->  Hash (actual rows=5 loops=1)
+                     Buckets: 1024  Batches: 1 
+                     ->  Unique (actual rows=5 loops=1)
+                           ->  Merge Append (actual rows=3420 loops=1)
+                                 Sort Key: _hyper_4_12_chunk.sensor_id
+                                 ->  Custom Scan (CompressedSkipScan) on _hyper_4_12_chunk (actual rows=1060 loops=1)
+                                       ->  Custom Scan (SkipScan) on compress_hyper_6_18_chunk (actual rows=5 loops=1)
+                                             ->  Index Scan using compress_hyper_6_18_chunk__compressed_hypertable_6_sensor_id__t on compress_hyper_6_18_chunk (actual rows=5 loops=1)
+                                                   Index Cond: (sensor_id = ANY ('{1,2,3,4,5}'::integer[]))
+                                 ->  Custom Scan (CompressedSkipScan) on _hyper_4_13_chunk (actual rows=1800 loops=1)
+                                       ->  Custom Scan (SkipScan) on compress_hyper_6_19_chunk (actual rows=5 loops=1)
+                                             ->  Index Scan using compress_hyper_6_19_chunk__compressed_hypertable_6_sensor_id__t on compress_hyper_6_19_chunk (actual rows=5 loops=1)
+                                                   Index Cond: (sensor_id = ANY ('{1,2,3,4,5}'::integer[]))
+                                 ->  Custom Scan (CompressedSkipScan) on _hyper_4_14_chunk (actual rows=560 loops=1)
+                                       ->  Custom Scan (SkipScan) on compress_hyper_6_20_chunk (actual rows=5 loops=1)
+                                             ->  Index Scan using compress_hyper_6_20_chunk__compressed_hypertable_6_sensor_id__t on compress_hyper_6_20_chunk (actual rows=5 loops=1)
+                                                   Index Cond: (sensor_id = ANY ('{1,2,3,4,5}'::integer[]))
+(37 rows)
+
+-- Plan before Dropping temperature column
+:PREFIX SELECT distinct sensor_id from ht1 LIMIT 5;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=2737 loops=1)
+               Sort Key: _hyper_3_9_chunk.sensor_id
+               ->  Custom Scan (CompressedSkipScan) on _hyper_3_9_chunk (actual rows=849 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_5_15_chunk__compressed_hypertable_5_sensor_id__t on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_3_10_chunk (actual rows=1441 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_5_16_chunk__compressed_hypertable_5_sensor_id__t on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (CompressedSkipScan) on _hyper_3_11_chunk (actual rows=449 loops=1)
+                     ->  Custom Scan (SkipScan) on compress_hyper_5_17_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_5_17_chunk__compressed_hypertable_5_sensor_id__t on compress_hyper_5_17_chunk (actual rows=5 loops=1)
+(13 rows)
+
+-- DROP temperature column
+ALTER TABLE ht1 DROP COLUMN temperature;
+-- Plan after Dropping temperature column
+:PREFIX SELECT distinct sensor_id from ht1 LIMIT 5;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Unique (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=2737 loops=1)
+               Sort Key: _hyper_3_9_chunk.sensor_id
+               ->  Custom Scan (DecompressChunk) on _hyper_3_9_chunk (actual rows=849 loops=1)
+                     ->  Index Scan using compress_hyper_5_15_chunk__compressed_hypertable_5_sensor_id__t on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_10_chunk (actual rows=1441 loops=1)
+                     ->  Index Scan using compress_hyper_5_16_chunk__compressed_hypertable_5_sensor_id__t on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=449 loops=1)
+                     ->  Index Scan using compress_hyper_5_17_chunk__compressed_hypertable_5_sensor_id__t on compress_hyper_5_17_chunk (actual rows=5 loops=1)
+(10 rows)
+
+--Tear Down
+DROP TABLE sensor_data;
+DROP TABLE sensor_data_ht cascade;
+NOTICE:  drop cascades to 3 other objects
+DROP TABLE ht1 cascade;
+NOTICE:  drop cascades to 3 other objects
+DROP TABLE ht2 cascade;
+NOTICE:  drop cascades to 3 other objects

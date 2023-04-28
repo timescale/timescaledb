@@ -1,0 +1,278 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\set PREFIX 'EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX_EXPLAIN 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+
+--DROP TABLE sensor_data;
+--DROP TABLE sensor_data_ht cascade;
+
+CREATE TABLE sensor_data(
+time timestamptz not null,
+sensor_id integer not null,
+cpu_id integer not null,
+cpu double precision null,
+temperature double precision null );
+
+INSERT INTO sensor_data
+SELECT
+time,
+sensor_id,
+cpu_id,
+cpu,
+temperature
+FROM
+generate_series('2000-01-01 00:00:00-00', '2000-01-02 00:00:00-00', INTERVAL '4 hour') AS g1(time),
+generate_series(1, 10, 1) AS g2(sensor_id),
+generate_series(10, 0, -1) AS g3(cpu_id),
+generate_series(1, 10, 1) AS g4(cpu),
+generate_series(45, 55, 1) AS g5(temperature)
+ORDER BY
+time;
+
+CREATE TABLE sensor_data_ht(
+time timestamptz not null,
+sensor_id integer not null,
+cpu_id integer not null,
+cpu double precision null,
+temperature double precision null );
+
+SELECT FROM CREATE_hypertable('sensor_data_ht','time', chunk_time_interval=> INTERVAL '8 hours');
+
+INSERT INTO sensor_data_ht
+SELECT * FROM sensor_data;
+
+CREATE INDEX ON sensor_data (sensor_id);
+CREATE INDEX ON sensor_data_ht (sensor_id);
+
+SELECT show_chunks('sensor_data_ht');
+
+ALTER TABLE sensor_data_ht SET(timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='sensor_id, cpu_id');
+
+VACUUM sensor_data;
+VACUUM sensor_data_ht;
+
+SET enable_seqscan = FALSE;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht;
+SET enable_seqscan = TRUE;
+
+SELECT compress_chunk(i) FROM show_chunks('sensor_data_ht')i;
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht LIMIT 5;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 LIMIT 5;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 DESC;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 DESC LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht ORDER BY 1 DESC LIMIT 5;
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 LIMIT 5;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 LIMIT 5;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 DESC;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 DESC LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5 ORDER BY 1 DESC LIMIT 5;
+
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 LIMIT 3;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 LIMIT 3;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1 LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1 LIMIT 5;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE temperature > 50 ORDER BY 1 DESC;
+:PREFIX SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5  AND temperature > 50 ORDER BY 1 DESC LIMIT 5;
+SELECT DISTINCT  sensor_id FROM sensor_data_ht WHERE sensor_id > 5  AND temperature > 50 ORDER BY 1 DESC LIMIT 5;
+
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time, tableoid FROM sensor_data_ht;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht LIMIT 5;
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now();
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() LIMIT 5;
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 LIMIT 5;
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1, 2;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1, 2 LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2 DESC;
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2;
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1, 2 DESC;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2 DESC LIMIT 5;
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() ORDER BY 1 DESC, 2 DESC LIMIT 5;
+
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 LIMIT 5;
+SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1, 2;
+SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1, 2;
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC, 2;
+--No SkipScan for this case
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1, 2 DESC;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC, 2 DESC;
+:PREFIX SELECT DISTINCT ON (sensor_id)sensor_id, cpu_id, time FROM sensor_data_ht WHERE time < now() and sensor_id > 5 ORDER BY 1 DESC, 2 DESC LIMIT 5;
+
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC LIMIT 5;
+--No SkipScan for this case
+:PREFIX_EXPLAIN SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id, time DESC LIMIT 5;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC, cpu_id DESC, time DESC LIMIT 5;
+SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht ORDER BY sensor_id DESC, cpu_id DESC, time DESC LIMIT 5;
+
+:PREFIX SELECT count(*) FROM sensor_data_ht WHERE sensor_id in (SELECT DISTINCT sensor_id FROM sensor_data_ht);
+:PREFIX SELECT max(cpu) FROM sensor_data_ht WHERE sensor_id in (SELECT DISTINCT sensor_id FROM sensor_data_ht LIMIT 5);
+
+-- test system columns
+-- all system columns except for tableoid should error
+\set ON_ERROR_STOP 0
+SELECT DISTINCT sensor_id, xmin FROM sensor_data_ht;
+SELECT DISTINCT on (sensor_id) sensor_id, ctid FROM sensor_data_ht;
+SELECT DISTINCT ON (sensor_id)sensor_id, time from sensor_data_ht WHERE tableoid > 1;
+SELECT DISTINCT ON (sensor_id)* from sensor_data_ht WHERE tableoid > 1;
+\set ON_ERROR_STOP 1
+
+--chunk level distinct queries
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM _timescaledb_internal._hyper_1_3_chunk;
+:PREFIX SELECT DISTINCT  sensor_id FROM _timescaledb_internal._hyper_1_3_chunk WHERE sensor_id > 5;
+
+--After COLUMN Rename
+ALTER TABLE sensor_data_ht RENAME COLUMN sensor_id to s_id;
+:PREFIX SELECT DISTINCT ON (s_id)* FROM sensor_data_ht;
+
+INSERT INTO sensor_data
+SELECT
+time,
+sensor_id,
+cpu_id,
+cpu,
+temperature
+FROM
+generate_series('2000-01-01 00:00:00-00', '2000-01-02 00:00:00-00', INTERVAL '8 hour') AS g1(time),
+generate_series(1, 10, 1) AS g2(sensor_id),
+generate_series(10, 0, -1) AS g3(cpu_id),
+generate_series(1, 10, 1) AS g4(cpu),
+generate_series(45, 55, 1) AS g5(temperature)
+ORDER BY
+time;
+
+VACUUM sensor_data;
+
+SET enable_seqscan = FALSE;
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data;
+SET enable_seqscan = TRUE;
+
+INSERT INTO sensor_data_ht
+SELECT * FROM sensor_data;
+
+VACUUM sensor_data_ht;
+
+SET enable_seqscan = FALSE;
+\set ON_ERROR_STOP 0
+:PREFIX SELECT DISTINCT ON (sensor_id)* FROM sensor_data_ht;
+SET enable_seqscan = TRUE;
+\set ON_ERROR_STOP 1
+
+SET enable_seqscan = FALSE;
+\set ON_ERROR_STOP 0
+:PREFIX SELECT DISTINCT ON (s_id)* FROM sensor_data_ht;
+SET enable_seqscan = TRUE;
+\set ON_ERROR_STOP 1
+
+--Decompress few chunk
+SELECT decompress_chunk(i) FROM show_chunks('sensor_data_ht')i LIMIT 1;
+:PREFIX SELECT DISTINCT ON (s_id)* FROM sensor_data_ht;
+
+--Common Table Expression and Join
+CREATE TABLE ht1(
+time timestamptz not null,
+sensor_id integer not null,
+cpu double precision null,
+temperature double precision null );
+
+SELECT FROM CREATE_hypertable('ht1','time', chunk_time_interval=> INTERVAL '30 day');
+
+INSERT INTO ht1
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+sensor_id,
+random() AS cpu,
+random()* 100 AS temperature
+FROM
+generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-04-28 1:00', '2 hour') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY
+time;
+
+SELECT show_chunks('ht1');
+
+CREATE TABLE ht2(
+time timestamptz not null,
+sensor_id integer not null,
+cpu double precision null,
+temperature double precision null );
+
+SELECT FROM CREATE_hypertable('ht2','time', chunk_time_interval=> INTERVAL '30 day');
+
+INSERT INTO ht2
+SELECT * FROM ht1;
+
+SELECT show_chunks('ht2');
+
+CREATE INDEX ON ht1 (sensor_id);
+CREATE INDEX ON ht2 (sensor_id);
+
+ALTER TABLE ht1 SET(timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='sensor_id');
+ALTER TABLE ht2 SET(timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='sensor_id');
+
+SELECT compress_chunk(i) FROM show_chunks('ht1')i;
+SELECT compress_chunk(i) FROM show_chunks('ht2')i;
+
+
+:PREFIX WITH query_params as (
+SELECT DISTINCT on (sensor_id)sensor_id, cpu
+FROM ht2
+WHERE ht2.sensor_id IN (1,2,3,4,5)
+)
+SELECT
+    distinct on (ht1.sensor_id)ht1.sensor_id,
+    ht1.sensor_id = q.sensor_id as "this should never be false",
+    ht1.sensor_id,
+    ht1.cpu,
+    q.*
+FROM
+ht1 INNER JOIN query_params q
+    on q.sensor_id = ht1.sensor_id AND q.cpu = ht1.cpu
+WHERE ht1.time BETWEEN '2018-01-01 00:00' AND now()
+ORDER BY ht1.sensor_id;
+
+-- Plan before Dropping temperature column
+:PREFIX SELECT distinct sensor_id from ht1 LIMIT 5;
+
+-- DROP temperature column
+ALTER TABLE ht1 DROP COLUMN temperature;
+
+-- Plan after Dropping temperature column
+:PREFIX SELECT distinct sensor_id from ht1 LIMIT 5;
+
+--Tear Down
+DROP TABLE sensor_data;
+DROP TABLE sensor_data_ht cascade;
+DROP TABLE ht1 cascade;
+DROP TABLE ht2 cascade;

@@ -1,0 +1,3 @@
+set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/planner.c
+            ${CMAKE_CURRENT_SOURCE_DIR}/exec.c)
+target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

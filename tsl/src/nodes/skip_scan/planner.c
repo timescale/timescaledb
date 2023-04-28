@@ -16,6 +16,7 @@
 #include <optimizer/paths.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/planmain.h>
+#include <optimizer/plancat.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
 #include <parser/parse_coerce.h>
@@ -29,6 +30,8 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/compressed_skip_scan/compressed_skip_scan.h"
 #include "compat/compat.h"
 
 #include <math.h>
@@ -46,6 +49,8 @@ typedef struct SkipScanPath
 	AttrNumber scankey_attno;
 	int distinct_typ_len;
 	bool distinct_by_val;
+	/* The column is a segment_by col of a compressed rel */
+	bool is_compressed;
 	/* Var referencing the distinct column on the relation */
 	Var *distinct_var;
 } SkipScanPath;
@@ -137,7 +142,6 @@ static CustomPathMethods skip_scan_path_methods = {
 
 static SkipScanPath *skip_scan_path_create(PlannerInfo *root, IndexPath *index_path,
 										   double ndistinct);
-
 /*
  * Create SkipScan paths based on existing Unique paths.
  * For a Unique path on a simple relation like the following
@@ -151,13 +155,29 @@ static SkipScanPath *skip_scan_path_create(PlannerInfo *root, IndexPath *index_p
  *    ->  Custom Scan (SkipScan) on skip_scan
  *          ->  Index Scan using skip_scan_dev_name_idx on skip_scan
  *
+ * In case of compressed chunks
+ *
+ *  Unique
+ *    ->  Custom Scan (DecompressChunk) on _hyper_2_1_chunk
+ *          -> Index Scan using compress_hyper_2_4_chunk_idx on compress_hyper_3_1_chunk
+ *
+ * a SkipScan path like this will be created:
+ *
+ *  Unique
+ *    ->  Custom Scan (CompressedSkipScan) on _hyper_2_1_chunk
+ *        ->  Custom Scan (SkipScan) on compress_hyper_2_4_chunk
+ *            ->  Index Scan using compress_hyper_2_4_chunk_idx on compress_hyper_3_1_chunk
+ *
  * For a Unique path on a hypertable with multiple chunks like the following
+ * 2 uncompressed and 1 compressed chunk
  *
  *  Unique
  *    ->  Merge Append
  *          Sort Key: _hyper_2_1_chunk.dev_name
  *          ->  Index Scan using _hyper_2_1_chunk_idx on _hyper_2_1_chunk
  *          ->  Index Scan using _hyper_2_2_chunk_idx on _hyper_2_2_chunk
+ *          ->  Custom Scan (DecompressChunk) on _hyper_2_3_chunk
+ *              -> Index Scan using compress_hyper_2_4_chunk_idx on compress_hyper_2_4_chunk
  *
  * a SkipScan path like this will be created:
  *
@@ -168,7 +188,14 @@ static SkipScanPath *skip_scan_path_create(PlannerInfo *root, IndexPath *index_p
  *                ->  Index Scan using _hyper_2_1_chunk_idx on _hyper_2_1_chunk
  *          ->  Custom Scan (SkipScan) on _hyper_2_2_chunk
  *                ->  Index Scan using _hyper_2_2_chunk_idx on _hyper_2_2_chunk
+ *          ->  Custom Scan (CompressedSkipScan) on _hyper_2_3_chunk
+ *              ->  Custom Scan (SkipScan) on compress_hyper_2_4_chunk
+ *                  ->  Index Scan using compress_hyper_2_4_chunk_idx on compress_hyper_2_4_chunk
+ *
+ * SkipScan optimization comes into play for DISTINCT ON single column on a TABLE with matching
+ * ORDERED INDEX. For more details please refer README.md
  */
+
 void
 tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
 {
@@ -252,7 +279,27 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			has_caa = true;
 		}
 
-		if (IsA(subpath, IndexPath))
+		/* Here we are only interested in indexscan subpath wrapped under
+		 * DecompressChunk.
+		 * DecompressChunk->IndexScan
+		 */
+
+		if (ts_is_decompress_index_path(subpath))
+		{
+			DecompressChunkPath *dc = (DecompressChunkPath *) subpath;
+			List *new_paths =
+				build_subpath(root, castNode(CustomPath, subpath)->custom_paths, unique->path.rows);
+			if (!new_paths)
+				continue;
+			subpath = (Path *) compressed_skip_scan_path_create(root,
+																&dc->custom_path,
+																dc->info,
+																dc->compressed_pathkeys,
+																dc->needs_sequence_num,
+																dc->reverse,
+																new_paths);
+		}
+		else if (IsA(subpath, IndexPath))
 		{
 			IndexPath *index_path = castNode(IndexPath, subpath);
 
@@ -367,13 +414,29 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 	Var *var = get_distinct_var(root, index_path, skip_scan_path);
 
 	if (!var)
+	{
 		return NULL;
+	}
 
 	skip_scan_path->distinct_var = var;
 
 	/* build skip qual this may fail if we cannot look up the operator */
 	if (!build_skip_qual(root, skip_scan_path, index_path, var))
 		return NULL;
+
+	if (skip_scan_path->is_compressed)
+	{
+		List *physical_tlist = NULL;
+		physical_tlist = build_physical_tlist(root, index_path->path.parent);
+		if (physical_tlist)
+		{
+			PathTarget *ptarget = create_pathtarget(root, physical_tlist);
+			skip_scan_path->cpath.path.pathtarget = ptarget;
+			index_path->path.pathtarget = ptarget;
+		}
+		else
+			return NULL;
+	}
 
 	return skip_scan_path;
 }
@@ -422,51 +485,71 @@ get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_sc
 
 	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
 	RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, false);
+
+	/* Check for compressed chunk */
+	if (chunk != NULL && ts_chunk_contains_compressed_data(chunk))
+	{
+		skip_scan_path->is_compressed = true;
+		AttrNumber attno = ts_map_attno(ht_rte->relid, chunk_rte->relid, var->varattno);
+
+		foreach (lc, rel->reltarget->exprs)
+		{
+			Expr *e = (Expr *) lfirst(lc);
+			Var *v = castNode(Var, e);
+			if (v->varattno == attno)
+				return v;
+		}
+
+		return NULL;
+	}
 
 	/* Check for hypertable */
-	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
-		return NULL;
-
-	Relation ht_rel = table_open(ht_rte->relid, AccessShareLock);
-	Relation chunk_rel = table_open(chunk_rte->relid, AccessShareLock);
-	bool found_wholerow;
-	TupleConversionMap *map =
-		convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(ht_rel));
-
-	/* attno mapping necessary */
-	if (map)
+	if (ts_is_hypertable(ht_rte->relid) && bms_is_member(var->varno, rel->top_parent_relids))
 	{
-		var = (Var *) map_variable_attnos((Node *) var,
-										  var->varno,
-										  0,
-										  map->attrMap,
-										  InvalidOid,
-										  &found_wholerow);
+		Relation ht_rel = table_open(ht_rte->relid, AccessShareLock);
+		Relation chunk_rel = table_open(chunk_rte->relid, AccessShareLock);
+		bool found_wholerow;
+		TupleConversionMap *map =
+			convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(ht_rel));
 
-		free_conversion_map(map);
-
-		/* If we found whole row here skipscan wouldn't be applicable
-		 * but this should have been caught already in previous checks */
-		Assert(!found_wholerow);
-		if (found_wholerow)
+		/* attno mapping necessary */
+		if (map)
 		{
-			table_close(ht_rel, NoLock);
-			table_close(chunk_rel, NoLock);
+			var = (Var *) map_variable_attnos((Node *) var,
+											  var->varno,
+											  0,
+											  map->attrMap,
+											  InvalidOid,
+											  &found_wholerow);
 
-			return NULL;
+			free_conversion_map(map);
+
+			/* If we found whole row here skipscan wouldn't be applicable
+			 * but this should have been caught already in previous checks */
+			Assert(!found_wholerow);
+			if (found_wholerow)
+			{
+				table_close(ht_rel, NoLock);
+				table_close(chunk_rel, NoLock);
+
+				return NULL;
+			}
 		}
+		else
+		{
+			var = copyObject(var);
+		}
+
+		table_close(ht_rel, NoLock);
+		table_close(chunk_rel, NoLock);
+
+		var->varno = rel->relid;
+
+		return var;
 	}
-	else
-	{
-		var = copyObject(var);
-	}
 
-	table_close(ht_rel, NoLock);
-	table_close(chunk_rel, NoLock);
-
-	var->varno = rel->relid;
-
-	return var;
+	return NULL;
 }
 
 /*
@@ -495,6 +578,32 @@ build_subpath(PlannerInfo *root, List *subpaths, double ndistinct)
 				has_skip_path = true;
 			}
 		}
+		else if (ts_is_decompress_index_path(child))
+		{
+			DecompressChunkPath *dc = (DecompressChunkPath *) child;
+			Path *temp_path = NULL;
+			List *temp_list = NULL;
+			SkipScanPath *skip_path =
+				skip_scan_path_create(root,
+									  castNode(IndexPath,
+											   linitial(castNode(CustomPath, child)->custom_paths)),
+									  ndistinct);
+
+			if (skip_path)
+			{
+				child = (Path *) skip_path;
+				temp_path = (Path *) skip_path;
+				temp_list = lappend(temp_list, temp_path);
+				child = (Path *) compressed_skip_scan_path_create(root,
+																  &dc->custom_path,
+																  dc->info,
+																  dc->compressed_pathkeys,
+																  dc->needs_sequence_num,
+																  dc->reverse,
+																  temp_list);
+				has_skip_path = true;
+			}
+		}
 
 		new_paths = lappend(new_paths, child);
 	}
@@ -519,18 +628,19 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 
 	/*
 	 * Skipscan is not applicable for the following case:
-	 * We might have a path with an index that produces the correct pathkeys for the target ordering
-	 * without actually including all the columns of the ORDER BY. If the path uses an index that
-	 * does not include the distinct column, we cannot use it for skipscan and have to discard this
-	 * path from skipscan generation. This happens, for instance, when we have an order by clause
-	 * (like ORDER BY a, b) with constraints in the WHERE clause (like WHERE a = <constant>) . "a"
-	 * can now be removed from the Pathkeys (since it is a constant) and the query can be satisfied
-	 * by using an index on just column "b".
+	 * We might have a path with an index that produces the correct pathkeys for the target
+	 * ordering without actually including all the columns of the ORDER BY. If the path uses an
+	 * index that does not include the distinct column, we cannot use it for skipscan and have
+	 * to discard this path from skipscan generation. This happens, for instance, when we have
+	 * an order by clause (like ORDER BY a, b) with constraints in the WHERE clause (like WHERE
+	 * a = <constant>) . "a" can now be removed from the Pathkeys (since it is a constant) and
+	 * the query can be satisfied by using an index on just column "b".
 	 *
 	 * Example query:
 	 * SELECT DISTINCT ON (a) * FROM test WHERE a in (2) ORDER BY a ASC, time DESC;
 	 * Since a is always 2 due to the WHERE clause we can create the correct ordering for the
-	 * ORDER BY with an index that does not include the a column and only includes the time column.
+	 * ORDER BY with an index that does not include the a column and only includes the time
+	 * column.
 	 */
 	int idx_key = get_idx_key(info, var->varattno);
 	if (idx_key < 0)

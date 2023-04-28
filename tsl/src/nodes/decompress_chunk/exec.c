@@ -158,64 +158,6 @@ decompress_chunk_state_create(CustomScan *cscan)
 	return (Node *) chunk_state;
 }
 
-typedef struct ConstifyTableOidContext
-{
-	Index chunk_index;
-	Oid chunk_relid;
-	bool made_changes;
-} ConstifyTableOidContext;
-
-static Node *
-constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
-{
-	if (node == NULL)
-		return NULL;
-
-	if (IsA(node, Var))
-	{
-		Var *var = castNode(Var, node);
-
-		if ((Index) var->varno != ctx->chunk_index)
-			return node;
-
-		if (var->varattno == TableOidAttributeNumber)
-		{
-			ctx->made_changes = true;
-			return (
-				Node *) makeConst(OIDOID, -1, InvalidOid, 4, (Datum) ctx->chunk_relid, false, true);
-		}
-
-		/*
-		 * we doublecheck system columns here because projection will
-		 * segfault if any system columns get through
-		 */
-		if (var->varattno < SelfItemPointerAttributeNumber)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
-
-		return node;
-	}
-
-	return expression_tree_mutator(node, constify_tableoid_walker, (void *) ctx);
-}
-
-static List *
-constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
-{
-	ConstifyTableOidContext ctx = {
-		.chunk_index = chunk_index,
-		.chunk_relid = chunk_relid,
-		.made_changes = false,
-	};
-
-	List *result = (List *) constify_tableoid_walker((Node *) node, &ctx);
-	if (ctx.made_changes)
-	{
-		return result;
-	}
-
-	return node;
-}
-
 pg_attribute_always_inline static TupleTableSlot *
 decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
 						   const struct BatchQueueFunctions *queue);

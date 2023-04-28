@@ -171,9 +171,10 @@ set(TEST_TEMPLATES
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
+    merge_append_partially_compressed.sql.in
+    plan_skip_scan_compressed.sql.in
     transparent_decompression.sql.in
-    transparent_decompression_ordered_index.sql.in
-    merge_append_partially_compressed.sql.in)
+    transparent_decompression_ordered_index.sql.in)
 
 # This test runs only with PG version >= 14
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))

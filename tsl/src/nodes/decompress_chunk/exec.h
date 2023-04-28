@@ -10,21 +10,11 @@
 #include <postgres.h>
 
 #include <nodes/extensible.h>
-
-#define DECOMPRESS_CHUNK_COUNT_ID -9
-#define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
-
-typedef enum DecompressChunkColumnType
-{
-	SEGMENTBY_COLUMN,
-	COMPRESSED_COLUMN,
-	COUNT_COLUMN,
-	SEQUENCE_NUM_COLUMN,
-} DecompressChunkColumnType;
+#include "nodes/nodes_common.h"
 
 typedef struct DecompressChunkColumnDescription
 {
-	DecompressChunkColumnType type;
+	CompressedChunkColumnType type;
 	Oid typid;
 	int value_bytes;
 

@@ -41,21 +41,6 @@ _decompress_chunk_init(void)
 	TryRegisterCustomScanMethods(&decompress_chunk_plan_methods);
 }
 
-static void
-check_for_system_columns(Bitmapset *attrs_used)
-{
-	int bit = bms_next_member(attrs_used, -1);
-	if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
-	{
-		/* we support tableoid so skip that */
-		if (bit == TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber)
-			bit = bms_next_member(attrs_used, bit);
-
-		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
-	}
-}
-
 /*
  * Given the scan targetlist and the bitmapset of the needed columns, determine
  * which scan columns become which decompressed columns (fill decompression_map).
@@ -272,83 +257,6 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	{
 		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
 	}
-}
-
-/* replace vars that reference the compressed table with ones that reference the
- * uncompressed one. Based on replace_nestloop_params
- */
-static Node *
-replace_compressed_vars(Node *node, CompressionInfo *info)
-{
-	if (node == NULL)
-		return NULL;
-
-	if (IsA(node, Var))
-	{
-		Var *var = (Var *) node;
-		Var *new_var;
-		char *colname;
-
-		/* constify tableoid in quals */
-		if ((Index) var->varno == info->chunk_rel->relid &&
-			var->varattno == TableOidAttributeNumber)
-			return (Node *)
-				makeConst(OIDOID, -1, InvalidOid, 4, (Datum) info->chunk_rte->relid, false, true);
-
-		/* Upper-level Vars should be long gone at this point */
-		Assert(var->varlevelsup == 0);
-		/* If not to be replaced, we can just return the Var unmodified */
-		if ((Index) var->varno != info->compressed_rel->relid)
-			return node;
-
-		/* Create a decompressed Var to replace the compressed one */
-		colname = get_attname(info->compressed_rte->relid, var->varattno, false);
-		new_var = makeVar(info->chunk_rel->relid,
-						  get_attnum(info->chunk_rte->relid, colname),
-						  var->vartype,
-						  var->vartypmod,
-						  var->varcollid,
-						  var->varlevelsup);
-
-		if (!AttributeNumberIsValid(new_var->varattno))
-			elog(ERROR, "cannot find column %s on decompressed chunk", colname);
-
-		/* And return the replacement var */
-		return (Node *) new_var;
-	}
-	if (IsA(node, PlaceHolderVar))
-		elog(ERROR, "ignoring placeholders");
-
-	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
-}
-
-/*
- * Find the resno of the given attribute in the provided target list
- */
-static AttrNumber
-find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
-{
-	ListCell *lc;
-
-	Assert(targetlist != NIL);
-	Assert(pos > 0 && pos != InvalidAttrNumber);
-
-	foreach (lc, targetlist)
-	{
-		TargetEntry *target = (TargetEntry *) lfirst(lc);
-
-		if (!IsA(target->expr, Var))
-			elog(ERROR, "compressed scan targetlist entries must be Vars");
-
-		Var *var = castNode(Var, target->expr);
-		AttrNumber compressed_attno = var->varattno;
-
-		if (compressed_attno == pos)
-			return target->resno;
-	}
-
-	elog(ERROR, "Unable to locate var %d in targetlist", pos);
-	pg_unreachable();
 }
 
 Plan *

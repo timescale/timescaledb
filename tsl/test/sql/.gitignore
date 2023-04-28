@@ -25,3 +25,5 @@
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
 /merge_append_partially_compressed-*.sql
+/cagg_joins-*.sql
+/plan_skip_scan_compressed-*.sql

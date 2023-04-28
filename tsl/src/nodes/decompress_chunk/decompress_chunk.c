@@ -78,6 +78,21 @@ static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo 
 
 static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
 							   List *pathkeys);
+bool
+ts_is_decompress_index_path(Path *path)
+{
+	if (IsA(path, CustomPath) &&
+		castNode(CustomPath, path)->methods == &decompress_chunk_path_methods)
+	{
+		Path *temp_path = linitial(castNode(CustomPath, path)->custom_paths);
+		if (IsA(temp_path, IndexPath))
+			return true;
+		else
+			return false;
+	}
+	else
+		return false;
+}
 
 static bool
 is_compressed_column(CompressionInfo *info, AttrNumber attno)
@@ -1751,22 +1766,6 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	rte->updatedCols = NULL;
 
 	return rte;
-}
-
-FormData_hypertable_compression *
-get_column_compressioninfo(List *hypertable_compression_info, char *column_name)
-{
-	ListCell *lc;
-
-	foreach (lc, hypertable_compression_info)
-	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (namestrcmp(&fd->attname, column_name) == 0)
-			return fd;
-	}
-	elog(ERROR, "No compression information for column \"%s\" found.", column_name);
-
-	pg_unreachable();
 }
 
 /*

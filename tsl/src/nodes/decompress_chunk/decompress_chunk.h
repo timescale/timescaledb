@@ -12,34 +12,7 @@
 
 #include "chunk.h"
 #include "hypertable.h"
-
-typedef struct CompressionInfo
-{
-	RelOptInfo *chunk_rel;
-	RelOptInfo *compressed_rel;
-	RangeTblEntry *chunk_rte;
-	RangeTblEntry *compressed_rte;
-	RangeTblEntry *ht_rte;
-
-	int hypertable_id;
-	List *hypertable_compression_info;
-
-	int num_orderby_columns;
-	int num_segmentby_columns;
-
-	/* chunk attribute numbers that are segmentby columns */
-	Bitmapset *chunk_segmentby_attnos;
-	/*
-	 * Chunk segmentby attribute numbers that are equated to a constant by a
-	 * baserestrictinfo.
-	 */
-	Bitmapset *chunk_const_segmentby;
-	/* compressed chunk attribute numbers for columns that are compressed */
-	Bitmapset *compressed_attnos_in_compressed_chunk;
-
-	bool single_chunk; /* query on explicit chunk */
-
-} CompressionInfo;
+#include "nodes/nodes_common.h"
 
 typedef struct ColumnCompressionInfo
 {
@@ -89,7 +62,6 @@ typedef struct DecompressChunkPath
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										Chunk *chunk);
 
-FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
-															char *column_name);
+bool ts_is_decompress_index_path(Path *path);
 
 #endif /* TIMESCALEDB_DECOMPRESS_CHUNK_H */

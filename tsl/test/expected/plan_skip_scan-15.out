@@ -3813,20 +3813,21 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 (1 row)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=2538 loops=1)
          Sort Key: _hyper_1_1_chunk.dev
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2505 loops=1)
-               ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_dev__ts_meta_ on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (CompressedSkipScan) on _hyper_1_1_chunk (actual rows=2505 loops=1)
+               ->  Custom Scan (SkipScan) on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk__compressed_hypertable_2_dev__ts_meta_ on compress_hyper_2_5_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx1 on _hyper_1_2_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx1 on _hyper_1_3_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx1 on _hyper_1_4_chunk (actual rows=11 loops=1)
-(11 rows)
+(12 rows)
 
 SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
             decompress_chunk            
