@@ -226,3 +226,7 @@ ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan', '');
 
 GRANT SELECT ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO PUBLIC;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.telemetry_event;
+
+DROP TABLE IF EXISTS _timescaledb_catalog.telemetry_event;

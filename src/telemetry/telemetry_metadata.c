@@ -6,7 +6,9 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
+#include <utils/jsonb.h>
 #include <utils/timestamp.h>
+#include <commands/tablecmds.h>
 
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
@@ -14,6 +16,72 @@
 #include "telemetry/telemetry_metadata.h"
 #include "scan_iterator.h"
 #include "jsonb_utils.h"
+
+#if PG14_LT
+/* Copied from jsonb_util.c */
+static void
+JsonbToJsonbValue(Jsonb *jsonb, JsonbValue *val)
+{
+	val->type = jbvBinary;
+	val->val.binary.data = &jsonb->root;
+	val->val.binary.len = VARSIZE(jsonb) - VARHDRSZ;
+}
+#endif
+
+void
+ts_telemetry_event_truncate(void)
+{
+	RangeVar rv = {
+		.schemaname = CATALOG_SCHEMA_NAME,
+		.relname = TELEMETRY_EVENT_TABLE_NAME,
+	};
+	ExecuteTruncate(&(TruncateStmt){
+		.type = T_TruncateStmt,
+		.relations = list_make1(&rv),
+		.behavior = DROP_RESTRICT,
+	});
+}
+
+void
+ts_telemetry_events_add(JsonbParseState *state)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(TELEMETRY_EVENT, AccessShareLock, CurrentMemoryContext);
+	pushJsonbValue(&state, WJB_BEGIN_ARRAY, NULL);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = iterator.tinfo;
+		TupleDesc tupdesc = ti->slot->tts_tupleDescriptor;
+		bool created_isnull, tag_isnull, value_isnull;
+		Datum created = slot_getattr(ti->slot, Anum_telemetry_event_created, &created_isnull);
+		Datum tag = slot_getattr(ti->slot, Anum_telemetry_event_tag, &tag_isnull);
+		Datum body = slot_getattr(ti->slot, Anum_telemetry_event_body, &value_isnull);
+
+		pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+		if (!created_isnull)
+			ts_jsonb_add_str(state,
+							 NameStr(
+								 TupleDescAttr(tupdesc, Anum_telemetry_event_created - 1)->attname),
+							 DatumGetCString(DirectFunctionCall1(timestamptz_out, created)));
+
+		if (!tag_isnull)
+			ts_jsonb_add_str(state,
+							 NameStr(TupleDescAttr(tupdesc, Anum_telemetry_event_tag - 1)->attname),
+							 NameStr(*DatumGetName(tag)));
+
+		if (!value_isnull)
+		{
+			JsonbValue jsonb_value;
+			JsonbToJsonbValue(DatumGetJsonbP(body), &jsonb_value);
+			ts_jsonb_add_value(state,
+							   NameStr(
+								   TupleDescAttr(tupdesc, Anum_telemetry_event_body - 1)->attname),
+							   &jsonb_value);
+		}
+		pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+	}
+	pushJsonbValue(&state, WJB_END_ARRAY, NULL);
+}
 
 /*
  * add all entries from _timescaledb_catalog.metadata

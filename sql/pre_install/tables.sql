@@ -347,6 +347,15 @@ CREATE TABLE _timescaledb_catalog.metadata (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$
   WHERE KEY = 'exported_uuid' $$);
 
+-- Log with events that will be sent out with the telemetry. The log
+-- will be flushed after it has been sent out. We do not save it to
+-- backups since it should not contain important data.
+CREATE TABLE _timescaledb_catalog.telemetry_event (
+       created timestamptz NOT NULL DEFAULT current_timestamp,
+       tag name NOT NULL,
+       body jsonb NOT NULL
+);
+
 CREATE TABLE _timescaledb_catalog.continuous_agg (
   mat_hypertable_id integer NOT NULL,
   raw_hypertable_id integer NOT NULL,
