@@ -3085,7 +3085,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	}
 	else
 		elog(DEBUG1,
-			 "[cagg_rebuild_view_definition] %s.%s has being rebuilded!",
+			 "[cagg_rebuild_view_definition] %s.%s has been rebuilt!",
 			 NameStr(agg->data.user_view_schema),
 			 NameStr(agg->data.user_view_name));
 

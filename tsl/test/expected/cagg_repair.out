@@ -118,7 +118,7 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
 (4 rows)
 
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
-DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has being rebuilded!
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has been rebuilt!
 \d+ conditions_summary
                                  View "public.conditions_summary"
    Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
@@ -231,7 +231,7 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
 (7 rows)
 
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
-DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has being rebuilded!
+DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has been rebuilt!
 \d+ conditions_summary
                                  View "public.conditions_summary"
    Column    |           Type           | Collation | Nullable | Default | Storage  | Description 
