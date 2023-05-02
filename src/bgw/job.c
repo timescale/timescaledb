@@ -48,13 +48,8 @@
 #include "jsonb_utils.h"
 #include "debug_assert.h"
 
-#define TELEMETRY_INITIAL_NUM_RUNS 12
-
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
-#ifdef USE_TELEMETRY
-static bool is_telemetry_job(BgwJob *job);
-#endif
 
 typedef enum JobLockLifetime
 {
@@ -291,8 +286,7 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 				   NameStr(
 					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])
-		namestrcpy(&job->fd.owner,
-				   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])));
+		job->fd.owner = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]);
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)])
 		job->fd.scheduled = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)]);
@@ -378,7 +372,7 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 
 #ifdef USE_TELEMETRY
 		/* ignore telemetry jobs if telemetry is disabled */
-		if (!ts_telemetry_on() && is_telemetry_job(job))
+		if (!ts_telemetry_on() && ts_is_telemetry_job(job))
 		{
 			pfree(job);
 			continue;
@@ -975,14 +969,21 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 }
 
 void
-ts_bgw_job_permission_check(BgwJob *job)
+ts_bgw_job_permission_check(BgwJob *job, const char *cmd)
 {
-	Oid owner_oid = get_role_oid(NameStr(job->fd.owner), false);
-
-	if (!has_privs_of_role(GetUserId(), owner_oid))
+	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	{
+		const char *owner_name = GetUserNameFromId(job->fd.owner, false);
+		const char *user_name = GetUserNameFromId(GetUserId(), false);
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("insufficient permissions to alter job %d", job->fd.id)));
+				 errmsg("insufficient permissions to %s job %d", cmd, job->fd.id),
+				 errdetail("Job %d is owned by role \"%s\" but user \"%s\" does not belong to that "
+						   "role.",
+						   job->fd.id,
+						   owner_name,
+						   user_name)));
+	}
 }
 
 void
@@ -1003,9 +1004,12 @@ ts_bgw_job_validate_job_owner(Oid owner)
 	ReleaseSysCache(role_tup);
 }
 
+/*
+ * Is the job the telemetry job?
+ */
 #ifdef USE_TELEMETRY
-static bool
-is_telemetry_job(BgwJob *job)
+bool
+ts_is_telemetry_job(BgwJob *job)
 {
 	return namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0 &&
 		   namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0;
@@ -1016,7 +1020,9 @@ bool
 ts_bgw_job_execute(BgwJob *job)
 {
 #ifdef USE_TELEMETRY
-	if (is_telemetry_job(job))
+	/* The telemetry job has a separate code path since we want to be able to
+	 * use telemetry even if the TSL code is not installed. */
+	if (ts_is_telemetry_job(job))
 	{
 		/*
 		 * In the first 12 hours, we want telemetry to ping every
@@ -1027,7 +1033,9 @@ ts_bgw_job_execute(BgwJob *job)
 		return ts_bgw_job_run_and_set_next_start(job,
 												 ts_telemetry_main_wrapper,
 												 TELEMETRY_INITIAL_NUM_RUNS,
-												 &one_hour);
+												 &one_hour,
+												 /* atomic */ true,
+												 /* mark */ false);
 	}
 #endif
 
@@ -1294,22 +1302,42 @@ ts_bgw_job_set_job_entrypoint_function_name(char *func_name)
 	job_entrypoint_function_name = func_name;
 }
 
+/*
+ * Run job and set next start.
+ *
+ * job: Job to run and update
+ * func: Function to execute for the job
+ * initial_runs: Limit on the number of runs to do
+ * next_interval: Interval to use when computing next start
+ * atomic: Should be executed as a single transaction.
+ * mark: Mark the start and end of the function execution in job_stats
+ */
 bool
 ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
-								  Interval *next_interval)
+								  Interval *next_interval, bool atomic, bool mark)
 {
 	BgwJobStat *job_stat;
-	bool ret = func();
+	bool had_error;
+
+	if (atomic)
+		StartTransactionCommand();
+
+	if (mark)
+		ts_bgw_job_stat_mark_start(job->fd.id);
+
+	had_error = func();
+
+	if (mark)
+		ts_bgw_job_stat_mark_end(job, had_error ? JOB_FAILURE : JOB_SUCCESS);
 
 	/* Now update next_start. */
-	StartTransactionCommand();
-
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
 
 	/*
 	 * Note that setting next_start explicitly from this function will
 	 * override any backoff calculation due to failure.
 	 */
+	Ensure(job_stat != NULL, "job status for job %d not found", job->fd.id);
 	if (job_stat->fd.total_runs < initial_runs)
 	{
 		TimestampTz next_start =
@@ -1319,9 +1347,11 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 
 		ts_bgw_job_stat_set_next_start(job->fd.id, next_start);
 	}
-	CommitTransactionCommand();
 
-	return ret;
+	if (atomic)
+		CommitTransactionCommand();
+
+	return had_error;
 }
 
 /* Insert a new job in the bgw_job relation */
@@ -1329,7 +1359,7 @@ int
 ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name check_schema, Name check_name,
-						   Name owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
+						   Oid owner, bool scheduled, bool fixed_schedule, int32 hypertable_id,
 						   Jsonb *config, TimestampTz initial_start, const char *timezone)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -1363,7 +1393,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	else
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = BoolGetDatum(fixed_schedule);
 	/* initial_start must have a value if the schedule is fixed */
@@ -1406,6 +1436,13 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
+
+	/* This is where we would add a call to recordDependencyOnOwner, but it
+	 * cannot support dependencies on anything but built-in classes since
+	 * getObjectClass() have a lot of hard-coded checks in place.
+	 *
+	 * Instead we have a check in process_utility.c that prevents dropping the
+	 * user if there is a dependent job. */
 
 	table_close(rel, NoLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];

@@ -465,6 +465,7 @@ static void
 add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptInfo *hyper_rel,
 						 List *ppi_list)
 {
+	TsFdwRelInfo *hyper_fpinfo = fdw_relinfo_get(hyper_rel);
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(data_node_rel);
 	Path *path;
 
@@ -511,18 +512,12 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptInf
 		 * so that the remote index paths are preferred.
 		 */
 		bool index_matches_parameterization = false;
-		ListCell *path_cell;
-		foreach (path_cell, hyper_rel->pathlist)
+		ListCell *lc;
+		foreach (lc, hyper_fpinfo->indexed_parameterizations)
 		{
-			Path *path = (Path *) lfirst(path_cell);
-			if (path->param_info == param_info)
+			Bitmapset *item = lfirst(lc);
+			if (bms_equal(item, param_info->ppi_req_outer))
 			{
-				/*
-				 * We shouldn't have parameterized seq scans. Can be an
-				 * IndexPath (includes index-only scans) or a BitmapHeapPath.
-				 */
-				Assert(path->type == T_BitmapHeapPath || path->type == T_IndexPath);
-
 				index_matches_parameterization = true;
 				break;
 			}
@@ -1112,6 +1107,13 @@ create_data_node_joinrel(PlannerInfo *root, RelOptInfo *innerrel, RelOptInfo *jo
 		castNode(List,
 				 adjust_appendrel_attrs(root, (Node *) joinrel->reltarget->exprs, 1, &appinfo));
 
+	/*
+	 * Copy the list of parameterizations for which we know indexpats exist, for
+	 * use by the ref table join cost estimation code.
+	 */
+	TsFdwRelInfo *joinrel_fpinfo = fdw_relinfo_get(joinrel);
+	join_part_fpinfo->indexed_parameterizations = joinrel_fpinfo->indexed_parameterizations;
+
 	return join_partition;
 }
 
@@ -1155,7 +1157,6 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 									   RelOptInfo *innerrel, JoinType jointype,
 									   JoinPathExtraData *extra)
 {
-	TsFdwRelInfo *fpinfo;
 	Path *joinpath;
 	double rows = 0;
 	int width = 0;
@@ -1232,12 +1233,20 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 	 * if found safe. Once we know that this join can be pushed down, we fill
 	 * the entry.
 	 */
-	fpinfo = fdw_relinfo_create(root, joinrel, InvalidOid, InvalidOid, TS_FDW_RELINFO_JOIN);
-	Assert(fpinfo->type == TS_FDW_RELINFO_JOIN);
+	TsFdwRelInfo *joinrel_fpinfo =
+		fdw_relinfo_create(root, joinrel, InvalidOid, InvalidOid, TS_FDW_RELINFO_JOIN);
+	Assert(joinrel_fpinfo->type == TS_FDW_RELINFO_JOIN);
 
 	/* attrs_used is only for base relations. */
-	fpinfo->attrs_used = NULL;
-	fpinfo->pushdown_safe = false;
+	joinrel_fpinfo->attrs_used = NULL;
+	joinrel_fpinfo->pushdown_safe = false;
+
+	/*
+	 * Copy the list of parameterizations for which we know indexpats exist, for
+	 * use by the ref table join cost estimation code.
+	 */
+	TsFdwRelInfo *hypertable_fpinfo = fdw_relinfo_get(outerrel);
+	joinrel_fpinfo->indexed_parameterizations = hypertable_fpinfo->indexed_parameterizations;
 
 	/*
 	 * We need the FDW information to get retrieve the information about the
@@ -1245,11 +1254,11 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 	 * the first server. The reference tables are the same for all servers.
 	 */
 	Oid server_oid = hyper_table_rels[0]->serverid;
-	fpinfo->server = GetForeignServer(server_oid);
-	apply_fdw_and_server_options(fpinfo);
+	joinrel_fpinfo->server = GetForeignServer(server_oid);
+	apply_fdw_and_server_options(joinrel_fpinfo);
 
 	if (!is_safe_to_pushdown_reftable_join(root,
-										   fpinfo->join_reference_tables,
+										   joinrel_fpinfo->join_reference_tables,
 										   rte_inner,
 										   jointype))
 	{
@@ -1302,7 +1311,7 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 		RelOptInfo *join_partition =
 			create_data_node_joinrel(root, innerrel, joinrel, data_node_rel, appinfo);
 		join_partition_rels[i] = join_partition;
-		fpinfo = fdw_relinfo_get(join_partition);
+		TsFdwRelInfo *partition_fpinfo = fdw_relinfo_get(join_partition);
 
 		/* Create a new join path extra for this join partition */
 		JoinPathExtraData *partition_extra = create_data_node_joinrel_extra(root, extra, appinfo);
@@ -1332,16 +1341,19 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 		 * the remote side like quals in WHERE clause, so pass jointype as
 		 * JOIN_INNER.
 		 */
-		fpinfo->local_conds_sel =
-			clauselist_selectivity(root, fpinfo->local_conds, 0, JOIN_INNER, NULL);
-		cost_qual_eval(&fpinfo->local_conds_cost, fpinfo->local_conds, root);
+		partition_fpinfo->local_conds_sel =
+			clauselist_selectivity(root, partition_fpinfo->local_conds, 0, JOIN_INNER, NULL);
+		cost_qual_eval(&partition_fpinfo->local_conds_cost, partition_fpinfo->local_conds, root);
 
 		/*
 		 * If we are going to estimate costs locally, estimate the join clause
 		 * selectivity here while we have special join info.
 		 */
-		fpinfo->joinclause_sel =
-			clauselist_selectivity(root, fpinfo->joinclauses, 0, fpinfo->jointype, extra->sjinfo);
+		partition_fpinfo->joinclause_sel = clauselist_selectivity(root,
+																  partition_fpinfo->joinclauses,
+																  0,
+																  partition_fpinfo->jointype,
+																  extra->sjinfo);
 
 		/* Estimate costs for bare join relation */
 		fdw_estimate_path_cost_size(root,
@@ -1355,10 +1367,10 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 		/* Now update this information in the joinrel */
 		join_partition->rows = rows;
 		join_partition->reltarget->width = width;
-		fpinfo->rows = rows;
-		fpinfo->width = width;
-		fpinfo->startup_cost = startup_cost;
-		fpinfo->total_cost = total_cost;
+		partition_fpinfo->rows = rows;
+		partition_fpinfo->width = width;
+		partition_fpinfo->startup_cost = startup_cost;
+		partition_fpinfo->total_cost = total_cost;
 
 		/*
 		 * Create a new join path and add it to the joinrel which represents a
@@ -1377,7 +1389,7 @@ data_node_generate_pushdown_join_paths(PlannerInfo *root, RelOptInfo *joinrel, R
 
 		Assert(joinpath != NULL);
 
-		if (!bms_is_empty(fpinfo->sca->chunk_relids))
+		if (!bms_is_empty(partition_fpinfo->sca->chunk_relids))
 		{
 			/* Add generated path into joinrel by add_path(). */
 			fdw_utils_add_path(join_partition, (Path *) joinpath);
@@ -1480,6 +1492,41 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	 * hyper_rel->ppilist.
 	 */
 	List *ppi_list = build_parameterizations(root, hyper_rel);
+
+	/*
+	 * Check if we have an index path locally that matches the
+	 * parameterization. If so, we're going to have the same index path on
+	 * the data node, and it's going to be significantly cheaper that a seq
+	 * scan. We don't know precise values, but we have to discount it later
+	 * so that the remote index paths are preferred.
+	 *
+	 * Cache this information for use in reference join pushdown costs.
+	 * It has to have the same idea about which paths are becoming index
+	 * scans.
+	 */
+	TsFdwRelInfo *hyper_fpinfo = fdw_relinfo_get(hyper_rel);
+	ListCell *ppi_cell;
+	foreach (ppi_cell, ppi_list)
+	{
+		ParamPathInfo *param_info = (ParamPathInfo *) lfirst(ppi_cell);
+		ListCell *path_cell;
+		foreach (path_cell, hyper_rel->pathlist)
+		{
+			Path *path = (Path *) lfirst(path_cell);
+			if (path->param_info == param_info)
+			{
+				/*
+				 * We shouldn't have parameterized seq scans. Can be an
+				 * IndexPath (includes index-only scans) or a BitmapHeapPath.
+				 */
+				Assert(path->type == T_BitmapHeapPath || path->type == T_IndexPath);
+
+				hyper_fpinfo->indexed_parameterizations =
+					lappend(hyper_fpinfo->indexed_parameterizations, param_info->ppi_req_outer);
+				break;
+			}
+		}
+	}
 
 	/*
 	 * Create estimates and paths for each data node rel based on data node chunk

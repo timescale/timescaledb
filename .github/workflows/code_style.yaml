@@ -100,7 +100,7 @@ jobs:
           git diff --exit-code
 
   misc_checks:
-    name: Check license, update scripts, and git hooks
+    name: Check license, update scripts, git hooks and missing gitignore entries
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -121,3 +121,6 @@ jobs:
     - name: Check update scripts
       if: always()
       run: ./scripts/check_update_scripts.sh
+    - name: Check for missing gitignore entries for template test files
+      if: always()
+      run: ./scripts/check_missing_gitignore_for_template_tests.sh

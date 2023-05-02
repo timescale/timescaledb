@@ -19,17 +19,17 @@ SELECT create_hypertable(
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-14', 'Moscow', 26,1),
-  ('2021-06-15', 'Moscow', 22,2),
-  ('2021-06-16', 'Moscow', 24,3),
-  ('2021-06-17', 'Moscow', 24,4),
-  ('2021-06-18', 'Moscow', 27,4),
+  ('2021-06-15', 'Berlin', 22,2),
+  ('2021-06-16', 'Stockholm', 24,3),
+  ('2021-06-17', 'London', 24,4),
+  ('2021-06-18', 'London', 27,4),
   ('2021-06-19', 'Moscow', 28,4),
   ('2021-06-20', 'Moscow', 30,1),
-  ('2021-06-21', 'Moscow', 31,1),
-  ('2021-06-22', 'Moscow', 34,1),
-  ('2021-06-23', 'Moscow', 34,2),
+  ('2021-06-21', 'Berlin', 31,1),
+  ('2021-06-22', 'Stockholm', 34,1),
+  ('2021-06-23', 'Stockholm', 34,2),
   ('2021-06-24', 'Moscow', 34,2),
-  ('2021-06-25', 'Moscow', 32,3),
+  ('2021-06-25', 'London', 32,3),
   ('2021-06-26', 'Moscow', 32,3),
   ('2021-06-27', 'Moscow', 31,3);
 CREATE TABLE conditions_dup AS SELECT * FROM conditions;
@@ -92,6 +92,25 @@ UNION ALL
     devices
   WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_internal.to_date(_timescaledb_internal.cagg_watermark(3)), '-infinity'::date)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day));
+
+SELECT * FROM conditions_summary_daily_realtime ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+(14 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-30', 'Moscow', 28, 3);
@@ -160,6 +179,26 @@ UNION ALL
   WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_internal.to_date(_timescaledb_internal.cagg_watermark(4)), '-infinity'::date)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day));
 
+SELECT * FROM conditions_summary_daily_realtime_reorder ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(15 rows)
+
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-07-01', 'Moscow', 28, 3);
 SELECT *
@@ -200,6 +239,27 @@ WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket, thermo_id;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   | thermo_id 
+------------+---------------------+-----+-----+----------+-----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1 |         1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2 |         2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3 |         3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4 |         4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4 |         4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4 |         4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1 |         1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1 |         1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1 |         1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2 |         2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2 |         2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3 |         3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3 |         3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3 |         3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3 |         3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3 |         3
+(16 rows)
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_reorder
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -212,6 +272,27 @@ WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily_reorder"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_reorder ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_2
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -223,6 +304,27 @@ FROM conditions JOIN devices ON conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily_2"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_2 ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_2_reorder
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -234,6 +336,27 @@ FROM devices JOIN conditions ON conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily_2_reorder"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_2_reorder ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_3
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -245,6 +368,27 @@ FROM devices JOIN conditions USING (device_id)
 GROUP BY name, bucket;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily_3"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_3 ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
 CREATE MATERIALIZED VIEW conditions_summary_daily_3_reorder
 WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -256,6 +400,117 @@ FROM conditions JOIN devices USING (device_id)
 GROUP BY name, bucket;
 NOTICE:  refreshing continuous aggregate "conditions_summary_daily_3_reorder"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_3_reorder ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
+CREATE MATERIALIZED VIEW conditions_summary_daily_3_reorder_using_realtime
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices USING (device_id)
+GROUP BY name, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_daily_3_reorder_using_realtime"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_3_reorder_using_realtime ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-14-2021 | 26.0000000000000000 |  26 |  26 | thermo_1
+ 06-15-2021 | 22.0000000000000000 |  22 |  22 | thermo_2
+ 06-16-2021 | 24.0000000000000000 |  24 |  24 | thermo_3
+ 06-17-2021 | 24.0000000000000000 |  24 |  24 | thermo_4
+ 06-18-2021 | 27.0000000000000000 |  27 |  27 | thermo_4
+ 06-19-2021 | 28.0000000000000000 |  28 |  28 | thermo_4
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-21-2021 | 31.0000000000000000 |  31 |  31 | thermo_1
+ 06-22-2021 | 34.0000000000000000 |  34 |  34 | thermo_1
+ 06-23-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-24-2021 | 34.0000000000000000 |  34 |  34 | thermo_2
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-26-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+ 06-27-2021 | 31.0000000000000000 |  31 |  31 | thermo_3
+ 06-30-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+ 07-01-2021 | 28.0000000000000000 |  28 |  28 | thermo_3
+(16 rows)
+
+--Create CAgg with join and additional WHERE conditions
+CREATE MATERIALIZED VIEW conditions_summary_daily_more_conds
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+WHERE conditions.city = devices.location AND
+      conditions.temperature > 28
+GROUP BY name, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_daily_more_conds"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_more_conds ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+(2 rows)
+
+--Create CAgg with join and ORDER BY
+CREATE MATERIALIZED VIEW conditions_summary_daily_ordered
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+WHERE conditions.city = devices.location AND
+      conditions.temperature > 28
+GROUP BY name, bucket
+ORDER BY name;
+NOTICE:  refreshing continuous aggregate "conditions_summary_daily_ordered"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_summary_daily_ordered ORDER BY bucket;
+   bucket   |         avg         | max | min |   name   
+------------+---------------------+-----+-----+----------
+ 06-20-2021 | 30.0000000000000000 |  30 |  30 | thermo_1
+ 06-25-2021 | 32.0000000000000000 |  32 |  32 | thermo_3
+(2 rows)
+
+--Error out when creating CAgg with multiple join conditions
+CREATE MATERIALIZED VIEW conditions_summary_daily_more_joins_conds
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+AND conditions.city = devices.location AND
+      conditions.temperature > 28
+GROUP BY name, bucket;
+ERROR:  invalid continuous aggregate view
+DETAIL:  Unsupported expression in join clause.
+HINT:  Only equality conditions are supported in continuous aggregates.
 --Error out for old format cagg definition
 CREATE MATERIALIZED VIEW conditions_summary_daily_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
@@ -269,7 +524,7 @@ FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket, devices.device_id;
 ERROR:  old format of continuous aggregate is not supported with joins
-HINT:  set timescaledb.finalized to TRUE
+HINT:  Set timescaledb.finalized to TRUE.
 CREATE MATERIALIZED VIEW conditions_summary_daily_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -282,7 +537,7 @@ FROM conditions JOIN devices
 ON conditions.device_id = devices.device_id
 GROUP BY name, bucket, devices.device_id;
 ERROR:  old format of continuous aggregate is not supported with joins
-HINT:  set timescaledb.finalized to TRUE
+HINT:  Set timescaledb.finalized to TRUE.
 CREATE  TABLE mat_t1( a integer, b integer,c TEXT);
 -- Error out LATERAL multiple tables old format
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
@@ -291,7 +546,7 @@ select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q
 group by temperature WITH NO DATA;
 ERROR:  old format of continuous aggregate is not supported with joins
-HINT:  set timescaledb.finalized to TRUE
+HINT:  Set timescaledb.finalized to TRUE.
 -- Error out for LATERAL multiple tables in new format
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
 as
@@ -299,7 +554,7 @@ select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q
 group by temperature WITH NO DATA;
 ERROR:  invalid continuous aggregate view
-DETAIL:  lateral are not supported in FROM clause
+DETAIL:  Lateral joins are not supported in FROM clause.
 --Error out if from clause has view
 CREATE MATERIALIZED VIEW conditions_summary_daily_view
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -313,7 +568,7 @@ FROM conditions, devices_view
 WHERE conditions.device_id = devices_view.device_id
 GROUP BY name, bucket, devices_view.device_id;
 ERROR:  invalid continuous aggregate view
-DETAIL:  views are not supported in FROM clause
+DETAIL:  Views are not supported in FROM clause.
 -- Nested CAgg over a CAgg with join
 CREATE MATERIALIZED VIEW cagg_on_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -341,7 +596,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions JOIN (SELECT * FROM devices WHERE location in (SELECT name from cities where currency = 'EUR')) dev ON conditions.device_id = dev.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  sub-queries are not supported in FROM clause
+DETAIL:  Sub-queries are not supported in FROM clause.
 DROP TABLE cities CASCADE;
 --Error out when join is between two hypertables
 CREATE MATERIALIZED VIEW conditions_summary_daily_ht
@@ -354,7 +609,7 @@ FROM conditions, conditions_dup
 WHERE conditions.device_id = conditions_dup.device_id
 GROUP BY bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  multiple hypertables or normal tables are not supported in FROM clause
+DETAIL:  Multiple hypertables or normal tables are not supported in FROM clause.
 --Error out when join is between two normal tables
 CREATE MATERIALIZED VIEW conditions_summary_daily_nt
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -367,7 +622,7 @@ FROM devices, devices_dup
 WHERE devices.device_id = devices_dup.device_id
 GROUP BY devices.name, devices.location;
 ERROR:  invalid continuous aggregate view
-DETAIL:  multiple hypertables or normal tables are not supported in FROM clause
+DETAIL:  Multiple hypertables or normal tables are not supported in FROM clause.
 --Error out when join is on non-equality condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -380,7 +635,7 @@ FROM conditions, devices
 WHERE conditions.device_id <> devices.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  only equality conditions are supported in continuous aggregates
+DETAIL:  Only equality conditions are supported in continuous aggregates.
 --Unsupported join condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -394,8 +649,8 @@ WHERE conditions.device_id = devices.device_id AND
       conditions.city like '%cow*'
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  unsupported expression in join clause
-HINT:  only equality condition is supported
+DETAIL:  Unsupported expression in join clause.
+HINT:  Only equality conditions are supported in continuous aggregates.
 --Unsupported join condition
 CREATE MATERIALIZED VIEW conditions_summary_daily_unequal
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -409,8 +664,8 @@ WHERE conditions.device_id = devices.device_id OR
       conditions.city like '%cow*'
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  unsupported expression in join clause
-HINT:  only equality condition is supported
+DETAIL:  Unsupported expression in join clause.
+HINT:  Only equality conditions are supported in continuous aggregates.
 --Error out when join type is not inner
 CREATE MATERIALIZED VIEW conditions_summary_daily_outer
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -456,10 +711,13 @@ FROM conditions_summary_daily_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
 GROUP BY 1,2,3;
 ERROR:  invalid continuous aggregate view
-DETAIL:  views are not supported in FROM clause
+DETAIL:  Views are not supported in FROM clause.
 \set VERBOSITY terse
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 24 other objects
+NOTICE:  drop cascades to 33 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
@@ -470,7 +728,7 @@ NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 ERROR:  cannot drop view conditions_summary_daily_cagg because other objects depend on it
 DROP TABLE devices CASCADE;
-NOTICE:  drop cascades to 27 other objects
+NOTICE:  drop cascades to 36 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate

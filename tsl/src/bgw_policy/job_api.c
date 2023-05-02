@@ -80,7 +80,6 @@ job_add(PG_FUNCTION_ARGS)
 	NameData application_name;
 	NameData proc_name;
 	NameData proc_schema;
-	NameData owner_name;
 	NameData check_name = { .data = { 0 } };
 	NameData check_schema = { .data = { 0 } };
 	Interval max_runtime = { .time = DEFAULT_MAX_RUNTIME };
@@ -167,7 +166,6 @@ job_add(PG_FUNCTION_ARGS)
 	namestrcpy(&application_name, "User-Defined Action");
 	namestrcpy(&proc_schema, get_namespace_name(get_func_namespace(proc)));
 	namestrcpy(&proc_name, func_name);
-	namestrcpy(&owner_name, GetUserNameFromId(owner, false));
 
 	/* The check exists but may not have the expected signature: (config jsonb) */
 	if (OidIsValid(check))
@@ -184,7 +182,7 @@ job_add(PG_FUNCTION_ARGS)
 										&proc_name,
 										&check_schema,
 										&check_name,
-										&owner_name,
+										owner,
 										scheduled,
 										fixed_schedule,
 										0,
@@ -240,18 +238,16 @@ job_delete(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
 	BgwJob *job;
-	Oid owner;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	job = find_job(job_id, PG_ARGISNULL(0), false);
-	owner = get_role_oid(NameStr(job->fd.owner), false);
 
-	if (!has_privs_of_role(GetUserId(), owner))
+	if (!has_privs_of_role(GetUserId(), job->fd.owner))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("insufficient permissions to delete job for user \"%s\"",
-						NameStr(job->fd.owner))));
+						GetUserNameFromId(job->fd.owner, false))));
 
 	ts_bgw_job_delete_by_id(job_id);
 
@@ -266,6 +262,8 @@ job_run(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
 	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false);
+
+	ts_bgw_job_permission_check(job, "run");
 
 	job_execute(job);
 
@@ -330,7 +328,7 @@ job_alter(PG_FUNCTION_ARGS)
 	if (job == NULL)
 		PG_RETURN_NULL();
 
-	ts_bgw_job_permission_check(job);
+	ts_bgw_job_permission_check(job, "alter");
 
 	if (!PG_ARGISNULL(1))
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);
@@ -467,7 +465,8 @@ job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
 	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false /* missing_ok */);
 	if (job == NULL)
 		PG_RETURN_NULL();
-	ts_bgw_job_permission_check(job);
+
+	ts_bgw_job_permission_check(job, "alter");
 
 	if (!PG_ARGISNULL(1))
 	{

@@ -2,6 +2,15 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- In the following test cases, we test that certain indexes are used. By using the
+-- timescaledb.enable_decompression_sorted_merge optimization, we are pushing a sort node
+-- below the DecompressChunk node, which operates on the batches. This could lead to flaky
+-- tests because the input data is small and PostgreSQL switches from IndexScans to
+-- SequentialScans. Disable the optimization for the following tests to ensure we have
+-- stable query plans in all CI environments.
+
+SET timescaledb.enable_decompression_sorted_merge = 0;
+
 -- test LATERAL with ordered append in the outer query
 :PREFIX
 SELECT time,
@@ -27,6 +36,7 @@ FROM (
     FROM :TEST_TABLE
     ORDER BY time DESC
     LIMIT 2) l;
+
 
 -- test plan with best index is chosen
 -- this should use device_id, time index

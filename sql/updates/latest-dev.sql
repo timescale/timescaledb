@@ -1,8 +1,3 @@
-DROP FUNCTION _timescaledb_internal.ping_data_node(NAME);
-
-CREATE FUNCTION _timescaledb_internal.ping_data_node(node_name NAME, timeout INTERVAL = NULL) RETURNS BOOLEAN
-AS '@MODULE_PATHNAME@', 'ts_data_node_ping' LANGUAGE C VOLATILE;
-
 CREATE TABLE _timescaledb_catalog.continuous_aggs_watermark (
   mat_hypertable_id integer NOT NULL,
   watermark bigint NOT NULL,
@@ -28,3 +23,35 @@ DROP FUNCTION _timescaledb_internal.dimension_slice_get_constraint_sql;
 CREATE SCHEMA _timescaledb_functions;
 GRANT USAGE ON SCHEMA _timescaledb_functions TO PUBLIC;
 
+-- migrate histogram support functions into _timescaledb_functions schema
+ALTER FUNCTION _timescaledb_internal.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.hist_combinefunc(state1 INTERNAL, state2 INTERNAL) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.hist_serializefunc(INTERNAL) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.hist_deserializefunc(bytea, INTERNAL) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER) SET SCHEMA _timescaledb_functions;
+
+-- migrate first/last support functions into _timescaledb_functions schema
+ALTER FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any") SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.first_combinefunc(internal, internal) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any") SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.last_combinefunc(internal, internal) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any") SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.bookend_serializefunc(internal) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal) SET SCHEMA _timescaledb_functions;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.is_main_table(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_internal.is_main_table(name, name);
+DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_from_main_table(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_internal.main_table_from_hypertable(integer);
+DROP FUNCTION IF EXISTS _timescaledb_internal.time_literal_sql(bigint, regtype);
+
+ALTER FUNCTION _timescaledb_internal.compressed_data_in(CSTRING) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.compressed_data_out(_timescaledb_internal.compressed_data) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.compressed_data_send(_timescaledb_internal.compressed_data) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.compressed_data_recv(internal) SET SCHEMA _timescaledb_functions;
+
+ALTER FUNCTION _timescaledb_internal.rxid_in(cstring) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.rxid_out(@extschema@.rxid) SET SCHEMA _timescaledb_functions;
+
+ALTER TABLE _timescaledb_config.bgw_job
+    ALTER COLUMN owner SET DEFAULT pg_catalog.quote_ident(current_role)::regrole;

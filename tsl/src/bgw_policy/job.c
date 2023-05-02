@@ -38,6 +38,9 @@
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
 #include "ts_catalog/continuous_agg.h"
+#ifdef USE_TELEMETRY
+#include "telemetry/telemetry.h"
+#endif
 
 #include "tsl/src/chunk.h"
 
@@ -569,6 +572,12 @@ job_execute_procedure(FuncExpr *funcexpr)
 	ExecuteCallStmt(call, params, false, dest);
 }
 
+/*
+ * Execute the job.
+ *
+ * This function can be called both from a portal and from a background
+ * worker.
+ */
 bool
 job_execute(BgwJob *job)
 {
@@ -606,6 +615,27 @@ job_execute(BgwJob *job)
 		PushActiveSnapshot(GetTransactionSnapshot());
 #endif
 	}
+
+#ifdef USE_TELEMETRY
+	/* The telemetry job has a separate code path and since we can reach this
+	 * code also when using run_job(), we have a special case here. This will
+	 * not be triggered when executed from ts_bgw_job_execute(). */
+	if (ts_is_telemetry_job(job))
+	{
+		/*
+		 * In the first 12 hours, we want telemetry to ping every
+		 * hour. After that initial period, we default to the
+		 * schedule_interval listed in the job table.
+		 */
+		Interval one_hour = { .time = 1 * USECS_PER_HOUR };
+		return ts_bgw_job_run_and_set_next_start(job,
+												 ts_telemetry_main_wrapper,
+												 TELEMETRY_INITIAL_NUM_RUNS,
+												 &one_hour,
+												 /* atomic */ false,
+												 /* mark */ true);
+	}
+#endif
 
 	object = makeNode(ObjectWithArgs);
 	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),

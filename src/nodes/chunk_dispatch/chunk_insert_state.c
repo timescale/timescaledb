@@ -608,10 +608,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	state->rel = rel;
 	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
-
-	state->chunk_compressed = ts_chunk_is_compressed(chunk);
-	if (state->chunk_compressed)
-		state->chunk_partial = ts_chunk_is_partial(chunk);
+	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
 		ExecOpenIndices(relinfo, onconflict_action != ONCONFLICT_NONE);
@@ -716,6 +713,14 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	MemoryContextSwitchTo(old_mcxt);
 
 	return state;
+}
+
+void
+ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
+{
+	state->chunk_compressed = ts_chunk_is_compressed(chunk);
+	if (state->chunk_compressed)
+		state->chunk_partial = ts_chunk_is_partial(chunk);
 }
 
 extern void

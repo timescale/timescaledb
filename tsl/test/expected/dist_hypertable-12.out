@@ -3798,15 +3798,10 @@ SELECT "time", dist_device, temp FROM public.dist_device ORDER BY "time" ASC NUL
    Chunks: _dist_hyper_15_37_chunk
    Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[22]) ORDER BY "time" ASC NULLS LAST
    Remote EXPLAIN: 
-     Custom Scan (ChunkAppend) on public.dist_device
-       Output: dist_device."time", dist_device.dist_device, dist_device.temp
-       Order: dist_device."time"
-       Startup Exclusion: false
-       Runtime Exclusion: false
-       ->  Index Scan Backward using _dist_hyper_15_37_chunk_dist_device_time_idx on _timescaledb_internal._dist_hyper_15_37_chunk
-             Output: _dist_hyper_15_37_chunk."time", _dist_hyper_15_37_chunk.dist_device, _dist_hyper_15_37_chunk.temp
+     Index Scan Backward using _dist_hyper_15_37_chunk_dist_device_time_idx on _timescaledb_internal._dist_hyper_15_37_chunk
+       Output: _dist_hyper_15_37_chunk."time", _dist_hyper_15_37_chunk.dist_device, _dist_hyper_15_37_chunk.temp
  
-(14 rows)
+(9 rows)
 
 SELECT * FROM dist_device;
              time             | dist_device | temp 
@@ -3858,15 +3853,15 @@ ANALYZE hyper_estimate;
 EXPLAIN (COSTS ON)
 SELECT *
 FROM hyper_estimate;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
- Append  (cost=100.00..607.58 rows=15 width=20)
-   ->  Foreign Scan on _dist_hyper_16_38_chunk  (cost=100.00..101.40 rows=4 width=20)
-   ->  Foreign Scan on _dist_hyper_16_39_chunk  (cost=100.00..101.20 rows=2 width=20)
-   ->  Foreign Scan on _dist_hyper_16_40_chunk  (cost=100.00..101.30 rows=3 width=20)
-   ->  Foreign Scan on _dist_hyper_16_41_chunk  (cost=100.00..101.20 rows=2 width=20)
-   ->  Foreign Scan on _dist_hyper_16_42_chunk  (cost=100.00..101.30 rows=3 width=20)
-   ->  Foreign Scan on _dist_hyper_16_43_chunk  (cost=100.00..101.10 rows=1 width=20)
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Append  (cost=10000.00..60021.38 rows=15 width=20)
+   ->  Foreign Scan on _dist_hyper_16_38_chunk  (cost=10000.00..10005.08 rows=4 width=20)
+   ->  Foreign Scan on _dist_hyper_16_39_chunk  (cost=10000.00..10003.04 rows=2 width=20)
+   ->  Foreign Scan on _dist_hyper_16_40_chunk  (cost=10000.00..10004.06 rows=3 width=20)
+   ->  Foreign Scan on _dist_hyper_16_41_chunk  (cost=10000.00..10003.04 rows=2 width=20)
+   ->  Foreign Scan on _dist_hyper_16_42_chunk  (cost=10000.00..10004.06 rows=3 width=20)
+   ->  Foreign Scan on _dist_hyper_16_43_chunk  (cost=10000.00..10002.02 rows=1 width=20)
 (7 rows)
 
 -- Let's insert data into a new chunk. This will result in chunk creation.
@@ -3875,16 +3870,16 @@ INSERT INTO hyper_estimate VALUES ('2019-11-11 06:01', 1, 1.1);
 EXPLAIN (COSTS ON)
 SELECT *
 FROM hyper_estimate;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
- Append  (cost=100.00..707.77 rows=17 width=20)
-   ->  Foreign Scan on _dist_hyper_16_38_chunk  (cost=100.00..101.40 rows=4 width=20)
-   ->  Foreign Scan on _dist_hyper_16_39_chunk  (cost=100.00..101.20 rows=2 width=20)
-   ->  Foreign Scan on _dist_hyper_16_40_chunk  (cost=100.00..101.30 rows=3 width=20)
-   ->  Foreign Scan on _dist_hyper_16_41_chunk  (cost=100.00..101.20 rows=2 width=20)
-   ->  Foreign Scan on _dist_hyper_16_42_chunk  (cost=100.00..101.30 rows=3 width=20)
-   ->  Foreign Scan on _dist_hyper_16_43_chunk  (cost=100.00..101.10 rows=1 width=20)
-   ->  Foreign Scan on _dist_hyper_16_44_chunk  (cost=100.00..100.19 rows=2 width=20)
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Append  (cost=10000.00..70023.31 rows=17 width=20)
+   ->  Foreign Scan on _dist_hyper_16_38_chunk  (cost=10000.00..10005.08 rows=4 width=20)
+   ->  Foreign Scan on _dist_hyper_16_39_chunk  (cost=10000.00..10003.04 rows=2 width=20)
+   ->  Foreign Scan on _dist_hyper_16_40_chunk  (cost=10000.00..10004.06 rows=3 width=20)
+   ->  Foreign Scan on _dist_hyper_16_41_chunk  (cost=10000.00..10003.04 rows=2 width=20)
+   ->  Foreign Scan on _dist_hyper_16_42_chunk  (cost=10000.00..10004.06 rows=3 width=20)
+   ->  Foreign Scan on _dist_hyper_16_43_chunk  (cost=10000.00..10002.02 rows=1 width=20)
+   ->  Foreign Scan on _dist_hyper_16_44_chunk  (cost=10000.00..10001.93 rows=2 width=20)
 (8 rows)
 
 CREATE TABLE devices (

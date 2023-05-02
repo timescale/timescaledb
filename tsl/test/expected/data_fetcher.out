@@ -130,7 +130,8 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_PREPARED')
 :DIFF_CMD
 -- Test custom FDW settings. Instead of the tests above, we are not interersted
 -- in comparing the results of the fetchers. In the following tests we are
--- interested in the actual outputs (e.g., costs).
+-- interested in the actual outputs (e.g., costs). It's enough to only test them
+-- with one type of fetcher, because it doesn't influence the costs.
 ANALYZE one_batch;
 SET timescaledb.remote_data_fetcher = 'copy';
 \ir include/data_fetcher_fdw_settings.sql
@@ -139,9 +140,9 @@ SET timescaledb.remote_data_fetcher = 'copy';
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Default settings
 EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=10000.00..10101.98 rows=99 width=20)
 (1 row)
 
 -- Set custom startup cost
@@ -149,15 +150,15 @@ ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_startup_cost '200');
 EXPLAIN (COSTS) SELECT * FROM one_batch;
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=200.00..210.90 rows=99 width=20)
+ Custom Scan (DataNodeScan) on one_batch  (cost=200.00..301.98 rows=99 width=20)
 (1 row)
 
 -- Set custom tuple cost
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '1');
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '2');
 EXPLAIN (COSTS) SELECT * FROM one_batch;
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=200.00..301.98 rows=99 width=20)
+ Custom Scan (DataNodeScan) on one_batch  (cost=200.00..400.98 rows=99 width=20)
 (1 row)
 
 -- Update startup cost
@@ -165,7 +166,7 @@ ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_startup_cost '2');
 EXPLAIN (COSTS) SELECT * FROM one_batch;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=2.00..103.98 rows=99 width=20)
+ Custom Scan (DataNodeScan) on one_batch  (cost=2.00..202.98 rows=99 width=20)
 (1 row)
 
 -- Update startup cost
@@ -180,62 +181,9 @@ EXPLAIN (COSTS) SELECT * FROM one_batch;
 ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_startup_cost);
 ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_tuple_cost);
 EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
-(1 row)
-
-SET timescaledb.remote_data_fetcher = 'cursor';
-\ir include/data_fetcher_fdw_settings.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
--- Default settings
-EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
-(1 row)
-
--- Set custom startup cost
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_startup_cost '200');
-EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=200.00..210.90 rows=99 width=20)
-(1 row)
-
--- Set custom tuple cost
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '1');
-EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=200.00..301.98 rows=99 width=20)
-(1 row)
-
--- Update startup cost
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_startup_cost '2');
-EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=2.00..103.98 rows=99 width=20)
-(1 row)
-
--- Update startup cost
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (SET fdw_tuple_cost '0.5');
-EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=2.00..54.48 rows=99 width=20)
-(1 row)
-
--- Reset custom settings
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_startup_cost);
-ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (DROP fdw_tuple_cost);
-EXPLAIN (COSTS) SELECT * FROM one_batch;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on one_batch  (cost=100.00..110.90 rows=99 width=20)
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on one_batch  (cost=10000.00..10101.98 rows=99 width=20)
 (1 row)
 
 RESET ROLE;

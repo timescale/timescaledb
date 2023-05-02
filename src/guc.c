@@ -76,6 +76,7 @@ bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
+TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
@@ -283,6 +284,18 @@ _guc_init(void)
 							 "Enable SkipScan",
 							 "Enable SkipScan for DISTINCT queries",
 							 &ts_guc_enable_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_decompression_sorted_merge",
+							 "Enable compressed batches heap merge",
+							 "Enable the merge of compressed batches to preserve the compression "
+							 "order by",
+							 &ts_guc_enable_decompression_sorted_merge,
 							 true,
 							 PGC_USERSET,
 							 0,

@@ -33,13 +33,17 @@ extern struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *ro
 extern bool ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 								  Datum *min, Datum *max);
 
-extern Plan *ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
-										   const AttrNumber *reqColIdx, bool adjust_tlist_in_place,
-										   int *p_numsortkeys, AttrNumber **p_sortColIdx,
-										   Oid **p_sortOperators, Oid **p_collations,
-										   bool **p_nullsFirst);
+extern TSDLLEXPORT Plan *
+ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
+							  const AttrNumber *reqColIdx, bool adjust_tlist_in_place,
+							  int *p_numsortkeys, AttrNumber **p_sortColIdx, Oid **p_sortOperators,
+							  Oid **p_collations, bool **p_nullsFirst);
 
 extern TSDLLEXPORT Sort *ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids);
+
+extern TSDLLEXPORT Sort *ts_make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx,
+									  Oid *sortOperators, Oid *collations, bool *nullsFirst);
+
 extern TSDLLEXPORT PathKey *ts_make_pathkey_from_sortop(PlannerInfo *root, Expr *expr,
 														Relids nullable_relids, Oid ordering_op,
 														bool nulls_first, Index sortref,

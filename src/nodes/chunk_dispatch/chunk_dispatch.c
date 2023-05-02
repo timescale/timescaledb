@@ -64,6 +64,8 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 {
 	ChunkInsertState *cis;
 	bool cis_changed = true;
+	bool found = true;
+	Chunk *chunk = NULL;
 
 	/* Direct inserts into internal compressed hypertable is not supported.
 	 * For compression chunks are created explicitly by compress_chunk and
@@ -75,15 +77,14 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
+	/*
+	 * The chunk search functions may leak memory, so switch to a temporary
+	 * memory context.
+	 */
+	MemoryContext old_context = MemoryContextSwitchTo(GetPerTupleMemoryContext(dispatch->estate));
+
 	if (!cis)
 	{
-		/*
-		 * The chunk search functions may leak memory, so switch to a temporary
-		 * memory context.
-		 */
-		MemoryContext old_context =
-			MemoryContextSwitchTo(GetPerTupleMemoryContext(dispatch->estate));
-
 		/*
 		 * Normally, for every row of the chunk except the first one, we expect
 		 * the chunk to exist already. The "create" function would take a lock
@@ -92,9 +93,8 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
-		bool found;
 		Assert(slot);
-		Chunk *chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
+		chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
 
 #if PG14_GE
 		/*
@@ -107,10 +107,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (!chunk)
 		{
 			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
-		}
-		else
-		{
-			found = true;
 		}
 
 		if (!chunk)
@@ -135,9 +131,29 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		}
 
 		cis = ts_chunk_insert_state_create(chunk, dispatch);
-		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 
-		if (found && ts_chunk_is_compressed(chunk) && !ts_chunk_is_distributed(chunk))
+		/*
+		 * We might have been blocked by a compression operation
+		 * while trying to fetch the above lock so lets update the
+		 * chunk catalog data because the status might have changed.
+		 *
+		 * This works even in higher levels of isolation since
+		 * catalog data is always read from latest snapshot.
+		 */
+		chunk = ts_chunk_get_by_relid(chunk->table_id, true);
+		ts_set_compression_status(cis, chunk);
+
+		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
+	}
+	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
+	{
+		/* got the same item from cache as before */
+		cis_changed = false;
+	}
+
+	if (found)
+	{
+		if (cis->chunk_compressed && cis->chunk_data_nodes == NIL)
 		{
 			/*
 			 * If this is an INSERT into a compressed chunk with UNIQUE or
@@ -147,6 +163,12 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 			 */
 			if (ts_cm_functions->decompress_batches_for_insert)
 			{
+				/* Get the chunk if its not already been loaded.
+				 * It's needed for decompress_batches_for_insert
+				 * which only uses some ids from it.
+				 */
+				if (chunk == NULL)
+					chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
 				ts_cm_functions->decompress_batches_for_insert(cis, chunk, slot);
 				OnConflictAction onconflict_action =
 					chunk_dispatch_get_on_conflict_action(dispatch);
@@ -163,14 +185,9 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 						 errhint("To access all features and the best time-series "
 								 "experience, try out Timescale Cloud")));
 		}
+	}
 
-		MemoryContextSwitchTo(old_context);
-	}
-	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
-	{
-		/* got the same item from cache as before */
-		cis_changed = false;
-	}
+	MemoryContextSwitchTo(old_context);
 
 	if (cis_changed && on_chunk_changed)
 		on_chunk_changed(cis, data);

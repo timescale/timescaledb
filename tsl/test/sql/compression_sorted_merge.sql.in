@@ -1,0 +1,466 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+
+CREATE TABLE test1 (
+time timestamptz NOT NULL,
+    x1 integer,
+    x2 integer,
+    x3 integer,
+    x4 integer,
+    x5 integer);
+
+SELECT FROM create_hypertable('test1', 'time');
+
+ALTER TABLE test1 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'time DESC, x3 ASC, x4 ASC');
+
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
+
+SELECT compress_chunk(i) FROM show_chunks('test1') i;
+
+CREATE TABLE test2 (
+time timestamptz NOT NULL,
+    x1 integer,
+    x2 integer,
+    x3 integer,
+    x4 integer,
+    x5 integer);
+
+SELECT FROM create_hypertable('test2', 'time');
+
+ALTER TABLE test2 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'time ASC, x3 DESC, x4 DESC');
+
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
+
+SELECT compress_chunk(i) FROM show_chunks('test2') i;
+
+CREATE TABLE test_with_defined_null (
+    time timestamptz NOT NULL,
+    x1 integer,
+    x2 integer,
+    x3 integer);
+
+SELECT FROM create_hypertable('test_with_defined_null','time');
+
+ALTER TABLE test_with_defined_null SET (timescaledb.compress,timescaledb.compress_segmentby='x1', timescaledb.compress_orderby='x2 ASC NULLS FIRST');
+
+INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01', '1', NULL);
+INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01','2', NULL);
+INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01','1',1);
+INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01','1',2);
+
+SELECT compress_chunk(i) FROM show_chunks('test_with_defined_null') i;
+
+-- test1 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time DESC, x3 ASC, x4 ASC'
+-- test2 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time ASC, x3 DESC, x4 DESC'
+-- test_with_defined_null uses compress_segmentby='x1' and compress_orderby = 'x2 ASC NULLS FIRST'
+
+------
+-- Tests based on ordering
+------
+
+-- Should be optimized (implicit NULLS first)
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
+
+-- Should not be optimized (NULL order wrong)
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
+
+-- Should be optimized (implicit NULLS last)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- Should not be optimized (NULL order wrong)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
+
+-- Should not be optimized (wrong order for x4)
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
+
+-- Should not be optimized (wrong order for x4 in backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
+
+-- Should not be optimized (wrong order for x3)
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
+
+-- Should not be optimized (wrong order for x3)
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST;
+
+-- Should not be optimized (wrong order for x3 in backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST;
+
+-- Should not be optimized (wrong order for x3 in backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+
+-- Should not be optimized
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
+
+-- Should not be optimized
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
+
+
+------
+-- Tests based on attributes
+------
+
+-- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
+
+-- Should be optimized (no batches qualify by pushed down filter on _ts_meta_max_3)
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4;
+
+-- Should be optimized (duplicate order by attributes)
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
+
+-- Should be optimized (duplicate order by attributes)
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
+
+-- Should not be optimized
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
+
+-- Should not be optimized
+:PREFIX
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
+
+------
+-- Tests based on results
+------
+
+-- Forward scan
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Backward scan
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
+
+-- Forward scan
+SELECT * FROM test2 ORDER BY time ASC;
+
+-- Backward scan
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST;
+
+-- With selection on compressed column (value larger as max value for all batches, so no batch has to be opened)
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
+
+-- With selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
+SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC;
+
+-- With selection on segment_by column
+SELECT * FROM test1 WHERE time < '1980-01-01 00:00:00-00' ORDER BY time DESC;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
+
+-- With selection on segment_by and compressed column
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' AND x4 > 100 ORDER BY time DESC;
+
+-- Without projection
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- With projection on time
+SELECT time FROM test1 ORDER BY time DESC;
+
+-- With projection on x3
+SELECT x3 FROM test1 ORDER BY time DESC;
+
+-- With projection on x3 and time
+SELECT x3,time FROM test1 ORDER BY time DESC;
+
+-- With projection on time and x3
+SELECT time,x3 FROM test1 ORDER BY time DESC;
+
+-- Test with projection and constants
+EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+
+-- Test with projection and constants
+EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+
+-- With projection and selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
+SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC;
+
+-- Aggregation with count
+SELECT count(*) FROM test1;
+
+-- Test with default values
+ALTER TABLE test1 ADD COLUMN c1 int;
+ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 42;
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Recompress
+SELECT decompress_chunk(i) FROM show_chunks('test1') i;
+SELECT compress_chunk(i) FROM show_chunks('test1') i;
+
+-- Test with a changed physical layout
+-- build_physical_tlist() can not be used for the scan on the compressed chunk anymore
+SELECT * FROM test1 ORDER BY time DESC;
+ALTER TABLE test1 DROP COLUMN c2;
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Test with a re-created column
+ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 43;
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Test with the recreated column
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Test with projection and recreated column
+:PREFIX
+SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
+SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
+
+-- Test with projection and recreated column
+:PREFIX
+SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
+SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
+
+-- Test with projection, constants and recreated column
+:PREFIX
+SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
+
+-- Test with null values
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
+
+------
+-- Tests based on chunk state
+------
+
+BEGIN TRANSACTION;
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10, 20, 30, 40, 50);
+
+-- Should not be optimized because of the partially compressed chunk
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+ROLLBACK;
+
+-- Should be optimized again
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+
+------
+-- Tests on a larger relation
+------
+
+CREATE TABLE sensor_data (
+time timestamptz NOT NULL,
+sensor_id integer NOT NULL,
+cpu double precision NULL,
+temperature double precision NULL);
+
+SELECT FROM create_hypertable('sensor_data','time');
+
+INSERT INTO sensor_data
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+sensor_id,
+random() AS cpu,
+random() * 100 AS temperature
+FROM
+generate_series('1980-01-01 00:00:00-00', '1980-02-01 00:00:00-00', INTERVAL '10 minute') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY
+time;
+
+ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id', timescaledb.compress_orderby = 'time DESC');
+
+SELECT add_compression_policy('sensor_data','1 minute'::INTERVAL);
+
+SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
+
+-- Ensure the optimization is used for queries on this table
+:PREFIX
+SELECT * FROM sensor_data ORDER BY time DESC LIMIT 1;
+
+-- Verify that we produce the same order without and with the optimization
+CREATE PROCEDURE order_test(query text) LANGUAGE plpgsql AS $$
+        DECLARE
+            count integer;
+        BEGIN
+
+        SET timescaledb.enable_decompression_sorted_merge = 0;
+        EXECUTE format('CREATE TABLE temp_data1 AS %s;', query);
+        ALTER TABLE temp_data1 ADD COLUMN new_id SERIAL PRIMARY KEY;
+
+        SET timescaledb.enable_decompression_sorted_merge = 1;
+        EXECUTE format('CREATE TABLE temp_data2 AS %s;', query);
+        ALTER TABLE temp_data2 ADD COLUMN new_id SERIAL PRIMARY KEY;
+
+        CREATE TEMP TABLE temp_data3 AS (
+            SELECT * FROM temp_data1 UNION ALL SELECT * FROM temp_data2
+        );
+
+        count := (SELECT COUNT(*) FROM (SELECT COUNT(*) FROM temp_data3 GROUP BY time, new_id HAVING COUNT(*) != 2) AS s);
+
+        IF count > 0 THEN
+            RAISE EXCEPTION 'Detected different order with and without the optimization %', count;
+        END IF;
+
+        -- Drop old tables
+        DROP TABLE temp_data1;
+        DROP TABLE temp_data2;
+        DROP TABLE temp_data3;
+
+        END;
+$$;
+
+CALL order_test('SELECT * FROM sensor_data ORDER BY time DESC');
+CALL order_test('SELECT * FROM sensor_data ORDER BY time DESC LIMIT 100');
+CALL order_test('SELECT * FROM sensor_data ORDER BY time ASC NULLS FIRST');
+CALL order_test('SELECT * FROM sensor_data ORDER BY time ASC NULLS FIRST LIMIT 100');
+
+CALL order_test('SELECT * FROM test1 ORDER BY time DESC');
+CALL order_test('SELECT * FROM test1 ORDER BY time ASC NULLS LAST');
+
+------
+-- Test enabling and disabling the optimization based on costs
+------
+
+CREATE TABLE test_costs (
+time timestamptz NOT NULL,
+segment_by integer NOT NULL,
+x1 integer NOT NULL);
+
+SELECT FROM create_hypertable('test_costs', 'time');
+
+ALTER TABLE test_costs SET (timescaledb.compress, timescaledb.compress_segmentby='segment_by', timescaledb.compress_orderby = 'time DESC, x1');
+
+-- Create 100 segments
+INSERT INTO test_costs
+SELECT
+'2000-01-01 02:01:00-00'::timestamptz AS time,
+segment_by,
+random() as x1
+FROM
+generate_series(1, 100, 1) AS g2(segment_by)
+ORDER BY time;
+
+SELECT add_compression_policy('test_costs','1 minute'::INTERVAL);
+
+SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
+
+-- Number of segments
+SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
+
+-- Test query plan (should be optimized due to 100 different segments)
+:PREFIX
+SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
+
+-- Decompress chunk
+SELECT decompress_chunk(i) FROM show_chunks('test_costs') i;
+
+-- Add 900 segments (1000 segments total)
+INSERT INTO test_costs
+SELECT
+'2000-01-01 02:01:00-00'::timestamptz AS time,
+segment_by,
+random() as x1
+FROM
+generate_series(100, 1000, 1) AS g2(segment_by)
+ORDER BY time;
+
+-- Recompress chunk
+SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
+
+-- Number of segments
+SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
+
+-- Test query plan (should not be optimized due to 1000 different segments)
+:PREFIX
+SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
+
+-- Test query plan with predicate (query should be optimized due to ~100 segments)
+:PREFIX
+SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;

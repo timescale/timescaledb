@@ -4,6 +4,7 @@ include(GenerateTestSchedule)
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
     bgw_custom.sql
+    bgw_security.sql
     bgw_policy.sql
     cagg_errors.sql
     cagg_invalidation.sql
@@ -26,6 +27,10 @@ set(TEST_FILES
     reorder.sql
     skip_scan.sql
     size_utils_tsl.sql)
+
+if(USE_TELEMETRY)
+  list(APPEND TEST_FILES bgw_telemetry.sql)
+endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -67,6 +72,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_tableam.sql
     cagg_usage.sql
     cagg_policy_run.sql
+    cagg_repair.sql
     data_fetcher.sql
     data_node_bootstrap.sql
     data_node.sql
@@ -105,8 +111,6 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql)
-    list(APPEND TEST_TEMPLATES continuous_aggs.sql.in
-         continuous_aggs_deprecated.sql)
   endif()
   list(APPEND TEST_FILES compression.sql compression_update_delete.sql
        compression_permissions.sql)
@@ -137,15 +141,17 @@ set(SOLO_TESTS
     remote_txn_resolve
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})
-
-# In PG15.0 and PG15.1, dist_move_chunk can get stuck when run in parallel with
-# other tests as mentioned in #4972.
-if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "2")
+# In PG versions 15.0 to 15.2, dist_move_chunk can cause a deadlock when run in
+# parallel with other tests as mentioned in #4972.
+if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "3")
   list(APPEND SOLO_TESTS dist_move_chunk)
 endif()
 
 set(TEST_TEMPLATES
-    compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
+    compression_insert.sql.in
+    compression_sorted_merge.sql.in
+    cagg_union_view.sql.in
+    plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
@@ -167,6 +173,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_partial_agg.sql.in
     dist_query.sql.in
     cagg_invalidation_dist_ht.sql.in
+    continuous_aggs.sql.in
+    continuous_aggs_deprecated.sql.in
     cagg_joins.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)

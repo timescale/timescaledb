@@ -48,6 +48,15 @@ CREATE OR REPLACE FUNCTION show_chunks(relation regclass, older_than "any" DEFAU
 CREATE EXTENSION timescaledb;
 DROP FUNCTION show_chunks;
 
+-- Create a user that is not all-lowercase
+CREATE USER "FooBar" WITH SUPERUSER;
+
+\c :TEST_DBNAME "FooBar"
+SET client_min_messages TO error;
+CREATE EXTENSION timescaledb;
+DROP EXTENSION timescaledb;
+RESET client_min_messages;
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;

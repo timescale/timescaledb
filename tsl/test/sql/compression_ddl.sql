@@ -42,6 +42,12 @@ ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
 
+-- make sure we cannot create constraints or unique indexes on compressed hypertables
+\set ON_ERROR_STOP 0
+ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
+CREATE UNIQUE INDEX unique_index ON test1(time,i);
+\set ON_ERROR_STOP 1
+
 --test adding boolean columns with default and not null
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
@@ -398,6 +404,14 @@ WHERE chunk.id IS NULL;
 
 
 --can turn compression back on
+-- this will fail because current table owner does not have permission to create compressed hypertable
+-- in the current tablespace, as they do not own it
+\set ON_ERROR_STOP 0
+ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
+-- now change the owner and repeat, should work
+ALTER TABLESPACE tablespace2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\set ON_ERROR_STOP 1
+
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
 
 SELECT COUNT(*) AS count_compressed
@@ -483,7 +497,9 @@ FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 13:00', '1 hour
 
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = 'i', timescaledb.compress_orderby = 'timec');
 
-SELECT relname FROM pg_class
+-- the toast table and its index will have a different name depending on
+-- the order the tests run, so anonymize it
+SELECT regexp_replace(relname, 'pg_toast_[0-9]+', 'pg_toast_XXX') FROM pg_class
 WHERE reltablespace in
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
 
@@ -610,3 +626,229 @@ ALTER MATERIALIZED VIEW test1_cont_view2 SET (
 );
 
 DROP TABLE metric CASCADE;
+
+-- inserting into compressed chunks with different physical layouts
+CREATE TABLE compression_insert(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON compression_insert(time);
+CREATE INDEX ON compression_insert(device_id,time);
+SELECT create_hypertable('compression_insert','time',create_default_indexes:=false);
+ALTER TABLE compression_insert SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+
+-- test without altering physical layout
+-- this is a baseline test to compare results with
+-- next series of tests which should yield identical results
+-- while changing the physical layouts of chunks
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+WHERE c.hypertable_id = ht.id and ht.table_name = 'compression_insert'
+AND c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC \gset
+
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-04 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-01 0:00:00+0'
+AND time <= '2000-01-05 23:55:00+0';
+
+-- force index scans to check index mapping
+-- this verifies that we are actually using compressed chunk index scans
+-- previously we could not use indexes on uncompressed chunks due to a bug:
+-- https://github.com/timescale/timescaledb/issues/5432
+--
+-- this check basically makes sure that the indexes are built properly
+-- and there are no issues in attribute mappings while building them
+SET enable_seqscan = off;
+EXPLAIN (costs off) SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-01 0:00:00+0'
+AND time <= '2000-01-05 23:55:00+0';
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SET enable_seqscan = default;
+
+-- 1. drop column after first insert into chunk, before compressing
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-07 0:00:00+0'::timestamptz,'2000-01-09 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+ALTER TABLE compression_insert DROP COLUMN filler_1;
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+WHERE c.hypertable_id = ht.id
+AND ht.table_name = 'compression_insert'
+AND c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC \gset
+
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-10 0:00:00+0'::timestamptz,'2000-01-11 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-07 0:00:00+0'
+AND time <= '2000-01-11 23:55:00+0';
+
+-- force index scans to check index mapping
+SET enable_seqscan = off;
+EXPLAIN (costs off) SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-07 0:00:00+0'
+AND time <= '2000-01-11 23:55:00+0';
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SET enable_seqscan = default;
+
+-- 2. drop column after compressing chunk
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-15 0:00:00+0'::timestamptz,'2000-01-17 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+WHERE c.hypertable_id = ht.id
+AND ht.table_name = 'compression_insert'
+AND c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC \gset
+
+ALTER TABLE compression_insert DROP COLUMN filler_2;
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-18 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-15 0:00:00+0'
+AND time <= '2000-01-19 23:55:00+0';
+
+-- force index scans to check index mapping
+SET enable_seqscan = off;
+EXPLAIN (costs off) SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-15 0:00:00+0'
+AND time <= '2000-01-19 23:55:00+0';
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SET enable_seqscan = default;
+
+-- 3. add new column after first insert into chunk, before compressing
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-22 0:00:00+0'::timestamptz,'2000-01-24 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+ALTER TABLE compression_insert ADD COLUMN filler_4 int;
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+WHERE c.hypertable_id = ht.id
+AND ht.table_name = 'compression_insert'
+AND c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC \gset
+
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-25 0:00:00+0'::timestamptz,'2000-01-26 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-22 0:00:00+0'
+AND time <= '2000-01-26 23:55:00+0';
+
+-- force index scans to check index mapping
+SET enable_seqscan = off;
+EXPLAIN (costs off) SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-22 0:00:00+0'
+AND time <= '2000-01-26 23:55:00+0';
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SET enable_seqscan = default;
+
+-- 4. add new column after compressing chunk
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-28 0:00:00+0'::timestamptz,'2000-01-30 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+WHERE c.hypertable_id = ht.id
+AND ht.table_name = 'compression_insert'
+AND c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC \gset
+
+ALTER TABLE compression_insert ADD COLUMN filler_5 int;
+INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-31 0:00:00+0'::timestamptz,'2000-02-01 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-28 0:00:00+0'
+AND time <= '2000-02-01 23:55:00+0';
+
+-- force index scans to check index mapping
+SET enable_seqscan = off;
+EXPLAIN (costs off) SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
+FROM compression_insert
+WHERE time >= '2000-01-28 0:00:00+0'
+AND time <= '2000-02-01 23:55:00+0';
+SELECT device_id, count(*)
+FROM compression_insert
+GROUP BY device_id
+ORDER BY device_id;
+SET enable_seqscan = default;
+
+DROP TABLE compression_insert;

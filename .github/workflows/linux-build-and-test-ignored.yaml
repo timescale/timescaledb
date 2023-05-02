@@ -36,7 +36,11 @@ jobs:
         fi
 
   regress:
+    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+    needs: matrixbuilder
     runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
     steps:
       - run: |
           echo "No build required"

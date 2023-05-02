@@ -64,11 +64,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1',0.1),
   ('2020-01-01 0:00:02','d2',0.2),
   ('2020-01-01 0:00:03','d3',0.3);
-  -- data should have move into uncompressed chunk for conflict check
+  -- no data should have moved into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     4
+     3
 (1 row)
 
 ROLLBACK;
@@ -139,11 +140,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1',0.1),
   ('2020-01-01 0:00:01','d2',0.2),
   ('2020-01-01 0:00:01','d3',0.3);
-  -- data should have move into uncompressed chunk for conflict check
+  -- no data should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     5
+     3
 (1 row)
 
 ROLLBACK;
@@ -213,6 +215,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 BEGIN;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL,0.3);
   -- data for 1 segment (count = 1 value + 1 inserted) should be present in uncompressed chunk
+  -- we treat NULLs as NOT DISTINCT and let the constraint configuration handle the check
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
@@ -223,11 +226,12 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1',0.1);
-  -- data for 1 segment (count = 1 value + 1 inserted) should have move into uncompressed chunk for conflict check
+  -- no data should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     2
+     1
 (1 row)
 
 ROLLBACK;
@@ -236,11 +240,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1',0.1),
   ('2020-01-01 0:00:01','d2',0.2),
   ('2020-01-01 0:00:01','d3',0.3);
-  -- data for 2 segment (count = 2 value + 2 inserted) should have move into uncompressed chunk for conflict check
+  -- no data for should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     4
+     3
 (1 row)
 
 ROLLBACK;
@@ -274,6 +279,106 @@ SELECT count(*) FROM ONLY :CHUNK;
      1
 (1 row)
 
+-- test 4: multi-column primary key with multi-column orderby compression
+CREATE TABLE comp_conflicts_4(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_conflicts_4','time');
+    table_name    
+------------------
+ comp_conflicts_4
+(1 row)
+
+ALTER TABLE comp_conflicts_4 SET (timescaledb.compress,timescaledb.compress_orderby='time,device');
+-- implicitly create chunk
+INSERT INTO comp_conflicts_4 SELECT generate_series('2020-01-01'::timestamp, '2020-01-01 2:00:00', '1s'), 'd1',0.1;
+INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d2',0.2);
+INSERT INTO comp_conflicts_4 VALUES ('2020-01-01',NULL,0.3);
+SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_4') c
+\gset
+-- after compression no data should be in uncompressed chunk
+SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     0
+(1 row)
+
+-- NULL is considered distinct from other NULL so even though the next INSERT looks
+-- like a conflict it is not a constraint violation (PG15 makes NULL behaviour configurable)
+BEGIN;
+  INSERT INTO comp_conflicts_4 VALUES ('2020-01-01',NULL,0.3);
+  -- data for 1 segment (count = 1000 values + 1 inserted) should be present in uncompressed chunk
+  -- we treat NULLs as NOT DISTINCT and let the constraint configuration handle the check
+  SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+  1001
+(1 row)
+
+ROLLBACK;
+-- should succeed since there are no conflicts in the values
+BEGIN;
+  INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 2:00:01','d1',0.1);
+  -- no data should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
+  SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     1
+(1 row)
+
+ROLLBACK;
+BEGIN;
+  INSERT INTO comp_conflicts_4 VALUES
+  ('2020-01-01 2:00:01','d1',0.1),
+  ('2020-01-01 2:00:01','d2',0.2),
+  ('2020-01-01 2:00:01','d3',0.3);
+  -- no data for should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
+  SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+BEGIN;
+  INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:00:01','d3',0.2);
+  -- count = 1 since no data should have move into uncompressed chunk for conflict check since d3 is new segment
+  SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     1
+(1 row)
+
+ROLLBACK;
+-- no data should be in uncompressed chunk since we did rollback
+SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     0
+(1 row)
+
+-- should fail since it conflicts with existing row
+\set ON_ERROR_STOP 0
+INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d1',0.1);
+ERROR:  duplicate key value violates unique constraint "7_4_comp_conflicts_4_time_device_key"
+\set ON_ERROR_STOP 1
+-- data not should have move into uncompressed chunk for conflict check
+SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     0
+(1 row)
+
+INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:00:01','d1',0.1) ON CONFLICT DO NOTHING;
+INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:30:00','d1',0.1) ON CONFLICT DO NOTHING;
+-- data should have move into uncompressed chunk for conflict check
+-- 2 segments (count = 2000)
+SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+  2000
+(1 row)
+
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -301,7 +406,7 @@ SELECT * FROM create_hypertable('compressed_ht', 'time',
 WARNING:  column type "character varying" used for "name" does not follow best practices
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
-             7 | public      | compressed_ht | t
+             9 | public      | compressed_ht | t
 (1 row)
 
 -- create chunk 1
@@ -320,11 +425,11 @@ ALTER TABLE compressed_ht SET (
 	timescaledb.compress_segmentby = 'sensor_id'
 );
 SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
-             compress_chunk             
-----------------------------------------
- _timescaledb_internal._hyper_7_7_chunk
- _timescaledb_internal._hyper_7_8_chunk
- _timescaledb_internal._hyper_7_9_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_9_chunk
+ _timescaledb_internal._hyper_9_10_chunk
+ _timescaledb_internal._hyper_9_11_chunk
 (3 rows)
 
 -- check compression status
@@ -332,11 +437,11 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_7_7_chunk
-            1 | _hyper_7_8_chunk
-            1 | _hyper_7_9_chunk
+ chunk_status |    CHUNK_NAME     
+--------------+-------------------
+            1 | _hyper_9_10_chunk
+            1 | _hyper_9_11_chunk
+            1 | _hyper_9_9_chunk
 (3 rows)
 
 -- should report 0 row
@@ -361,11 +466,11 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            9 | _hyper_7_7_chunk
-            1 | _hyper_7_8_chunk
-            1 | _hyper_7_9_chunk
+ chunk_status |    CHUNK_NAME     
+--------------+-------------------
+            1 | _hyper_9_10_chunk
+            1 | _hyper_9_11_chunk
+            9 | _hyper_9_9_chunk
 (3 rows)
 
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
@@ -381,10 +486,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            9 | _hyper_7_7_chunk
-            1 | _hyper_7_8_chunk
-            9 | _hyper_7_9_chunk
+ chunk_status |    CHUNK_NAME     
+--------------+-------------------
+            1 | _hyper_9_10_chunk
+            9 | _hyper_9_11_chunk
+            9 | _hyper_9_9_chunk
 (3 rows)
 
