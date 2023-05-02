@@ -14,6 +14,7 @@
 #include "adts/uint64_vec.h"
 #include "compat/compat.h"
 
+/* We have to stub this for the unit tests. */
 #ifndef CheckCompressedData
 #define CheckCompressedData(X) Assert(X)
 #endif

@@ -2042,35 +2042,20 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 static int
 test_one_input_throw(const uint8_t *Data, size_t Size)
 {
-	/* FIXME this is broken. */
-	//	void *vl = palloc(Size + 4);
-	//	SET_VARSIZE(vl, Size + 4);
-	//	memcpy(VARDATA(vl), Data, Size);
-	//
-	//	StringInfoData si = { .data = (char *) vl, .len = VARSIZE(vl) };
 	StringInfoData si = { .data = (char *) Data, .len = Size };
-	//*
+
 	int algo = pq_getmsgbyte(&si);
-	if (algo != 3)
+
+	CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
+
+	/* Only for Gorilla for now. */
+	if (algo != COMPRESSION_ALGORITHM_GORILLA)
 	{
 		return -1;
 	}
-	//*/
 
-	Datum datum = gorilla_compressed_recv(&si);
-	//  Datum datum = tsl_compressed_data_recv(&si);
-	//	CompressedDataHeader *header = (CompressedDataHeader *) datum;
-	//
-	//	if (header->compression_algorithm != 3)
-	//	{
-	//		return -1;
-	//	}
-	//
-	//	DecompressionIterator *iter = tsl_get_decompression_iterator(
-	//		header->compression_algorithm, /* reverse = */ false)(datum, FLOAT8OID);
-
-	DecompressionIterator *iter =
-		gorilla_decompression_iterator_from_datum_forward(datum, FLOAT8OID);
+	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
 	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -2080,19 +2065,11 @@ test_one_input_throw(const uint8_t *Data, size_t Size)
 	}
 	(void) i;
 	// fprintf(stderr, " (%d total)\n", i);
+
 	return 0;
 }
 
-//*
-TS_FUNCTION_INFO_V1(ts_fuzz);
-
-Datum
-ts_fuzz(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_NULL();
-}
-
-/*/
+#ifdef TS_COMPRESSION_FUZZING
 
 static int
 LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
@@ -2108,16 +2085,6 @@ LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 	}
 	PG_CATCH();
 	{
-//		MemoryContextSwitchTo(oldcontext);
-//
-//		ErrorData  *edata = CopyErrorData();
-//
-//		if (edata->sqlerrcode == ERRCODE_QUERY_CANCELED &&
-//			strstr(edata->message, "due to user request"))
-//		{
-//			PG_RE_THROW();
-//		}
-
 		FlushErrorState();
 		res = -1;
 	}
@@ -2131,10 +2098,10 @@ LLVMFuzzerRunDriver(int *argc, char ***argv,
 					int (*UserCb)(const uint8_t *Data, size_t Size));
 
 
-TS_FUNCTION_INFO_V1(ts_fuzz);
+TS_FUNCTION_INFO_V1(ts_fuzz_compression);
 
 Datum
-ts_fuzz(PG_FUNCTION_ARGS)
+ts_fuzz_compression(PG_FUNCTION_ARGS)
 {
 	MemoryContext fuzzing_context = AllocSetContextCreate(CurrentMemoryContext,
 											 "fuzzing",
@@ -2168,26 +2135,26 @@ ts_fuzz(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(res);
 }
 
-//*/
+#endif
 
-TS_FUNCTION_INFO_V1(ts_fromfile);
+TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 
 Datum
-ts_fromfile(PG_FUNCTION_ARGS)
+ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 {
 	char *name = PG_GETARG_CSTRING(0);
 	FILE *f = fopen(name, "r");
 
 	if (!f)
 	{
-		elog(ERROR, "could not open the file");
+		elog(ERROR, "could not open the file '%s'", name);
 	}
 
 	fseek(f, 0, SEEK_END);
 	long fsize = ftell(f);
 	fseek(f, 0, SEEK_SET); /* same as rewind(f); */
 
-	char *string = malloc(fsize + 1);
+	char *string = palloc(fsize + 1);
 	fread(string, fsize, 1, f);
 	fclose(f);
 
@@ -2197,6 +2164,9 @@ ts_fromfile(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(res);
 }
+
+
+//*/
 
 #if PG14_GE
 static SegmentFilter *

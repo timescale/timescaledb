@@ -18,6 +18,8 @@
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
 #endif
 
+typedef struct BulkInsertStateData *BulkInsertState;
+
 #include <nodes/execnodes.h>
 #include "segment_meta.h"
 
@@ -351,11 +353,18 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
-#define CheckCompressedData(X)                                                                     \
-	if (!(X))                                                                                      \
-	{                                                                                              \
-		ereport(ERROR, (/*errmsg("the compressed data is corrupt")*/ true));                       \
-	}
+/*
+ * A convenience macro to thorw an error about the corrupted compressed data, if
+ * the argument is false. When fuzzing is enabled, we don't show the message not
+ * to pollute the logs.
+ */
+#ifdef TS_COMPRESSION_FUZZING
+#define CORRUPT_DATA_MESSAGE (errmsg("the compressed data is corrupt"))
+#else
+#define CORRUPT_DATA_MESSAGE (true)
+#endif
+
+#define CheckCompressedData(X) if (!(X)) ereport(ERROR, CORRUPT_DATA_MESSAGE);
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
