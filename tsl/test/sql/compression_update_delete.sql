@@ -941,3 +941,27 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and 
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
 ROLLBACK;
+
+--github issue: 5646
+CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON tab1(time);
+CREATE INDEX ON tab1(device_id,time);
+SELECT create_hypertable('tab1','time',create_default_indexes:=false);
+
+ALTER TABLE tab1 DROP COLUMN filler_1;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','57m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ALTER TABLE tab1 DROP COLUMN filler_2;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','58m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ALTER TABLE tab1 DROP COLUMN filler_3;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','59m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ANALYZE tab1;
+
+-- compress chunks
+ALTER TABLE tab1 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(show_chunks('tab1'));
+
+-- query with joins
+-- ensure only affected chunks are processed
+BEGIN;
+DELETE FROM tab1 t1 USING tab1 t2, tab1 t3 WHERE t1.device_id = t2.device_id AND t2.device_id = t3.device_id AND t1.time > '2000-01-10' AND t2.v0 IS NOT NULL AND t3.v1 IS NOT NULL;
+ROLLBACK;

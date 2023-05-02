@@ -100,7 +100,29 @@ typedef struct ChunkScanNodes
 	List *chunks;
 	/* list of conditions specified in WHERE */
 	List *predicates;
+	/* all above chunks should belong to this parent table */
+	Oid hypertable_id;
+	/* set of chunks which needs to be processed */
+	List *target_chunk_oids;
 } ChunkScanNodes;
+
+static bool
+is_chunk_oid_present(Oid ch_id, List **nodelist)
+{
+	ListCell *lc;
+	bool is_present = false;
+
+	foreach (lc, *nodelist)
+	{
+		if (ch_id == lfirst_oid(lc))
+		{
+			is_present = true;
+			*nodelist = list_delete_oid(*nodelist, ch_id);
+			break;
+		}
+	}
+	return is_present;
+}
 /*
  * Traverse the plan tree to look for Scan nodes on uncompressed chunks.
  * Once Scan node is found check if chunk is compressed, if so then save
@@ -126,8 +148,16 @@ collect_chunks_from_scan(PlanState *ps, ChunkScanNodes *sn)
 		case T_TidRangeScanState:
 			rte = rt_fetch(((Scan *) ps->plan)->scanrelid, ps->state->es_range_table);
 			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
-			if (current_chunk && ts_chunk_is_compressed(current_chunk))
+			/* ensure chunk belongs to target hypertable and is compressed */
+			if (current_chunk && current_chunk->hypertable_relid == sn->hypertable_id &&
+				ts_chunk_is_compressed(current_chunk) &&
+				is_chunk_oid_present(current_chunk->table_id, &sn->target_chunk_oids))
 			{
+				const char *chunk_name;
+				chunk_name = psprintf("%s.%s",
+									  quote_identifier(current_chunk->fd.schema_name.data),
+									  quote_identifier(current_chunk->fd.table_name.data));
+				elog(DEBUG1, "\nChunk being processed: \"%s\"\n", chunk_name);
 				sn->chunks = lappend(sn->chunks, current_chunk);
 				if (ps->plan->qual && !sn->predicates)
 					sn->predicates = ps->plan->qual;
@@ -800,6 +830,16 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	if ((operation == CMD_DELETE || operation == CMD_UPDATE) && !ht_state->comp_chunks_processed)
 	{
 		ChunkScanNodes *sn = palloc0(sizeof(ChunkScanNodes));
+		/* save target hypertable id */
+		RangeTblEntry *hyper_rte = exec_rt_fetch(ht_state->mt->nominalRelation, estate);
+		sn->hypertable_id = hyper_rte->relid;
+		/* save target chunk oids */
+		for (int j = 0; j < context.mtstate->mt_nrels; j++)
+		{
+			ResultRelInfo *resrel = context.mtstate->resultRelInfo + j;
+			RangeTblEntry *ch_rte = exec_rt_fetch(resrel->ri_RangeTableIndex, estate);
+			sn->target_chunk_oids = lappend_oid(sn->target_chunk_oids, ch_rte->relid);
+		}
 		collect_chunks_from_scan(pstate, sn);
 		if (sn->chunks && ts_cm_functions->decompress_batches_for_update_delete)
 		{
