@@ -1000,3 +1000,71 @@ ROLLBACK;
 RESET timescaledb.enable_optimizations;
 DROP table tab1;
 DROP table tab2;
+
+-- test joins with UPDATE/DELETE on compression chunks
+CREATE TABLE join_test1(time timestamptz NOT NULL,device text, value float);
+CREATE TABLE join_test2(time timestamptz NOT NULL,device text, value float);
+CREATE VIEW chunk_status AS SELECT ht.table_name AS hypertable, ch.table_name AS chunk,ch.status from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id AND ht.table_name IN ('join_test1','join_test2') ORDER BY ht.id, ch.id;
+
+SELECT table_name FROM create_hypertable('join_test1', 'time');
+SELECT table_name FROM create_hypertable('join_test2', 'time');
+
+ALTER TABLE join_test1 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+ALTER TABLE join_test2 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+INSERT INTO join_test1 VALUES ('2000-01-01','d1',0.1), ('2000-02-01','d1',0.1), ('2000-03-01','d1',0.1);
+INSERT INTO join_test2 VALUES ('2000-02-01','d1',0.1), ('2000-02-01','d2',0.1), ('2000-02-01','d3',0.1);
+
+SELECT compress_chunk(show_chunks('join_test1'));
+SELECT compress_chunk(show_chunks('join_test2'));
+
+SELECT * FROM chunk_status;
+
+BEGIN;
+DELETE FROM join_test1 USING join_test2;
+-- only join_test1 chunks should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+DELETE FROM join_test2 USING join_test1;
+-- only join_test2 chunks should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+DELETE FROM join_test1 t1 USING join_test1 t2 WHERE t1.time = '2000-01-01';
+-- only first chunk of join_test1 should have status change
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+DELETE FROM join_test1 t1 USING join_test1 t2 WHERE t2.time = '2000-01-01';
+-- all chunks of join_test1 should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test2 t2;
+-- only join_test1 chunks should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+UPDATE join_test2 t1 SET value = t1.value + 1 FROM join_test1 t2;
+-- only join_test2 chunks should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test1 t2 WHERE t1.time = '2000-01-01';
+-- only first chunk of join_test1 should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+
+BEGIN;
+UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test1 t2 WHERE t2.time = '2000-01-01';
+-- all chunks of join_test1 should have status 9
+SELECT * FROM chunk_status;
+ROLLBACK;
+

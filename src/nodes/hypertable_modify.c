@@ -754,7 +754,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	{
 		if (ts_cm_functions->decompress_target_segments)
 		{
-			ts_cm_functions->decompress_target_segments(pstate);
+			ts_cm_functions->decompress_target_segments(node);
 			ht_state->comp_chunks_processed = true;
 			/*
 			 * save snapshot set during ExecutorStart(), since this is the same
