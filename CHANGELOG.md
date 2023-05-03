@@ -33,6 +33,7 @@ accidentally triggering the load of a previous DB version.**
 * #5613 Quote username identifier appropriately
 * #5525 Fix tablespace for compressed hypertable and corresponding toast
 * #5642 Fix ALTER TABLE SET with normal tables
+* #5666 Reduce memory usage for distributed analyze
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
