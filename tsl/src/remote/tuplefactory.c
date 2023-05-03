@@ -221,6 +221,15 @@ tuplefactory_create_for_scan(ScanState *ss, List *retrieved_attrs)
 	return tuplefactory_create(NULL, ss, retrieved_attrs);
 }
 
+void
+tuplefactory_destroy(TupleFactory *tf)
+{
+	if (tf->temp_mctx)
+		MemoryContextDelete(tf->temp_mctx);
+
+	pfree(tf);
+}
+
 bool
 tuplefactory_is_binary(TupleFactory *tf)
 {
@@ -252,8 +261,9 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 	ItemPointer ctid = NULL;
 	ListCell *lc;
 	int j;
+	int PG_USED_FOR_ASSERTS_ONLY ntuples = PQntuples(res);
 
-	Assert(row < PQntuples(res));
+	Assert(row < ntuples);
 
 	/* Install error callback */
 	if (tf->errcallback.callback != NULL)
