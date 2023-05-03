@@ -2055,7 +2055,8 @@ test_one_input_throw(const uint8_t *Data, size_t Size)
 	}
 
 	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
-	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
+	DecompressionIterator *iter =
+		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
 	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -2074,7 +2075,6 @@ test_one_input_throw(const uint8_t *Data, size_t Size)
 static int
 LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
-	//MemoryContext oldcontext = CurrentMemoryContext;
 	MemoryContextReset(CurrentMemoryContext);
 	volatile int res = -1;
 
@@ -2092,41 +2092,35 @@ LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 	return res;
 }
 
-
-extern int
-LLVMFuzzerRunDriver(int *argc, char ***argv,
-					int (*UserCb)(const uint8_t *Data, size_t Size));
-
+extern int LLVMFuzzerRunDriver(int *argc, char ***argv,
+							   int (*UserCb)(const uint8_t *Data, size_t Size));
 
 TS_FUNCTION_INFO_V1(ts_fuzz_compression);
 
 Datum
 ts_fuzz_compression(PG_FUNCTION_ARGS)
 {
-	MemoryContext fuzzing_context = AllocSetContextCreate(CurrentMemoryContext,
-											 "fuzzing",
-											 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
+	MemoryContext fuzzing_context =
+		AllocSetContextCreate(CurrentMemoryContext, "fuzzing", 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
 	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
 
-	char *argvdata[] = {
-		"PostgresFuzzer",
-		//"-help=1",
-		"-verbosity=1",
-		"-timeout=1",
-		"-report_slow_units=1",
-		"-use_value_profile=1",
-		//"-reload=1",
-		//"-print_full_coverage=1",
-		//"-runs=1",
-		//"-data_flow_trace=1",
-		//"-focus-function=auto",
-		//"-merge=1",
-		//"/var/tmp/corpus-mini",
-		"/var/tmp/corpus",
-		NULL
-	};
+	char *argvdata[] = { "PostgresFuzzer",
+						 //"-help=1",
+						 "-verbosity=1",
+						 "-timeout=1",
+						 "-report_slow_units=1",
+						 "-use_value_profile=1",
+						 //"-reload=1",
+						 //"-print_full_coverage=1",
+						 //"-runs=1",
+						 //"-data_flow_trace=1",
+						 //"-focus-function=auto",
+						 //"-merge=1",
+						 //"/var/tmp/corpus-mini",
+						 "/var/tmp/corpus",
+						 NULL };
 	char **argv = argvdata;
-	int argc = sizeof(argvdata)/sizeof(*argvdata) - 1;
+	int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
 
 	int res = LLVMFuzzerRunDriver(&argc, &argv, LLVMFuzzerTestOneInput);
 
@@ -2164,7 +2158,6 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(res);
 }
-
 
 //*/
 
