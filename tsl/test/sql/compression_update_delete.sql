@@ -941,3 +941,62 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and 
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
 ROLLBACK;
+
+--github issue: 5640
+CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON tab1(time);
+CREATE INDEX ON tab1(device_id,time);
+SELECT create_hypertable('tab1','time',create_default_indexes:=false);
+
+ALTER TABLE tab1 DROP COLUMN filler_1;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','57m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ALTER TABLE tab1 DROP COLUMN filler_2;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','58m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ALTER TABLE tab1 DROP COLUMN filler_3;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','59m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ANALYZE tab1;
+
+-- compress chunks
+ALTER TABLE tab1 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(show_chunks('tab1'));
+
+-- ensure there is an index scan generated for below DELETE query
+BEGIN;
+SELECT count(*) FROM tab1 WHERE device_id = 1;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 1000, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT count(*) FROM tab1 WHERE device_id = 1;
+ANALYZE tab1;
+EXPLAIN (costs off) DELETE FROM public.tab1 WHERE public.tab1.device_id = 1;
+DELETE FROM tab1 WHERE tab1.device_id = 1;
+SELECT count(*) FROM tab1 WHERE device_id = 1;
+ROLLBACK;
+
+-- create hypertable with space partitioning and compression
+CREATE TABLE tab2(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON tab2(time);
+CREATE INDEX ON tab2(device_id,time);
+SELECT create_hypertable('tab2','time','device_id',3,create_default_indexes:=false);
+
+ALTER TABLE tab2 DROP COLUMN filler_1;
+INSERT INTO tab2(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','35m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ALTER TABLE tab2 DROP COLUMN filler_2;
+INSERT INTO tab2(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','45m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ALTER TABLE tab2 DROP COLUMN filler_3;
+INSERT INTO tab2(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','55m') gtime(time), generate_series(1,1,1) gdevice(device_id);
+ANALYZE tab2;
+
+-- compress chunks
+ALTER TABLE tab2 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(show_chunks('tab2'));
+
+-- below test will cause chunks of tab2 to get decompressed
+-- without fix for issue #5460
+SET timescaledb.enable_optimizations = OFF;
+BEGIN;
+DELETE FROM tab1 t1 USING tab2 t2 WHERE t1.device_id = t2.device_id AND t2.time > '2000-01-01';
+ROLLBACK;
+
+--cleanup
+RESET timescaledb.enable_optimizations;
+DROP table tab1;
+DROP table tab2;
