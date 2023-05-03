@@ -184,9 +184,6 @@ vacuum full conditions;
 -- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
 pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
-from hypertable_detailed_size('foo');
-select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
-pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('conditions');
 select * from timescaledb_information.hypertables
 where hypertable_name like 'foo' or hypertable_name like 'conditions'
@@ -760,3 +757,75 @@ SET enable_indexscan to off;
 SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
+
+
+-- Improve the number of parallel workers for decompression
+
+-- Test that a parallel plan is generated
+-- with different number of parallel workers
+
+CREATE TABLE f_sensor_data(
+      time timestamptz not null,
+      sensor_id integer not null,
+      cpu double precision null,
+      temperature double precision null 
+    );
+
+SELECT FROM create_hypertable('f_sensor_data','time');
+SELECT set_chunk_time_interval('f_sensor_data', INTERVAL '1 year');
+
+SELECT * FROM _timescaledb_internal.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
+
+INSERT INTO f_sensor_data
+SELECT
+    time AS time,
+    sensor_id,
+    100.0,
+    36.6
+FROM
+    generate_series('1980-01-01 00:00'::timestamp, '1980-12-31 12:00', INTERVAL '1 day') AS g1(time),
+    generate_series(1, 700, 1 ) AS g2(sensor_id)
+ORDER BY
+    time;
+
+SELECT c.chunk_name,c.range_start,c.range_end,c.is_compressed,pg_size_pretty(d.total_bytes) 
+FROM public.chunks_detailed_size('public.f_sensor_data') d, timescaledb_information.chunks c 
+WHERE d.chunk_name=c.chunk_name 
+ORDER BY c.range_start;
+
+ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
+
+SELECT add_compression_policy('f_sensor_data','1 minute'::INTERVAL);
+SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
+
+SELECT c.chunk_name,c.range_start,c.range_end,c.is_compressed,pg_size_pretty(d.total_bytes) 
+FROM public.chunks_detailed_size('public.f_sensor_data') d, timescaledb_information.chunks c 
+WHERE d.chunk_name=c.chunk_name 
+ORDER BY c.range_start;
+
+-- Encourage use of parallel plans
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+
+SET min_parallel_table_scan_size TO '1';
+
+\set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
+
+SHOW min_parallel_table_scan_size;
+SHOW max_parallel_workers;
+SHOW max_parallel_workers_per_gather;
+
+set max_parallel_workers_per_gather = 1;
+SHOW max_parallel_workers_per_gather;
+:explain
+select sum(cpu) from f_sensor_data;
+
+set max_parallel_workers_per_gather = 2;
+SHOW max_parallel_workers_per_gather;
+:explain
+select sum(cpu) from f_sensor_data;
+
+set max_parallel_workers_per_gather = 4;
+SHOW max_parallel_workers_per_gather;
+:explain
+select sum(cpu) from f_sensor_data;

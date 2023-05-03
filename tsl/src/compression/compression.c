@@ -21,8 +21,10 @@
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pg_list.h>
 #include <nodes/print.h>
+#include <parser/parsetree.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
@@ -2340,66 +2342,97 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
  *  3. Move scanned rows to staging area.
  *  4. Update catalog table to change status of moved chunk.
  */
-void
-decompress_batches_for_update_delete(List *chunks, List *predicates)
+static void
+decompress_batches_for_update_delete(Chunk *chunk, List *predicates)
 {
+	/* process each chunk with its corresponding predicates */
+
 	List *filters = NIL;
 	List *is_null = NIL;
-	ListCell *ch = NULL;
 	ListCell *lc = NULL;
-
 	Relation chunk_rel;
 	Relation comp_chunk_rel;
-	Chunk *chunk, *comp_chunk;
+	Chunk *comp_chunk;
 	RowDecompressor decompressor;
 	SegmentFilter *filter;
 
-	if (predicates)
-		fill_predicate_context(linitial(chunks), predicates, &filters, &is_null);
-	foreach (ch, chunks)
+	bool chunk_status_changed = false;
+	ScanKeyData *scankeys = NULL;
+	Bitmapset *null_columns = NULL;
+	int num_scankeys = 0;
+
+	fill_predicate_context(chunk, predicates, &filters, &is_null);
+
+	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
+	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
+	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
+
+	if (filters)
 	{
-		chunk = (Chunk *) lfirst(ch);
-		bool chunk_status_changed = false;
-		ScanKeyData *scankeys = NULL;
-		Bitmapset *null_columns = NULL;
-		int num_scankeys = 0;
-
-		chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
-		comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-		comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
-		decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
-
-		if (filters)
-		{
-			scankeys =
-				build_update_delete_scankeys(&decompressor, filters, &num_scankeys, &null_columns);
-		}
-		if (decompress_batches(&decompressor,
-							   scankeys,
-							   num_scankeys,
-							   null_columns,
-							   is_null,
-							   &chunk_status_changed))
-		{
-			/*
-			 * tuples from compressed chunk has been decompressed and moved
-			 * to staging area, thus mark this chunk as partially compressed
-			 */
-			if (chunk_status_changed == true)
-				ts_chunk_set_partial(lfirst(ch));
-		}
-
-		ts_catalog_close_indexes(decompressor.indexstate);
-		FreeBulkInsertState(decompressor.bistate);
-
-		table_close(chunk_rel, NoLock);
-		table_close(comp_chunk_rel, NoLock);
+		scankeys =
+			build_update_delete_scankeys(&decompressor, filters, &num_scankeys, &null_columns);
 	}
+	if (decompress_batches(&decompressor,
+						   scankeys,
+						   num_scankeys,
+						   null_columns,
+						   is_null,
+						   &chunk_status_changed))
+	{
+		/*
+		 * tuples from compressed chunk has been decompressed and moved
+		 * to staging area, thus mark this chunk as partially compressed
+		 */
+		if (chunk_status_changed == true)
+			ts_chunk_set_partial(chunk);
+	}
+
+	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeBulkInsertState(decompressor.bistate);
+
+	table_close(chunk_rel, NoLock);
+	table_close(comp_chunk_rel, NoLock);
 
 	foreach (lc, filters)
 	{
 		filter = lfirst(lc);
 		pfree(filter);
 	}
+}
+
+/*
+ * Traverse the plan tree to look for Scan nodes on uncompressed chunks.
+ * Once Scan node is found check if chunk is compressed, if so then
+ * decompress those segments which match the filter conditions if present.
+ */
+bool
+decompress_target_segments(PlanState *ps)
+{
+	RangeTblEntry *rte = NULL;
+	Chunk *current_chunk;
+	if (ps == NULL)
+		return false;
+
+	switch (nodeTag(ps))
+	{
+		case T_SeqScanState:
+		case T_SampleScanState:
+		case T_IndexScanState:
+		case T_IndexOnlyScanState:
+		case T_BitmapHeapScanState:
+		case T_TidScanState:
+		case T_TidRangeScanState:
+			rte = rt_fetch(((Scan *) ps->plan)->scanrelid, ps->state->es_range_table);
+			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
+			if (current_chunk && ts_chunk_is_compressed(current_chunk))
+			{
+				decompress_batches_for_update_delete(current_chunk, ps->plan->qual);
+			}
+			break;
+		default:
+			break;
+	}
+	return planstate_tree_walker(ps, decompress_target_segments, NULL);
 }
 #endif
