@@ -55,7 +55,7 @@ SELECT * FROM test.get_connection_stats();
 \set ON_ERROR_STOP 0
 SELECT test.send_remote_query_that_generates_exception();
 ERROR:  XX000: bad query error thrown from test
-LOCATION:  ts_test_bad_remote_query, connection.c:216
+LOCATION:  ts_test_bad_remote_query, connection.c:222
 \set ON_ERROR_STOP 1
 SELECT * FROM test.get_connection_stats();
  connections_created | connections_closed | results_created | results_cleared 
