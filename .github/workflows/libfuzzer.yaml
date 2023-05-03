@@ -65,7 +65,7 @@ jobs:
         export LIBFUZZER_PATH=$(readlink -e /usr/lib/llvm-14/lib/clang/*/lib/linux)
 
         cmake -B build -S . -DASSERTIONS=ON -DLINTER=OFF -DCMAKE_VERBOSE_MAKEFILE=1 \
-            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=Debug \
+            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
             -DCMAKE_C_FLAGS="-DTS_COMPRESSION_FUZZING -fsanitize=fuzzer-no-link -lstdc++ -L$LIBFUZZER_PATH -l:libclang_rt.fuzzer_no_main-x86_64.a -static-libsan"
             -DPG_PATH=$(readlink -f ~/$PG_INSTALL_DIR)
 
