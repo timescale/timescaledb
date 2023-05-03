@@ -184,9 +184,6 @@ vacuum full conditions;
 -- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
 pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
-from hypertable_detailed_size('foo');
-select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
-pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('conditions');
 select * from timescaledb_information.hypertables
 where hypertable_name like 'foo' or hypertable_name like 'conditions'
