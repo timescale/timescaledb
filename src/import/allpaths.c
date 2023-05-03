@@ -90,8 +90,8 @@ set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *
 }
 
 /* copied from allpaths.c */
-static void
-create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel)
+void
+ts_create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel)
 {
 	int parallel_workers;
 
@@ -124,7 +124,7 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* If appropriate, consider parallel sequential scan */
 	if (rel->consider_parallel && required_outer == NULL)
-		create_plain_partial_paths(root, rel);
+		ts_create_plain_partial_paths(root, rel);
 
 	/* Consider index scans */
 	create_index_paths(root, rel);
