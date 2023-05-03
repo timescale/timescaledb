@@ -307,7 +307,7 @@ typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
 										  TupleTableSlot *slot);
 #if PG14_GE
-extern void decompress_batches_for_update_delete(List *chunks, List *predicates);
+extern bool decompress_target_segments(PlanState *ps);
 #endif
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;
