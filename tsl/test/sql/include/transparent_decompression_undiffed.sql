@@ -30,12 +30,14 @@ SET max_parallel_workers_per_gather TO 4;
 
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size TO '0';
 
 EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
 EXPLAIN (costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v0 FROM metrics GROUP BY bucket;
 
 EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
 
+RESET min_parallel_table_scan_size;
 RESET parallel_setup_cost;
 RESET parallel_tuple_cost;
 

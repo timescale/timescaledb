@@ -1711,3 +1711,167 @@ SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY ti
 
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
+-- Test the number of allocated parallel workers for decompression
+-- Test that a parallel plan is generated
+-- with different number of parallel workers
+CREATE TABLE f_sensor_data(
+      time timestamptz NOT NULL,
+      sensor_id integer NOT NULL,
+      cpu double precision NULL,
+      temperature double precision NULL
+    );
+SELECT FROM create_hypertable('f_sensor_data','time');
+--
+(1 row)
+
+SELECT set_chunk_time_interval('f_sensor_data', INTERVAL '1 year');
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+-- Create one chunk manually to ensure, all data is inserted into one chunk
+SELECT * FROM _timescaledb_internal.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
+ chunk_id | hypertable_id |      schema_name      |     table_name     | relkind |                    slices                    | created 
+----------+---------------+-----------------------+--------------------+---------+----------------------------------------------+---------
+       71 |            37 | _timescaledb_internal | _hyper_37_71_chunk | r       | {"time": [181900977000000, 515024000000000]} | t
+(1 row)
+
+INSERT INTO f_sensor_data
+SELECT
+    time AS time,
+    sensor_id,
+    100.0,
+    36.6
+FROM
+    generate_series('1980-01-01 00:00'::timestamp, '1980-02-28 12:00', INTERVAL '1 day') AS g1(time),
+    generate_series(1, 1700, 1 ) AS g2(sensor_id)
+ORDER BY
+    time;
+ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
+SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_37_71_chunk
+(1 row)
+
+-- Encourage use of parallel plans
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size TO '0';
+\set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
+SHOW min_parallel_table_scan_size;
+ min_parallel_table_scan_size 
+------------------------------
+ 0
+(1 row)
+
+SHOW max_parallel_workers;
+ max_parallel_workers 
+----------------------
+ 8
+(1 row)
+
+SHOW max_parallel_workers_per_gather;
+ max_parallel_workers_per_gather 
+---------------------------------
+ 2
+(1 row)
+
+SET max_parallel_workers_per_gather = 4;
+SHOW max_parallel_workers_per_gather;
+ max_parallel_workers_per_gather 
+---------------------------------
+ 4
+(1 row)
+
+:explain
+SELECT sum(cpu) FROM f_sensor_data;
+                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate
+   Output: sum(_hyper_37_71_chunk.cpu)
+   ->  Gather
+         Output: (PARTIAL sum(_hyper_37_71_chunk.cpu))
+         Workers Planned: 4
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_37_71_chunk.cpu)
+               ->  Parallel Append
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
+                           Output: _hyper_37_71_chunk.cpu
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_72_chunk
+                                 Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+(12 rows)
+
+-- Encourage use of Index Scan
+SET enable_seqscan = false;
+SET enable_indexscan = true;
+SET min_parallel_index_scan_size = 0;
+SET min_parallel_table_scan_size = 0;
+CREATE INDEX ON f_sensor_data (time, sensor_id);
+:explain
+SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+                                                                                                                                                                           QUERY PLAN                                                                                                                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather
+   Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+   Workers Planned: 2
+   ->  Parallel Append
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
+               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+               ->  Parallel Index Scan using compress_hyper_38_72_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_72_chunk
+                     Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+                     Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
+(9 rows)
+
+-- Test for partially compressed chunks
+INSERT INTO f_sensor_data
+SELECT
+    time AS time,
+    sensor_id,
+    100.0,
+    36.6
+FROM
+    generate_series('1980-01-01 00:00'::timestamp, '1980-01-30 12:00', INTERVAL '1 day') AS g1(time),
+    generate_series(1700, 1800, 1 ) AS g2(sensor_id)
+ORDER BY
+    time;
+:explain
+SELECT sum(cpu) FROM f_sensor_data;
+                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate
+   Output: sum(_hyper_37_71_chunk.cpu)
+   ->  Gather
+         Output: (PARTIAL sum(_hyper_37_71_chunk.cpu))
+         Workers Planned: 4
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_37_71_chunk.cpu)
+               ->  Parallel Append
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_71_chunk
+                           Output: _hyper_37_71_chunk.cpu
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
+                           Output: _hyper_37_71_chunk.cpu
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_72_chunk
+                                 Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+(14 rows)
+
+:explain
+SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+                                                                                                                                                                           QUERY PLAN                                                                                                                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather
+   Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+   Workers Planned: 3
+   ->  Parallel Append
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
+               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+               Filter: (_hyper_37_71_chunk.sensor_id > 100)
+               ->  Parallel Index Scan using compress_hyper_38_72_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_72_chunk
+                     Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+                     Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
+         ->  Parallel Index Scan using _hyper_37_71_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_71_chunk
+               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+               Index Cond: (_hyper_37_71_chunk.sensor_id > 100)
+(13 rows)
+

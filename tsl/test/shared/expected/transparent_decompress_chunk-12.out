@@ -657,6 +657,7 @@ QUERY PLAN
 
 DROP VIEW compressed_view;
 SET parallel_leader_participation TO off;
+SET min_parallel_table_scan_size TO '0';
 -- test INNER JOIN
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -709,6 +710,7 @@ QUERY PLAN
                      Index Cond: (device_id = 3)
 (16 rows)
 
+RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
@@ -768,6 +770,7 @@ QUERY PLAN
 (20 rows)
 
 -- test OUTER JOIN
+SET min_parallel_table_scan_size TO '0';
 :PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
@@ -790,6 +793,7 @@ QUERY PLAN
                      ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
 (11 rows)
 
+RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
