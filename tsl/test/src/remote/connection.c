@@ -170,31 +170,37 @@ test_connection_and_result_leaks()
 	ASSERT_NUM_OPEN_RESULTS(stats, 3);
 
 	RollbackAndReleaseCurrentSubTransaction();
-	/* The connection created in the rolled back transaction should be
+
+	/* The results in the rolled-back transaction should be closed */
+	ASSERT_NUM_OPEN_RESULTS(stats, 1);
+
+	/* The connection created in the rolled-back transaction should be
 	 * destroyed */
 	ASSERT_NUM_OPEN_CONNECTIONS(stats, 2);
 
 	remote_connection_exec(subconn, "SELECT 1");
-	ASSERT_NUM_OPEN_RESULTS(stats, 4);
+	ASSERT_NUM_OPEN_RESULTS(stats, 2);
 
 	/* Note that releasing/committing the subtransaction does not delete the memory */
 	ReleaseCurrentSubTransaction();
 
+	/* No remaining results */
+	ASSERT_NUM_OPEN_RESULTS(stats, 0);
+
 	/* The original and subconn still exists */
 	ASSERT_NUM_OPEN_CONNECTIONS(stats, 2);
-	ASSERT_NUM_OPEN_RESULTS(stats, 4);
 
 	remote_connection_exec(conn, "SELECT 1");
-	ASSERT_NUM_OPEN_RESULTS(stats, 5);
+	ASSERT_NUM_OPEN_RESULTS(stats, 1);
 
 	MemoryContextSwitchTo(old);
 	MemoryContextDelete(mcxt);
 
-	/* Original connection should be cleaned up along with its 3 results. The
-	 * subconn object was created on a subtransaction memory context that will
-	 * be cleared when the main transaction ends. */
+	/* Original connection should be cleaned up along with all its
+	 * results. The subconn object, however, was created on a subtransaction
+	 * memory context that will be cleared when the main transaction ends. */
 	ASSERT_NUM_OPEN_CONNECTIONS(stats, 1);
-	ASSERT_NUM_OPEN_RESULTS(stats, 2);
+	ASSERT_NUM_OPEN_RESULTS(stats, 0);
 
 	remote_connection_stats_reset();
 }
