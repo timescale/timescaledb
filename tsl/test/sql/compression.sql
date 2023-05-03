@@ -757,3 +757,84 @@ SET enable_indexscan to off;
 SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
+
+
+-- Test the number of allocated parallel workers for decompression
+
+-- Test that a parallel plan is generated
+-- with different number of parallel workers
+CREATE TABLE f_sensor_data(
+      time timestamptz NOT NULL,
+      sensor_id integer NOT NULL,
+      cpu double precision NULL,
+      temperature double precision NULL
+    );
+
+SELECT FROM create_hypertable('f_sensor_data','time');
+SELECT set_chunk_time_interval('f_sensor_data', INTERVAL '1 year');
+
+-- Create one chunk manually to ensure, all data is inserted into one chunk
+SELECT * FROM _timescaledb_internal.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
+
+INSERT INTO f_sensor_data
+SELECT
+    time AS time,
+    sensor_id,
+    100.0,
+    36.6
+FROM
+    generate_series('1980-01-01 00:00'::timestamp, '1980-02-28 12:00', INTERVAL '1 day') AS g1(time),
+    generate_series(1, 1700, 1 ) AS g2(sensor_id)
+ORDER BY
+    time;
+
+ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
+
+SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
+
+-- Encourage use of parallel plans
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size TO '0';
+
+\set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
+
+SHOW min_parallel_table_scan_size;
+SHOW max_parallel_workers;
+SHOW max_parallel_workers_per_gather;
+
+SET max_parallel_workers_per_gather = 4;
+SHOW max_parallel_workers_per_gather;
+:explain
+SELECT sum(cpu) FROM f_sensor_data;
+
+-- Encourage use of Index Scan
+
+SET enable_seqscan = false;
+SET enable_indexscan = true;
+SET min_parallel_index_scan_size = 0;
+SET min_parallel_table_scan_size = 0;
+
+CREATE INDEX ON f_sensor_data (time, sensor_id);
+:explain
+SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+
+-- Test for partially compressed chunks
+
+INSERT INTO f_sensor_data
+SELECT
+    time AS time,
+    sensor_id,
+    100.0,
+    36.6
+FROM
+    generate_series('1980-01-01 00:00'::timestamp, '1980-01-30 12:00', INTERVAL '1 day') AS g1(time),
+    generate_series(1700, 1800, 1 ) AS g2(sensor_id)
+ORDER BY
+    time;
+
+:explain
+SELECT sum(cpu) FROM f_sensor_data;
+
+:explain
+SELECT * FROM f_sensor_data WHERE sensor_id > 100;

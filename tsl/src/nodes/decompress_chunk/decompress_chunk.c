@@ -26,6 +26,7 @@
 #include "debug_assert.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
+#include "import/allpaths.h"
 #include "compression/create.h"
 #include "nodes/decompress_chunk/sorted_merge.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
@@ -59,8 +60,7 @@ typedef enum MergeBatchResult
 
 static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
-										 int parallel_workers, CompressionInfo *info,
-										 SortInfo *sort_info);
+										 CompressionInfo *info, SortInfo *sort_info);
 
 static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info,
 														 int parallel_workers,
@@ -576,12 +576,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		   (info->chunk_rel->reloptkind == RELOPT_BASEREL &&
 			ts_rte_is_marked_for_expansion(info->chunk_rte)));
 
-	/*
-	 * since we rely on parallel coordination from the scan below
-	 * this node it is probably not beneficial to have more
-	 * than a single worker per chunk
-	 */
-	int parallel_workers = 1;
 	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, info, root->query_pathkeys);
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
@@ -616,11 +610,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	}
 
 	chunk_rel->rows = new_row_estimate;
-	create_compressed_scan_paths(root,
-								 compressed_rel,
-								 compressed_rel->consider_parallel ? parallel_workers : 0,
-								 info,
-								 &sort_info);
+
+	create_compressed_scan_paths(root, compressed_rel, info, &sort_info);
 
 	/* compute parent relids of the chunk and use it to filter paths*/
 	Relids parent_relids = NULL;
@@ -876,7 +867,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *) decompress_chunk_path_create(root, info, parallel_workers, child_path);
+			path = (Path *)
+				decompress_chunk_path_create(root, info, child_path->parallel_workers, child_path);
 
 			if (ts_chunk_is_partial(chunk))
 			{
@@ -917,7 +909,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 														  list_make2(path, uncompressed_path),
 														  NIL /* pathkeys */,
 														  req_outer,
-														  parallel_workers,
+														  Max(path->parallel_workers,
+															  uncompressed_path->parallel_workers),
 														  false,
 														  NIL,
 														  path->rows + uncompressed_path->rows);
@@ -1547,8 +1540,8 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
  */
 
 static void
-create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int parallel_workers,
-							 CompressionInfo *info, SortInfo *sort_info)
+create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, CompressionInfo *info,
+							 SortInfo *sort_info)
 {
 	Path *compressed_path;
 
@@ -1563,12 +1556,8 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 	add_path(compressed_rel, compressed_path);
 
 	/* create parallel scan path */
-	if (compressed_rel->consider_parallel && parallel_workers > 0)
-	{
-		compressed_path = create_seqscan_path(root, compressed_rel, NULL, parallel_workers);
-		Assert(compressed_path->parallel_aware);
-		add_partial_path(compressed_rel, compressed_path);
-	}
+	if (compressed_rel->consider_parallel)
+		ts_create_plain_partial_paths(root, compressed_rel);
 
 	/*
 	 * We set enable_bitmapscan to false here to ensure any pathes with bitmapscan do not
