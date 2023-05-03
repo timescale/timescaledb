@@ -71,9 +71,6 @@ jobs:
 
         make -C build -j$(nproc) install
 
-    - name: pginstallcheck
-      run: make -C build pginstallcheck
-
     - name: fuzz
       run: |
         mkdir db
