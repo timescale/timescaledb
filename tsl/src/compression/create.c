@@ -569,7 +569,7 @@ set_toast_tuple_target_on_compressed(Oid compressed_table_id)
 }
 
 static int32
-create_compression_table(Oid owner, CompressColInfo *compress_cols)
+create_compression_table(Oid owner, CompressColInfo *compress_cols, Oid tablespace_oid)
 {
 	ObjectAddress tbladdress;
 	char relnamebuf[NAMEDATALEN];
@@ -589,8 +589,11 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	create->constraints = NIL;
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
-	create->tablespacename = NULL;
+	create->tablespacename = get_tablespace_name(tablespace_oid);
 	create->if_not_exists = false;
+
+	/* Invalid tablespace_oid <=> NULL tablespace name */
+	Assert(!OidIsValid(tablespace_oid) == (create->tablespacename == NULL));
 
 	/* create the compression table */
 	/* NewRelationCreateToastTable calls CommandCounterIncrement */
@@ -1154,7 +1157,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	}
 	else
 	{
-		compress_htid = create_compression_table(ownerid, &compress_cols);
+		Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+		compress_htid = create_compression_table(ownerid, &compress_cols, tablespace_oid);
 		ts_hypertable_set_compressed(ht, compress_htid);
 	}
 

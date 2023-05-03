@@ -625,14 +625,14 @@ ts_make_pathkey_from_sortop(PlannerInfo *root, Expr *expr, Relids nullable_relid
 }
 
 /*
- * make_sort --- basic routine to build a Sort plan node
+ * ts_make_sort --- basic routine to build a Sort plan node
  *
  * Caller must have built the sortColIdx, sortOperators, collations, and
  * nullsFirst arrays already.
  */
-static Sort *
-make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators, Oid *collations,
-		  bool *nullsFirst)
+Sort *
+ts_make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
+			 Oid *collations, bool *nullsFirst)
 {
 	Sort *node = makeNode(Sort);
 	Plan *plan = &node->plan;
@@ -680,7 +680,7 @@ ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
 											 &nullsFirst);
 
 	/* Now build the Sort node */
-	return make_sort(lefttree, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
+	return ts_make_sort(lefttree, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
 }
 
 /*

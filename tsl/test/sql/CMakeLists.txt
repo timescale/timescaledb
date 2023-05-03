@@ -148,7 +148,10 @@ if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "3")
 endif()
 
 set(TEST_TEMPLATES
-    compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
+    compression_insert.sql.in
+    compression_sorted_merge.sql.in
+    cagg_union_view.sql.in
+    plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 

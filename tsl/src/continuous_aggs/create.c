@@ -3057,8 +3057,16 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	/*
 	 * If there is a join in CAggs then rebuild it definitley,
 	 * because v2.10.0 has created the definition with missing structs.
+	 *
+	 * Removed the check for direct_query->jointree != NULL because
+	 * we don't allow queries without FROM clause in Continuous Aggregate
+	 * definition.
+	 *
+	 * Per coverityscan:
+	 * https://scan4.scan.coverity.com/reports.htm#v54116/p12995/fileInstanceId=131745632&defectInstanceId=14569562&mergedDefectId=384045
+	 *
 	 */
-	if (force_rebuild && direct_query->jointree != NULL)
+	if (force_rebuild)
 	{
 		ListCell *l;
 		foreach (l, direct_query->jointree->fromlist)

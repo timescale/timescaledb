@@ -18,6 +18,7 @@ accidentally triggering the load of a previous DB version.**
 * #5547 Skip Ordered Append when only 1 child node is present
 * #5510 Propagate vacuum/analyze to compressed chunks
 * #5584 Reduce decompression during constraint checking
+* #5530 Optimize compressed chunk resorting
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
@@ -30,6 +31,8 @@ accidentally triggering the load of a previous DB version.**
 * #5614 Enable run_job() for telemetry job
 * #5578 Fix on-insert decompression after schema changes
 * #5613 Quote username identifier appropriately
+* #5525 Fix tablespace for compressed hypertable and corresponding toast
+* #5651 Improve the number of parallel workers for decompression
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
