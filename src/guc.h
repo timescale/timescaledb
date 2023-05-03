@@ -26,6 +26,7 @@ extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_osm_reads;
+extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_per_data_node_queries;

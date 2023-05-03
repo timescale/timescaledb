@@ -75,6 +75,7 @@ bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_osm_reads = true;
+TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_per_data_node_queries = true;
@@ -262,6 +263,17 @@ _guc_init(void)
 							 "Enable qualifier propagation",
 							 "Enable propagation of qualifiers in JOINs",
 							 &ts_guc_enable_qual_propagation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_dml_decompression",
+							 "Enable DML decompression",
+							 "Enable DML decompression when modifying compressed hypertable",
+							 &ts_guc_enable_dml_decompression,
 							 true,
 							 PGC_USERSET,
 							 0,

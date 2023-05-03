@@ -1957,6 +1957,12 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 		return;
 	}
 
+	if (!ts_guc_enable_dml_decompression)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("inserting into compressed chunk with unique constraints disabled"),
+				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
+
 	Chunk *comp = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
 
@@ -2470,6 +2476,12 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
 			if (current_chunk && ts_chunk_is_compressed(current_chunk))
 			{
+				if (!ts_guc_enable_dml_decompression)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("UPDATE/DELETE is disabled on compressed chunks"),
+							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
+
 				decompress_batches_for_update_delete(current_chunk, predicates);
 			}
 		}
