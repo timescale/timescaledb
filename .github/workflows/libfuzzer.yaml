@@ -1,0 +1,134 @@
+name: Regression
+"on":
+  push:
+    branches:
+      - main
+      - prerelease_test
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
+
+jobs:
+    
+  regress:
+    # Change the JOB_NAME variable below when changing the name.
+    name: Libfuzzer compression test
+    runs-on: ubuntu-22.04
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+
+    steps:
+    - name: Install Linux Dependencies
+      run: |
+        # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
+        # If needed, install them before opening the core dump.
+        sudo apt-get update
+        sudo apt-get install clang lld flex bison lcov systemd-coredump gdb libipc-run-perl \
+          libtest-most-perl
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v3
+
+    - name: Build PostgreSQL
+      run: |
+       wget -q -O postgresql.tar.bz2 \
+         https://ftp.postgresql.org/pub/source/v15.2/postgresql-15.2.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        cd ~/$PG_SRC_DIR
+        CC=clang ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+          --without-readline --without-zlib --without-libxml --enable-cassert \
+          --enable-debug CC=clang CFLAGS="-fuse-ld=lld -ggdb3 -Og -fno-omit-frame-pointer"
+        make -j$(nproc)
+
+    - name: Install PostgreSQL
+      run: |
+        make -C ~/$PG_SRC_DIR install
+        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+
+    - name: Upload config.log
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: config.log for PostgreSQL
+        path: ~/${{ env.PG_SRC_DIR }}/config.log
+
+    - name: Build TimescaleDB
+      run: |
+        export LIBFUZZER_PATH=$(readlink -e /usr/lib/llvm-14/lib/clang/*/lib/linux)
+
+        cmake -B build -S . -DASSERTIONS=ON -DLINTER=OFF -DCMAKE_VERBOSE_MAKEFILE=1 \
+            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-DTS_COMPRESSION_FUZZING -fsanitize=fuzzer-no-link -lstdc++ -L$LIBFUZZER_PATH -l:libclang_rt.fuzzer_no_main-x86_64.a -static-libsan"
+            -DPG_PATH=$(readlink -f ~/$PG_INSTALL_DIR)
+
+        make -C build -j$(nproc) install
+
+    - name: pginstallcheck
+      run: make -C build pginstallcheck
+
+    - name: fuzz
+      run: |
+        mkdir db
+        export PGDATA=db
+        export PATH=$PATH:$(readlink -e ~/$PG_INSTALL_DIR)
+        initdb
+        pg_ctl start
+        export PGDATABASE=postgres
+        export MODULE_NAME=$(basename $(find ~/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
+        psql -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+        ln -s tsl/test/fuzzing/gorilla /var/tmp/corpus
+        readlink -e /var/tmp/corpus
+        psql -c "select fuzz();"
+
+
+    - name: Collect the logs
+      if: always()
+      id: collectlogs
+      run: |
+        find . -name postmaster.log -exec cat {} + > postgres.log
+        # wait in case there are in-progress coredumps
+        sleep 10
+        if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+        # print OOM killer information
+        sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+
+    - name: Save PostgreSQL log
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: PostgreSQL log
+        path: postgres.log
+
+    - name: Stack trace
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      run: |
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", conditionName
+          up 1
+          l
+          info args
+          info locals
+          bt full
+        " 2>&1 | tee stacktrace.log
+        ./scripts/bundle_coredumps.sh
+        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
+
+    - name: Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: Coredumps
+        path: coredumps
