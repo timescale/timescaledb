@@ -84,7 +84,6 @@ compress_chunk_dml_exec(CustomScanState *node)
 static void
 compress_chunk_dml_end(CustomScanState *node)
 {
-	// CompressChunkDmlState *state = (CompressChunkDmlState *) node;
 	PlanState *substate = linitial(node->custom_ps);
 	ExecEndNode(substate);
 }
@@ -99,7 +98,6 @@ compress_chunk_dml_path_create(Path *subpath, Oid chunk_relid)
 	path->cpath.path.pathtype = T_CustomScan;
 	path->cpath.path.parent = subpath->parent;
 	path->cpath.path.pathtarget = subpath->pathtarget;
-	// path->cpath.path.param_info = subpath->param_info;
 	path->cpath.methods = &compress_chunk_dml_path_methods;
 	path->cpath.custom_paths = list_make1(subpath);
 	path->chunk_relid = chunk_relid;
@@ -139,6 +137,6 @@ compress_chunk_dml_state_create(CustomScan *scan)
 Path *
 compress_chunk_dml_generate_paths(Path *subpath, Chunk *chunk)
 {
-	Assert(chunk->fd.compressed_chunk_id > 0);
+	Assert(chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID);
 	return compress_chunk_dml_path_create(subpath, chunk->table_id);
 }

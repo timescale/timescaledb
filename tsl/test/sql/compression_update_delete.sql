@@ -29,7 +29,8 @@ CREATE TABLE sample_table (
 SELECT * FROM create_hypertable('sample_table', 'time',
        chunk_time_interval => INTERVAL '2 months');
 
-SELECT '2022-01-28 01:09:53.583252+05:30' as start_date \gset
+\set start_date '2022-01-28 01:09:53.583252+05:30'
+
 INSERT INTO sample_table
     SELECT
        	time + (INTERVAL '1 minute' * random()) AS time,
@@ -44,7 +45,8 @@ INSERT INTO sample_table
        	ORDER BY
        		time;
 
-SELECT '2023-03-17 17:51:11.322998+05:30' as start_date \gset
+\set start_date '2023-03-17 17:51:11.322998+05:30'
+
 -- insert into new chunks
 INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 12, 21.98, 33.123, 'new row1');
 INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 12, 17.66, 13.875, 'new row1');
@@ -734,7 +736,7 @@ DROP TABLE sample_table;
 
 -- test filtering with ORDER BY columns
 CREATE TABLE sample_table(time timestamptz, c1 int, c2 int, c3 int, c4 int);
-SELECT create_hypertable('sample_table','time');
+SELECT create_hypertable('sample_table','time',chunk_time_interval=>'1 day'::interval);
 ALTER TABLE sample_table SET (timescaledb.compress,timescaledb.compress_segmentby='c4', timescaledb.compress_orderby='c1,c2,time');
 INSERT INTO sample_table
 SELECT t, c1, c2, c3, c4
@@ -751,13 +753,13 @@ SELECT compress_chunk(show_chunks('sample_table'));
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
-ORDER BY ch1.id \gset
+ORDER BY ch1.id LIMIT 1 \gset
 
 -- get FIRST compressed chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
-ORDER BY ch1.id \gset
+ORDER BY ch1.id LIMIT 1 \gset
 
 -- check that you uncompress and delete only for exact SEGMENTBY value
 BEGIN;
@@ -1142,3 +1144,73 @@ SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
 SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
 ROLLBACK;
 
+-- test for disabling DML decompression
+SHOW timescaledb.enable_dml_decompression;
+SET timescaledb.enable_dml_decompression = false;
+
+\set ON_ERROR_STOP 0
+-- should ERROR both UPDATE/DELETE statements because the DML decompression is disabled
+UPDATE sample_table SET c3 = NULL WHERE c4 = 5;
+DELETE FROM sample_table WHERE c4 = 5;
+\set ON_ERROR_STOP 1
+
+-- make sure reseting the GUC we will be able to UPDATE/DELETE compressed chunks
+RESET timescaledb.enable_dml_decompression;
+SHOW timescaledb.enable_dml_decompression;
+
+BEGIN;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 = 5 AND c3 IS NULL;
+UPDATE sample_table SET c3 = NULL WHERE c4 = 5;
+-- report 10k rows
+SELECT count(*) FROM sample_table WHERE c4 = 5 AND c3 IS NULL;
+ROLLBACK;
+
+BEGIN;
+-- report 10k rows
+SELECT count(*) FROM sample_table WHERE c4 = 5;
+DELETE FROM sample_table WHERE c4 = 5;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE c4 = 5;
+ROLLBACK;
+
+-- create new uncompressed chunk
+INSERT INTO sample_table
+SELECT t, 1, 1, 1, 1
+FROM generate_series('2023-05-04 00:00:00-00'::timestamptz,
+            '2023-05-04 00:00:00-00'::timestamptz + INTERVAL '2 hours',
+            INTERVAL '1 hour') t;
+
+-- check chunk compression status
+SELECT chunk_name, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'sample_table'
+ORDER BY chunk_name;
+
+-- test for uncompressed and compressed chunks
+SHOW timescaledb.enable_dml_decompression;
+SET timescaledb.enable_dml_decompression = false;
+
+BEGIN;
+-- report 3 rows
+SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timestamptz;
+-- delete from uncompressed chunk should work
+DELETE FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timestamptz;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timestamptz;
+ROLLBACK;
+
+BEGIN;
+-- report 0 rows
+SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timestamptz AND c3 IS NULL;
+UPDATE sample_table SET c3 = NULL WHERE time >= '2023-05-04 00:00:00-00'::timestamptz;
+-- report 3 rows
+SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timestamptz AND c3 IS NULL;
+ROLLBACK;
+
+\set ON_ERROR_STOP 0
+-- should ERROR both UPDATE/DELETE statements because the DML decompression is disabled
+-- and both statements we're touching compressed and uncompressed chunks
+UPDATE sample_table SET c3 = NULL WHERE time >= '2023-03-17 00:00:00-00'::timestamptz AND c3 IS NULL;
+DELETE FROM sample_table WHERE time >= '2023-03-17 00:00:00-00'::timestamptz;
+\set ON_ERROR_STOP 1
