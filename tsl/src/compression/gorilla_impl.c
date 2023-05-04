@@ -54,22 +54,41 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	//		.this_word = gorilla_data->xors.buckets.data[0],
 	//	};
 
-	/* The first tag1 must be 1, so that we initialize the bit widths. */
-	CheckCompressedData(simple8brle_bitmap_get_at(&tag1s, 0) == 1);
-
 	/*
 	 * Now decompress the non-null data.
 	 *
-	 * First, unpack only the different elements (tag0 = 1) based on the tag1
-	 * array. Note that the bit widths change often, so there's no sense in
+	 * 1) unpack only the different elements (tag0 = 1) based on the tag1 array.
+	 *
+	 * 1a) Sanity check: the number of bit width values we have matches the
+	 * number of 1s in the tag1s array. FIXME speed this up.
+	 */
+	size_t n_widths = 0;
+	const int n_different = tag1s.num_elements;
+	for (int i = 0; i < n_different; i++)
+	{
+		int value = simple8brle_bitmap_get_at(&tag1s, i);
+		Assert(value == 0 || value == 1);
+		n_widths += value;
+	}
+	CheckCompressedData(n_widths == gorilla_data->num_bits_used_per_xor->num_elements);
+
+	/*
+	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
+	 * widths.
+	 */
+	CheckCompressedData(simple8brle_bitmap_get_at(&tag1s, 0) == 1);
+
+	/*
+	 * 1c) Unpack.
+	 *
+	 * Note that the bit widths change often, so there's no sense in
 	 * having a fast path for stretches of tag1 == 0.
 	 */
 	ELEMENT_TYPE prev = 0;
-	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 	int next_leading_zeros_index = 0;
 	uint8 current_leading_zeros = 0;
 	uint8 current_xor_bits = 0;
-	const int n_different = tag1s.num_elements;
+	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 	for (int i = 0; i < n_different; i++)
 	{
 		if (simple8brle_bitmap_get_at(&tag1s, i) != 0)
@@ -91,15 +110,29 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	Assert(simple8brle_decompression_iterator_try_next_forward(&num_bits_used).is_done);
 
 	/*
-	 * Fill out the stretches of repeated elements, encoded with tag0 = 0.
+	 * 2) Fill out the stretches of repeated elements, encoded with tag0 = 0.
 	 *
-	 * FIXME need a sanity check on number of set bits in tag0s, so that the
+	 * 2a) Sanity check: number of different elements according to tag0s must be
+	 * the same as number of different elements according to tag1s, so that the
 	 * current_element doesn't underrun.
+	 */
+	int n_different_by_tag0s = 0;
+	for (int i = 0; i < n_notnull; i++)
+	{
+		int value = simple8brle_bitmap_get_at(&tag1s, i);
+		Assert(value == 0 || value == 1);
+		n_different_by_tag0s += value;
+	}
+	CheckCompressedData(n_different_by_tag0s == n_different);
+
+	/*
+	 * 2b) Fill.
 	 */
 	int current_element = n_different - 1;
 	for (int i = n_notnull - 1; i >= 0; i--)
 	{
 		Assert(i >= current_element);
+		Assert(current_element >= 0);
 		if (simple8brle_bitmap_get_at(&tag0s, i) == 0)
 		{
 			/* Repeat this element. */
