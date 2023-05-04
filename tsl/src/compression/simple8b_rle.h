@@ -591,8 +591,6 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
 		const uint64 selector_mask = 0xFULL << selector_shift;
 		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
-		Assert(selector_value < 16);
-		Assert(selector_value != 0);
 		selector_values[block_index] = selector_value;
 	}
 

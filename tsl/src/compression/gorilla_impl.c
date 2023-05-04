@@ -55,10 +55,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	//	};
 
 	/* The first tag1 must be 1, so that we initialize the bit widths. */
-	if (simple8brle_bitmap_get_at(&tag1s, 0) == 0)
-	{
-		ereport(ERROR, (errmsg("the compressed data is corrupt")));
-	}
+	CheckCompressedData(simple8brle_bitmap_get_at(&tag1s, 0) == 1);
 
 	/*
 	 * Now decompress the non-null data.
