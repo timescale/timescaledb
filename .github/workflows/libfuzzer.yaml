@@ -78,6 +78,7 @@ jobs:
         export PATH=$PATH:$HOME/$PG_INSTALL_DIR/bin
         initdb
         pg_ctl start
+        for _ in {1..20}; do sleep 1; if pqsl -c "select 1"; then break; fi; done
         export PGDATABASE=postgres
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         psql -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
