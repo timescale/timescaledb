@@ -1,4 +1,4 @@
-name: Regression
+name: Libfuzzer compression test
 "on":
   push:
     branches:
@@ -15,10 +15,7 @@ name: Regression
       - NOTICE
 
 jobs:
-    
-  regress:
-    # Change the JOB_NAME variable below when changing the name.
-    name: Libfuzzer compression test
+  fuzz:
     runs-on: ubuntu-22.04
     env:
       PG_SRC_DIR: pgbuild
@@ -76,10 +73,12 @@ jobs:
         mkdir db
         export PGDATA=db
         export PGPORT=5432
+        export PGDATABASE=postgres
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         which psql
         psql --version
         initdb
+        echo "shared_preload_libraries = 'timescaledb'" >> $PGDATA/postgresql.conf
         pg_ctl start
         for _ in {1..20}; do sleep 1; if psql -c "select 1"; then break; fi; done
         export PGDATABASE=postgres
