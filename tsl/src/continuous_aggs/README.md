@@ -114,3 +114,20 @@ are cut against the given refresh window, leaving only invalidation
 entries that are outside the refresh window. Subsequently, if the
 refresh window does not match any invalidations, there is nothing to
 refresh either.
+
+## Distribution of functions across files
+common.c
+This file contains the functions common in all scenarios of creating a continuous aggregates.
+
+create.c
+This file contains the functions that are directly responsible for the creation of the continuous aggregates,
+like creating hypertable, catalog_entry, view, etc.
+
+finalize.c
+This file contains the specific functions for the case when continous aggregates are created in old format.
+
+materialize.c
+This file contains the functions directly dealing with the materialization of the continuous aggregates.
+
+repair.c
+The repair and rebuilding related functions are put together in this file

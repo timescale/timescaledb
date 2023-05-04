@@ -23,8 +23,13 @@
 #include "hypertable_cache.h"
 #include "scan_iterator.h"
 
+static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
+static List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);
+static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);
+static void cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems);
+
 static void
-update_materialized_only(ContinuousAgg *agg, bool materialized_only)
+cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
@@ -255,7 +260,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Assert(mat_ht != NULL);
 
 		cagg_flip_realtime_view_definition(agg, mat_ht);
-		update_materialized_only(agg, materialized_only);
+		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
 	}
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);

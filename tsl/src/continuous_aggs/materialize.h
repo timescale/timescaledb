@@ -10,6 +10,7 @@
 #include <fmgr.h>
 #include <nodes/pg_list.h>
 #include "ts_catalog/continuous_agg.h"
+#include "common.h"
 
 typedef struct SchemaAndName
 {
@@ -40,5 +41,4 @@ void continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName par
 										   const NameData *time_column_name,
 										   InternalTimeRange new_materialization_range,
 										   InternalTimeRange invalidation_range, int32 chunk_id);
-
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_MATERIALIZE_H */

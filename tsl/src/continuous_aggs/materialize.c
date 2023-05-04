@@ -23,6 +23,9 @@
 
 #include "materialize.h"
 
+#define CHUNKIDFROMRELID "chunk_id_from_relid"
+#define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
+
 static bool ranges_overlap(InternalTimeRange invalidation_range,
 						   InternalTimeRange new_materialization_range);
 static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
@@ -348,4 +351,96 @@ spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
 		}
 	}
+}
+/*
+ * Initialize MatTableColumnInfo.
+ */
+void
+mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
+{
+	matcolinfo->matcollist = NIL;
+	matcolinfo->partial_seltlist = NIL;
+	matcolinfo->partial_grouplist = grouplist;
+	matcolinfo->mat_groupcolname_list = NIL;
+	matcolinfo->matpartcolno = -1;
+	matcolinfo->matpartcolname = NULL;
+}
+
+/*
+ * Add internal columns for the materialization table.
+ */
+void
+mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
+{
+	Index maxRef;
+	int colno = list_length(matcolinfo->partial_seltlist) + 1;
+	ColumnDef *col;
+	Var *chunkfn_arg1;
+	FuncExpr *chunk_fnexpr;
+	Oid chunkfnoid;
+	Oid argtype[] = { OIDOID };
+	Oid rettype = INT4OID;
+	TargetEntry *chunk_te;
+	Oid sortop, eqop;
+	bool hashable;
+	ListCell *lc;
+	SortGroupClause *grpcl;
+
+	/* Add a chunk_id column for materialization table */
+	Node *vexpr = (Node *) makeVar(1, colno, INT4OID, -1, InvalidOid, 0);
+	col = makeColumnDef(CONTINUOUS_AGG_CHUNK_ID_COL_NAME,
+						exprType(vexpr),
+						exprTypmod(vexpr),
+						exprCollation(vexpr));
+	matcolinfo->matcollist = lappend(matcolinfo->matcollist, col);
+
+	/*
+	 * Need to add an entry to the target list for computing chunk_id column
+	 * : chunk_for_tuple( htid, table.*).
+	 */
+	chunkfnoid =
+		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
+					   sizeof(argtype) / sizeof(argtype[0]),
+					   argtype,
+					   false);
+	chunkfn_arg1 = makeVar(1, TableOidAttributeNumber, OIDOID, -1, 0, 0);
+
+	chunk_fnexpr = makeFuncExpr(chunkfnoid,
+								rettype,
+								list_make1(chunkfn_arg1),
+								InvalidOid,
+								InvalidOid,
+								COERCE_EXPLICIT_CALL);
+	chunk_te = makeTargetEntry((Expr *) chunk_fnexpr,
+							   colno,
+							   pstrdup(CONTINUOUS_AGG_CHUNK_ID_COL_NAME),
+							   false);
+	matcolinfo->partial_seltlist = lappend(matcolinfo->partial_seltlist, chunk_te);
+	/* Any internal column needs to be added to the group-by clause as well. */
+	maxRef = 0;
+	foreach (lc, matcolinfo->partial_seltlist)
+	{
+		Index ref = ((TargetEntry *) lfirst(lc))->ressortgroupref;
+
+		if (ref > maxRef)
+			maxRef = ref;
+	}
+	chunk_te->ressortgroupref =
+		maxRef + 1; /* used by sortgroupclause to identify the targetentry */
+	grpcl = makeNode(SortGroupClause);
+	get_sort_group_operators(exprType((Node *) chunk_te->expr),
+							 false,
+							 true,
+							 false,
+							 &sortop,
+							 &eqop,
+							 NULL,
+							 &hashable);
+	grpcl->tleSortGroupRef = chunk_te->ressortgroupref;
+	grpcl->eqop = eqop;
+	grpcl->sortop = sortop;
+	grpcl->nulls_first = false;
+	grpcl->hashable = hashable;
+
+	matcolinfo->partial_grouplist = lappend(matcolinfo->partial_grouplist, grpcl);
 }
