@@ -516,10 +516,8 @@ static void
 compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum gorilla_compressed)
 {
 	compressed_gorilla_data_init_from_pointer(data,
-											  (GorillaCompressed *) DatumGetPointer(
+											  (GorillaCompressed *) PG_DETOAST_DATUM(
 												  gorilla_compressed));
-	//											  (GorillaCompressed *) PG_DETOAST_DATUM(
-	//												  gorilla_compressed));
 }
 
 static void

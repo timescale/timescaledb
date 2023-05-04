@@ -369,3 +369,14 @@ DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i;
 \ir include/compression_test.sql
 DROP TABLE base_texts;
+
+-----------------------------------------------
+-- Interesting corrupt data found by fuzzing --
+-----------------------------------------------
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+create or replace function ts_read_compressed_data_directory(cstring) returns int
+as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_directory' language c;
+
+select ts_read_compressed_data_directory((:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla')::cstring);

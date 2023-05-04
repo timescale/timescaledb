@@ -13,11 +13,6 @@
 #include <lib/stringinfo.h>
 #include <utils/relcache.h>
 
-/* Normal compression uses 1k rows, but the regression tests use up to 1015. */
-#ifndef GLOBAL_MAX_ROWS_PER_COMPRESSION
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
-#endif
-
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include <nodes/execnodes.h>
@@ -354,7 +349,7 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
 /*
- * A convenience macro to thorw an error about the corrupted compressed data, if
+ * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
  * to pollute the logs.
  */
@@ -364,7 +359,9 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 #define CORRUPT_DATA_MESSAGE (true)
 #endif
 
-#define CheckCompressedData(X) if (!(X)) ereport(ERROR, CORRUPT_DATA_MESSAGE);
+#define CheckCompressedData(X)                                                                     \
+	if (!(X))                                                                                      \
+		ereport(ERROR, CORRUPT_DATA_MESSAGE);
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
@@ -378,5 +375,11 @@ consumeCompressedData(StringInfo si, int bytes)
 	si->cursor += bytes;
 	return result;
 }
+
+/*
+ * Normal compression uses 1k rows, but the regression tests use up to 1015.
+ * We use this limit for sanity checks in case the compressed data is corrupt.
+ */
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
 
 #endif

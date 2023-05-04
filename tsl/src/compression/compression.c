@@ -2039,8 +2039,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	table_close(in_rel, NoLock);
 }
 
-/////////////////////////////////////////////////
-
+/* Try to decompress the given compressed data. Used for fuzzing. */
 static int
 test_one_input_throw(const uint8_t *Data, size_t Size)
 {
@@ -2057,26 +2056,24 @@ test_one_input_throw(const uint8_t *Data, size_t Size)
 	}
 
 	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
-	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
+	DecompressionIterator *iter =
+		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
-	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-	{
-		i++;
-		// fprintf(stderr, "%lf ", DatumGetFloat8(r.val));
-	}
-	(void) i;
-	// fprintf(stderr, " (%d total)\n", i);
+		;
 
 	return 0;
 }
 
 #ifdef TS_COMPRESSION_FUZZING
 
+/*
+ * This is our test function that will be called by the libfuzzer driver. It
+ * has to catch the postgres exceptions normally produced for corrupt data.
+ */
 static int
 LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
-	//MemoryContext oldcontext = CurrentMemoryContext;
 	MemoryContextReset(CurrentMemoryContext);
 	volatile int res = -1;
 
@@ -2094,20 +2091,20 @@ LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 	return res;
 }
 
-
-extern int
-LLVMFuzzerRunDriver(int *argc, char ***argv,
-					int (*UserCb)(const uint8_t *Data, size_t Size));
-
+/*
+ * This is the libfuzzer fuzzing driver. It will run our test functions with
+ * random inputs.
+ */
+extern int LLVMFuzzerRunDriver(int *argc, char ***argv,
+							   int (*UserCb)(const uint8_t *Data, size_t Size));
 
 TS_FUNCTION_INFO_V1(ts_fuzz_compression);
 
 Datum
 ts_fuzz_compression(PG_FUNCTION_ARGS)
 {
-	MemoryContext fuzzing_context = AllocSetContextCreate(CurrentMemoryContext,
-											 "fuzzing",
-											 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
+	MemoryContext fuzzing_context =
+		AllocSetContextCreate(CurrentMemoryContext, "fuzzing", 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
 	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
 
 	char *argvdata[] = {
@@ -2128,7 +2125,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 		NULL
 	};
 	char **argv = argvdata;
-	int argc = sizeof(argvdata)/sizeof(*argvdata) - 1;
+	int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
 
 	int res = LLVMFuzzerRunDriver(&argc, &argv, LLVMFuzzerTestOneInput);
 
@@ -2141,6 +2138,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 
+/* Read and decompress compressed data from file. Useful for fuzzing. */
 Datum
 ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 {
@@ -2167,8 +2165,47 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(res);
 }
 
+TS_FUNCTION_INFO_V1(ts_read_compressed_data_directory);
 
-//*/
+/*
+ * Read and decomrpess all compressed data files from directory. Useful for
+ * checking the fuzzing corpora in the regression tests.
+ */
+Datum
+ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
+{
+	char *name = PG_GETARG_CSTRING(0);
+	DIR *dp;
+	struct dirent *ep;
+	dp = opendir(name);
+
+	if (!dp)
+	{
+		elog(ERROR, "could not open directory '%s'", name);
+	}
+
+	int n = 0;
+	while ((ep = readdir(dp)))
+	{
+		PG_TRY();
+		{
+			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(ep->d_name));
+		}
+		PG_CATCH();
+		{
+			/*
+			 * We're testing the corrupt data handling, so we don't care about
+			 * these errors.
+			 */
+			FlushErrorState();
+		}
+		PG_END_TRY();
+		n++;
+	}
+
+	(void) closedir(dp);
+	PG_RETURN_INT32(n);
+}
 
 #if PG14_GE
 static SegmentFilter *

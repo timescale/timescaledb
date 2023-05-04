@@ -46,7 +46,7 @@ pg_attribute_unused() assertions(void)
 							 sizeof(test_val.has_nulls) + sizeof(test_val.padding) +
 							 sizeof(test_val.last_value) + sizeof(test_val.last_delta),
 					 "DeltaDeltaCompressed wrong size");
-	// StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 16, "DeltaDeltaCompressed wrong size");
+	StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 24, "DeltaDeltaCompressed wrong size");
 }
 
 typedef struct DeltaDeltaDecompressionIterator
