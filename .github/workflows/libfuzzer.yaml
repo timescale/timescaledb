@@ -79,12 +79,15 @@ jobs:
         psql --version
         initdb
         echo "shared_preload_libraries = 'timescaledb'" >> $PGDATA/postgresql.conf
-        pg_ctl start
+        pg_ctl -l postmaster.log start
         for _ in {1..20}; do sleep 1; if psql -c "select 1"; then break; fi; done
-        export PGDATABASE=postgres
-        export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         psql -c "create extension timescaledb;"
-        psql -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+
+        export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
+        echo $MODULE_NAME
+        echo "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+        psql -a -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+
         ln -s tsl/test/fuzzing/gorilla /var/tmp/corpus
         readlink -e /var/tmp/corpus
         psql -c "select fuzz();"
