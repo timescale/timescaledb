@@ -79,9 +79,6 @@ extern void gorilla_compressor_append_value(GorillaCompressor *compressor, uint6
 extern void *gorilla_compressor_finish(GorillaCompressor *compressor);
 
 extern DecompressionIterator *
-gorilla_decompression_iterator_from_stringinfo_forward(StringInfo si, Oid element_type);
-
-extern DecompressionIterator *
 gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type);
 extern DecompressResult
 gorilla_decompression_iterator_try_next_forward(DecompressionIterator *iter);

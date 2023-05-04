@@ -554,15 +554,6 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	return &iterator->base;
 }
 
-DecompressionIterator *
-gorilla_decompression_iterator_from_stringinfo_forward(StringInfo si, Oid element_type)
-{
-	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
-	compressed_gorilla_data_init_from_stringinfo(&iterator->gorilla_data, si);
-	gorilla_iterator_init_from_expanded_forward(iterator, element_type);
-	return &iterator->base;
-}
-
 static inline DecompressResult
 convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 {
