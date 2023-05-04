@@ -1547,6 +1547,6 @@ as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_directory' language c;
 select ts_read_compressed_data_directory((:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla')::cstring);
  ts_read_compressed_data_directory 
 -----------------------------------
-                               385
+                               383
 (1 row)
 
