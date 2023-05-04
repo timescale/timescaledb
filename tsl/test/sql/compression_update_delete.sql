@@ -1068,3 +1068,77 @@ UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test1 t2 WHERE t2.time =
 SELECT * FROM chunk_status;
 ROLLBACK;
 
+DROP TABLE join_test1;
+DROP TABLE join_test2;
+
+-- test if index scan qualifiers are properly used
+CREATE TABLE index_scan_test(time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('index_scan_test','time',create_default_indexes:=false);
+INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device_id + 0.5 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-01 23:55:00+0','1m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+-- compress chunks
+ALTER TABLE index_scan_test SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(show_chunks('index_scan_test'));
+ANALYZE index_scan_test;
+
+SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'index_scan_test'
+AND ch1.hypertable_id = ht.id
+AND ch1.table_name LIKE '_hyper%'
+ORDER BY ch1.id LIMIT 1 \gset
+
+SELECT ch2.schema_name|| '.' || ch2.table_name AS "COMP_CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'index_scan_test'
+AND ch1.hypertable_id = ht.id
+AND ch1.compressed_chunk_id  = ch2.id
+ORDER BY ch2.id LIMIT 1 \gset
+
+INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device_id + 0.5 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','1m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+-- test index on single column
+BEGIN;
+SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 \gset
+CREATE INDEX ON index_scan_test(device_id);
+EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
+DELETE FROM index_scan_test WHERE device_id = 2;
+-- everything should be deleted
+SELECT count(*) FROM index_scan_test where device_id = 2;
+
+-- there shouldn't be anything in the uncompressed chunk where device_id = 2
+SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
+-- there shouldn't be anything in the compressed chunk from device_id = 2
+SELECT count(*) FROM :COMP_CHUNK_1 where device_id = 2;
+ROLLBACK;
+
+-- test multi column index
+BEGIN;
+SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
+CREATE INDEX ON index_scan_test(device_id, time);
+EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+-- everything should be deleted
+SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+
+-- there shouldn't be anything in the uncompressed chunk that matches predicates
+SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
+-- there shouldn't be anything in the compressed chunk that matches predicates
+SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
+ROLLBACK;
+
+-- test index with filter condition
+BEGIN;
+SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
+CREATE INDEX ON index_scan_test(device_id);
+EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+-- everything should be deleted
+SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+
+-- there shouldn't be anything in the uncompressed chunk that matches predicates
+SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
+-- there shouldn't be anything in the compressed chunk that matches predicates
+SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
+ROLLBACK;
+
