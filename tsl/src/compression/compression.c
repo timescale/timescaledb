@@ -2074,7 +2074,8 @@ test_one_input_throw(const uint8 *Data, size_t Size)
 	DecompressionIterator *iter =
 		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
-	ArrowArray *arrow = tsl_try_decompress_all(COMPRESSION_ALGORITHM_GORILLA, compressed_data, FLOAT8OID);
+	ArrowArray *arrow =
+		tsl_try_decompress_all(COMPRESSION_ALGORITHM_GORILLA, compressed_data, FLOAT8OID);
 
 	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))

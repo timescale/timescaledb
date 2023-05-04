@@ -485,7 +485,9 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 #define CORRUPT_DATA_MESSAGE (true)
 #endif
 
-#define CheckCompressedData(X) if (!(X)) ereport(ERROR, CORRUPT_DATA_MESSAGE)
+#define CheckCompressedData(X)                                                                     \
+	if (!(X))                                                                                      \
+	ereport(ERROR, CORRUPT_DATA_MESSAGE)
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
