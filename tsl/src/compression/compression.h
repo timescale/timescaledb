@@ -479,7 +479,8 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
  * to pollute the logs.
  */
 #ifdef TS_COMPRESSION_FUZZING
-#define CORRUPT_DATA_MESSAGE (errmsg("the compressed data is corrupt"))
+#define CORRUPT_DATA_MESSAGE                                                                       \
+	(errmsg("the compressed data is corrupt"), errcode(ERRCODE_DATA_CORRUPTED))
 #else
 #define CORRUPT_DATA_MESSAGE (true)
 #endif
