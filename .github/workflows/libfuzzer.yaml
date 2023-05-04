@@ -89,7 +89,7 @@ jobs:
         echo "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
         psql -a -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
-        ln -s tsl/test/fuzzing/gorilla $PGDATA/corpus
+        ln -s tsl/test/fuzzing/compression/gorilla $PGDATA/corpus
         readlink -e $PGDATA/corpus
         psql -c "select fuzz();"
 
