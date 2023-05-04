@@ -1974,3 +1974,151 @@ SELECT * FROM chunk_status;
 (4 rows)
 
 ROLLBACK;
+DROP TABLE join_test1;
+DROP TABLE join_test2;
+-- test if index scan qualifiers are properly used
+CREATE TABLE index_scan_test(time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('index_scan_test','time',create_default_indexes:=false);
+       create_hypertable       
+-------------------------------
+ (29,public,index_scan_test,t)
+(1 row)
+
+INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device_id + 0.5 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-01 23:55:00+0','1m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+-- compress chunks
+ALTER TABLE index_scan_test SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(show_chunks('index_scan_test'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_29_59_chunk
+(1 row)
+
+ANALYZE index_scan_test;
+SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'index_scan_test'
+AND ch1.hypertable_id = ht.id
+AND ch1.table_name LIKE '_hyper%'
+ORDER BY ch1.id LIMIT 1 \gset
+SELECT ch2.schema_name|| '.' || ch2.table_name AS "COMP_CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'index_scan_test'
+AND ch1.hypertable_id = ht.id
+AND ch1.compressed_chunk_id  = ch2.id
+ORDER BY ch2.id LIMIT 1 \gset
+INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device_id + 0.5 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','1m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+-- test index on single column
+BEGIN;
+SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 \gset
+CREATE INDEX ON index_scan_test(device_id);
+EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on public.index_scan_test
+         Delete on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
+         ->  Index Scan using _hyper_29_59_chunk_index_scan_test_device_id_idx on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
+               Output: index_scan_test_1.tableoid, index_scan_test_1.ctid
+               Index Cond: (index_scan_test_1.device_id = 2)
+(6 rows)
+
+DELETE FROM index_scan_test WHERE device_id = 2;
+-- everything should be deleted
+SELECT count(*) FROM index_scan_test where device_id = 2;
+ count 
+-------
+     0
+(1 row)
+
+-- there shouldn't be anything in the uncompressed chunk where device_id = 2
+SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- there shouldn't be anything in the compressed chunk from device_id = 2
+SELECT count(*) FROM :COMP_CHUNK_1 where device_id = 2;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+-- test multi column index
+BEGIN;
+SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
+CREATE INDEX ON index_scan_test(device_id, time);
+EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on public.index_scan_test
+         Delete on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
+         ->  Index Scan using _hyper_29_59_chunk_index_scan_test_device_id_time_idx on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
+               Output: index_scan_test_1.tableoid, index_scan_test_1.ctid
+               Index Cond: ((index_scan_test_1.device_id = 2) AND (index_scan_test_1."time" > 'Sun Jan 02 00:00:00 2000 PST'::timestamp with time zone))
+(6 rows)
+
+DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+-- everything should be deleted
+SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+ count 
+-------
+     0
+(1 row)
+
+-- there shouldn't be anything in the uncompressed chunk that matches predicates
+SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- there shouldn't be anything in the compressed chunk that matches predicates
+SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+-- test index with filter condition
+BEGIN;
+SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
+CREATE INDEX ON index_scan_test(device_id);
+EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on public.index_scan_test
+         Delete on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
+         ->  Index Scan using _hyper_29_59_chunk_index_scan_test_device_id_idx on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
+               Output: index_scan_test_1.tableoid, index_scan_test_1.ctid
+               Index Cond: (index_scan_test_1.device_id = 2)
+               Filter: (index_scan_test_1."time" > 'Sun Jan 02 00:00:00 2000 PST'::timestamp with time zone)
+(7 rows)
+
+DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+-- everything should be deleted
+SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+ count 
+-------
+     0
+(1 row)
+
+-- there shouldn't be anything in the uncompressed chunk that matches predicates
+SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- there shouldn't be anything in the compressed chunk that matches predicates
+SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
