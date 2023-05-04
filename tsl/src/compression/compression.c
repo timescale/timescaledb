@@ -2107,23 +2107,15 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 		AllocSetContextCreate(CurrentMemoryContext, "fuzzing", 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
 	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
 
-	char *argvdata[] = {
-		"PostgresFuzzer",
-		//"-help=1",
-		"-verbosity=1",
-		"-timeout=1",
-		"-report_slow_units=1",
-		"-use_value_profile=1",
-		//"-reload=1",
-		//"-print_full_coverage=1",
-		"-runs=10000",
-		//"-data_flow_trace=1",
-		//"-focus-function=auto",
-		//"-merge=1",
-		//"/var/tmp/corpus-mini",
-		"corpus", /* in the database directory */
-		NULL
-	};
+	char *argvdata[] = { "PostgresFuzzer",
+						 "-verbosity=1",
+						 "-timeout=1",
+						 "-report_slow_units=1",
+						 "-use_value_profile=1",
+						 "-reload=1",
+						 "-runs=10000",
+						 "corpus" /* in the database directory */,
+						 NULL };
 	char **argv = argvdata;
 	int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
 
