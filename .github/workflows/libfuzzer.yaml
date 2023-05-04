@@ -84,25 +84,21 @@ jobs:
         for _ in {1..20}; do sleep 1; if psql -c "select 1"; then break; fi; done
         psql -c "create extension timescaledb;"
 
+        # Create the fuzzing function
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         echo $MODULE_NAME
         echo "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
         psql -a -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
-        ls tsl
-        ls tsl/test
-        ls tsl/test/fuzzing
-        ls tsl/test/fuzzing/compression
-        ls tsl/test/fuzzing/compression/gorilla
-
-        ln -s $(readlink -e tsl/test/fuzzing/compression/gorilla) $PGDATA/corpus
-
-        ls $PGDATA
-        ls $PGDATA/corpus
-
+        # Symlink the corpus directory to the database directory.
+        ln -sf $(readlink -e tsl/test/fuzzing/compression/gorilla) $PGDATA/corpus
         readlink -e $PGDATA/corpus
 
-        psql -c "select fuzz();"
+        # The LLVM fuzzing driver calls exit(), so we expect to lose the connection.
+        psql -c "select fuzz();" ||:
+
+        # Check that the server is still alive.
+        psql -c "select 1"
 
 
     - name: Collect the logs
@@ -141,8 +137,9 @@ jobs:
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
         grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
+        exit 1 # Fail the job if we have core dumps.
 
-    - name: Coredumps
+    - name: Upload core dumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
