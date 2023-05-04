@@ -2099,7 +2099,7 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 
 	string[fsize] = 0;
 
-	int res = test_one_input_throw((const uint8_t *) string, fsize);
+	int res = test_one_input_throw((const uint8 *) string, fsize);
 
 	PG_RETURN_INT32(res);
 }
