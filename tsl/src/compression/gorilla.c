@@ -14,10 +14,10 @@
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 
+#include "compression/compression.h"
 #include "compression/gorilla.h"
 
 #include "adts/bit_array.h"
-#include "compression/compression.h"
 #include "compression/simple8b_rle.h"
 #include "compression/simple8b_rle_bitmap.h"
 #include "float_utils.h"
@@ -464,40 +464,54 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
  ***  DecompressionIterator  ***
  *******************************/
 
+inline static void
+bytes_attach_bit_array_and_advance(BitArray *dst, StringInfo si, uint32 num_buckets,
+								   uint8 bits_in_last_bucket)
+{
+	bit_array_wrap_internal(dst,
+							num_buckets,
+							bits_in_last_bucket,
+							(uint64 *) (si->data + si->cursor));
+	consumeCompressedData(si, bit_array_data_bytes_used(dst));
+}
+
+static void
+compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, StringInfo si)
+{
+	expanded->header = (GorillaCompressed *) consumeCompressedData(si, sizeof(GorillaCompressed));
+
+	if (expanded->header->compression_algorithm != COMPRESSION_ALGORITHM_GORILLA)
+		elog(ERROR, "unknown compression algorithm");
+
+	bool has_nulls = expanded->header->has_nulls == 1;
+
+	expanded->tag0s = bytes_deserialize_simple8b_and_advance(si);
+	expanded->tag1s = bytes_deserialize_simple8b_and_advance(si);
+
+	bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
+									   si,
+									   expanded->header->num_leading_zeroes_buckets,
+									   expanded->header->bits_used_in_last_leading_zeros_bucket);
+
+	expanded->num_bits_used_per_xor = bytes_deserialize_simple8b_and_advance(si);
+
+	bytes_attach_bit_array_and_advance(&expanded->xors,
+									   si,
+									   expanded->header->num_xor_buckets,
+									   expanded->header->bits_used_in_last_xor_bucket);
+
+	if (has_nulls)
+		expanded->nulls = bytes_deserialize_simple8b_and_advance(si);
+	else
+		expanded->nulls = NULL;
+}
+
 static void
 compressed_gorilla_data_init_from_pointer(CompressedGorillaData *expanded,
 										  const GorillaCompressed *compressed)
 {
-	bool has_nulls;
-	const char *data = (char *) compressed;
-
-	expanded->header = compressed;
-	if (expanded->header->compression_algorithm != COMPRESSION_ALGORITHM_GORILLA)
-		elog(ERROR, "unknown compression algorithm");
-
-	has_nulls = expanded->header->has_nulls == 1;
-	data += sizeof(GorillaCompressed);
-
-	expanded->tag0s = bytes_deserialize_simple8b_and_advance(&data);
-	expanded->tag1s = bytes_deserialize_simple8b_and_advance(&data);
-
-	data = bytes_attach_bit_array_and_advance(&expanded->leading_zeros,
-											  data,
-											  expanded->header->num_leading_zeroes_buckets,
-											  expanded->header
-												  ->bits_used_in_last_leading_zeros_bucket);
-
-	expanded->num_bits_used_per_xor = bytes_deserialize_simple8b_and_advance(&data);
-
-	data = bytes_attach_bit_array_and_advance(&expanded->xors,
-											  data,
-											  expanded->header->num_xor_buckets,
-											  expanded->header->bits_used_in_last_xor_bucket);
-
-	if (has_nulls)
-		expanded->nulls = bytes_deserialize_simple8b_and_advance(&data);
-	else
-		expanded->nulls = NULL;
+	StringInfoData si = { .data = (char *) compressed, .len = VARSIZE(compressed) };
+	compressed_gorilla_data_init_from_stringinfo(expanded, &si);
 }
 
 static void
@@ -508,10 +522,10 @@ compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum goril
 												  gorilla_compressed));
 }
 
-DecompressionIterator *
-gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type)
+static void
+gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterator,
+											Oid element_type)
 {
-	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
 	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
 	iterator->base.forward = true;
 	iterator->base.element_type = element_type;
@@ -519,7 +533,6 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->prev_val = 0;
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
-	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
 
 	iterator->tag0s = simple8brle_decompress_bitmap(iterator->gorilla_data.tag0s);
 	iterator->tag1s = simple8brle_decompress_bitmap(iterator->gorilla_data.tag1s);
@@ -531,7 +544,15 @@ gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid 
 	iterator->has_nulls = iterator->gorilla_data.nulls != NULL;
 	if (iterator->has_nulls)
 		iterator->nulls = simple8brle_decompress_bitmap(iterator->gorilla_data.nulls);
+														iterator->gorilla_data.nulls);
+}
 
+DecompressionIterator *
+gorilla_decompression_iterator_from_datum_forward(Datum gorilla_compressed, Oid element_type)
+{
+	GorillaDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	compressed_gorilla_data_init_from_datum(&iterator->gorilla_data, gorilla_compressed);
+	gorilla_iterator_init_from_expanded_forward(iterator, element_type);
 	return &iterator->base;
 }
 
@@ -592,7 +613,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 
 		if (null.val != 0)
 		{
-			Assert(null.val == 1);
+			CheckCompressedData(null.val == 1);
 			return (DecompressResultInternal){
 				.is_null = true,
 			};
@@ -612,7 +633,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		};
 
 	tag1 = simple8brle_bitmap_get_next(&iter->tag1s);
-	Assert(!tag1.is_done);
+	CheckCompressedData(!tag1.is_done);
 
 	if (tag1.val != 0)
 	{
@@ -620,9 +641,14 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		/* get new xor sizes */
 		iter->prev_leading_zeroes =
 			bit_array_iter_next(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
+		CheckCompressedData(iter->prev_leading_zeroes <= 64);
+
 		num_xor_bits = simple8brle_decompression_iterator_try_next_forward(&iter->num_bits_used);
-		Assert(!num_xor_bits.is_done);
+		CheckCompressedData(!num_xor_bits.is_done);
 		iter->prev_xor_bits_used = num_xor_bits.val;
+		CheckCompressedData(iter->prev_xor_bits_used <= 64);
+
+		CheckCompressedData(iter->prev_xor_bits_used + iter->prev_leading_zeroes <= 64);
 	}
 
 	xor = bit_array_iter_next(&iter->xors, iter->prev_xor_bits_used);
@@ -987,7 +1013,9 @@ gorilla_compressed_recv(StringInfo buf)
 
 	header.has_nulls = pq_getmsgbyte(buf);
 	if (header.has_nulls != 0 && header.has_nulls != 1)
+	{
 		elog(ERROR, "invalid recv in gorilla: bad bool");
+	}
 
 	header.last_value = pq_getmsgint64(buf);
 	data.tag0s = simple8brle_serialized_recv(buf);

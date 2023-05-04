@@ -2054,6 +2054,113 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	table_close(in_rel, NoLock);
 }
 
+/* Try to decompress the given compressed data. Used for fuzzing. */
+static int
+test_one_input_throw(const uint8 *Data, size_t Size)
+{
+	StringInfoData si = { .data = (char *) Data, .len = Size };
+
+	int algo = pq_getmsgbyte(&si);
+
+	CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
+
+	/* Only for Gorilla for now. */
+	if (algo != COMPRESSION_ALGORITHM_GORILLA)
+	{
+		return -1;
+	}
+
+	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+	DecompressionIterator *iter =
+		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
+
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+		;
+
+	return 0;
+}
+
+TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
+
+/* Read and decompress compressed data from file. Useful for fuzzing. */
+Datum
+ts_read_compressed_data_file(PG_FUNCTION_ARGS)
+{
+	char *name = PG_GETARG_CSTRING(0);
+	FILE *f = fopen(name, "r");
+
+	if (!f)
+	{
+		elog(ERROR, "could not open the file '%s'", name);
+	}
+
+	fseek(f, 0, SEEK_END);
+	size_t fsize = ftell(f);
+	fseek(f, 0, SEEK_SET); /* same as rewind(f); */
+
+	char *string = palloc(fsize + 1);
+	size_t bytes_read = fread(string, fsize, 1, f);
+
+	if (bytes_read != fsize)
+	{
+		elog(ERROR,
+			 "failed to read file '%s': expected %zu bytes, got %zu",
+			 name,
+			 fsize,
+			 bytes_read);
+	}
+
+	fclose(f);
+
+	string[fsize] = 0;
+
+	int res = test_one_input_throw((const uint8 *) string, fsize);
+
+	PG_RETURN_INT32(res);
+}
+
+TS_FUNCTION_INFO_V1(ts_read_compressed_data_directory);
+
+/*
+ * Read and decomrpess all compressed data files from directory. Useful for
+ * checking the fuzzing corpora in the regression tests.
+ */
+Datum
+ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
+{
+	char *name = PG_GETARG_CSTRING(0);
+	DIR *dp;
+	struct dirent *ep;
+	dp = opendir(name);
+
+	if (!dp)
+	{
+		elog(ERROR, "could not open directory '%s'", name);
+	}
+
+	int n = 0;
+	while ((ep = readdir(dp)))
+	{
+		PG_TRY();
+		{
+			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(ep->d_name));
+		}
+		PG_CATCH();
+		{
+			/*
+			 * We're testing the corrupt data handling, so we don't care about
+			 * these errors.
+			 */
+			FlushErrorState();
+		}
+		PG_END_TRY();
+		n++;
+	}
+
+	(void) closedir(dp);
+	PG_RETURN_INT32(n);
+}
+
 #if PG14_GE
 static SegmentFilter *
 add_filter_column_strategy(char *column_name, StrategyNumber strategy, Const *value,

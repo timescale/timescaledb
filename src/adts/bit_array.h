@@ -48,9 +48,6 @@ static char *bytes_store_bit_array_and_advance(char *dest, size_t expected_size,
 static size_t bit_array_output(const BitArray *array, uint64 *data, size_t max_n_bytes,
 							   uint64 *num_bits_out);
 static void bit_array_wrap(BitArray *dst, uint64 *data, uint64 num_bits);
-static const char *bytes_attach_bit_array_and_advance(BitArray *dst, const char *data,
-													  uint32 num_buckets,
-													  uint8 bits_in_last_bucket);
 
 /* Accessors / Info */
 static uint64 bit_array_num_bits(const BitArray *array);
