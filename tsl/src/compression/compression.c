@@ -2074,8 +2074,19 @@ test_one_input_throw(const uint8 *Data, size_t Size)
 	DecompressionIterator *iter =
 		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
+	ArrowArray *arrow = tsl_try_decompress_all(COMPRESSION_ALGORITHM_GORILLA, compressed_data, FLOAT8OID);
+
+	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-		;
+	{
+		if (((float8 *) arrow->buffers[1])[i] != r.val)
+		{
+			elog(ERROR, "the decompression result does not match");
+		}
+
+		i++;
+		fprintf(stderr, "it works! %d\n", i);
+	}
 
 	return 0;
 }
@@ -2141,6 +2152,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 	int n = 0;
 	while ((ep = readdir(dp)))
 	{
+		fprintf(stderr, "%s\n", ep->d_name);
 		PG_TRY();
 		{
 			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(ep->d_name));

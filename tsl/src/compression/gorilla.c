@@ -544,7 +544,6 @@ gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterat
 	iterator->has_nulls = iterator->gorilla_data.nulls != NULL;
 	if (iterator->has_nulls)
 		iterator->nulls = simple8brle_decompress_bitmap(iterator->gorilla_data.nulls);
-														iterator->gorilla_data.nulls);
 }
 
 DecompressionIterator *
