@@ -75,6 +75,7 @@ jobs:
       run: |
         mkdir db
         export PGDATA=db
+        export PGPORT=5432
         export PATH=$PATH:$HOME/$PG_INSTALL_DIR/bin
         initdb
         pg_ctl start
