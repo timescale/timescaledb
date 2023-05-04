@@ -29,6 +29,11 @@ accidentally triggering the load of a previous DB version.**
 * #5583 Fix parameterization in DecompressChunk path generation
 * #5602 Fix broken CAgg with JOIN repair function
 * #5615 Add permission checks to run_job()
+* #5614 Enable run_job() for telemetry job
+* #5578 Fix on-insert decompression after schema changes
+* #5613 Quote username identifier appropriately
+* #5525 Fix tablespace for compressed hypertable and corresponding toast
+* #5642 Fix ALTER TABLE SET with normal tables
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
