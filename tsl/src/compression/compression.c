@@ -2119,7 +2119,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 		"-use_value_profile=1",
 		//"-reload=1",
 		//"-print_full_coverage=1",
-		"-runs=1000",
+		"-runs=10000",
 		//"-data_flow_trace=1",
 		//"-focus-function=auto",
 		//"-merge=1",
