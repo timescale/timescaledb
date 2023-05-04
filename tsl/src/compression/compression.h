@@ -478,7 +478,7 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
  * the argument is false. When fuzzing is enabled, we don't show the message not
  * to pollute the logs.
  */
-#ifdef TS_COMPRESSION_FUZZING
+#ifndef TS_COMPRESSION_FUZZING
 #define CORRUPT_DATA_MESSAGE                                                                       \
 	(errmsg("the compressed data is corrupt"), errcode(ERRCODE_DATA_CORRUPTED))
 #else

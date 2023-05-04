@@ -672,7 +672,7 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 					 * harm to report it right away, because this loop can't be
 					 * vectorized.
 					 */
-					ereport(ERROR, (errmsg("the compressed data is corrupt")));
+					CheckCompressedData(false);
 			}
 #undef UNPACK_BLOCK
 		}

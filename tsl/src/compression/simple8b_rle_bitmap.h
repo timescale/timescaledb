@@ -108,10 +108,8 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			 */
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
 			const uint64 repeated_value = simple8brle_rledata_value(block_data);
-			if (repeated_value > 1 || decompressed_index + n_block_values > num_elements)
-			{
-				ereport(ERROR, (errmsg("the compressed data is corrupt")));
-			}
+			CheckCompressedData(repeated_value <= 1);
+			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
 			for (int i = 0; i < n_block_values; i++)
 			{
@@ -128,10 +126,7 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			 * number of elements, but we have 64 bytes of padding on the right
 			 * so we don't care.
 			 */
-			if (selector_value != 1)
-			{
-				ereport(ERROR, (errmsg("the compressed data is corrupt")));
-			}
+			CheckCompressedData(selector_value == 1);
 
 			Assert(SIMPLE8B_BIT_LENGTH[selector_value] == 1);
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
