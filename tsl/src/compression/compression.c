@@ -2039,8 +2039,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	table_close(in_rel, NoLock);
 }
 
-/////////////////////////////////////////////////
-
+/* Try to decompress the given compressed data. Used for fuzzing. */
 static int
 test_one_input_throw(const uint8_t *Data, size_t Size)
 {
@@ -2060,20 +2059,18 @@ test_one_input_throw(const uint8_t *Data, size_t Size)
 	DecompressionIterator *iter =
 		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
-	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-	{
-		i++;
-		// fprintf(stderr, "%lf ", DatumGetFloat8(r.val));
-	}
-	(void) i;
-	// fprintf(stderr, " (%d total)\n", i);
+		;
 
 	return 0;
 }
 
 #ifdef TS_COMPRESSION_FUZZING
 
+/*
+ * This is our test function that will be called by the libfuzzer driver. It
+ * has to catch the postgres exceptions normally produced for corrupt data.
+ */
 static int
 LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
@@ -2094,6 +2091,10 @@ LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 	return res;
 }
 
+/*
+ * This is the libfuzzer fuzzing driver. It will run our test functions with
+ * random inputs.
+ */
 extern int LLVMFuzzerRunDriver(int *argc, char ***argv,
 							   int (*UserCb)(const uint8_t *Data, size_t Size));
 
@@ -2164,7 +2165,10 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_directory);
 
-/* Read and decomrpess all compressed data files from directory. Useful for fuzzing. */
+/*
+ * Read and decomrpess all compressed data files from directory. Useful for
+ * checking the fuzzing corpora in the regression tests.
+ */
 Datum
 ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 {
