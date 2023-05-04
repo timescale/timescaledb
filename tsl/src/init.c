@@ -30,6 +30,7 @@
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/repair.h"
 #include "cross_module_fn.h"
 #include "nodes/data_node_dispatch.h"
 #include "data_node.h"

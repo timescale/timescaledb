@@ -39,6 +39,43 @@ typedef struct CaggRefreshState
 	SchemaAndName partial_view;
 } CaggRefreshState;
 
+static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
+static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
+static InternalTimeRange
+compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
+										  const int64 bucket_width);
+static InternalTimeRange
+compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
+											  const int64 bucket_width,
+											  const ContinuousAggsBucketFunction *bucket_function);
+static void continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg,
+										const InternalTimeRange *refresh_window);
+static void continuous_agg_refresh_execute(const CaggRefreshState *refresh,
+										   const InternalTimeRange *bucketed_refresh_window,
+										   const int32 chunk_id);
+static void log_refresh_window(int elevel, const ContinuousAgg *cagg,
+							   const InternalTimeRange *refresh_window, const char *msg);
+static long materialization_per_refresh_window(void);
+static void continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
+												   const long iteration, void *arg1_refresh,
+												   void *arg2_chunk_id);
+static void update_merged_refresh_window(const InternalTimeRange *bucketed_refresh_window,
+										 const long iteration, void *arg1_merged_refresh_window,
+										 void *arg2);
+static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
+											   const InternalTimeRange *refresh_window,
+											   const InvalidationStore *invalidations,
+											   const int64 bucket_width, int32 chunk_id,
+											   const bool is_raw_ht_distributed,
+											   const bool do_merged_refresh,
+											   const InternalTimeRange merged_refresh_window);
+static ContinuousAgg *get_cagg_by_relid(const Oid cagg_relid);
+static void emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshCallContext callctx);
+static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
+												   const InternalTimeRange *refresh_window,
+												   const CaggRefreshCallContext callctx,
+												   int32 chunk_id);
+
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {

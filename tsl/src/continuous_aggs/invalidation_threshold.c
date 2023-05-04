@@ -70,6 +70,9 @@ typedef struct InvalidationThresholdData
 	bool was_updated;
 } InvalidationThresholdData;
 
+static ScanTupleResult scan_update_invalidation_threshold(TupleInfo *ti, void *data);
+static ScanTupleResult invalidation_threshold_tuple_found(TupleInfo *ti, void *data);
+
 static ScanTupleResult
 scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 {

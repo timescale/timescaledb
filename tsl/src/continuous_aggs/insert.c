@@ -84,6 +84,18 @@ static MemoryContext continuous_aggs_trigger_mctx = NULL;
 void _continuous_aggs_cache_inval_init(void);
 void _continuous_aggs_cache_inval_fini(void);
 
+static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
+static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
+										  int32 hypertable_id, int32 entry_id);
+static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
+											   Oid chunk_id, Relation chunk_relation);
+static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
+static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
+static void cache_inval_cleanup(void);
+static void cache_inval_htab_write(void);
+static void continuous_agg_xact_invalidation_callback(XactEvent event, void *arg);
+static ScanTupleResult invalidation_tuple_found(TupleInfo *ti, void *min);
+
 static void
 cache_inval_init()
 {
