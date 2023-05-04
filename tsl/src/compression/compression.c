@@ -2041,7 +2041,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 /* Try to decompress the given compressed data. Used for fuzzing. */
 static int
-test_one_input_throw(const uint8_t *Data, size_t Size)
+test_one_input_throw(const uint8 *Data, size_t Size)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
