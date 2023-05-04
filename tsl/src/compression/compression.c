@@ -2135,6 +2135,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 }
 
 #endif
+
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 
 /* Read and decompress compressed data from file. Useful for fuzzing. */
