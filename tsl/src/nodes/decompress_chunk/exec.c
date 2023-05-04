@@ -674,8 +674,16 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 							(errmsg("the compressed data is corrupt: got a segment with length %d",
 									count_value)));
 				}
-				Assert(batch_state->total_batch_rows == 0);
-				batch_state->total_batch_rows = count_value;
+
+				if (batch_state->total_batch_rows == 0)
+				{
+					batch_state->total_batch_rows = count_value;
+				}
+				else if (batch_state->total_batch_rows != count_value)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
+
 				break;
 			}
 			case SEQUENCE_NUM_COLUMN:
