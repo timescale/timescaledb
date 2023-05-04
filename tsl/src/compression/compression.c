@@ -2135,7 +2135,6 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 }
 
 #endif
-
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 
 /* Read and decompress compressed data from file. Useful for fuzzing. */
@@ -2151,11 +2150,21 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	}
 
 	fseek(f, 0, SEEK_END);
-	long fsize = ftell(f);
+	size_t fsize = ftell(f);
 	fseek(f, 0, SEEK_SET); /* same as rewind(f); */
 
 	char *string = palloc(fsize + 1);
-	fread(string, fsize, 1, f);
+	size_t bytes_read = fread(string, fsize, 1, f);
+
+	if (bytes_read != fsize)
+	{
+		elog(ERROR,
+			 "failed to read file '%s': expected %zu bytes, got %zu",
+			 name,
+			 fsize,
+			 bytes_read);
+	}
+
 	fclose(f);
 
 	string[fsize] = 0;
