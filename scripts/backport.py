@@ -188,6 +188,7 @@ previous_version = version_config["update_from_version"]
 previous_version_parts = previous_version.split(".")
 previous_version_parts[-1] = "x"
 backport_target = ".".join(previous_version_parts)
+backported_label = f"backported-{backport_target}"
 
 print(f"Will backport to {backport_target}.")
 
@@ -272,10 +273,6 @@ prs_to_backport = {}
 for commit_sha, commit_title in main_commits:
     print()
 
-    if commit_title in branch_commit_titles:
-        print(f"{commit_sha[:9]} '{commit_title}' is already in the branch.")
-        continue
-
     pygithub_commit = source_repo.get_commit(sha=commit_sha)
 
     pulls = pygithub_commit.get_pulls()
@@ -291,6 +288,19 @@ for commit_sha, commit_title in main_commits:
         continue
 
     pull = pulls[0]
+
+    # If a commit with the same title is already in the branch, mark the PR with
+    # a corresponding tag. This makes it easier to check what was backported
+    # when looking at the release milestone. Note that we do this before other
+    # checks -- maybe it was backported manually regardless of the usual
+    # conditions.
+    if commit_title in branch_commit_titles:
+        print(f"{commit_sha[:9]} '{commit_title}' is already in the branch.")
+
+        if backported_label not in {label.name for label in pull.labels}:
+            pull.add_to_labels(backported_label)
+
+        continue
 
     # Next, we're going to look at the labels of both the PR and the linked
     # issue, if any, to understand whether we should backport the fix. We have
@@ -400,9 +410,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         continue
 
     # Push the backport branch.
-    git_check(
-        f"push --quiet {target_remote} @:refs/heads/{backport_branch} > /dev/null 2>&1"
-    )
+    git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")
 
     # Prepare description for the backport PR.
     backport_description = (

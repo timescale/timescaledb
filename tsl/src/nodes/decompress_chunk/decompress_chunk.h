@@ -51,14 +51,19 @@ typedef struct DecompressChunkPath
 	List *decompression_map;
 
 	/*
-	 * Whether a targetlist entry is a segmentby column. Parallel to the above
-	 * list.
+	 * This Int list is parallel to the compressed scan targetlist, just like
+	 * the above one. The value is true if a given targetlist entry is a
+	 * segmentby column, false otherwise. Has the same length as the above list.
+	 * We have to use the parallel lists and not a list of structs, because the
+	 * Plans have to be copyable by the Postgres _copy functions, and we can't
+	 * do that for a custom struct.
 	 */
 	List *is_segmentby_column;
 
 	List *compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;
+	bool sorted_merge_append;
 } DecompressChunkPath;
 
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,

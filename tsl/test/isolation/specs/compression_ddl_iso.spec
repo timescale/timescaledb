@@ -28,10 +28,12 @@ teardown
 
 session "I"
 step "I1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); }
+step "IR1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100) RETURNING *; }
 step "Ic"   { COMMIT; }
 
 session "IN"
 step "IN1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100); }
+step "INR1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) RETURNING *; }
 step "INc"   { COMMIT; }
 
 session "SI"
@@ -110,7 +112,7 @@ step "RC1" {
   BEGIN
   FOR chunk_name IN
       SELECT ch FROM show_chunks('ts_device_table') ch
-       ORDER BY ch::text LIMIT 1
+      LIMIT 1
      LOOP
          CALL recompress_chunk(chunk_name);
      END LOOP;
@@ -134,6 +136,7 @@ step "RC2" {
   $$;
 }
 
+
 #if insert in progress, compress  is blocked
 permutation "LockChunk1" "I1" "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1"
 
@@ -154,6 +157,14 @@ permutation "LockChunk1" "C1" "S1" "UnlockChunk" "SH" "Cc"
 # concurrent inserts into compressed chunk will wait to update chunk status
 # and not error out.
 permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat"
+
+#concurrent inserts don't need to wait for each other if inserting into a partially compressed chunk
+#commit order should not matter in that case
+permutation "C1" "Cc" "I1" "Ic" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "INc" "Ic" "SChunkStat"
+
+#concurrent inserts into compressed chunk with RETURNING clause should behave the same
+permutation "C1" "Cc" "LockChunkTuple" "IR1" "INR1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat"
+permutation "C1" "Cc" "I1" "Ic" "LockChunkTuple" "IR1" "INR1"  "UnlockChunkTuple" "INc" "Ic" "SChunkStat"
 
 # Testing concurrent recompress and insert.
 

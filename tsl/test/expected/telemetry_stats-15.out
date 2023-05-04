@@ -930,6 +930,7 @@ FROM
   disthyper
 GROUP BY hour, device;
 NOTICE:  refreshing continuous aggregate "distcontagg_old"
+VACUUM;
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT
 	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates
@@ -937,7 +938,7 @@ FROM relations;
              continuous_aggregates              
 ------------------------------------------------
  {                                             +
-     "heap_size": 368640,                      +
+     "heap_size": 425984,                      +
      "toast_size": 40960,                      +
      "compression": {                          +
          "compressed_heap_size": 40960,        +
@@ -951,10 +952,10 @@ FROM relations;
          "uncompressed_toast_size": 0,         +
          "uncompressed_indexes_size": 81920    +
      },                                        +
-     "indexes_size": 393216,                   +
+     "indexes_size": 409600,                   +
      "num_children": 8,                        +
      "num_relations": 4,                       +
-     "num_reltuples": 0,                       +
+     "num_reltuples": 2336,                    +
      "num_caggs_nested": 0,                    +
      "num_caggs_finalized": 2,                 +
      "num_caggs_on_distributed_hypertables": 2,+

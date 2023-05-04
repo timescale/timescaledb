@@ -13,6 +13,7 @@
 #include <catalog/index.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_authid.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
@@ -71,6 +72,7 @@
 #include "compression_with_clause.h"
 #include "partitioning.h"
 #include "debug_point.h"
+#include "debug_assert.h"
 
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
@@ -759,14 +761,7 @@ typedef struct VacuumCtx
 {
 	VacuumRelation *ht_vacuum_rel;
 	List *chunk_rels;
-	List *chunk_pairs;
 } VacuumCtx;
-
-typedef struct ChunkPair
-{
-	Oid uncompressed_relid;
-	Oid compressed_relid;
-} ChunkPair;
 
 /* Adds a chunk to the list of tables to be vacuumed */
 static void
@@ -783,6 +778,18 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk_vacuum_rel =
 		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
+
+	/* If we have a compressed chunk, make sure to analyze it as well */
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	{
+		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+		/* Compressed chunk might be missing due to concurrent operations */
+		if (comp_chunk)
+		{
+			chunk_vacuum_rel = makeVacuumRelation(NULL, comp_chunk->table_id, NIL);
+			ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
+		}
+	}
 }
 
 /*
@@ -856,7 +863,6 @@ process_vacuum(ProcessUtilityArgs *args)
 	VacuumCtx ctx = {
 		.ht_vacuum_rel = NULL,
 		.chunk_rels = NIL,
-		.chunk_pairs = NIL,
 	};
 	ListCell *lc;
 	Hypertable *ht;
@@ -1119,7 +1125,7 @@ process_truncate(ProcessUtilityArgs *args)
 						{
 							Chunk *compressed_chunk =
 								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-							if (compressed_chunk != NULL)
+							if (compressed_chunk != NULL && !compressed_chunk->fd.dropped)
 							{
 								/* Create list item into the same context of the list. */
 								oldctx = MemoryContextSwitchTo(parsetreectx);
@@ -1692,6 +1698,62 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("mixing continuous aggregates and other objects not allowed"),
 				 errhint("Drop continuous aggregates and other objects in separate statements.")));
+}
+
+static bool
+fetch_role_info(RoleSpec *rolespec, Oid *roleid)
+{
+	/* Special role specifiers should not be present when dropping a role,
+	 * but if they are, we just ignore them */
+	if (rolespec->roletype != ROLESPEC_CSTRING)
+		return false;
+
+	/* Fetch the heap tuple from system table. If heaptuple is not valid it
+	 * means we did not find a role. We ignore it since the real execution
+	 * will handle this. */
+	HeapTuple tuple = SearchSysCache1(AUTHNAME, PointerGetDatum(rolespec->rolename));
+	if (!HeapTupleIsValid(tuple))
+		return false;
+
+	Form_pg_authid roleform = (Form_pg_authid) GETSTRUCT(tuple);
+	*roleid = roleform->oid;
+	ReleaseSysCache(tuple);
+	return true;
+}
+
+static DDLResult
+process_drop_role(ProcessUtilityArgs *args)
+{
+	DropRoleStmt *stmt = (DropRoleStmt *) args->parsetree;
+	ListCell *cell;
+	foreach (cell, stmt->roles)
+	{
+		RoleSpec *rolespec = lfirst(cell);
+		Oid roleid;
+
+		if (!fetch_role_info(rolespec, &roleid))
+			continue;
+
+		ScanIterator iterator =
+			ts_scan_iterator_create(BGW_JOB, AccessShareLock, CurrentMemoryContext);
+		ts_scanner_foreach(&iterator)
+		{
+			bool isnull;
+			TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+			Datum value = slot_getattr(ti->slot, Anum_bgw_job_owner, &isnull);
+			if (!isnull && DatumGetObjectId(value) == roleid)
+			{
+				Datum value = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull);
+				Ensure(!isnull, "job id was null");
+				ereport(ERROR,
+						(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+						 errmsg("role \"%s\" cannot be dropped because some objects depend on it",
+								rolespec->rolename),
+						 errdetail("owner of job %d", DatumGetInt32(value))));
+			}
+		}
+	}
+	return DDL_CONTINUE;
 }
 
 static DDLResult
@@ -2648,6 +2710,18 @@ process_index_start(ProcessUtilityArgs *args)
 
 		/* Make the RangeVar for the underlying materialization hypertable */
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
+	}
+	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
+		/* unique indexes are not allowed on compressed hypertables*/
+		if (stmt->unique || stmt->primary || stmt->isconstraint)
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on hypertables that have compression "
+							"enabled")));
+		}
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -4093,6 +4167,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			 * way.
 			 */
 			handler = process_drop_start;
+			break;
+		case T_DropRoleStmt:
+			handler = process_drop_role;
 			break;
 		case T_DropTableSpaceStmt:
 			handler = process_drop_tablespace;

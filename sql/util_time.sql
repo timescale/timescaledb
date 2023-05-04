@@ -27,37 +27,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.to_interval(unixtime_us BIGINT)
 -- Converting from int* columns to internal representation is a cast to bigint.
 -- Converting from timestamps to internal representation is conversion to epoch (in microseconds).
 
--- Gets the sql code for representing the literal for the given time value (in the internal representation) as the column_type.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.time_literal_sql(
-    time_value      BIGINT,
-    column_type     REGTYPE
-)
-    RETURNS text LANGUAGE PLPGSQL STABLE AS
-$BODY$
-DECLARE
-    ret text;
-BEGIN
-    IF time_value IS NULL THEN
-        RETURN format('%L', NULL);
-    END IF;
-    CASE column_type
-      WHEN 'BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype THEN
-        RETURN format('%L', time_value); -- scale determined by user.
-      WHEN 'TIMESTAMP'::regtype THEN
-        --the time_value for timestamps w/o tz does not depend on local timezones. So perform at UTC.
-        RETURN format('TIMESTAMP %1$L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))); -- microseconds
-      WHEN 'TIMESTAMPTZ'::regtype THEN
-        -- assume time_value is in microsec
-        RETURN format('TIMESTAMPTZ %1$L', _timescaledb_internal.to_timestamp(time_value)); -- microseconds
-      WHEN 'DATE'::regtype THEN
-        RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
-      ELSE
-         EXECUTE 'SELECT format(''%L'', $1::' || column_type::text || ')' into ret using time_value;
-         RETURN ret;
-    END CASE;
-END
-$BODY$ SET search_path TO pg_catalog, pg_temp;
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.interval_to_usec(
        chunk_interval INTERVAL
 )

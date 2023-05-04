@@ -3,12 +3,12 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE FUNCTION _timescaledb_internal.test_remote_txn_id()
+CREATE FUNCTION _timescaledb_functions.test_remote_txn_id()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_id'
 LANGUAGE C STRICT;
 
-SELECT _timescaledb_internal.test_remote_txn_id();
+SELECT _timescaledb_functions.test_remote_txn_id();
 
 SELECT 'ts-1-10-20-30'::rxid;
 
@@ -20,7 +20,7 @@ CREATE UNIQUE INDEX idx_name ON tbl_w_rxid ((txn_id::text));
 
 INSERT INTO tbl_w_rxid VALUES ('ts-1-10-20-30'), ('ts-1-11-20-30'), ('ts-1-10-21-30');
 
-SELECT txn_id, _timescaledb_internal.rxid_in(_timescaledb_internal.rxid_out(txn_id))::text = txn_id::text FROM tbl_w_rxid;
+SELECT txn_id, _timescaledb_functions.rxid_in(_timescaledb_functions.rxid_out(txn_id))::text = txn_id::text FROM tbl_w_rxid;
 
 \set ON_ERROR_STOP 0
 INSERT INTO tbl_w_rxid VALUES ('ts-1-10-20-30');

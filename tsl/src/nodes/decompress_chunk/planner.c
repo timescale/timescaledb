@@ -127,7 +127,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 			elog(ERROR, "compressed scan targetlist entries must be Vars");
 		}
 
-		Var *var = (Var *) target->expr;
+		Var *var = castNode(Var, target->expr);
 		Assert((Index) var->varno == path->info->compressed_rel->relid);
 		AttrNumber compressed_attno = var->varattno;
 
@@ -336,6 +336,35 @@ clause_has_compressed_attrs(Node *node, void *context)
 	return expression_tree_walker(node, clause_has_compressed_attrs, context);
 }
 
+/*
+ * Find the resno of the given attribute in the provided target list
+ */
+static AttrNumber
+find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
+{
+	ListCell *lc;
+
+	Assert(targetlist != NIL);
+	Assert(pos > 0 && pos != InvalidAttrNumber);
+
+	foreach (lc, targetlist)
+	{
+		TargetEntry *target = (TargetEntry *) lfirst(lc);
+
+		if (!IsA(target->expr, Var))
+			elog(ERROR, "compressed scan targetlist entries must be Vars");
+
+		Var *var = castNode(Var, target->expr);
+		AttrNumber compressed_attno = var->varattno;
+
+		if (compressed_attno == pos)
+			return target->resno;
+	}
+
+	elog(ERROR, "Unable to locate var %d in targetlist", pos);
+	pg_unreachable();
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							 List *decompressed_tlist, List *clauses, List *custom_plans)
@@ -415,9 +444,10 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 * extra work of projecting the result of compressed chunk scan, because
 	 * DecompressChunk can choose only the needed columns itself.
 	 * Note that Postgres uses the CP_EXACT_TLIST option when planning the child
-	 * paths of the Custom path, so we won't automatically get a phsyical tlist
+	 * paths of the Custom path, so we won't automatically get a physical tlist
 	 * here.
 	 */
+	bool target_list_compressed_is_physical = false;
 	if (compressed_path->pathtype == T_IndexOnlyScan)
 	{
 		compressed_scan->plan.targetlist = ((IndexPath *) compressed_path)->indexinfo->indextlist;
@@ -429,6 +459,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		if (physical_tlist)
 		{
 			compressed_scan->plan.targetlist = physical_tlist;
+			target_list_compressed_is_physical = true;
 		}
 	}
 
@@ -454,29 +485,122 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 */
 	build_decompression_map(dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
 
-	/*
-	 * Add a sort if the compressed scan is not ordered appropriately.
-	 */
-	if (!pathkeys_contained_in(dcpath->compressed_pathkeys, compressed_path->pathkeys))
+	/* Build heap sort info for sorted_merge_append */
+	List *sort_options = NIL;
+
+	if (dcpath->sorted_merge_append)
 	{
-		List *compressed_pks = dcpath->compressed_pathkeys;
-		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
-												compressed_pks,
-												bms_make_singleton(compressed_scan->scanrelid));
+		/* sorted_merge_append is used when the 'order by' of the query and the
+		 * 'order by' of the segments do match, we use a heap to merge the segments.
+		 * For the heap we need a compare function that determines the heap order. This
+		 * function is constructed here.
+		 */
+		AttrNumber *sortColIdx = NULL;
+		Oid *sortOperators = NULL;
+		Oid *collations = NULL;
+		bool *nullsFirst = NULL;
+		int numsortkeys = 0;
+
+		ts_prepare_sort_from_pathkeys(&decompress_plan->scan.plan,
+									  dcpath->cpath.path.pathkeys,
+									  bms_make_singleton(dcpath->info->chunk_rel->relid),
+									  NULL,
+									  false,
+									  &numsortkeys,
+									  &sortColIdx,
+									  &sortOperators,
+									  &collations,
+									  &nullsFirst);
+
+		List *sort_col_idx = NIL;
+		List *sort_ops = NIL;
+		List *sort_collations = NIL;
+		List *sort_nulls = NIL;
+
+		/* Since we have to keep the sort info in custom_private, we store the information
+		 * in copyable lists */
+		for (int i = 0; i < numsortkeys; i++)
+		{
+			sort_col_idx = lappend_oid(sort_col_idx, sortColIdx[i]);
+			sort_ops = lappend_oid(sort_ops, sortOperators[i]);
+			sort_collations = lappend_oid(sort_collations, collations[i]);
+			sort_nulls = lappend_oid(sort_nulls, nullsFirst[i]);
+		}
+
+		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
+
+		/* Build a sort node for the compressed batches. The sort function is derived from the sort
+		 * function of the pathkeys, except that it refers to the min and max elements of the
+		 * batches. We have already verified that the pathkeys match the compression order_by, so
+		 * this mapping can be done here. */
+		for (int i = 0; i < numsortkeys; i++)
+		{
+			Oid opfamily, opcintype;
+			int16 strategy;
+
+			/* Find the operator in pg_amop --- failure shouldn't happen */
+			if (!get_ordering_op_properties(sortOperators[i], &opfamily, &opcintype, &strategy))
+				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
+
+			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
+			char *meta_col_name = strategy == BTLessStrategyNumber ?
+									  column_segment_min_name(i + 1) :
+									  column_segment_max_name(i + 1);
+
+			AttrNumber attr_position =
+				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);
+
+			if (attr_position == InvalidAttrNumber)
+				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
+
+			/* If the the target list is not based on the layout of the uncompressed chunk,
+			 * (see comment for physical_tlist above), adjust the position of the attribute.
+			 */
+			if (target_list_compressed_is_physical)
+				sortColIdx[i] = attr_position;
+			else
+				sortColIdx[i] =
+					find_attr_pos_in_tlist(compressed_scan->plan.targetlist, attr_position);
+		}
+
+		/* Now build the compressed batches sort node */
+		Sort *sort = ts_make_sort((Plan *) compressed_scan,
+								  numsortkeys,
+								  sortColIdx,
+								  sortOperators,
+								  collations,
+								  nullsFirst);
+
 		decompress_plan->custom_plans = list_make1(sort);
 	}
 	else
 	{
-		decompress_plan->custom_plans = custom_plans;
+		/*
+		 * Add a sort if the compressed scan is not ordered appropriately.
+		 */
+		if (!pathkeys_contained_in(dcpath->compressed_pathkeys, compressed_path->pathkeys))
+		{
+			List *compressed_pks = dcpath->compressed_pathkeys;
+			Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
+													compressed_pks,
+													bms_make_singleton(compressed_scan->scanrelid));
+			decompress_plan->custom_plans = list_make1(sort);
+		}
+		else
+		{
+			decompress_plan->custom_plans = custom_plans;
+		}
 	}
 
 	Assert(list_length(custom_plans) == 1);
 
-	settings = list_make3_int(dcpath->info->hypertable_id,
+	settings = list_make4_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
-							  dcpath->reverse);
+							  dcpath->reverse,
+							  dcpath->sorted_merge_append);
+
 	decompress_plan->custom_private =
-		list_make3(settings, dcpath->decompression_map, dcpath->is_segmentby_column);
+		list_make4(settings, dcpath->decompression_map, dcpath->is_segmentby_column, sort_options);
 
 	return &decompress_plan->scan.plan;
 }

@@ -378,3 +378,29 @@ join metric_dist m2 using (ts)
 where m1.id in (select id from metric_name where name = 'cpu1')
     and m2.id in (select id from metric_name where name = 'cpu3')
 ;
+
+
+-- Should prefer reference table join pushdown to all other kinds of plans,
+-- basically always. Note that we don't actually replicate the ref table here,
+-- so EXPLAIN ANALYZE would fail.
+set role :ROLE_CLUSTER_SUPERUSER;
+
+alter foreign data wrapper timescaledb_fdw options (add reference_tables 'metric_name');
+
+explain (costs off, verbose)
+select name, max(value), count(*)
+from metric_dist join metric_name using (id)
+where name like 'cpu%'
+group by name
+order by name
+;
+
+set timescaledb.enable_parameterized_data_node_scan to false;
+
+explain (costs off, verbose)
+select name, max(value), count(*)
+from metric_dist join metric_name using (id)
+where name like 'cpu%'
+group by name
+order by name
+;

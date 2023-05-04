@@ -35,6 +35,7 @@ list(
   APPEND
   TEST_FILES
   compression_ddl_iso.spec
+  compression_conflicts_iso.spec
   cagg_insert.spec
   cagg_multi_iso.spec
   cagg_concurrent_refresh.spec

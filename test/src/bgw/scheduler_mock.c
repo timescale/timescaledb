@@ -407,7 +407,12 @@ test_job_dispatcher(BgwJob *job)
 		{
 			/* Set next_start to 200ms */
 			Interval new_interval = { .time = .2 * USECS_PER_SEC };
-			return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, &new_interval);
+			return ts_bgw_job_run_and_set_next_start(job,
+													 test_job_4,
+													 3,
+													 &new_interval,
+													 /* atomic */ true,
+													 /* mark */ false);
 		}
 		default:
 			return ts_cm_functions->job_execute(job);

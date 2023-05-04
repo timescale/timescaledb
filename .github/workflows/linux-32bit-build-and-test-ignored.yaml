@@ -16,9 +16,28 @@ name: Regression Linux i386
       - 'LICENSE*'
       - NOTICE
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+      pg15_latest: ${{ steps.setter.outputs.PG15_LATEST }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
   regress_linux_32bit:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
     runs-on: ubuntu-latest
+    needs: config
+    strategy:
+      matrix:
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+        build_type: [ Debug ]
+        include:
+          - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
     steps:
       - run: |
           echo "No build required"

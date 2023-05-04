@@ -947,8 +947,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("only immutable expressions allowed in time bucket function"),
-						 errhint("Use an immutable expression as first argument"
-								 " to the time bucket function.")));
+						 errhint("Use an immutable expression as first argument to the time bucket "
+								 "function.")));
 
 			if (tbinfo->interval && tbinfo->interval->month)
 			{
@@ -1271,7 +1271,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("old format of continuous aggregate is not supported with joins"),
-					 errhint("set timescaledb.finalized to TRUE")));
+					 errhint("Set timescaledb.finalized to TRUE.")));
 
 		if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
 		{
@@ -1280,7 +1280,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate view"),
 						 errdetail(
-							 "from clause can only have one hypertable and one normal table")));
+							 "From clause can only have one hypertable and one normal table.")));
 
 			rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
 			rte = list_nth(query->rtable, rtref->rtindex - 1);
@@ -1307,8 +1307,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("invalid continuous aggregate view"),
 								 errdetail(
-									 "joins with using clause in continuous aggregate definition"
-									 " work for Postgres versions 13 and above")));
+									 "Joins with USING clause in continuous aggregate definition"
+									 " work for Postgres versions 13 and above.")));
 #endif
 					jointype = join->jointype;
 					op = (OpExpr *) join->quals;
@@ -1318,7 +1318,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("invalid continuous aggregate view"),
-								 errdetail("sub-queries are not supported in FROM clause")));
+								 errdetail("Sub-queries are not supported in FROM clause.")));
 					RangeTblEntry *jrte = rt_fetch(join->rtindex, query->rtable);
 					if (jrte->joinaliasvars == NIL)
 						ereport(ERROR,
@@ -1336,20 +1336,20 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("lateral are not supported in FROM clause")));
+					 errdetail("Lateral joins are not supported in FROM clause.")));
 		if ((rte->relkind == RELKIND_VIEW && ts_is_hypertable(rte_other->relid)) ||
 			(rte_other->relkind == RELKIND_VIEW && ts_is_hypertable(rte->relid)))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("views are not supported in FROM clause")));
+					 errdetail("Views are not supported in FROM clause.")));
 		if (rte->relkind != RELKIND_VIEW && rte_other->relkind != RELKIND_VIEW &&
 			(ts_is_hypertable(rte->relid) == ts_is_hypertable(rte_other->relid)))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("multiple hypertables or normal tables"
-							   " are not supported in FROM clause")));
+					 errdetail("Multiple hypertables or normal tables are not supported in FROM "
+							   "clause.")));
 
 		/* Only inner joins are allowed. */
 		if (jointype != JOIN_INNER)
@@ -1368,14 +1368,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate view"),
 						 errdetail(
-							 "only equality conditions are supported in continuous aggregates")));
+							 "Only equality conditions are supported in continuous aggregates.")));
 		}
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
-					 errdetail("unsupported expression in join clause"),
-					 errhint("only equality condition is supported")));
+					 errdetail("Unsupported expression in join clause."),
+					 errhint("Only equality conditions are supported in continuous aggregates.")));
 		/*
 		 * Record the table oid of the normal table. This is required so
 		 * that we know which one is hypertable to carry out the related
@@ -1422,8 +1422,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate query"),
-						 errhint("continuous aggregate needs to query hypertable or another "
-								 "continuous aggregate")));
+						 errhint("Continuous aggregate needs to query hypertable or another "
+								 "continuous aggregate.")));
 			}
 
 			if (!ContinuousAggIsFinalized(cagg_parent))
@@ -1509,8 +1509,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("custom time function required on hypertable \"%s\"",
 								get_rel_name(ht->main_table_relid)),
-						 errdetail("An integer-based hypertable requires a custom time"
-								   " function to support continuous aggregates."),
+						 errdetail("An integer-based hypertable requires a custom time function to "
+								   "support continuous aggregates."),
 						 errhint("Set a custom time function on the hypertable.")));
 		}
 
@@ -2477,7 +2477,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
  * This is the function responsible for creating the final
  * structures for selecting from the materialized hypertable
  * created for the Cagg which is
- * select * from _timescaldeb_internal._matrialized_hypertable_<xxx>
+ * select * from _timescaldeb_internal._materialized_hypertable_<xxx>
  */
 static Query *
 finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
@@ -2509,6 +2509,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		ListCell *l;
 		foreach (l, inp->final_userquery->jointree->fromlist)
 		{
+			/*
+			 * In case of joins, update the rte with all the join related struct.
+			 */
 			Node *jtnode = (Node *) lfirst(l);
 			JoinExpr *join = NULL;
 			if (IsA(jtnode, JoinExpr))
@@ -2516,26 +2519,47 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 				join = castNode(JoinExpr, jtnode);
 				RangeTblEntry *jrte = rt_fetch(join->rtindex, inp->final_userquery->rtable);
 				rte->joinaliasvars = jrte->joinaliasvars;
+				rte->jointype = jrte->jointype;
+#if PG13_GE
+				rte->joinleftcols = jrte->joinleftcols;
+				rte->joinrightcols = jrte->joinrightcols;
+				rte->joinmergedcols = jrte->joinmergedcols;
+#endif
+#if PG14_GE
+				rte->join_using_alias = jrte->join_using_alias;
+#endif
+				rte->selectedCols = jrte->selectedCols;
 			}
 		}
 	}
 	else
+	{
 		rte = llast_node(RangeTblEntry, inp->final_userquery->rtable);
+		rte->eref->colnames = NIL;
+		rte->selectedCols = NULL;
+	}
+	if (rte->eref->colnames == NIL)
+	{
+		/*
+		 * We only need to do this for the case when there is no Join node in the query.
+		 * In the case of join, rte->eref is already populated by jrte->eref and hence the
+		 * relevant info, so need not to do this.
+		 */
+
+		/* Aliases for column names for the materialization table. */
+		foreach (lc, matcollist)
+		{
+			ColumnDef *cdef = lfirst_node(ColumnDef, lc);
+			rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
+			rte->selectedCols = bms_add_member(rte->selectedCols,
+											   list_length(rte->eref->colnames) -
+												   FirstLowInvalidHeapAttributeNumber);
+		}
+	}
 	rte->relid = mattbladdress->objectId;
 	rte->rtekind = RTE_RELATION;
 	rte->relkind = RELKIND_RELATION;
 	rte->tablesample = NULL;
-	rte->eref->colnames = NIL;
-	rte->selectedCols = NULL;
-	/* Aliases for column names for the materialization table. */
-	foreach (lc, matcollist)
-	{
-		ColumnDef *cdef = (ColumnDef *) lfirst(lc);
-		rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
-		rte->selectedCols =
-			bms_add_member(rte->selectedCols,
-						   list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber);
-	}
 	rte->requiredPerms |= ACL_SELECT;
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
@@ -2544,7 +2568,13 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	foreach (lc, inp->final_seltlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
-		if (IsA(tle->expr, Var))
+		/*
+		 * In case when this is a cagg wth joins, the Var from the normal table
+		 * already has resorigtbl populated and we need to use that to resolve
+		 * the Var. Hence only modify the tle when resorigtbl is unset
+		 * which means it is Var of the Hypertable
+		 */
+		if (IsA(tle->expr, Var) && !OidIsValid(tle->resorigtbl))
 		{
 			tle->resorigtbl = rte->relid;
 			tle->resorigcol = ((Var *) tle->expr)->varattno;
@@ -2553,7 +2583,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
 	final_selquery->hasAggs = !inp->finalized;
-	if (list_length(inp->final_userquery->jointree->fromlist) >= CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+	if (list_length(inp->final_userquery->jointree->fromlist) >=
+			CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
+		!IsA(linitial(inp->final_userquery->jointree->fromlist), RangeTblRef))
 	{
 		RangeTblRef *rtr;
 		final_selquery->rtable = list_make1(rte);
@@ -2871,8 +2903,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_TABLE),
 					 errmsg("continuous aggregate \"%s\" already exists", stmt->into->rel->relname),
-					 errhint("Drop or rename the existing continuous aggregate"
-							 " first or use another name.")));
+					 errhint("Drop or rename the existing continuous aggregate first or use "
+							 "another name.")));
 		}
 	}
 
@@ -2971,7 +3003,7 @@ remove_old_and_new_rte_from_query(Query *query)
  * for errors and attempt to rebuild it if required.
  */
 static void
-cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
+cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_rebuild)
 {
 	bool test_failed = false;
 	char *relname = agg->data.user_view_name.data;
@@ -2979,27 +3011,37 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	ListCell *lc1, *lc2;
 	int sec_ctx;
 	Oid uid, saved_uid;
+
 	/* Cagg view created by the user. */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
+
 	bool finalized = ContinuousAggIsFinalized(agg);
+	bool rebuild_cagg_with_joins = false;
 
 	/* Extract final query from user view query. */
 	Query *final_query = copyObject(user_query);
 	remove_old_and_new_rte_from_query(final_query);
-	if (!agg->data.materialized_only)
-	{
-		final_query = destroy_union_query(final_query);
-	}
 
-	if (finalized)
+	if (finalized && !force_rebuild)
 	{
 		/* This continuous aggregate does not have partials, do not check for defects. */
+		elog(DEBUG1,
+			 "[cagg_rebuild_view_definition] %s.%s does not have partials, do not check for "
+			 "defects!",
+			 NameStr(agg->data.user_view_schema),
+			 NameStr(agg->data.user_view_name)
+
+		);
 		relation_close(user_view_rel, NoLock);
 		return;
 	}
 
+	if (!agg->data.materialized_only)
+	{
+		final_query = destroy_union_query(final_query);
+	}
 	FinalizeQueryInfo fqi;
 	MatTableColumnInfo mattblinfo;
 	ObjectAddress mataddress = {
@@ -3011,6 +3053,50 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 	remove_old_and_new_rte_from_query(direct_query);
+
+	/*
+	 * If there is a join in CAggs then rebuild it definitley,
+	 * because v2.10.0 has created the definition with missing structs.
+	 *
+	 * Removed the check for direct_query->jointree != NULL because
+	 * we don't allow queries without FROM clause in Continuous Aggregate
+	 * definition.
+	 *
+	 * Per coverityscan:
+	 * https://scan4.scan.coverity.com/reports.htm#v54116/p12995/fileInstanceId=131745632&defectInstanceId=14569562&mergedDefectId=384045
+	 *
+	 */
+	if (force_rebuild)
+	{
+		ListCell *l;
+		foreach (l, direct_query->jointree->fromlist)
+		{
+			Node *jtnode = (Node *) lfirst(l);
+			if (IsA(jtnode, JoinExpr))
+				rebuild_cagg_with_joins = true;
+		}
+	}
+
+	if (!rebuild_cagg_with_joins && finalized)
+	{
+		/* There's nothing to fix, so no need to rebuild */
+		elog(DEBUG1,
+			 "[cagg_rebuild_view_definition] %s.%s does not have JOINS, so no need to rebuild the "
+			 "definition!",
+			 NameStr(agg->data.user_view_schema),
+			 NameStr(agg->data.user_view_name)
+
+		);
+		relation_close(user_view_rel, NoLock);
+		relation_close(direct_view_rel, NoLock);
+		return;
+	}
+	else
+		elog(DEBUG1,
+			 "[cagg_rebuild_view_definition] %s.%s has been rebuilt!",
+			 NameStr(agg->data.user_view_schema),
+			 NameStr(agg->data.user_view_name));
+
 	CAggTimebucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
 							finalized,
@@ -3021,17 +3107,33 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	fqi.finalized = finalized;
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
-	mattablecolumninfo_addinternal(&mattblinfo);
+	/*
+	 * Add any internal columns needed for materialization based
+	 * on the user query's table.
+	 */
+	if (!finalized)
+		mattablecolumninfo_addinternal(&mattblinfo);
 
-	Query *view_query =
-		finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress, relname);
+	Query *view_query = NULL;
+	if (rebuild_cagg_with_joins)
+	{
+		view_query = finalizequery_get_select_query(&fqi,
+													mattblinfo.matcollist,
+													&mataddress,
+													NameStr(mat_ht->fd.table_name));
+	}
+	else
+		view_query =
+			finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress, relname);
 
 	if (!agg->data.materialized_only)
+	{
 		view_query = build_union_query(&timebucket_exprinfo,
 									   mattblinfo.matpartcolno,
 									   view_query,
 									   direct_query,
 									   mat_ht->fd.id);
+	}
 
 	if (list_length(mattblinfo.matcollist) != ts_get_relnatts(mat_ht->main_table_relid))
 		/*
@@ -3041,7 +3143,6 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		 * rebuild those views since the materialization table can not be queried correctly.
 		 */
 		test_failed = true;
-
 	/*
 	 * When calling StoreViewQuery the target list names of the query have to
 	 * match the view's tuple descriptor attribute names. But if a column of the continuous
@@ -3081,9 +3182,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 						"\"%s.%s\"",
 						schema,
 						relname),
-				 errdetail("Continuous aggregate data possibly corrupted.\n"
-						   "You may need to recreate the continuous aggregate with"
-						   "CREATE MATERIALIZED VIEW.")));
+				 errdetail("Continuous aggregate data possibly corrupted."),
+				 errhint("You may need to recreate the continuous aggregate with CREATE "
+						 "MATERIALIZED VIEW.")));
 	}
 	else
 	{
@@ -3106,6 +3207,7 @@ tsl_cagg_try_repair(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	char relkind = get_rel_relkind(relid);
+	bool force_rebuild = PG_ARGISNULL(0) ? false : PG_GETARG_BOOL(1);
 	ContinuousAgg *cagg = NULL;
 
 	if (RELKIND_VIEW == relkind)
@@ -3123,14 +3225,12 @@ tsl_cagg_try_repair(PG_FUNCTION_ARGS)
 
 	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
 	Assert(mat_ht != NULL);
-
-	cagg_rebuild_view_definition(cagg, mat_ht);
+	cagg_rebuild_view_definition(cagg, mat_ht, force_rebuild);
 
 	ts_cache_release(hcache);
 
 	PG_RETURN_VOID();
 }
-
 /*
  * Flip the view definition of an existing continuous aggregate from
  * real-time to materialized-only or vice versa depending on the current state.
@@ -3469,13 +3569,43 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	 * If there is join in CAgg definition then adjust varno
 	 * to get time column from the hypertable in the join.
 	 */
-	if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+
+	/*
+	 * In case of joins it is enough to check if the first node is not RangeTblRef,
+	 * because the jointree has RangeTblRef as leaves and JoinExpr above them.
+	 * So if JoinExpr is present, it is the first node.
+	 * Other cases of join i.e. without explicit JOIN clause is confirmed
+	 * by reading the length of rtable.
+	 */
+	if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
+		!IsA(linitial(q2->jointree->fromlist), RangeTblRef))
 	{
 		Oid normal_table_id = InvalidOid;
-		RangeTblRef *rtref = linitial_node(RangeTblRef, q2->jointree->fromlist);
-		RangeTblEntry *rte = list_nth(q2->rtable, rtref->rtindex - 1);
-		RangeTblRef *rtref_other = lsecond_node(RangeTblRef, q2->jointree->fromlist);
-		RangeTblEntry *rte_other = list_nth(q2->rtable, rtref_other->rtindex - 1);
+		RangeTblEntry *rte = NULL;
+		RangeTblEntry *rte_other = NULL;
+
+		if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+		{
+			RangeTblRef *rtref = linitial_node(RangeTblRef, q2->jointree->fromlist);
+			rte = list_nth(q2->rtable, rtref->rtindex - 1);
+			RangeTblRef *rtref_other = lsecond_node(RangeTblRef, q2->jointree->fromlist);
+			rte_other = list_nth(q2->rtable, rtref_other->rtindex - 1);
+		}
+		else if (!IsA(linitial(q2->jointree->fromlist), RangeTblRef))
+		{
+			ListCell *l;
+			foreach (l, q2->jointree->fromlist)
+			{
+				Node *jtnode = (Node *) lfirst(l);
+				JoinExpr *join = NULL;
+				if (IsA(jtnode, JoinExpr))
+				{
+					join = castNode(JoinExpr, jtnode);
+					rte = list_nth(q2->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);
+					rte_other = list_nth(q2->rtable, ((RangeTblRef *) join->rarg)->rtindex - 1);
+				}
+			}
+		}
 		if (rte->relkind == RELKIND_VIEW)
 			normal_table_id = rte_other->relid;
 		else if (rte_other->relkind == RELKIND_VIEW)

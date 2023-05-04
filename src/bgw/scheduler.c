@@ -251,7 +251,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 #endif
 
 	BgwJobStat *job_stat;
-	Oid owner_uid;
 
 	switch (new_state)
 	{
@@ -314,7 +313,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			else
 				sjob->timeout_at = DT_NOEND;
 
-			owner_uid = get_role_oid(NameStr(sjob->job.fd.owner), false);
 			CommitTransactionCommand();
 			MemoryContextSwitchTo(scratch_mctx);
 
@@ -323,7 +321,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				 sjob->job.fd.id,
 				 NameStr(sjob->job.fd.application_name));
 
-			sjob->handle = ts_bgw_job_start(&sjob->job, owner_uid);
+			sjob->handle = ts_bgw_job_start(&sjob->job, sjob->job.fd.owner);
 			if (sjob->handle == NULL)
 			{
 				elog(WARNING,
@@ -575,7 +573,7 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 	ordered_scheduled_jobs = list_qsort(scheduled_jobs, cmp_next_start);
 #else
 	/* PG13 does in-place sort */
-	ordered_scheduled_jobs = scheduled_jobs;
+	ordered_scheduled_jobs = list_copy(scheduled_jobs);
 	list_sort(ordered_scheduled_jobs, cmp_next_start);
 #endif
 
@@ -588,9 +586,7 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 			scheduled_ts_bgw_job_start(sjob, bgw_register);
 	}
 
-#if PG13_LT
 	list_free(ordered_scheduled_jobs);
-#endif
 }
 
 /* Returns the earliest time the scheduler should start a job that is waiting to be started */

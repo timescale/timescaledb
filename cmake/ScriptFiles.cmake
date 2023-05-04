@@ -37,7 +37,6 @@ set(SOURCE_FILES
     chunk_constraint.sql
     hypertable_constraint.sql
     partitioning.sql
-    schema_info.sql
     ddl_api.sql
     ddl_triggers.sql
     bookend.sql

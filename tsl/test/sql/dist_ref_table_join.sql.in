@@ -116,6 +116,12 @@ ANALYZE metric;
 ANALYZE metric_name;
 ANALYZE metric_name_dht;
 
+-- Our cost model for these kinds of plans is not so good yet, so make some
+-- tweaks to always get the join pushdown.
+set timescaledb.enable_parameterized_data_node_scan to false;
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_tuple_cost '0.08');
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fdw_startup_cost '100.0');
+
 -------
 -- Tests based on results
 -------

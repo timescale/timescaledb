@@ -247,6 +247,9 @@ get_base_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	ce->run_cost += rel->reltarget->cost.per_tuple * ce->rows;
 }
 
+/*
+ * This code is from estimate_path_cost_size() in postgres_fdw.
+ */
 static void
 get_join_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 {
@@ -328,6 +331,28 @@ get_join_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	run_cost += nrows * join_cost.per_tuple;
 	nrows = clamp_row_est(nrows * fpinfo->joinclause_sel);
 	run_cost += nrows * remote_conds_cost.per_tuple;
+
+	/*
+	 * Discount the paths that are likely to be index scans on the remote, the
+	 * same way we do for parameterized data node scan.
+	 */
+	bool index_matches_parameterization = false;
+	ListCell *lc;
+	foreach (lc, fpinfo->indexed_parameterizations)
+	{
+		Bitmapset *item = lfirst(lc);
+		if (bms_equal(item, fpinfo->innerrel->relids))
+		{
+			index_matches_parameterization = true;
+			break;
+		}
+	}
+
+	if (index_matches_parameterization)
+	{
+		run_cost /= 10.;
+	}
+
 	run_cost += fpinfo->local_conds_cost.per_tuple * retrieved_rows;
 
 	/* Add in tlist eval cost for each output row */

@@ -742,7 +742,7 @@ typedef struct FormData_bgw_job
 	Interval retry_period;
 	NameData proc_schema;
 	NameData proc_name;
-	NameData owner;
+	Oid owner;
 	bool scheduled;
 	bool fixed_schedule;
 	TimestampTz initial_start;

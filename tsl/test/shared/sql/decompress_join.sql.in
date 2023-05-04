@@ -18,3 +18,20 @@ LIMIT 1;
 
 DROP TABLE compressed_join_temp;
 
+-- test join with partially compressed chunks
+CREATE TABLE partial_join(time timestamptz,device text);
+
+SELECT table_name FROM create_hypertable('partial_join','time');
+ALTER TABLE partial_join set(timescaledb.compress,timescaledb.compress_segmentby='device');
+
+INSERT INTO partial_join SELECT '2000-01-01','d1';
+
+SELECT count(*) FROM (SELECT compress_chunk(show_chunks('partial_join'),true)) compress;
+
+-- make chunk partially compressed
+INSERT INTO partial_join SELECT '2000-01-01','d1';
+
+SELECT * FROM partial_join m1 INNER JOIN partial_join m2 ON m1.device = m2.device;
+
+DROP TABLE partial_join;
+

@@ -633,7 +633,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 										&proc_name,
 										&check_schema,
 										&check_name,
-										&owner,
+										owner_id,
 										true,
 										fixed_schedule,
 										cagg->data.mat_hypertable_id,
