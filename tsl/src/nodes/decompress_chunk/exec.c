@@ -252,16 +252,16 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	}
 
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
-												 "DecompressChunk batch",
-												 /* minContextSize = */ 0,
-												 /* initBlockSize = */ 64 * 1024,
-												 /* maxBlockSize = */ 64 * 1024);
+														   "DecompressChunk batch",
+														   /* minContextSize = */ 0,
+														   /* initBlockSize = */ 64 * 1024,
+														   /* maxBlockSize = */ 64 * 1024);
 
 	batch_state->arrow_context = AllocSetContextCreate(CurrentMemoryContext,
-												 "DecompressChunk Arrow arrays",
-												 /* minContextSize = */ 0,
-												 /* initBlockSize = */ 64 * 1024,
-												 /* maxBlockSize = */ 64 * 1024);
+													   "DecompressChunk Arrow arrays",
+													   /* minContextSize = */ 0,
+													   /* initBlockSize = */ 64 * 1024,
+													   /* maxBlockSize = */ 64 * 1024);
 
 	batch_state->columns =
 		palloc0(list_length(chunk_state->decompression_map) * sizeof(DecompressChunkColumnState));
@@ -540,9 +540,20 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 
 				MemoryContext context_before_decompression =
 					MemoryContextSwitchTo(batch_state->arrow_context);
-				ArrowArray *arrow = tsl_try_decompress_all(header->compression_algorithm,
-														   PointerGetDatum(header),
-														   column->typid);
+				ArrowArray *arrow = NULL;
+				if (!chunk_state->reverse)
+				{
+					/*
+					 * In principle, we could do this for reverse decompression
+					 * as well, but have to figure out how to do the batch
+					 * Arrow->Datum conversion while respecting the paddings.
+					 * Maybe have to allocate the output array at offset so that the
+					 * padding is at the beginning.
+					 */
+					tsl_try_decompress_all(header->compression_algorithm,
+										   PointerGetDatum(header),
+										   column->typid);
+				}
 				MemoryContextSwitchTo(context_before_decompression);
 
 				if (arrow)
@@ -583,49 +594,41 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		{                                                                                          \
 			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
 			{                                                                                      \
-				const int output_row = outer + inner;                                              \
-				const int input_row = reverse ? n - output_row - 1 : output_row;                   \
-				datums[output_row] = CONVERSION(((CTYPE *) arrow_values)[input_row]);              \
+				const int row = outer + inner;                                                     \
+				datums[row] = CONVERSION(((CTYPE *) arrow_values)[row]);                           \
+				Assert(row >= 0);                                                                  \
+				Assert(row < n_padded);                                                            \
 			}                                                                                      \
 		}                                                                                          \
 		break
 
-#define FOR_ONE_DIRECTION                                                                          \
-	switch (column->typid)                                                                         \
-	{                                                                                              \
-		CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);                                            \
-		CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);                                            \
-		CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);                                            \
-		CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);                                        \
-		CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);                                        \
-		CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);                                          \
-		CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);                                   \
-		CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);                               \
-	}                                                                                              \
-	for (int outer = 0; outer < arrow_bitmap_elements; outer++)                                    \
-	{                                                                                              \
-		const uint64_t element = validity_bitmap[outer];                                           \
-		for (int inner = 0; inner < 64; inner++)                                                   \
-		{                                                                                          \
-			const int input_row = outer * 64 + inner;                                              \
-			const int output_row = reverse ? n - input_row - 1 : input_row;                        \
-			nulls[output_row] = ((element >> inner) & 1) ? false : true;                           \
-		}                                                                                          \
-	}
-
-					const bool reverse = chunk_state->reverse;
-					if (reverse)
+					Assert(!chunk_state->reverse);
+					switch (column->typid)
 					{
-						FOR_ONE_DIRECTION
+						CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);
+						CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);
+						CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);
+						CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);
+						CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);
+						CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);
+						CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);
+						CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);
+						default:
+							Assert(false);
 					}
-					else
+					for (int outer = 0; outer < arrow_bitmap_elements; outer++)
 					{
-						FOR_ONE_DIRECTION
+						const uint64_t element = validity_bitmap[outer];
+						for (int inner = 0; inner < 64; inner++)
+						{
+							const int row = outer * 64 + inner;
+							nulls[row] = ((element >> inner) & 1) ? false : true;
+							Assert(row >= 0);
+							Assert(row < n_nulls_padded);
+						}
 					}
 
 #undef CONVERSION_LOOP
-#undef FOR_ONE_DIRECTION
-
 #undef INNER_LOOP_SIZE
 
 					MemoryContextReset(batch_state->arrow_context);
@@ -917,8 +920,10 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			}
 			else if (column->compressed.datums != NULL)
 			{
-				decompressed_slot_scan->tts_isnull[attr] = column->compressed.nulls[batch_state->current_batch_row];
-				decompressed_slot_scan->tts_values[attr] = column->compressed.datums[batch_state->current_batch_row];
+				decompressed_slot_scan->tts_isnull[attr] =
+					column->compressed.nulls[batch_state->current_batch_row];
+				decompressed_slot_scan->tts_values[attr] =
+					column->compressed.datums[batch_state->current_batch_row];
 			}
 		}
 
