@@ -70,6 +70,7 @@ jobs:
 
     - name: fuzz
       run: |
+        set -x
         mkdir db
         export PGDATA=db
         export PGPORT=5432
@@ -88,8 +89,8 @@ jobs:
         echo "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
         psql -a -c "create or replace function fuzz() returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
-        ln -s tsl/test/fuzzing/gorilla /var/tmp/corpus
-        readlink -e /var/tmp/corpus
+        ln -s tsl/test/fuzzing/gorilla $PGDATA/corpus
+        readlink -e $PGDATA/corpus
         psql -c "select fuzz();"
 
 

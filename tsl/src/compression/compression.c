@@ -2124,7 +2124,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 		//"-focus-function=auto",
 		//"-merge=1",
 		//"/var/tmp/corpus-mini",
-		"/var/tmp/corpus",
+		"corpus", /* in the database directory */
 		NULL
 	};
 	char **argv = argvdata;
