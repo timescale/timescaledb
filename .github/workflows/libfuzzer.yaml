@@ -75,7 +75,7 @@ jobs:
       run: |
         mkdir db
         export PGDATA=db
-        export PATH=$PATH:$HOME/$PG_INSTALL_DIR
+        export PATH=$PATH:$HOME/$PG_INSTALL_DIR/bin
         initdb
         pg_ctl start
         export PGDATABASE=postgres
