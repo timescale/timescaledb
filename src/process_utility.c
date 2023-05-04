@@ -3412,15 +3412,15 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			}
 			case AT_SetRelOptions:
 			{
-				if (num_cmds != 1)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("ALTER TABLE <hypertable> SET does not support multiple "
-									"clauses")));
-				}
 				if (ht != NULL)
 				{
+					if (num_cmds != 1)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("ALTER TABLE <hypertable> SET does not support multiple "
+										"clauses")));
+					}
 					EventTriggerAlterTableStart(args->parsetree);
 					result = process_altertable_set_options(cmd, ht);
 				}

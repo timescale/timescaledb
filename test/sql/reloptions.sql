@@ -16,6 +16,10 @@ WHERE relname ~ '^_hyper.*' AND relkind = 'r';
 -- Alter reloptions
 ALTER TABLE reloptions_test SET (fillfactor=80, parallel_workers=8);
 
+\set ON_ERROR_STOP 0
+ALTER TABLE reloptions_test SET (fillfactor=80), SET (parallel_workers=8);
+\set ON_ERROR_STOP 1
+
 SELECT relname, reloptions FROM pg_class
 WHERE relname ~ '^_hyper.*' AND relkind = 'r';
 
@@ -23,3 +27,9 @@ ALTER TABLE reloptions_test RESET (fillfactor);
 
 SELECT relname, reloptions FROM pg_class
 WHERE relname ~ '^_hyper.*' AND relkind = 'r';
+
+-- Test reloptions on a regular table
+CREATE TABLE reloptions_test2(time integer, temp float8, color integer);
+ALTER TABLE reloptions_test2 SET (fillfactor=80, parallel_workers=8);
+ALTER TABLE reloptions_test2 SET (fillfactor=80), SET (parallel_workers=8);
+DROP TABLE reloptions_test2;
