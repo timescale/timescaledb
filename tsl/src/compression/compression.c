@@ -2135,7 +2135,10 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 		}
 		PG_CATCH();
 		{
+			MemoryContextSwitchTo(PortalContext);
 			ErrorData *error = CopyErrorData();
+			MemoryContextSwitchTo(ErrorContext);
+
 			if (error->sqlerrcode == ERRCODE_DATA_CORRUPTED)
 			{
 				/*
