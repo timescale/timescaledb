@@ -2080,19 +2080,15 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	}
 
 	fseek(f, 0, SEEK_END);
-	size_t fsize = ftell(f);
+	const size_t fsize = ftell(f);
 	fseek(f, 0, SEEK_SET); /* same as rewind(f); */
 
 	char *string = palloc(fsize + 1);
-	size_t bytes_read = fread(string, fsize, 1, f);
+	size_t elements_read = fread(string, fsize, 1, f);
 
-	if (bytes_read != fsize)
+	if (elements_read != 1)
 	{
-		elog(ERROR,
-			 "failed to read file '%s': expected %zu bytes, got %zu",
-			 name,
-			 fsize,
-			 bytes_read);
+		elog(ERROR, "failed to read file '%s'", name);
 	}
 
 	fclose(f);
@@ -2126,17 +2122,32 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 	int n = 0;
 	while ((ep = readdir(dp)))
 	{
+		if (ep->d_name[0] == '.')
+		{
+			continue;
+		}
+
+		char *path = psprintf("%s/%s", name, ep->d_name);
+
 		PG_TRY();
 		{
-			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(ep->d_name));
+			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(path));
 		}
 		PG_CATCH();
 		{
-			/*
-			 * We're testing the corrupt data handling, so we don't care about
-			 * these errors.
-			 */
-			FlushErrorState();
+			ErrorData *error = CopyErrorData();
+			if (error->sqlerrcode == ERRCODE_DATA_CORRUPTED)
+			{
+				/*
+				 * We're testing the corrupt data handling, so we don't care about
+				 * these errors.
+				 */
+				FlushErrorState();
+			}
+			else
+			{
+				PG_RE_THROW();
+			}
 		}
 		PG_END_TRY();
 		n++;
