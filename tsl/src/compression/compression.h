@@ -349,7 +349,7 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
 /*
- * A convenience macro to thorw an error about the corrupted compressed data, if
+ * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
  * to pollute the logs.
  */

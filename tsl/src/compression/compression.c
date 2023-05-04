@@ -2135,6 +2135,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 
+/* Read and decompress compressed data from file. Useful for fuzzing. */
 Datum
 ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 {
@@ -2161,7 +2162,44 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(res);
 }
 
-//*/
+TS_FUNCTION_INFO_V1(ts_read_compressed_data_directory);
+
+/* Read and decomrpess all compressed data files from directory. Useful for fuzzing. */
+Datum
+ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
+{
+	char *name = PG_GETARG_CSTRING(0);
+	DIR *dp;
+	struct dirent *ep;
+	dp = opendir(name);
+
+	if (!dp)
+	{
+		elog(ERROR, "could not open directory '%s'", name);
+	}
+
+	int n = 0;
+	while ((ep = readdir(dp)))
+	{
+		PG_TRY();
+		{
+			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(ep->d_name));
+		}
+		PG_CATCH();
+		{
+			/*
+			 * We're testing the corrupt data handling, so we don't care about
+			 * these errors.
+			 */
+			FlushErrorState();
+		}
+		PG_END_TRY();
+		n++;
+	}
+
+	(void) closedir(dp);
+	PG_RETURN_INT32(n);
+}
 
 #if PG14_GE
 static SegmentFilter *
