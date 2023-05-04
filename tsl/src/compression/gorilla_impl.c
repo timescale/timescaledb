@@ -119,7 +119,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	int n_different_by_tag0s = 0;
 	for (int i = 0; i < n_notnull; i++)
 	{
-		int value = simple8brle_bitmap_get_at(&tag1s, i);
+		int value = simple8brle_bitmap_get_at(&tag0s, i);
 		Assert(value == 0 || value == 1);
 		n_different_by_tag0s += value;
 	}
