@@ -2149,6 +2149,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 			}
 			else
 			{
+				errdetail("While processing file '%s'.", path);
 				PG_RE_THROW();
 			}
 		}
