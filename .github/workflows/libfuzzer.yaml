@@ -76,7 +76,9 @@ jobs:
         mkdir db
         export PGDATA=db
         export PGPORT=5432
-        export PATH=$PATH:$HOME/$PG_INSTALL_DIR/bin
+        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
+        which psql
+        psql --version
         initdb
         pg_ctl start
         for _ in {1..20}; do sleep 1; if psql -c "select 1"; then break; fi; done
