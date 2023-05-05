@@ -578,10 +578,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	/*
 	 * since we rely on parallel coordination from the scan below
-	 * this node it is probably not beneficial to have more
-	 * than a single worker per chunk
+	 * request the same amount of parallel workers here as 
+	 * PostgreSQL uses for the parallel scan on the compressed chunk
 	 */
-	int parallel_workers = 1;
+	int parallel_workers = compute_parallel_worker(chunk_rel, chunk_rel->pages, -1, 
+											   max_parallel_workers_per_gather);
+
 	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, info, root->query_pathkeys);
 
 	Assert(chunk->fd.compressed_chunk_id > 0);

@@ -670,16 +670,16 @@ FROM :TEST_TABLE m1
     LIMIT 10;
 QUERY PLAN
  Limit
-   ->  Nested Loop
-         Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
-         ->  Gather Merge
-               Workers Planned: 1
-               ->  Sort
-                     Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-               ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+   ->  Merge Join
+         Merge Cond: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
+         ->  Sort
+               Sort Key: m1."time", m1.device_id
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                     ->  Seq Scan on compress_hyper_X_X_chunk
+         ->  Sort
+               Sort Key: m2."time", m2.device_id
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
+                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
 (11 rows)
 
 :PREFIX_NO_VERBOSE
