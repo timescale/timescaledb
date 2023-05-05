@@ -547,9 +547,9 @@ CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
   mat_hypertable_id integer NOT NULL,
   start_ts TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
   end_ts TIMESTAMPTZ,
+  user_view_definition TEXT,
   -- table constraints
-  CONSTRAINT continuous_agg_migrate_plan_pkey PRIMARY KEY (mat_hypertable_id),
-  CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id)
+  CONSTRAINT continuous_agg_migrate_plan_pkey PRIMARY KEY (mat_hypertable_id)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan', '');

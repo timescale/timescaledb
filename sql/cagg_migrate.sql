@@ -100,9 +100,11 @@ BEGIN
     END IF;
 
     INSERT INTO
-        _timescaledb_catalog.continuous_agg_migrate_plan (mat_hypertable_id)
-    VALUES
-        (_cagg_data.mat_hypertable_id);
+        _timescaledb_catalog.continuous_agg_migrate_plan (mat_hypertable_id, user_view_definition)
+    VALUES (
+        _cagg_data.mat_hypertable_id,
+        pg_get_viewdef(format('%I.%I', _cagg_data.user_view_schema, _cagg_data.user_view_name)::regclass)
+    );
 
     SELECT schema_name, table_name
     INTO _matht
