@@ -368,3 +368,21 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
+
+-- test for disabling DML decompression
+SHOW timescaledb.enable_dml_decompression;
+SET timescaledb.enable_dml_decompression = false;
+
+\set ON_ERROR_STOP 0
+-- Should error because we disabled the DML decompression
+INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
+  ON conflict(sensor_id, time)
+DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE' RETURNING *;
+
+INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
+  ON conflict(sensor_id, time)
+DO NOTHING;
+
+-- Even a regular insert will fail due to unique constrant checks for dml decompression
+INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '7', 0.876, 4.123, 'new insert row');
+\set ON_ERROR_STOP 1
