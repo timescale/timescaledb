@@ -142,7 +142,9 @@ SELECT
 \gset
 
 CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
-SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+\x on
+SELECT mat_hypertable_id, user_view_definition FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+\x off
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
 
 -- should resume the execution
