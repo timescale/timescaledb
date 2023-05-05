@@ -558,7 +558,7 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 
 	const uint32 n_total_values = compressed->num_elements;
 	const uint32 num_blocks = compressed->num_blocks;
-	const uint32 n_padded_values = ((n_total_values + 63) / 64) * 64;
+	const uint32 n_padded_values = ((n_total_values + 63) / 64 + 1) * 64;
 
 	*iter = (Simple8bRleDecompressionIterator){
 		.compressed_data = compressed->slots + num_selector_slots,
