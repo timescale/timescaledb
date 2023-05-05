@@ -534,8 +534,8 @@ gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterat
 	iterator->prev_leading_zeroes = 0;
 	iterator->prev_xor_bits_used = 0;
 
-	iterator->tag0s = simple8brle_decompress_bitmap(iterator->gorilla_data.tag0s);
-	iterator->tag1s = simple8brle_decompress_bitmap(iterator->gorilla_data.tag1s);
+	iterator->tag0s = simple8brle_bitmap_decompress(iterator->gorilla_data.tag0s);
+	iterator->tag1s = simple8brle_bitmap_decompress(iterator->gorilla_data.tag1s);
 	bit_array_iterator_init(&iterator->leading_zeros, &iterator->gorilla_data.leading_zeros);
 	simple8brle_decompression_iterator_init_forward(&iterator->num_bits_used,
 													iterator->gorilla_data.num_bits_used_per_xor);
@@ -543,7 +543,7 @@ gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterat
 
 	iterator->has_nulls = iterator->gorilla_data.nulls != NULL;
 	if (iterator->has_nulls)
-		iterator->nulls = simple8brle_decompress_bitmap(iterator->gorilla_data.nulls);
+		iterator->nulls = simple8brle_bitmap_decompress(iterator->gorilla_data.nulls);
 }
 
 DecompressionIterator *
@@ -700,8 +700,8 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 	iter->base.try_next = gorilla_decompression_iterator_try_next_reverse;
 	compressed_gorilla_data_init_from_datum(&iter->gorilla_data, gorilla_compressed);
 
-	iter->tag0s = simple8brle_decompress_bitmap(iter->gorilla_data.tag0s);
-	iter->tag1s = simple8brle_decompress_bitmap(iter->gorilla_data.tag1s);
+	iter->tag0s = simple8brle_bitmap_decompress(iter->gorilla_data.tag0s);
+	iter->tag1s = simple8brle_bitmap_decompress(iter->gorilla_data.tag1s);
 	bit_array_iterator_init_rev(&iter->leading_zeros, &iter->gorilla_data.leading_zeros);
 	simple8brle_decompression_iterator_init_reverse(&iter->num_bits_used,
 													iter->gorilla_data.num_bits_used_per_xor);
@@ -709,7 +709,7 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 
 	iter->has_nulls = iter->gorilla_data.nulls != NULL;
 	if (iter->has_nulls)
-		iter->nulls = simple8brle_decompress_bitmap(iter->gorilla_data.nulls);
+		iter->nulls = simple8brle_bitmap_decompress(iter->gorilla_data.nulls);
 
 	/* we need to know how many bits are used, even if the last value didn't store them */
 	iter->prev_leading_zeroes =

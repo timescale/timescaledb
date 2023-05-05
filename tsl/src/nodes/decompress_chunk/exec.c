@@ -207,6 +207,9 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 	if (batch_state->decompressed_slot_scan != NULL)
 		ExecClearTuple(batch_state->decompressed_slot_scan);
 
+	MemoryContextReset(batch_state->per_batch_context);
+	MemoryContextReset(batch_state->arrow_context);
+
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
 }
 
@@ -504,6 +507,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 	batch_state->current_batch_row = 0;
 
 	MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
+	//MemoryContextStats(batch_state->per_batch_context);
 	MemoryContextReset(batch_state->per_batch_context);
 
 	for (i = 0; i < chunk_state->num_columns; i++)
@@ -550,7 +554,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * Maybe have to allocate the output array at offset so that the
 					 * padding is at the beginning.
 					 */
-					tsl_try_decompress_all(header->compression_algorithm,
+					arrow = tsl_try_decompress_all(header->compression_algorithm,
 										   PointerGetDatum(header),
 										   column->typid);
 				}
@@ -631,6 +635,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 #undef CONVERSION_LOOP
 #undef INNER_LOOP_SIZE
 
+					//MemoryContextStats(batch_state->arrow_context);
 					MemoryContextReset(batch_state->arrow_context);
 
 					column->compressed.iterator = NULL;

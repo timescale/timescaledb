@@ -12,17 +12,18 @@
 
 typedef struct Simple8bRleBitmap
 {
-	char *bitmap_bools;
+	char *bitmap_bools_;
 	uint16 current_element;
 	uint16 num_elements;
+	uint16 num_ones;
 } Simple8bRleBitmap;
 
 pg_attribute_always_inline static Simple8bRleDecompressResult
 simple8brle_bitmap_get_next(Simple8bRleBitmap *bitmap)
 {
 	Simple8bRleDecompressResult res;
-	/* We have some padding so it's OK to overrun. */
-	res.val = bitmap->bitmap_bools[bitmap->current_element];
+	/* We have at least one element of padding so it's OK to overrun. */
+	res.val = bitmap->bitmap_bools_[bitmap->current_element];
 	res.is_done = bitmap->current_element >= bitmap->num_elements;
 	bitmap->current_element++;
 	return res;
@@ -37,7 +38,7 @@ simple8brle_bitmap_get_next_reverse(Simple8bRleBitmap *bitmap)
 	}
 
 	return (Simple8bRleDecompressResult){
-		.val = bitmap->bitmap_bools[bitmap->num_elements - 1 - bitmap->current_element++]
+		.val = bitmap->bitmap_bools_[bitmap->num_elements - 1 - bitmap->current_element++]
 	};
 }
 
@@ -46,7 +47,7 @@ simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, int i)
 {
 	Assert(i >= 0);
 	// Assert(i < bitmap->num_elements);
-	return bitmap->bitmap_bools[i];
+	return bitmap->bitmap_bools_[i];
 }
 
 pg_attribute_always_inline static void
@@ -55,23 +56,32 @@ simple8brle_bitmap_rewind(Simple8bRleBitmap *bitmap)
 	bitmap->current_element = 0;
 }
 
+pg_attribute_always_inline static uint16
+simple8brle_bitmap_num_ones(Simple8bRleBitmap *bitmap)
+{
+	return bitmap->num_ones;
+}
+
 static Simple8bRleBitmap
-simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
+simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 {
 	Simple8bRleBitmap result;
 	result.current_element = 0;
 	result.num_elements = compressed->num_elements;
 
-	const uint32 num_elements = compressed->num_elements;
-	if (num_elements > GLOBAL_MAX_ROWS_PER_COMPRESSION)
+	if (compressed->num_elements > GLOBAL_MAX_ROWS_PER_COMPRESSION)
 	{
 		/* Don't allocate too much if we got corrupt data or something. */
 		ereport(ERROR,
 				(errmsg("the number of elements in compressed data %d is larger than the maximum "
 						"allowed %d",
-						num_elements,
+						compressed->num_elements,
 						GLOBAL_MAX_ROWS_PER_COMPRESSION)));
 	}
+
+	const uint16 num_elements = compressed->num_elements;
+	uint16 num_ones = 0;
+
 
 	const uint32 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
@@ -86,7 +96,7 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	 * least one byte of padding, hence the next multiple.
 	 */
 	const uint32 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
-	char *restrict bitmap_bools = palloc(num_elements_padded);
+	char *restrict bitmap_bools_ = palloc(num_elements_padded);
 	uint32 decompressed_index = 0;
 	const uint32 num_blocks = compressed->num_blocks;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
@@ -115,10 +125,12 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 
 			for (int i = 0; i < n_block_values; i++)
 			{
-				bitmap_bools[decompressed_index + i] = repeated_value;
+				bitmap_bools_[decompressed_index + i] = repeated_value;
 			}
 			decompressed_index += n_block_values;
 			Assert(decompressed_index <= num_elements);
+
+			num_ones += repeated_value * n_block_values;
 		}
 		else
 		{
@@ -134,10 +146,17 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
 			CheckCompressedData(decompressed_index + 64 < num_elements_padded);
+
+#ifdef HAVE__BUILTIN_POPCOUNT
+			num_ones += __builtin_popcountll(block_data);
+#endif
 			for (int i = 0; i < 64; i++)
 			{
 				const uint64 value = (block_data >> i) & 1;
-				bitmap_bools[decompressed_index + i] = value;
+				bitmap_bools_[decompressed_index + i] = value;
+#ifndef HAVE__BUILTIN_POPCOUNT
+				num_ones += value;
+#endif
 			}
 			decompressed_index += 64;
 		}
@@ -150,10 +169,16 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	CheckCompressedData(decompressed_index >= num_elements);
 	Assert(decompressed_index <= num_elements_padded);
 
+	/*
+	 * Stray ones in the higher unused bits of the last block?
+	 */
+	CheckCompressedData(num_ones <= num_elements);
+
 	//	mybt();
 	//	fprintf(stderr, "   1  15\n");
 	//	fprintf(stderr, " %3d %3d\n\n", blocks[1], blocks[15]);
 
-	result.bitmap_bools = bitmap_bools;
+	result.bitmap_bools_ = bitmap_bools_;
+	result.num_ones = num_ones;
 	return result;
 }

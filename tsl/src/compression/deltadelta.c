@@ -431,7 +431,7 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
-		iter->nulls = simple8brle_decompress_bitmap(nulls);
+		iter->nulls = simple8brle_bitmap_decompress(nulls);
 	}
 }
 
@@ -462,7 +462,7 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 	if (header->has_nulls)
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
-		iter->nulls = simple8brle_decompress_bitmap(nulls);
+		iter->nulls = simple8brle_bitmap_decompress(nulls);
 	}
 }
 
