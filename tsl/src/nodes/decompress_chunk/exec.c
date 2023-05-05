@@ -507,7 +507,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 	batch_state->current_batch_row = 0;
 
 	MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
-	//MemoryContextStats(batch_state->per_batch_context);
+	// MemoryContextStats(batch_state->per_batch_context);
 	MemoryContextReset(batch_state->per_batch_context);
 
 	for (i = 0; i < chunk_state->num_columns; i++)
@@ -555,8 +555,8 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * padding is at the beginning.
 					 */
 					arrow = tsl_try_decompress_all(header->compression_algorithm,
-										   PointerGetDatum(header),
-										   column->typid);
+												   PointerGetDatum(header),
+												   column->typid);
 				}
 				MemoryContextSwitchTo(context_before_decompression);
 
@@ -635,7 +635,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 #undef CONVERSION_LOOP
 #undef INNER_LOOP_SIZE
 
-					//MemoryContextStats(batch_state->arrow_context);
+					// MemoryContextStats(batch_state->arrow_context);
 					MemoryContextReset(batch_state->arrow_context);
 
 					column->compressed.iterator = NULL;

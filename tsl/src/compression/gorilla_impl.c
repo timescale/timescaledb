@@ -62,7 +62,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * 1a) Sanity check: the number of bit width values we have matches the
 	 * number of 1s in the tag1s array.
 	 */
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) == gorilla_data->num_bits_used_per_xor->num_elements);
+	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) ==
+						gorilla_data->num_bits_used_per_xor->num_elements);
 
 	/*
 	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit

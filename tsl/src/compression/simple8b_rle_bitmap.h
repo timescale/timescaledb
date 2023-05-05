@@ -82,7 +82,6 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	const uint16 num_elements = compressed->num_elements;
 	uint16 num_ones = 0;
 
-
 	const uint32 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
