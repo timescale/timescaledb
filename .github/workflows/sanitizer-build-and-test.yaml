@@ -122,6 +122,7 @@ jobs:
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        patch -F5 -p1 -D ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
