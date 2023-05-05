@@ -80,11 +80,13 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 	// int blocks[16] = {0};
 
 	/*
-	 * Decompress all the rows in one go for better throughput. Add 64 bytes of
-	 * padding on the right so that we can simplify the decompression loop and
-	 * the get() function.
+	 * Decompress all the rows in one go for better throughput. Pad to next
+	 * multiple of 64 bytes on the right, so that we can simplify the
+	 * decompression loop and the get() function. Note that for get() we need at
+	 * least one byte of padding, hence the next multiple.
 	 */
-	char *restrict bitmap_bools = palloc(((num_elements + 63) / 64 + 1) * 64);
+	const uint32 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
+	char *restrict bitmap_bools = palloc(num_elements_padded);
 	uint32 decompressed_index = 0;
 	const uint32 num_blocks = compressed->num_blocks;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
@@ -131,6 +133,7 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_BIT_LENGTH[selector_value] == 1);
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
+			CheckCompressedData(decompressed_index + 64 < num_elements_padded);
 			for (int i = 0; i < 64; i++)
 			{
 				const uint64 value = (block_data >> i) & 1;
@@ -139,6 +142,13 @@ simple8brle_decompress_bitmap(Simple8bRleSerialized *compressed)
 			decompressed_index += 64;
 		}
 	}
+
+	/*
+	 * We might have unpacked more because we work in full blocks, but at least
+	 * we shouldn't have unpacked less.
+	 */
+	CheckCompressedData(decompressed_index >= num_elements);
+	Assert(decompressed_index <= num_elements_padded);
 
 	//	mybt();
 	//	fprintf(stderr, "   1  15\n");

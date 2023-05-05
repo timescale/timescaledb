@@ -2080,13 +2080,17 @@ test_one_input_throw(const uint8 *Data, size_t Size)
 	int i = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
-		if (((float8 *) arrow->buffers[1])[i] != r.val)
+		if (i >= arrow->length || ((float8 *) arrow->buffers[1])[i] != DatumGetFloat8(r.val))
 		{
 			elog(ERROR, "the decompression result does not match");
 		}
 
 		i++;
-		fprintf(stderr, "it works! %d\n", i);
+	}
+
+	if (i != arrow->length)
+	{
+		elog(ERROR, "the decompression result does not match");
 	}
 
 	return 0;

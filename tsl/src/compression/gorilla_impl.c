@@ -96,8 +96,10 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 			/* Load new bit widths. */
 			Simple8bRleDecompressResult num_xor_bits =
 				simple8brle_decompression_iterator_try_next_forward(&num_bits_used);
+			/* Checked above that the lengths match. */
 			Assert(!num_xor_bits.is_done);
-			Assert(num_xor_bits.val <= 64);
+			/* The value might be incorrect due to data corruption. */
+			CheckCompressedData(num_xor_bits.val <= 64);
 
 			current_xor_bits = num_xor_bits.val;
 			current_leading_zeros = all_leading_zeros[next_leading_zeros_index++];
