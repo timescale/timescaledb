@@ -566,7 +566,7 @@ test_delta3(bool have_nulls, bool have_random)
 			TestAssertTrue(!nulls[i]);
 			TestAssertTrue(arrow_validity_bitmap_get(bulk_result->buffers[0], i));
 			TestAssertTrue(values[i] == DatumGetInt64(r.val));
-			TestAssertTrue(values[i] == ((int64_t *) bulk_result->buffers[1])[i]);
+			TestAssertTrue(values[i] == ((int64 *) bulk_result->buffers[1])[i]);
 		}
 	}
 	DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);

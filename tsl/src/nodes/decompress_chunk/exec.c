@@ -618,7 +618,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					}
 					for (int outer = 0; outer < arrow_bitmap_elements; outer++)
 					{
-						const uint64_t element = validity_bitmap[outer];
+						const uint64 element = validity_bitmap[outer];
 						for (int inner = 0; inner < 64; inner++)
 						{
 							const int row = outer * 64 + inner;

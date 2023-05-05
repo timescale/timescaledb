@@ -876,7 +876,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 //
 //	iter->start_bit_absolute = end_bit_absolute;
 //
-//	const uint64_t lower_mask = (-1ull) >> (64 - bits);
+//	const uint64 lower_mask = (-1ull) >> (64 - bits);
 //
 //	const uint64 this_word = iter->data[start_word_index];
 //	if (end_word_index == start_word_index)
@@ -947,7 +947,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 //
 // 	iter->start_bit_absolute = end_bit_absolute;
 //
-// 	const uint64_t lower_mask = (-1ull) >> (64 - bits);
+// 	const uint64 lower_mask = (-1ull) >> (64 - bits);
 // 	return output & lower_mask;
 // }
 
