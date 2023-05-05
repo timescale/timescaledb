@@ -2559,33 +2559,79 @@ decompress_batches_for_update_delete(Chunk *chunk, List *predicates)
  * Once Scan node is found check if chunk is compressed, if so then
  * decompress those segments which match the filter conditions if present.
  */
+static bool decompress_chunk_walker(PlanState *ps, List *relids);
+
 bool
-decompress_target_segments(PlanState *ps)
+decompress_target_segments(ModifyTableState *ps)
+{
+	List *relids = castNode(ModifyTable, ps->ps.plan)->resultRelations;
+	Assert(relids);
+
+	return decompress_chunk_walker(&ps->ps, relids);
+}
+
+static bool
+decompress_chunk_walker(PlanState *ps, List *relids)
 {
 	RangeTblEntry *rte = NULL;
+	bool needs_decompression = false;
+	List *predicates = NIL;
 	Chunk *current_chunk;
 	if (ps == NULL)
 		return false;
 
 	switch (nodeTag(ps))
 	{
+		/* Note: IndexOnlyScans will never be selected for target
+		 * tables because system columns are necessary in order to modify the
+		 * data and those columns cannot be a part of the index
+		 */
+		case T_IndexScanState:
+		{
+			/* Get the index quals on the original table and also include
+			 * any filters that are used to for filtering heap tuples
+			 */
+			predicates = list_union(((IndexScan *) ps->plan)->indexqualorig, ps->plan->qual);
+			needs_decompression = true;
+			break;
+		}
 		case T_SeqScanState:
 		case T_SampleScanState:
-		case T_IndexScanState:
-		case T_IndexOnlyScanState:
 		case T_BitmapHeapScanState:
 		case T_TidScanState:
 		case T_TidRangeScanState:
-			rte = rt_fetch(((Scan *) ps->plan)->scanrelid, ps->state->es_range_table);
-			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
-			if (current_chunk && ts_chunk_is_compressed(current_chunk))
-			{
-				decompress_batches_for_update_delete(current_chunk, ps->plan->qual);
-			}
+		{
+			/* We copy so we can always just free the predicates */
+			predicates = list_copy(ps->plan->qual);
+			needs_decompression = true;
 			break;
+		}
 		default:
 			break;
 	}
-	return planstate_tree_walker(ps, decompress_target_segments, NULL);
+	if (needs_decompression)
+	{
+		/*
+		 * We are only interested in chunk scans of chunks that are the
+		 * target of the DML statement not chunk scan on joined hypertables
+		 * even when it is a self join
+		 */
+		int scanrelid = ((Scan *) ps->plan)->scanrelid;
+		if (list_member_int(relids, scanrelid))
+		{
+			rte = rt_fetch(scanrelid, ps->state->es_range_table);
+			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
+			if (current_chunk && ts_chunk_is_compressed(current_chunk))
+			{
+				decompress_batches_for_update_delete(current_chunk, predicates);
+			}
+		}
+	}
+
+	if (predicates)
+		pfree(predicates);
+
+	return planstate_tree_walker(ps, decompress_chunk_walker, relids);
 }
+
 #endif
