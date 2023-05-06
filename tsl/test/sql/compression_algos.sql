@@ -380,3 +380,8 @@ create or replace function ts_read_compressed_data_directory(cstring) returns in
 as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_directory' language c;
 
 select ts_read_compressed_data_directory((:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla')::cstring);
+
+create or replace function ts_read_compressed_data_file(cstring) returns int
+as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
+
+select ts_read_compressed_data_file('--nonexistent');

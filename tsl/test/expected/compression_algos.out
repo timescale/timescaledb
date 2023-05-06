@@ -1550,3 +1550,7 @@ select ts_read_compressed_data_directory((:'TEST_INPUT_DIR' || '/fuzzing/compres
                                383
 (1 row)
 
+create or replace function ts_read_compressed_data_file(cstring) returns int
+as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
+select ts_read_compressed_data_file('--nonexistent');
+ERROR:  could not open the file '--nonexistent'
