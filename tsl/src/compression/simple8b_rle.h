@@ -117,6 +117,8 @@ typedef struct Simple8bRleCompressor
 
 typedef struct Simple8bRleDecompressionIterator
 {
+	BitArray selector_data;
+	BitArrayIterator selectors;
 	Simple8bRleBlock current_block;
 
 	const uint64 *compressed_data;
@@ -126,8 +128,6 @@ typedef struct Simple8bRleDecompressionIterator
 
 	uint32 num_elements;
 	uint32 num_elements_returned;
-
-	uint64 *decompressed_values;
 } Simple8bRleDecompressionIterator;
 
 typedef struct Simple8bRleDecompressResult
@@ -556,148 +556,18 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 	uint32 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 
-	const uint32 n_total_values = compressed->num_elements;
-	const uint32 num_blocks = compressed->num_blocks;
-	const uint32 n_padded_values = ((n_total_values + 63) / 64 + 1) * 64;
-
 	*iter = (Simple8bRleDecompressionIterator){
 		.compressed_data = compressed->slots + num_selector_slots,
 		.num_blocks = compressed->num_blocks,
 		.current_compressed_pos = 0,
 		.current_in_compressed_pos = 0,
-		.num_elements = n_total_values,
+		.num_elements = compressed->num_elements,
 		.num_elements_returned = 0,
-		.decompressed_values = palloc(sizeof(uint64) * n_padded_values),
 	};
 
-	// Decompress all.
-	Assert(iter->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	uint64 *restrict decompressed_values = iter->decompressed_values;
-	uint32 decompressed_index = 0;
-
-	// static int blocks[16] = {0};
-
-	/*
-	 * Unpack the selector slots to get the selector values. Best done separately,
-	 * so that this loop can be vectorized.
-	 */
-	Assert(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	uint8 selector_values[GLOBAL_MAX_ROWS_PER_COMPRESSION];
-	const uint64 *restrict slots = compressed->slots;
-	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
-	{
-		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const uint64 slot_value = slots[selector_slot];
-		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
-		const uint64 selector_mask = 0xFULL << selector_shift;
-		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
-		selector_values[block_index] = selector_value;
-	}
-
-	/*
-	 * Now decompress the individual blocks.
-	 */
-	const uint64 *restrict blocks = iter->compressed_data;
-	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
-	{
-		const int selector_value = selector_values[block_index];
-		const uint64 block_data = blocks[block_index];
-
-		/* We don't see RLE blocks so often in the real data, <1% of blocks. */
-		if (unlikely(simple8brle_selector_is_rle(selector_value)))
-		{
-			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
-			if (decompressed_index + n_block_values > n_total_values)
-			{
-				ereport(ERROR, (errmsg("the compressed data is corrupt")));
-			}
-
-			const uint64 repeated_value = simple8brle_rledata_value(block_data);
-			for (int i = 0; i < n_block_values; i++)
-			{
-				decompressed_values[decompressed_index + i] = repeated_value;
-			}
-
-			decompressed_index += n_block_values;
-		}
-		else
-		{
-			/* Bit-packed blocks. Generate separate code for each block type. */
-#define UNPACK_BLOCK(X)                                                                            \
-	case (X):                                                                                      \
-	{                                                                                              \
-		/*                                                                                         \
-		 * The last block might have less values than normal, but we have                          \
-		 * padding at the end so we can unpack them all always for simpler                         \
-		 * code. We still have to check if they fit, because the incoming data                     \
-		 * might be incorrect.                                                                     \
-		 */                                                                                        \
-		const int n_block_values = SIMPLE8B_NUM_ELEMENTS[X];                                       \
-		CheckCompressedData(decompressed_index + n_block_values < n_padded_values);                \
-                                                                                                   \
-		const uint32 bits_per_value = SIMPLE8B_BIT_LENGTH[X];                                      \
-		const uint64 bitmask = simple8brle_selector_get_bitmask(X);                                \
-                                                                                                   \
-		for (int i = 0; i < n_block_values; i++)                                                   \
-		{                                                                                          \
-			const uint64 value = (block_data >> (bits_per_value * i)) & bitmask;                   \
-			decompressed_values[decompressed_index + i] = value;                                   \
-		}                                                                                          \
-		decompressed_index += n_block_values;                                                      \
-		break;                                                                                     \
-	}
-
-			/*
-			 * FIXME reconsider if we need this switch? It's compiled to some
-			 * pretty crazy computed jump.
-			 */
-			switch (selector_value)
-			{
-				UNPACK_BLOCK(1);
-				UNPACK_BLOCK(2);
-				UNPACK_BLOCK(3);
-				UNPACK_BLOCK(4);
-				UNPACK_BLOCK(5);
-				UNPACK_BLOCK(6);
-				UNPACK_BLOCK(7);
-				UNPACK_BLOCK(8);
-				UNPACK_BLOCK(9);
-				UNPACK_BLOCK(10);
-				UNPACK_BLOCK(11);
-				UNPACK_BLOCK(12);
-				UNPACK_BLOCK(13);
-				UNPACK_BLOCK(14);
-				default:
-					/*
-					 * Can only get 0 here in case the data is corrupt. Doesn't
-					 * harm to report it right away, because this loop can't be
-					 * vectorized.
-					 */
-					CheckCompressedData(false);
-			}
-#undef UNPACK_BLOCK
-		}
-	}
-
-	/*
-	 * We can decompress more than expected because we work in full blocks,
-	 * but if we decompressed less, this means broken data.
-	 */
-	CheckCompressedData(decompressed_index >= n_total_values);
-	Assert(decompressed_index <= n_padded_values);
-
-	//  mybt();
-	//	for (int i = 0; i < 16; i++)
-	//	{
-	//		fprintf(stderr, " %6d", i);
-	//	}
-	//	fprintf(stderr, "\n");
-	//	for (int i = 0; i < 16; i++)
-	//	{
-	//		fprintf(stderr, " %6d", blocks[i]);
-	//	}
-	//	fprintf(stderr, "\n\n");
+	bit_array_wrap(&iter->selector_data,
+				   compressed->slots,
+				   compressed->num_blocks * SIMPLE8B_BITS_PER_SELECTOR);
 }
 
 static void
@@ -705,38 +575,123 @@ simple8brle_decompression_iterator_init_forward(Simple8bRleDecompressionIterator
 												Simple8bRleSerialized *compressed)
 {
 	simple8brle_decompression_iterator_init_common(iter, compressed);
+	bit_array_iterator_init(&iter->selectors, &iter->selector_data);
+}
+
+static uint32
+simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator *iter,
+												const Simple8bRleSerialized *compressed)
+{
+	BitArrayIterator selectors;
+	uint32 max_stored = 0;
+	uint32 i;
+
+	Assert(compressed->num_blocks > 0);
+
+	bit_array_iterator_init(&selectors, iter->selectors.array);
+	for (i = 0; i < compressed->num_blocks; i++)
+	{
+		uint8 selector = bit_array_iter_next(&selectors, SIMPLE8B_BITS_PER_SELECTOR);
+		if (selector == 0)
+			elog(ERROR, "invalid selector 0");
+
+		if (simple8brle_selector_is_rle(selector) && iter->compressed_data)
+		{
+			Assert(simple8brle_rledata_repeatcount(iter->compressed_data[i]) > 0);
+			max_stored += simple8brle_rledata_repeatcount(iter->compressed_data[i]);
+		}
+		else
+		{
+			Assert(selector < SIMPLE8B_MAXCODE);
+			max_stored += SIMPLE8B_NUM_ELEMENTS[selector];
+		}
+	}
+	return max_stored;
 }
 
 static void
 simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator *iter,
 												Simple8bRleSerialized *compressed)
 {
+	int32 skipped_in_last;
 	simple8brle_decompression_iterator_init_common(iter, compressed);
+	bit_array_iterator_init_rev(&iter->selectors, &iter->selector_data);
+	skipped_in_last = simple8brle_decompression_iterator_max_elements(iter, compressed) -
+					  compressed->num_elements;
+
+	Assert(NULL != iter->compressed_data);
+
+	iter->current_block =
+		simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
+														 SIMPLE8B_BITS_PER_SELECTOR),
+								 iter->compressed_data[compressed->num_blocks - 1]);
+	iter->current_in_compressed_pos =
+		iter->current_block.num_elements_compressed - 1 - skipped_in_last;
+	iter->current_compressed_pos = compressed->num_blocks - 2;
+	return;
 }
 
+/* returning a struct produces noticeably better assembly on x86_64 than returning
+ * is_done and is_null via pointers; it uses two registers instead of any memory reads.
+ * Since it is also easier to read, we perfer it here.
+ */
 static Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIterator *iter)
 {
-	Simple8bRleDecompressResult res;
-	/* We have some padding so it's OK to overrun. */
-	res.val = iter->decompressed_values[iter->num_elements_returned];
-	res.is_done = iter->num_elements_returned >= iter->num_elements;
-	iter->num_elements_returned++;
-	return res;
+	uint64 uncompressed;
+	if (iter->num_elements_returned >= iter->num_elements)
+		return (Simple8bRleDecompressResult){
+			.is_done = true,
+		};
+
+	if ((uint32) iter->current_in_compressed_pos >= iter->current_block.num_elements_compressed)
+	{
+		CheckCompressedData(iter->current_compressed_pos < iter->num_blocks);
+
+		iter->current_block =
+			simple8brle_block_create(bit_array_iter_next(&iter->selectors,
+														 SIMPLE8B_BITS_PER_SELECTOR),
+									 iter->compressed_data[iter->current_compressed_pos]);
+		iter->current_compressed_pos += 1;
+		iter->current_in_compressed_pos = 0;
+	}
+
+	uncompressed =
+		simple8brle_block_get_element(iter->current_block, iter->current_in_compressed_pos);
+	iter->num_elements_returned += 1;
+	iter->current_in_compressed_pos += 1;
+
+	return (Simple8bRleDecompressResult){
+		.val = uncompressed,
+	};
 }
 
 static Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIterator *iter)
 {
+	uint64 uncompressed;
 	if (iter->num_elements_returned >= iter->num_elements)
-	{
 		return (Simple8bRleDecompressResult){
 			.is_done = true,
 		};
+
+	if (iter->current_in_compressed_pos < 0)
+	{
+		iter->current_block =
+			simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
+															 SIMPLE8B_BITS_PER_SELECTOR),
+									 iter->compressed_data[iter->current_compressed_pos]);
+		iter->current_in_compressed_pos = iter->current_block.num_elements_compressed - 1;
+		iter->current_compressed_pos -= 1;
 	}
 
+	uncompressed =
+		simple8brle_block_get_element(iter->current_block, iter->current_in_compressed_pos);
+	iter->num_elements_returned += 1;
+	iter->current_in_compressed_pos -= 1;
+
 	return (Simple8bRleDecompressResult){
-		.val = iter->decompressed_values[iter->num_elements - 1 - iter->num_elements_returned++]
+		.val = uncompressed,
 	};
 }
 
