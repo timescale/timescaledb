@@ -568,6 +568,10 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 								 iter->element_type);
 }
 
+#define ELEMENT_TYPE uint64
+#include "simple8b_rle_decompress_all.h"
+#undef ELEMENT_TYPE
+
 /* Functions for bulk decompression. */
 #define ELEMENT_TYPE uint16
 #include "deltadelta_impl.c"
@@ -584,20 +588,17 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 ArrowArray *
 delta_delta_decompress_all_forward_direction(Datum compressed_data, Oid element_type)
 {
-	DecompressionIterator *iter =
-		delta_delta_decompression_iterator_from_datum_forward(compressed_data, element_type);
-
 	switch (element_type)
 	{
 		case INT8OID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-			return delta_delta_decompress_all_uint64(iter);
+			return delta_delta_decompress_all_uint64(compressed_data);
 		case INT4OID:
 		case DATEOID:
-			return delta_delta_decompress_all_uint32(iter);
+			return delta_delta_decompress_all_uint32(compressed_data);
 		case INT2OID:
-			return delta_delta_decompress_all_uint16(iter);
+			return delta_delta_decompress_all_uint16(compressed_data);
 		default:
 			elog(ERROR, "type oid %d is not supported for deltadelta decompression", element_type);
 			return NULL;

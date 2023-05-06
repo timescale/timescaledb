@@ -95,10 +95,9 @@ psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result"
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test1 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -227,10 +226,9 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test2 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -340,10 +338,9 @@ group by location ORDER BY location;
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test4 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -454,10 +451,9 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test5 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -535,10 +531,9 @@ INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test6 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -613,10 +608,9 @@ INSERT INTO test7
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test7 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------

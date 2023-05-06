@@ -36,12 +36,13 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	BitArrayIterator leading_zeros_iterator;
 	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
 
-	uint8_t all_leading_zeros[((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64];
+#define num_leading_zeros_padded (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
+	uint8_t all_leading_zeros[num_leading_zeros_padded];
 	unpack_leading_zeros_array(&gorilla_data->leading_zeros, all_leading_zeros);
 
-	Simple8bRleDecompressionIterator num_bits_used;
-	simple8brle_decompression_iterator_init_forward(&num_bits_used,
-													gorilla_data->num_bits_used_per_xor);
+	uint8 *bit_widths;
+	const uint16 num_bit_widths =
+		simple8brle_decompress_all_uint8(gorilla_data->num_bits_used_per_xor, &bit_widths);
 
 	BitArray xors_bitarray = gorilla_data->xors;
 	BitArrayIterator xors_iterator;
@@ -62,8 +63,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * 1a) Sanity check: the number of bit width values we have matches the
 	 * number of 1s in the tag1s array.
 	 */
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) ==
-						gorilla_data->num_bits_used_per_xor->num_elements);
+	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) == num_bit_widths);
 
 	/*
 	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
@@ -79,6 +79,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 */
 	const int n_different = tag1s.num_elements;
 	ELEMENT_TYPE prev = 0;
+	int next_bit_widths_index = 0;
 	int next_leading_zeros_index = 0;
 	uint8 current_leading_zeros = 0;
 	uint8 current_xor_bits = 0;
@@ -88,22 +89,22 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		if (simple8brle_bitmap_get_at(&tag1s, i) != 0)
 		{
 			/* Load new bit widths. */
-			Simple8bRleDecompressResult num_xor_bits =
-				simple8brle_decompression_iterator_try_next_forward(&num_bits_used);
-			/* Checked above that the lengths match. */
-			Assert(!num_xor_bits.is_done);
-			/* The value might be incorrect due to data corruption. */
-			CheckCompressedData(num_xor_bits.val <= 64);
+			Assert(next_bit_widths_index < num_bit_widths);
+			current_xor_bits = bit_widths[next_bit_widths_index++];
 
-			current_xor_bits = num_xor_bits.val;
+			Assert(next_leading_zeros_index < num_leading_zeros_padded);
 			current_leading_zeros = all_leading_zeros[next_leading_zeros_index++];
+
+			/* The value might be incorrect due to data corruption. */
+			CheckCompressedData(current_xor_bits <= 64);
+			CheckCompressedData(current_leading_zeros <= 64);
 		}
 
 		const uint64 current_xor = bit_array_iter_next(&xors_iterator, current_xor_bits);
 		prev ^= current_xor << (64 - (current_leading_zeros + current_xor_bits));
 		decompressed_values[i] = prev;
 	}
-	Assert(simple8brle_decompression_iterator_try_next_forward(&num_bits_used).is_done);
+	Assert(next_bit_widths_index == num_bit_widths);
 
 	/*
 	 * 2) Fill out the stretches of repeated elements, encoded with tag0 = 0.

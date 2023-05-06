@@ -10,23 +10,37 @@
 #define INNER_SIZE 8
 
 static ArrowArray *
-FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *iter_base)
+FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 {
-	Assert(iter_base->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
-	DeltaDeltaDecompressionIterator *iter = (DeltaDeltaDecompressionIterator *) iter_base;
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+	Simple8bRleSerialized *deltas_compressed = bytes_deserialize_simple8b_and_advance(&si);
 
-	const bool has_nulls = iter->has_nulls;
-	const int n_total = has_nulls ? iter->nulls.num_elements : iter->delta_deltas.num_elements;
+	const bool has_nulls = header->has_nulls == 1;
+
+	Assert(header->has_nulls == 0 || header->has_nulls == 1);
+
+	/* Can't use element type here because of zig-zag encoding. */
+	uint64 *deltas_zigzag;
+	const int16 num_deltas = simple8brle_decompress_all_uint64(deltas_compressed, &deltas_zigzag);
+
+	Simple8bRleBitmap nulls;
+	if (has_nulls)
+	{
+		Simple8bRleSerialized *nulls_compressed = bytes_deserialize_simple8b_and_advance(&si);
+		nulls = simple8brle_bitmap_decompress(nulls_compressed);
+	}
+
+	const int n_total = has_nulls ? nulls.num_elements : num_deltas;
 	const int n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const int n_notnull = iter->delta_deltas.num_elements;
+	const int n_notnull = num_deltas;
 	const int n_notnull_padded =
 		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	Assert(iter->delta_deltas.num_elements_returned == 0);
 
 	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
@@ -39,7 +53,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *i
 	ELEMENT_TYPE current_delta = 0;
 	ELEMENT_TYPE current_element = 0;
 	Assert(n_notnull_padded % INNER_SIZE == 0);
-	uint64_t *restrict source = iter->delta_deltas.decompressed_values;
+	uint64 *restrict source = deltas_zigzag;
 	for (int outer = 0; outer < n_notnull_padded; outer += INNER_SIZE)
 	{
 		for (int inner = 0; inner < INNER_SIZE; inner++)
@@ -60,13 +74,12 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(DecompressionIterator *i
 	/* Now move the data to account for nulls, and fill the validity bitmap. */
 	if (has_nulls)
 	{
-		simple8brle_bitmap_rewind(&iter->nulls);
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 
-			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next_reverse(&iter->nulls);
+			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next_reverse(&nulls);
 			Assert(!res.is_done);
 			if (res.val)
 			{
