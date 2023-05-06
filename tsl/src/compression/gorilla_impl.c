@@ -37,7 +37,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
 
 #define num_leading_zeros_padded (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
-	uint8_t all_leading_zeros[num_leading_zeros_padded];
+	uint8 all_leading_zeros[num_leading_zeros_padded];
 	unpack_leading_zeros_array(&gorilla_data->leading_zeros, all_leading_zeros);
 
 	uint8 *bit_widths;
