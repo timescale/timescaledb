@@ -24,7 +24,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	uint64 *deltas_zigzag;
 	const int16 num_deltas = simple8brle_decompress_all_uint64(deltas_compressed, &deltas_zigzag);
 
-	Simple8bRleBitmap nulls;
+	Simple8bRleBitmap nulls = { 0 };
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *nulls_compressed = bytes_deserialize_simple8b_and_advance(&si);
