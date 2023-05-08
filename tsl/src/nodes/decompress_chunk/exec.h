@@ -108,6 +108,8 @@ typedef struct DecompressChunkState
 	struct binaryheap *merge_heap; /* Binary heap of slot indices */
 	int n_sortkeys;				   /* Number of sort keys for heap compare function */
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
+
+	bool using_bulk_decompression; /* For EXPLAIN ANALYZE. */
 } DecompressChunkState;
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);

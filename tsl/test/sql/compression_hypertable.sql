@@ -74,6 +74,19 @@ SELECT DISTINCT attname, attstattarget
     AND attnum > 0
   ORDER BY attname;
 
+
+-- Test that the GUC to disable bulk decompression works.
+explain (analyze, verbose, timing off, costs off, summary off)
+select * from _timescaledb_internal._hyper_1_10_chunk;
+
+set timescaledb.enable_bulk_decompression to false;
+
+explain (analyze, verbose, timing off, costs off, summary off)
+select * from _timescaledb_internal._hyper_1_10_chunk;
+
+reset timescaledb.enable_bulk_decompression;
+
+
 TRUNCATE test1;
 /* should be no data in table */
 SELECT * FROM test1;

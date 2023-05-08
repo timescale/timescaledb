@@ -22,10 +22,11 @@
 #include "compat/compat.h"
 #include "compression/array.h"
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/sorted_merge.h"
+#include "guc.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/sorted_merge.h"
 #include "ts_catalog/hypertable_compression.h"
 
 static TupleTableSlot *decompress_chunk_exec(CustomScanState *node);
@@ -545,7 +546,8 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 				MemoryContext context_before_decompression =
 					MemoryContextSwitchTo(batch_state->arrow_context);
 				ArrowArray *arrow = NULL;
-				if (!chunk_state->reverse)
+				if (!chunk_state->reverse && !chunk_state->sorted_merge_append
+					&& ts_guc_enable_bulk_decompression)
 				{
 					/*
 					 * In principle, we could do this for reverse decompression
@@ -553,6 +555,10 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * Arrow->Datum conversion while respecting the paddings.
 					 * Maybe have to allocate the output array at offset so that the
 					 * padding is at the beginning.
+					 *
+					 * For now we also disable bulk decompression for batch sorted
+					 * merge plans. They involve keeping many open batches at
+					 * the same time, so the memory usage might increase greatly.
 					 */
 					arrow = tsl_try_decompress_all(header->compression_algorithm,
 												   PointerGetDatum(header),
@@ -566,6 +572,9 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * Currently we're going to convert the Arrow arrays to postgres
 					 * Data right away, but in the future we will perform vectorized
 					 * operations on Arrow arrays directly before that.
+					 *
+					 *
+					 * FIXME split this out into a function.
 					 */
 					const int n = arrow->length;
 #define INNER_LOOP_SIZE 8
@@ -641,6 +650,12 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					column->compressed.iterator = NULL;
 					column->compressed.datums = datums;
 					column->compressed.nulls = nulls;
+
+					/*
+					 * Note the fact that we are using bulk decompression, for
+					 * EXPLAIN ANALYZE.
+					 */
+					chunk_state->using_bulk_decompression = true;
 
 					break;
 				}
@@ -848,6 +863,11 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 		if (chunk_state->sorted_merge_append)
 		{
 			ExplainPropertyBool("Sorted merge append", chunk_state->sorted_merge_append, es);
+		}
+
+		if (es->analyze && chunk_state->using_bulk_decompression)
+		{
+			ExplainPropertyBool("Bulk Decompression", true, es);
 		}
 	}
 }
