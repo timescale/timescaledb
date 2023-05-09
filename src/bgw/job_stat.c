@@ -16,6 +16,7 @@
 #include "utils.h"
 #include "jsonb_utils.h"
 #include <utils/builtins.h>
+#include <utils/resowner.h>
 #include "time_bucket.h"
 
 #define MAX_INTERVALS_BACKOFF 5
@@ -346,7 +347,8 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 																		  consecutive_failures);
 	Assert(consecutive_failures > 0 && multiplier < 63);
 
-	MemoryContext oldctx;
+	MemoryContext oldctx = CurrentMemoryContext;
+	ResourceOwner oldowner = CurrentResourceOwner;
 	/* 2^(consecutive_failures) - 1, at most 2^20 */
 	int64 max_slots = (INT64CONST(1) << (int64) multiplier) - INT64CONST(1);
 	int64 rand_backoff = rand() % (max_slots * USECS_PER_SEC);
@@ -356,8 +358,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		elog(LOG, "%s: invalid finish time", __func__);
 		last_finish = ts_timer_get_current_timestamp();
 	}
-	oldctx = CurrentMemoryContext;
-	BeginInternalSubTransaction("next start on failure");
+
 	PG_TRY();
 	{
 		Datum ival;
@@ -367,6 +368,8 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		Interval interval_max = { .time = 60000000 };
 		Interval retry_ival = { .time = 2000000 };
 		retry_ival.time += rand_backoff;
+
+		BeginInternalSubTransaction("next start on failure");
 
 		if (launch_failure)
 		{
@@ -397,17 +400,20 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 			DirectFunctionCall2(timestamptz_pl_interval, TimestampTzGetDatum(last_finish), ival));
 		res_set = true;
 		ReleaseCurrentSubTransaction();
+		MemoryContextSwitchTo(oldctx);
+		CurrentResourceOwner = oldowner;
 	}
 	PG_CATCH();
 	{
+		RollbackAndReleaseCurrentSubTransaction();
 		MemoryContextSwitchTo(oldctx);
+		CurrentResourceOwner = oldowner;
 		ErrorData *errdata = CopyErrorData();
 		ereport(LOG,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not calculate next start on failure: resetting value"),
 				 errdetail("Error: %s.", errdata->message)));
 		FlushErrorState();
-		RollbackAndReleaseCurrentSubTransaction();
 	}
 	PG_END_TRY();
 	Assert(CurrentMemoryContext == oldctx);
