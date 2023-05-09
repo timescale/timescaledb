@@ -2428,6 +2428,7 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 {
 	RangeTblEntry *rte = NULL;
 	bool needs_decompression = false;
+	bool should_rescan = false;
 	List *predicates = NIL;
 	Chunk *current_chunk;
 	if (ps == NULL)
@@ -2448,9 +2449,13 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 			needs_decompression = true;
 			break;
 		}
+		case T_BitmapHeapScanState:
+			predicates = list_union(((BitmapHeapScan *) ps->plan)->bitmapqualorig, ps->plan->qual);
+			needs_decompression = true;
+			should_rescan = true;
+			break;
 		case T_SeqScanState:
 		case T_SampleScanState:
-		case T_BitmapHeapScanState:
 		case T_TidScanState:
 		case T_TidRangeScanState:
 		{
@@ -2483,6 +2488,24 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
 				decompress_batches_for_update_delete(current_chunk, predicates);
+
+				/* This is a workaround specifically for bitmap heap scans:
+				 * during node initialization, initialize the scan state with the active snapshot
+				 * but since we are inserting data to be modified during the same query, they end up
+				 * missing that data by using a snapshot which doesn't account for this decompressed
+				 * data. To circumvent this issue, we change the internal scan state to use the
+				 * transaction snapshot and execute a rescan so the scan state is set correctly and
+				 * includes the new data.
+				 */
+				if (should_rescan)
+				{
+					ScanState *ss = ((ScanState *) ps);
+					if (ss && ss->ss_currentScanDesc)
+					{
+						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
+						ExecReScan(ps);
+					}
+				}
 			}
 		}
 	}
