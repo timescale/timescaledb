@@ -34,6 +34,7 @@ accidentally triggering the load of a previous DB version.**
 * #5525 Fix tablespace for compressed hypertable and corresponding toast
 * #5642 Fix ALTER TABLE SET with normal tables
 * #5666 Reduce memory usage for distributed analyze
+* #5668 Fix subtransaction resource owner
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
