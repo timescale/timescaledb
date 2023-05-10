@@ -1205,7 +1205,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		if (job != NULL)
 		{
 			pfree(job);
-			job = NULL;
 		}
 
 		/*
@@ -1227,7 +1226,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
 			pfree(job);
-			job = NULL;
 		}
 
 		/*
