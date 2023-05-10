@@ -1125,8 +1125,7 @@ ts_job_errors_insert_tuple(const FormData_job_error *job_err)
 	return true;
 }
 
-extern Datum
-ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
+extern Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	BgwParams params;
@@ -1205,7 +1204,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		if (job != NULL)
 		{
 			pfree(job);
-			job = NULL;
 		}
 
 		/*
@@ -1227,7 +1225,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
 			pfree(job);
-			job = NULL;
 		}
 
 		/*
