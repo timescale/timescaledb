@@ -1409,8 +1409,6 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		if (ec_added)
 			info->compressed_rel->eclass_indexes =
 				bms_add_member(info->compressed_rel->eclass_indexes, i);
-		ec_added = false;
-
 #endif
 	}
 	info->compressed_rel->has_eclass_joins = info->chunk_rel->has_eclass_joins;
