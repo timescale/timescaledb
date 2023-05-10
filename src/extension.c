@@ -92,9 +92,9 @@ ts_extension_check_version(const char *so_version)
 {
 	char *sql_version;
 
-	if (!IsNormalProcessingMode() || !IsTransactionState() || !extension_exists())
+	if (!IsNormalProcessingMode() || !IsTransactionState() || !extension_exists(EXTENSION_NAME))
 		return;
-	sql_version = extension_version();
+	sql_version = extension_version(EXTENSION_NAME);
 
 	if (strcmp(sql_version, so_version) != 0)
 	{
@@ -170,7 +170,7 @@ extension_set_state(enum ExtensionState newstate)
 static void
 extension_update_state()
 {
-	enum ExtensionState new_state = extension_current_state();
+	enum ExtensionState new_state = extension_current_state(EXTENSION_NAME);
 
 	/* Never actually set the state to "not installed" since there is no good
 	 * way to get out of it in case the extension is installed again in
@@ -345,7 +345,7 @@ ts_extension_get_so_name(void)
 const char *
 ts_extension_get_version(void)
 {
-	return extension_version();
+	return extension_version(EXTENSION_NAME);
 }
 
 bool

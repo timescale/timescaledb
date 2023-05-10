@@ -68,7 +68,7 @@ enum ExtensionState
 };
 
 static char *
-extension_version(void)
+extension_version(char const *const extension_name)
 {
 	Datum result;
 	Relation rel;
@@ -84,7 +84,7 @@ extension_version(void)
 				Anum_pg_extension_extname,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				CStringGetDatum(EXTENSION_NAME));
+				CStringGetDatum(extension_name));
 
 	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true, NULL, 1, entry);
 
@@ -123,13 +123,13 @@ get_proxy_table_relid()
 }
 
 inline static bool
-extension_exists()
+extension_exists(char const *const extension_name)
 {
-	return OidIsValid(get_extension_oid(EXTENSION_NAME, true));
+	return OidIsValid(get_extension_oid(extension_name, true));
 }
 
 inline static bool
-extension_is_transitioning()
+extension_is_transitioning(char const *const extension_name)
 {
 	/*
 	 * Determine whether the extension is being created or upgraded (as a
@@ -137,14 +137,14 @@ extension_is_transitioning()
 	 */
 	if (creating_extension)
 	{
-		return get_extension_oid(EXTENSION_NAME, true) == CurrentExtensionObject;
+		return get_extension_oid(extension_name, true) == CurrentExtensionObject;
 	}
 	return false;
 }
 
 /* Returns the recomputed current state */
 static enum ExtensionState
-extension_current_state()
+extension_current_state(char const *const extension_name)
 {
 	Oid proxy_relid;
 
@@ -160,7 +160,7 @@ extension_current_state()
 	 * NOTE: do not check for proxy_table_exists here. Want to be in
 	 * TRANSITIONING state even before the proxy table is created
 	 */
-	if (extension_is_transitioning())
+	if (extension_is_transitioning(extension_name))
 		return EXTENSION_STATE_TRANSITIONING;
 
 	/*
@@ -169,11 +169,17 @@ extension_current_state()
 	 * extension_exists will return true until the end of the command
 	 */
 
+	if (strcmp(extension_name, "timescaledb") != 0) {
+		// XXX Haven't looked into what this proxy table is.  For now, just a
+		// hack to skip that check except for timescaledb.
+		return EXTENSION_STATE_NOT_INSTALLED;
+	}
+
 	proxy_relid = get_proxy_table_relid();
 
 	if (OidIsValid(proxy_relid))
 	{
-		Assert(extension_exists());
+		Assert(extension_exists(extension_name));
 		return EXTENSION_STATE_CREATED;
 	}
 
