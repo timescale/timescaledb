@@ -1015,10 +1015,7 @@ gorilla_compressed_recv(StringInfo buf)
 	};
 
 	header.has_nulls = pq_getmsgbyte(buf);
-	if (header.has_nulls != 0 && header.has_nulls != 1)
-	{
-		elog(ERROR, "invalid recv in gorilla: bad bool");
-	}
+	CheckCompressedData(header.has_nulls == 0 || header.has_nulls == 1);
 
 	header.last_value = pq_getmsgint64(buf);
 	data.tag0s = simple8brle_serialized_recv(buf);

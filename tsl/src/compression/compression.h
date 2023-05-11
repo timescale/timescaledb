@@ -482,7 +482,7 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 #define CORRUPT_DATA_MESSAGE                                                                       \
 	(errmsg("the compressed data is corrupt"), errcode(ERRCODE_DATA_CORRUPTED))
 #else
-#define CORRUPT_DATA_MESSAGE (true)
+#define CORRUPT_DATA_MESSAGE (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
 
 #define CheckCompressedData(X)                                                                     \

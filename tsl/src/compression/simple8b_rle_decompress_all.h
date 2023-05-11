@@ -55,10 +55,7 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 		if (unlikely(simple8brle_selector_is_rle(selector_value)))
 		{
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
-			if (decompressed_index + n_block_values > n_total_values)
-			{
-				ereport(ERROR, (errmsg("the compressed data is corrupt")));
-			}
+			CheckCompressedData(decompressed_index + n_block_values <= n_total_values);
 
 			const ELEMENT_TYPE repeated_value = simple8brle_rledata_value(block_data);
 			for (int i = 0; i < n_block_values; i++)

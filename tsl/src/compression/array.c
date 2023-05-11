@@ -607,8 +607,7 @@ array_compressed_recv(StringInfo buffer)
 	Oid element_type;
 
 	has_nulls = pq_getmsgbyte(buffer);
-	if (has_nulls != 0 && has_nulls != 1)
-		elog(ERROR, "invalid recv in array: bad bool");
+	CheckCompressedData(has_nulls == 0 || has_nulls == 1);
 
 	element_type = binary_string_get_type(buffer);
 

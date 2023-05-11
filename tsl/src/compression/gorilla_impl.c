@@ -156,6 +156,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		 * according to the nulls bitmap.
 		 */
 		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(gorilla_data->nulls);
+		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
 		{
@@ -163,12 +165,13 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 
 			if (simple8brle_bitmap_get_at(&nulls, i))
 			{
-				decompressed_values[i] = 0;
 				arrow_validity_bitmap_set(validity_bitmap, i, false);
 			}
 			else
 			{
-				decompressed_values[i] = decompressed_values[current_notnull_element--];
+				Assert(current_notnull_element >= 0);
+				decompressed_values[i] = decompressed_values[current_notnull_element];
+				current_notnull_element--;
 			}
 		}
 

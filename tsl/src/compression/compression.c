@@ -2071,35 +2071,98 @@ test_one_input_throw(const uint8 *Data, size_t Size)
 	CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
 
 	/* Only for Gorilla for now. */
-	if (algo != COMPRESSION_ALGORITHM_GORILLA)
+	if (algo == COMPRESSION_ALGORITHM_GORILLA)
 	{
 		return -1;
-	}
 
-	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
-	DecompressionIterator *iter =
-		definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
+		Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+		DecompressionIterator *iter =
+				definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
 
-	ArrowArray *arrow =
-		tsl_try_decompress_all(COMPRESSION_ALGORITHM_GORILLA, compressed_data, FLOAT8OID);
+		ArrowArray *arrow =
+				tsl_try_decompress_all(algo, compressed_data, FLOAT8OID);
 
-	int i = 0;
-	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-	{
-		if (i >= arrow->length || ((float8 *) arrow->buffers[1])[i] != DatumGetFloat8(r.val))
+		int i = 0;
+		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+		{
+			if (i >= arrow->length)
+			{
+				elog(ERROR, "the decompression result does not match");
+			}
+
+			if (r.is_null)
+			{
+				if (arrow_validity_bitmap_get(arrow->buffers[0], i))
+				{
+					elog(ERROR, "the decompression result does not match");
+				}
+			}
+			else
+			{
+				if (!arrow_validity_bitmap_get(arrow->buffers[0], i)
+				 || ((float8 *) arrow->buffers[1])[i] != DatumGetFloat8(r.val))
+				{
+					elog(ERROR, "the decompression result does not match");
+				}
+			}
+
+			i++;
+		}
+
+		if (i != arrow->length)
 		{
 			elog(ERROR, "the decompression result does not match");
 		}
 
-		i++;
+		return 0;
 	}
-
-	if (i != arrow->length)
+	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA)
 	{
-		elog(ERROR, "the decompression result does not match");
+		Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+		DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, INT8OID);
+
+		ArrowArray *arrow = tsl_try_decompress_all(algo, compressed_data, INT8OID);
+
+		int i = 0;
+		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+		{
+			if (i >= arrow->length)
+			{
+				elog(ERROR, "the decompression result does not match");
+			}
+
+			if (r.is_null)
+			{
+				if (arrow_validity_bitmap_get(arrow->buffers[0], i))
+				{
+					elog(ERROR, "the decompression result does not match");
+				}
+			}
+			else
+			{
+				if (!arrow_validity_bitmap_get(arrow->buffers[0], i))
+				{
+					elog(ERROR, "the decompression result does not match");
+				}
+
+				if (((int64 *) arrow->buffers[1])[i] != DatumGetInt64(r.val))
+				{
+					elog(ERROR, "the decompression result does not match");
+				}
+			}
+
+			i++;
+		}
+
+		if (i != arrow->length)
+		{
+			elog(ERROR, "the decompression result does not match");
+		}
+
+		return 0;
 	}
 
-	return 0;
+	return -1;
 }
 
 #ifdef TS_COMPRESSION_FUZZING
@@ -2112,20 +2175,29 @@ static int
 LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
 	MemoryContextReset(CurrentMemoryContext);
-	volatile int res = -1;
 
 	PG_TRY();
 	{
 		CHECK_FOR_INTERRUPTS();
-		res = test_one_input_throw(Data, Size);
+		return test_one_input_throw(Data, Size);
 	}
 	PG_CATCH();
 	{
+		if(geterrcode() == ERRCODE_INTERNAL_ERROR)
+		{
+			EmitErrorReport();
+			int encoded_len = pg_b64_enc_len(Size);
+			char *encoded = palloc(encoded_len + 1);
+			encoded_len = pg_b64_encode_compat((char *) Data, Size, encoded, encoded_len);
+			encoded[encoded_len] = '\0';
+			fprintf(stderr, "base64 encoded fuzzing input:\n%s\n", encoded);
+			abort();
+		}
+
 		FlushErrorState();
-		res = -1;
+		return -1;
 	}
 	PG_END_TRY();
-	return res;
 }
 
 /*
@@ -2150,7 +2222,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 						 "-report_slow_units=1",
 						 "-use_value_profile=1",
 						 "-reload=1",
-						 "-runs=10000",
+						 "-runs=1",
 						 "corpus" /* in the database directory */,
 						 NULL };
 	char **argv = argvdata;
@@ -2235,11 +2307,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 		}
 		PG_CATCH();
 		{
-			MemoryContextSwitchTo(PortalContext);
-			ErrorData *error = CopyErrorData();
-			MemoryContextSwitchTo(ErrorContext);
-
-			if (error->sqlerrcode == ERRCODE_DATA_CORRUPTED)
+			if (geterrcode() == ERRCODE_DATA_CORRUPTED)
 			{
 				/*
 				 * We're testing the corrupt data handling, so we don't care about

@@ -42,12 +42,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	const uint32 validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
+	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
-
-	/* All data valid by default, we will fill in the nulls later. */
-	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;
@@ -71,28 +68,48 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 		}
 	}
 
+	/* All data valid by default, we will fill in the nulls later. */
+	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
 	/* Now move the data to account for nulls, and fill the validity bitmap. */
 	if (has_nulls)
 	{
+		/*
+		 * The number of not-null elements we have must be consistent with the
+		 * nulls bitmap.
+		 */
+		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 
-			Simple8bRleDecompressResult res = simple8brle_bitmap_get_next_reverse(&nulls);
-			Assert(!res.is_done);
-			if (res.val)
+			if (simple8brle_bitmap_get_at(&nulls, i))
 			{
-				decompressed_values[i] = 0;
 				arrow_validity_bitmap_set(validity_bitmap, i, false);
 			}
 			else
 			{
-				decompressed_values[i] = decompressed_values[current_notnull_element--];
+				Assert(current_notnull_element >= 0);
+				decompressed_values[i] = decompressed_values[current_notnull_element];
+				current_notnull_element--;
 			}
 		}
 
 		Assert(current_notnull_element == -1);
+	}
+	else
+	{
+		/*
+		 * The validity bitmap is padded at the end to a multiple of 64 bytes.
+		 * Fill the padding with zeros, because the elements corresponding to
+		 * the padding bits are not valid.
+		 */
+		for (int i = n_total; i < validity_bitmap_bytes * 8; i++)
+		{
+			arrow_validity_bitmap_set(validity_bitmap, i, false);
+		}
 	}
 
 	/* Return the result. */

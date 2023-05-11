@@ -322,7 +322,7 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 
 	if (compressed->has_nulls == 1 && nulls != NULL)
 	{
-		Assert(nulls->num_elements > deltas->num_elements);
+		CheckCompressedData(nulls->num_elements > deltas->num_elements);
 		bytes_serialize_simple8b_and_advance(compressed_data, nulls_size, nulls);
 	}
 
@@ -708,8 +708,7 @@ deltadelta_compressed_recv(StringInfo buffer)
 	DeltaDeltaCompressed *compressed;
 
 	has_nulls = pq_getmsgbyte(buffer);
-	if (has_nulls != 0 && has_nulls != 1)
-		elog(ERROR, "invalid recv in deltadelta: bad bool");
+	CheckCompressedData(has_nulls == 0 || has_nulls == 1);
 
 	last_value = pq_getmsgint64(buffer);
 	last_delta = pq_getmsgint64(buffer);
