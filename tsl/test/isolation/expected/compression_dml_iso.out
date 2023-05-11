@@ -1,5 +1,3 @@
-unused step name: IN1
-unused step name: INc
 unused step name: S1
 unused step name: SA
 unused step name: SC1
@@ -58,5 +56,487 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            3|                       3
+(1 row)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS DEL1 UPD1 DELc UPDc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200;
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200; <waiting ...>
+step DELc: COMMIT;
+step UPD1: <... completed>
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS UPD1 DEL1 UPDc DELc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200; <waiting ...>
+step UPDc: COMMIT;
+step DEL1: <... completed>
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS DEL1 UPDrr DELc UPDc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200;
+step UPDrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; UPDATE ts_device_table SET value = 4 WHERE location = 200; <waiting ...>
+step DELc: COMMIT;
+step UPDrr: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS UPD1 DELrr UPDc DELc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step DELrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; DELETE from ts_device_table WHERE location = 200; <waiting ...>
+step UPDc: COMMIT;
+step DELrr: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|    4
+(1 row)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS DELrr UPDrr DELc UPDc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step DELrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; DELETE from ts_device_table WHERE location = 200;
+step UPDrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; UPDATE ts_device_table SET value = 4 WHERE location = 200; <waiting ...>
+step DELc: COMMIT;
+step UPDrr: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS UPDrr DELrr UPDc DELc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step UPDrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step DELrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; DELETE from ts_device_table WHERE location = 200; <waiting ...>
+step UPDc: COMMIT;
+step DELrr: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|    4
+(1 row)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS DELrr UPDs DELc UPDc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step DELrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; DELETE from ts_device_table WHERE location = 200;
+step UPDs: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; UPDATE ts_device_table SET value = 4 WHERE location = 200; <waiting ...>
+step DELc: COMMIT;
+step UPDs: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS UPDrr DELs UPDc DELc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step UPDrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step DELs: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; DELETE from ts_device_table WHERE location = 200; <waiting ...>
+step UPDc: COMMIT;
+step DELs: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|    4
+(1 row)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS DELs UPDrr DELc UPDc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step DELs: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; DELETE from ts_device_table WHERE location = 200;
+step UPDrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; UPDATE ts_device_table SET value = 4 WHERE location = 200; <waiting ...>
+step DELc: COMMIT;
+step UPDrr: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: IN1 INc CA1 CAc SH SS UPDs DELrr UPDc DELc SH SS
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step UPDs: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step DELrr: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; DELETE from ts_device_table WHERE location = 200; <waiting ...>
+step UPDc: COMMIT;
+step DELrr: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|    4
 (1 row)
 
