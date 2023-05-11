@@ -2265,8 +2265,13 @@ build_update_delete_scankeys(RowDecompressor *decompressor, List *filters, int *
  * This method will:
  *  1.scan compressed chunk
  *  2.decompress the row
- *  3.insert decompressed rows to uncompressed chunk
- *  4.delete this row from compressed chunk
+ *  3.delete this row from compressed chunk
+ *  4.insert decompressed rows to uncompressed chunk
+ *
+ * Return value:
+ * if all 4 steps defined above pass set chunk_status_changed to true and return true
+ * if step 4 fails return false. Step 3 will fail if there are conflicting concurrent operations on
+ * same chunk.
  */
 static bool
 decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
@@ -2307,7 +2312,6 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 						  decompressor->compressed_datums,
 						  decompressor->compressed_is_nulls);
 
-		row_decompressor_decompress_row(decompressor, NULL);
 		TM_FailureData tmfd;
 		TM_Result result;
 		result = table_tuple_delete(decompressor->in_rel,
@@ -2319,19 +2323,49 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 									&tmfd,
 									false);
 
-		if (result == TM_Updated || result == TM_Deleted)
+		switch (result)
 		{
-			if (IsolationUsesXactSnapshot())
-				ereport(ERROR,
-						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-						 errmsg("could not serialize access due to concurrent update")));
-			return false;
+			/* If the tuple has been already deleted, most likely somebody
+			 * decompressed the tuple already */
+			case TM_Deleted:
+			{
+				if (IsolationUsesXactSnapshot())
+				{
+					/* For Repeatable Read isolation level report error */
+					table_endscan(heapScan);
+					ereport(ERROR,
+							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+							 errmsg("could not serialize access due to concurrent update")));
+				}
+				continue;
+			}
+			break;
+			/*
+			 * If another transaction is updating the compressed data,
+			 * we have to abort the transaction to keep consistency.
+			 */
+			case TM_Updated:
+			{
+				table_endscan(heapScan);
+				elog(ERROR, "tuple concurrently updated");
+			}
+			break;
+			case TM_Invisible:
+			{
+				table_endscan(heapScan);
+				elog(ERROR, "attempted to lock invisible tuple");
+			}
+			break;
+			case TM_Ok:
+				break;
+			default:
+			{
+				table_endscan(heapScan);
+				elog(ERROR, "unexpected tuple operation result: %d", result);
+			}
+			break;
 		}
-		if (result == TM_Invisible)
-		{
-			elog(ERROR, "attempted to lock invisible tuple");
-			return false;
-		}
+		row_decompressor_decompress_row(decompressor, NULL);
 		*chunk_status_changed = true;
 	}
 	if (scankeys)

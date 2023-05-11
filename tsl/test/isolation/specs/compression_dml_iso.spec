@@ -36,10 +36,14 @@ step "INc"   { COMMIT; }
 
 session "DEL"
 step "DEL1"   { BEGIN; DELETE from ts_device_table WHERE location = 200; }
+step "DELrr"  { BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; DELETE from ts_device_table WHERE location = 200; }
+step "DELs"   { BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; DELETE from ts_device_table WHERE location = 200; }
 step "DELc"   { COMMIT; }
 
 session "UPD"
 step "UPD1"   { BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200; }
+step "UPDrr"  { BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; UPDATE ts_device_table SET value = 4 WHERE location = 200; }
+step "UPDs"   { BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; UPDATE ts_device_table SET value = 4 WHERE location = 200; }
 step "UPDc"   { COMMIT; }
 
 session "SI"
@@ -51,6 +55,7 @@ step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch ORDER BY ch::text LIMIT 1; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
 step "SA" { SELECT * FROM ts_device_table; }
+step "SS" { SELECT * FROM ts_device_table WHERE location = 200; }
 
 session "CompressAll"
 step "CA1" {
@@ -64,3 +69,15 @@ step "CAc" { COMMIT; }
 
 # Test concurrent update/delete operations
 permutation "CA1" "CAc" "SH" "I1" "Ic" "SH" "UPD1" "UPDc" "SH" "DEL1" "DELc" "SH" "UPD1" "UPDc" "SH"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPD1" "DELc" "UPDc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPD1" "DEL1" "UPDc" "DELc" "SH" "SS"
+
+#Test interaction with upper isolation levels
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPDrr"  "DELc" "UPDc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPD1" "DELrr"  "UPDc" "DELc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DELrr" "UPDrr"  "DELc" "UPDc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPDrr" "DELrr"  "UPDc" "DELc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DELrr" "UPDs"  "DELc" "UPDc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPDrr" "DELs"  "UPDc" "DELc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DELs" "UPDrr"  "DELc" "UPDc" "SH" "SS"
+permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPDs" "DELrr"  "UPDc" "DELc" "SH" "SS"
