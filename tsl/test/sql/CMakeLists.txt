@@ -106,6 +106,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
+    transparent_decompression_join_index.sql
     feature_flags.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
