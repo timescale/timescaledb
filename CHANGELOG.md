@@ -15,7 +15,8 @@ This release includes these noteworthy features:
   * Support for unique constraints on compressed chunks
   * Support for `ON CONFLICT DO UPDATE`
   * Support for `ON CONFLICT DO NOTHING`
-* Join support for hierarchical Continuous Aggregates
+* Join support for Hierarchical Continuous Aggregates
+* Performance improvements for real-time Hierarchical Continuous Aggregates
 
 **Features**
 * #5212 Allow pushdown of reference table joins
