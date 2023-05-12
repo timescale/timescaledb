@@ -71,10 +71,12 @@ This release includes these noteworthy features:
 * #5642 Fix ALTER TABLE SET with normal tables
 * #5666 Reduce memory usage for distributed analyze
 * #5668 Fix subtransaction resource owner
+* #5680 Fix DISTINCT query with JOIN on multiple segmentby columns
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
 * @ollz272 for reporting an issue with interpolate error messages
+* @ericdevries for reporting an issue with DISTINCT queries using segmentby columns of compressed hypertable
 
 
 ## 2.10.3 (2023-04-26)
