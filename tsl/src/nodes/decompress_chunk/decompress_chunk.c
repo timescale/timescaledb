@@ -1290,11 +1290,13 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
-		/* only consider EquivalenceMembers that are vars of the uncompressed chunk */
-		if (!IsA(cur_em->em_expr, Var))
+		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
+		 * uncompressed chunk */
+		var = (Var *) cur_em->em_expr;
+		while (var && IsA(var, RelabelType))
+			var = (Var *) ((RelabelType *) var)->arg;
+		if (!(var && IsA(var, Var)))
 			continue;
-
-		var = castNode(Var, cur_em->em_expr);
 
 		if ((Index) var->varno != info->chunk_rel->relid)
 			continue;
@@ -1303,7 +1305,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		 * be set on the em */
 		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
 
-		context->current_col_info = get_compression_info_for_em((Node *) cur_em->em_expr, context);
+		context->current_col_info = get_compression_info_for_em((Node *) var, context);
 		if (context->current_col_info == NULL)
 			continue;
 
