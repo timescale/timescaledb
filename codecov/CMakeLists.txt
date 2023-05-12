@@ -56,7 +56,7 @@ else()
     OUTPUT ${OUTPUT_FILE}.base
     COMMENT "Generating code coverage base file"
     COMMAND
-      ${LCOV} --rc lcov_branch_coverage=1 --capture --initial # Initial run
+      ${LCOV} --capture --initial # Initial run
       --no-external # Do not include external source files
       --base-directory ${CMAKE_SOURCE_DIR} --directory ${CMAKE_BINARY_DIR}
       --output-file ${OUTPUT_FILE}.base --gcov-tool
@@ -74,7 +74,7 @@ else()
     OUTPUT ${OUTPUT_FILE}.test
     COMMENT "Generating code coverage test file"
     COMMAND
-      ${LCOV} --rc lcov_branch_coverage=1 --capture --no-external --base-directory ${CMAKE_SOURCE_DIR}
+      ${LCOV} --capture --no-external --base-directory ${CMAKE_SOURCE_DIR}
       --directory ${CMAKE_BINARY_DIR} --output-file ${OUTPUT_FILE}.test
       --gcov-tool ${CMAKE_CURRENT_BINARY_DIR}/gcov
     DEPENDS ${OUTPUT_FILE}.base coverage_base)
@@ -89,7 +89,7 @@ else()
     OUTPUT ${OUTPUT_FILE}
     COMMENT "Generating final code coverage file"
     COMMAND
-      ${LCOV} --rc lcov_branch_coverage=1 --add-tracefile ${OUTPUT_FILE}.base --add-tracefile
+      ${LCOV} --add-tracefile ${OUTPUT_FILE}.base --add-tracefile
       ${OUTPUT_FILE}.test --output-file ${OUTPUT_FILE} --gcov-tool
       ${CMAKE_CURRENT_BINARY_DIR}/gcov
     DEPENDS ${OUTPUT_FILE}.test coverage_test)
@@ -114,7 +114,7 @@ else()
       COMMENT
         "Generating HTML code coverage report in ${CMAKE_CURRENT_BINARY_DIR}/${REPORT_DIR}"
       COMMAND
-        ${GENHTML} --prefix ${CMAKE_SOURCE_DIR} --branch-coverage --ignore-errors source --legend
+        ${GENHTML} --prefix ${CMAKE_SOURCE_DIR} --ignore-errors source --legend
         --title "TimescaleDB" --output-directory ${REPORT_DIR} ${OUTPUT_FILE}
       DEPENDS ${OUTPUT_FILE})
     add_custom_target(coverage DEPENDS ${REPORT_DIR}/index.html)
