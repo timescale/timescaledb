@@ -4,7 +4,19 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.11.0 (2023-05-12)
+
+This release contains new features and bug fixes since the 2.10.3 release.
+We deem it moderate priority for upgrading.
+
+This release includes these noteworthy features:
+* Support for DML operations on compressed chunks:
+  * UPDATE/DELETE support
+  * Support for unique constraints on compressed chunks
+  * Support for `ON CONFLICT DO UPDATE`
+  * Support for `ON CONFLICT DO NOTHING`
+* Join support for Hierarchical Continuous Aggregates
+* Performance improvements for real-time Hierarchical Continuous Aggregates
 
 **Features**
 * #5212 Allow pushdown of reference table joins
