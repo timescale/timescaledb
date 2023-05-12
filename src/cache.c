@@ -46,7 +46,7 @@ ts_cache_init(Cache *cache)
 	 * The cache object should have been created in its own context so that
 	 * cache_destroy can just delete the context to free everything.
 	 */
-	Assert(MemoryContextContains(ts_cache_memory_ctx(cache), cache));
+	Assert(GetMemoryChunkContext(cache) == ts_cache_memory_ctx(cache));
 
 	/*
 	 * We always want to be explicit about the memory context our hash table
