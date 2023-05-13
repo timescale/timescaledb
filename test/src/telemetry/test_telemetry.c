@@ -128,7 +128,7 @@ ts_test_status(PG_FUNCTION_ARGS)
 	int port = 80;
 	int status = PG_GETARG_INT32(0);
 
-	PG_RETURN_JSONB_P(test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
+	PG_RETURN_JSONB_P((void *) test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
 }
 
 #ifdef TS_DEBUG
@@ -141,7 +141,7 @@ ts_test_status_mock(PG_FUNCTION_ARGS)
 
 	test_string = text_to_cstring(arg1);
 
-	PG_RETURN_JSONB_P(test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
+	PG_RETURN_JSONB_P((void *) test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
 }
 #endif
 
@@ -269,5 +269,5 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 
 	ts_http_response_state_destroy(rsp);
 
-	PG_RETURN_JSONB_P(json_body);
+	PG_RETURN_JSONB_P((void *) json_body);
 }

@@ -186,7 +186,7 @@ static WithClauseDefinition test_args[] = {
 	[TestArgInt32] = { .arg_name = "int32", .type_id = INT4OID, },
 	[TestArgDefault] = { .arg_name = "default",
 						 .type_id = INT4OID,
-						 .default_val = Int32GetDatum(-100) },
+						 .default_val = (Datum)-100 },
 	[TestArgName] = { .arg_name = "name", .type_id = NAMEOID, },
 	[TestArgRegclass] = { .arg_name = "regclass",
 						  .type_id = REGCLASSOID },

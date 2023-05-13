@@ -48,17 +48,17 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 		[ContinuousEnabled] = {
 			.arg_name = "continuous",
 			.type_id = BOOLOID,
-			.default_val = BoolGetDatum(false),
+			.default_val = (Datum)false,
 		},
 		[ContinuousViewOptionCreateGroupIndex] = {
 			.arg_name = "create_group_indexes",
 			.type_id = BOOLOID,
-			.default_val = BoolGetDatum(true),
+			.default_val = (Datum)true,
 		},
 		[ContinuousViewOptionMaterializedOnly] = {
 			.arg_name = "materialized_only",
 			.type_id = BOOLOID,
-			.default_val = BoolGetDatum(false),
+			.default_val = (Datum)false,
 		},
 		[ContinuousViewOptionCompress] = {
 			.arg_name = "compress",
@@ -67,7 +67,7 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 		[ContinuousViewOptionFinalized] = {
 			.arg_name = "finalized",
 			.type_id = BOOLOID,
-			.default_val = BoolGetDatum(true),
+			.default_val = (Datum)true,
 		},
 		[ContinuousViewOptionCompressSegmentBy] = {
 			 .arg_name = "compress_segmentby",
