@@ -2612,7 +2612,7 @@ static const WithClauseDefinition index_with_clauses[] = {
 	[HypertableIndexFlagMultiTransaction] = {.arg_name = "transaction_per_chunk", .type_id = BOOLOID,},
 #ifdef DEBUG
 	[HypertableIndexFlagBarrierTable] = {.arg_name = "barrier_table", .type_id = REGCLASSOID,},
-	[HypertableIndexFlagMaxChunks] = {.arg_name = "max_chunks", .type_id = INT4OID, .default_val = Int32GetDatum(-1)},
+	[HypertableIndexFlagMaxChunks] = {.arg_name = "max_chunks", .type_id = INT4OID, .default_val = (Datum)-1},
 #endif
 };
 
