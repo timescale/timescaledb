@@ -345,12 +345,12 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 ////////////////////
 
 static void
-dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, const char *data,
+dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, const char *_data,
 									   bool scan_forward, Oid element_type)
 {
-	const DictionaryCompressed *bitmap = (const DictionaryCompressed *) data;
-	Size total_size = VARSIZE(bitmap);
-	Size remaining_size;
+	StringInfoData si = { .data = (char *) _data, .len = VARSIZE(_data) };
+	const DictionaryCompressed *bitmap = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+
 	Simple8bRleSerialized *s8_bitmap;
 	DecompressionIterator *dictionary_iterator;
 
@@ -366,8 +366,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 		.has_nulls = bitmap->has_nulls == 1,
 	};
 
-	data += sizeof(DictionaryCompressed);
-	s8_bitmap = bytes_deserialize_simple8b_and_advance(&data);
+	s8_bitmap = bytes_deserialize_simple8b_and_advance(&si);
 
 	if (scan_forward)
 		simple8brle_decompression_iterator_init_forward(&iter->bitmap, s8_bitmap);
@@ -376,17 +375,14 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 
 	if (iter->has_nulls)
 	{
-		Simple8bRleSerialized *s8_null = bytes_deserialize_simple8b_and_advance(&data);
+		Simple8bRleSerialized *s8_null = bytes_deserialize_simple8b_and_advance(&si);
 		if (scan_forward)
 			simple8brle_decompression_iterator_init_forward(&iter->nulls, s8_null);
 		else
 			simple8brle_decompression_iterator_init_reverse(&iter->nulls, s8_null);
 	}
 
-	remaining_size = total_size - (data - (char *) bitmap);
-
-	dictionary_iterator = array_decompression_iterator_alloc_forward(data,
-																	 remaining_size,
+	dictionary_iterator = array_decompression_iterator_alloc_forward(&si,
 																	 bitmap->element_type,
 																	 /* has_nulls */ false);
 

@@ -119,7 +119,8 @@ typedef struct Simple8bRleDecompressionIterator
 	Simple8bRleBlock current_block;
 
 	const uint64 *compressed_data;
-	uint32 current_compressed_pos;
+	int32 num_blocks;
+	int32 current_compressed_pos;
 	int32 current_in_compressed_pos;
 
 	uint32 num_elements;
@@ -153,7 +154,7 @@ static inline void simple8brle_serialized_send(StringInfo buffer,
 											   const Simple8bRleSerialized *data);
 static inline char *bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
 														 const Simple8bRleSerialized *data);
-static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(const char **data);
+static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(StringInfo si);
 static inline size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
 static inline size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);
 static inline size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor);
@@ -207,7 +208,9 @@ simple8brle_serialized_recv(StringInfo buffer)
 {
 	uint32 i;
 	uint32 num_elements = pq_getmsgint32(buffer);
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	uint32 num_blocks = pq_getmsgint32(buffer);
+	CheckCompressedData(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(num_blocks);
 	Simple8bRleSerialized *data;
 	Size compressed_size =
@@ -217,7 +220,7 @@ simple8brle_serialized_recv(StringInfo buffer)
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 
-	data = palloc0(compressed_size);
+	data = palloc(compressed_size);
 	data->num_elements = num_elements;
 	data->num_blocks = num_blocks;
 
@@ -253,10 +256,16 @@ bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
 }
 
 static Simple8bRleSerialized *
-bytes_deserialize_simple8b_and_advance(const char **data)
+bytes_deserialize_simple8b_and_advance(StringInfo si)
 {
-	Simple8bRleSerialized *ser = (Simple8bRleSerialized *) *data;
-	*data += simple8brle_serialized_total_size(ser);
+	Simple8bRleSerialized *ser = consumeCompressedData(si, sizeof(Simple8bRleSerialized));
+	consumeCompressedData(si, simple8brle_serialized_slot_size(ser));
+
+	CheckCompressedData(ser->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(ser->num_elements > 0);
+	CheckCompressedData(ser->num_blocks > 0);
+	CheckCompressedData(ser->num_elements >= ser->num_blocks);
+
 	return ser;
 }
 
@@ -266,8 +275,13 @@ simple8brle_serialized_slot_size(const Simple8bRleSerialized *data)
 	if (data == NULL)
 		return 0;
 
-	return sizeof(uint64) *
-		   (data->num_blocks + simple8brle_num_selector_slots_for_num_blocks(data->num_blocks));
+	int total_slots =
+		data->num_blocks + simple8brle_num_selector_slots_for_num_blocks(data->num_blocks);
+
+	CheckCompressedData(total_slots > 0);
+	CheckCompressedData((uint32) total_slots < PG_INT32_MAX / sizeof(uint64));
+
+	return total_slots * sizeof(uint64);
 }
 
 static size_t
@@ -543,6 +557,7 @@ simple8brle_decompression_iterator_init_common(Simple8bRleDecompressionIterator 
 
 	*iter = (Simple8bRleDecompressionIterator){
 		.compressed_data = compressed->slots + num_selector_slots,
+		.num_blocks = compressed->num_blocks,
 		.current_compressed_pos = 0,
 		.current_in_compressed_pos = 0,
 		.num_elements = compressed->num_elements,
@@ -628,12 +643,17 @@ simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIter
 			.is_done = true,
 		};
 
-	if (iter->current_in_compressed_pos >= (int32) iter->current_block.num_elements_compressed)
+	if ((uint32) iter->current_in_compressed_pos >= iter->current_block.num_elements_compressed)
 	{
+		CheckCompressedData(iter->current_compressed_pos < iter->num_blocks);
+
 		iter->current_block =
 			simple8brle_block_create(bit_array_iter_next(&iter->selectors,
 														 SIMPLE8B_BITS_PER_SELECTOR),
 									 iter->compressed_data[iter->current_compressed_pos]);
+		CheckCompressedData(iter->current_block.selector != 0);
+		CheckCompressedData(iter->current_block.num_elements_compressed <=
+							GLOBAL_MAX_ROWS_PER_COMPRESSION);
 		iter->current_compressed_pos += 1;
 		iter->current_in_compressed_pos = 0;
 	}
@@ -717,7 +737,7 @@ simple8brle_block_create_rle(uint32 rle_count, uint64 rle_val)
 	};
 }
 
-static inline Simple8bRleBlock
+static pg_attribute_always_inline Simple8bRleBlock
 simple8brle_block_create(uint8 selector, uint64 data)
 {
 	Simple8bRleBlock block = (Simple8bRleBlock){
@@ -725,11 +745,15 @@ simple8brle_block_create(uint8 selector, uint64 data)
 		.data = data,
 	};
 
-	Assert(block.selector != 0);
 	if (simple8brle_selector_is_rle(block.selector))
+	{
 		block.num_elements_compressed = simple8brle_rledata_repeatcount(block.data);
+	}
 	else
+	{
 		block.num_elements_compressed = SIMPLE8B_NUM_ELEMENTS[block.selector];
+	}
+
 	return block;
 }
 
@@ -774,6 +798,7 @@ simple8brle_block_get_element(Simple8bRleBlock block, uint32 position_in_value)
 	{
 		/* decode rle-encoded integers */
 		uint64 repeated_value = simple8brle_rledata_value(block.data);
+		CheckCompressedData(simple8brle_rledata_repeatcount(block.data) > 0);
 		Assert(simple8brle_rledata_repeatcount(block.data) > position_in_value);
 		return repeated_value;
 	}
@@ -795,13 +820,13 @@ simple8brle_block_get_element(Simple8bRleBlock block, uint32 position_in_value)
  ***  Utility Functions  ***
  ***************************/
 
-static inline bool
+static pg_attribute_always_inline bool
 simple8brle_selector_is_rle(uint8 selector)
 {
 	return selector == SIMPLE8B_RLE_SELECTOR;
 }
 
-static inline uint32
+static pg_attribute_always_inline uint32
 simple8brle_rledata_repeatcount(uint64 rledata)
 {
 	return (uint32) ((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
