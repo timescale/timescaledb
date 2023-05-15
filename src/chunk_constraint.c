@@ -1110,7 +1110,7 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_nam
 	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
 
 	ts_chunk_index_adjust_meta(chunk_id,
-							   new_name,
+							   NameStr(new_hypertable_constraint_name),
 							   NameStr(*old_chunk_constraint_name),
 							   NameStr(new_chunk_constraint_name));
 
@@ -1146,11 +1146,21 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
 
 		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
+		/*
+		 * The constraint names are of Postgres type 'name' which is fixed-width
+		 * 64-byte type. The input strings might not have the necessary padding
+		 * after them.
+		 */
+		NameData ht_constraint_namedata;
+		namestrcpy(&ht_constraint_namedata, ht_constraint_name);
+		NameData new_namedata;
+		namestrcpy(&new_namedata, new_name);
+
 		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
-			CStringGetDatum(ht_constraint_name);
+			NameGetDatum(&ht_constraint_namedata);
 		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
 		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
-			CStringGetDatum(new_name);
+			NameGetDatum(&new_namedata);
 		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
 
 		new_tuple =

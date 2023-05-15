@@ -959,10 +959,20 @@ ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char
 
 		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
+		/*
+		 * The constraint names are of Postgres type 'name' which is fixed-width
+		 * 64-byte type. The input strings might not have the necessary padding
+		 * after them.
+		 */
+		NameData ht_index_namedata;
+		namestrcpy(&ht_index_namedata, ht_index_name);
+		NameData new_namedata;
+		namestrcpy(&new_namedata, new_name);
+
 		values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
-			CStringGetDatum(ht_index_name);
+			NameGetDatum(&ht_index_namedata);
 		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
-		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = CStringGetDatum(new_name);
+		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = NameGetDatum(&new_namedata);
 		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
 
 		new_tuple =

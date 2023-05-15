@@ -67,12 +67,12 @@ ts_telemetry_events_add(JsonbParseState *state)
 		if (!tag_isnull)
 			ts_jsonb_add_str(state,
 							 NameStr(TupleDescAttr(tupdesc, Anum_telemetry_event_tag - 1)->attname),
-							 NameStr(*DatumGetName(tag)));
+							 pstrdup(NameStr(*DatumGetName(tag))));
 
 		if (!value_isnull)
 		{
 			JsonbValue jsonb_value;
-			JsonbToJsonbValue(DatumGetJsonbP(body), &jsonb_value);
+			JsonbToJsonbValue(DatumGetJsonbPCopy(body), &jsonb_value);
 			ts_jsonb_add_value(state,
 							   NameStr(
 								   TupleDescAttr(tupdesc, Anum_telemetry_event_body - 1)->attname),
@@ -117,7 +117,9 @@ ts_telemetry_metadata_add_values(JsonbParseState *state)
 				value = slot_getattr(ti->slot, Anum_metadata_value, &value_isnull);
 
 				if (!value_isnull)
-					ts_jsonb_add_str(state, DatumGetCString(key), TextDatumGetCString(value));
+					ts_jsonb_add_str(state,
+									 pstrdup(NameStr(*key_name)),
+									 pstrdup(TextDatumGetCString(value)));
 			}
 		}
 	}
