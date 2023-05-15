@@ -8,46 +8,43 @@ name: Sanitizer test
     branches:
       - main
       - prerelease_test
+  pull_request:
+    paths: .github/workflows/sanitizer-build-and-test.yaml
 
 env:
   name: "Sanitizer"
   PG_SRC_DIR: "pgbuild"
   PG_INSTALL_DIR: "postgresql"
-  MAKE_JOBS: 6
-  # llvm-symbolizer crashes so we don't use clang until we resolve that
-  extra_packages: "clang-10 llvm-10 llvm-10-dev llvm-10-tools"
-  llvm_config: "llvm-config-10"
-  CLANG: "clang-10"
-  # gcc-10 is the minimum version that can parse the suppression files barely adequately
-  CC: "gcc-10"
-  CXX: "g++-10"
+  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
+  llvm_config: "llvm-config-15"
+  CLANG: "clang-15"
+  CC: "clang-15"
+  CXX: "clang-15"
   # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
-  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
   # clang CFLAGS
-  #CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline-functions"
-  #CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline-functions"
+  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
   # clang does this by default, but we need to explicitly state that for gcc.
   # static gcc LDFLAGS
-  LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
+  # LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
   # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
-  #LDFLAGS: "-fsanitize=address,undefined"
+  LDFLAGS: "-fsanitize=address,undefined"
   ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
     detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
-    external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
+    detect_leaks=0 abort_on_error=1
 
   LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt
     print_suppressions=0 log_path=${{ github.workspace }}/sanitizer/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
-    external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
 
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
     print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
-    external_symbolizer_path=/usr/lib/llvm-10/bin/llvm-symbolizer
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
   SKIPS: "remote_txn"
@@ -74,7 +71,7 @@ jobs:
       fail-fast: false
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
-        os: ["ubuntu-20.04"]
+        os: ["ubuntu-22.04"]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
@@ -122,12 +119,15 @@ jobs:
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        # Add instrumentation to the Postgres memory contexts. For more details, see
+        # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
+        patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
-        make -j $MAKE_JOBS
-        make -j $MAKE_JOBS -C src/test/isolation
-        make -j $MAKE_JOBS -C contrib/postgres_fdw
+        make -j$(nproc)
+        make -j$(nproc) -C src/test/isolation
+        make -j$(nproc) -C contrib/postgres_fdw
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -140,12 +140,13 @@ jobs:
       run: |
         make -C ~/$PG_SRC_DIR install
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        ~/$PG_INSTALL_DIR/bin/pg_config --version
 
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
           -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=5
-        make -j $MAKE_JOBS -C build
+        make -j$(nproc) -C build
         make -C build install
 
     - name: make installcheck

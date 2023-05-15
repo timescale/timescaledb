@@ -299,11 +299,21 @@ create_data_node_datum(FunctionCallInfo fcinfo, const char *node_name, const cha
 				 errmsg("function returning record called in "
 						"context that cannot accept type record")));
 
+	/*
+	 * Some columns are of Postgres type 'name' which is fixed-width 64-byte
+	 * type. The input strings might not have the necessary padding after them,
+	 * so we must pad them here.
+	 */
+	NameData node_namedata;
+	namestrcpy(&node_namedata, node_name);
+	NameData dbnamedata;
+	namestrcpy(&dbnamedata, dbname);
+
 	tupdesc = BlessTupleDesc(tupdesc);
-	values[AttrNumberGetAttrOffset(Anum_create_data_node_name)] = CStringGetDatum(node_name);
+	values[AttrNumberGetAttrOffset(Anum_create_data_node_name)] = NameGetDatum(&node_namedata);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_host)] = CStringGetTextDatum(host);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_port)] = Int32GetDatum(port);
-	values[AttrNumberGetAttrOffset(Anum_create_data_node_dbname)] = CStringGetDatum(dbname);
+	values[AttrNumberGetAttrOffset(Anum_create_data_node_dbname)] = NameGetDatum(&dbnamedata);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_node_created)] =
 		BoolGetDatum(node_created);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_database_created)] =
@@ -1462,7 +1472,11 @@ create_alter_data_node_tuple(TupleDesc tupdesc, const char *node_name, List *opt
 
 	MemSet(nulls, false, sizeof(nulls));
 
-	values[AttrNumberGetAttrOffset(Anum_alter_data_node_node_name)] = CStringGetDatum(node_name);
+	NameData node_namedata;
+	NameData dbnamedata;
+
+	namestrcpy(&node_namedata, node_name);
+	values[AttrNumberGetAttrOffset(Anum_alter_data_node_node_name)] = NameGetDatum(&node_namedata);
 	values[AttrNumberGetAttrOffset(Anum_alter_data_node_available)] = BoolGetDatum(true);
 
 	foreach (lc, options)
@@ -1481,8 +1495,9 @@ create_alter_data_node_tuple(TupleDesc tupdesc, const char *node_name, List *opt
 		}
 		else if (strcmp("dbname", elem->defname) == 0)
 		{
+			namestrcpy(&dbnamedata, defGetString(elem));
 			values[AttrNumberGetAttrOffset(Anum_alter_data_node_database)] =
-				CStringGetDatum(defGetString(elem));
+				NameGetDatum(&dbnamedata);
 		}
 		else if (strcmp("available", elem->defname) == 0)
 		{
