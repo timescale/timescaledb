@@ -103,11 +103,8 @@ bit_array_recv(const StringInfo buffer)
 	uint32 num_elements = pq_getmsgint32(buffer);
 	uint8 bits_used_in_last_bucket = pq_getmsgbyte(buffer);
 	BitArray array;
-	if (num_elements >= PG_UINT32_MAX / sizeof(uint64))
-		elog(ERROR, "invalid number of elements in bit array");
-
-	if (bits_used_in_last_bucket > BITS_PER_BUCKET)
-		elog(ERROR, "invalid number of bits in last bucket of bit array");
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(bits_used_in_last_bucket <= BITS_PER_BUCKET);
 
 	array = (BitArray){
 		.bits_used_in_last_bucket = bits_used_in_last_bucket,
@@ -115,7 +112,7 @@ bit_array_recv(const StringInfo buffer)
 			.num_elements = num_elements,
 			.max_elements = num_elements,
 			.ctx = CurrentMemoryContext,
-			.data = palloc0(num_elements * sizeof(uint64)),
+			.data = palloc(num_elements * sizeof(uint64)),
 		},
 	};
 
@@ -185,14 +182,6 @@ bit_array_wrap(BitArray *dst, uint64 *data, uint64 num_bits)
 	bit_array_wrap_internal(dst, num_buckets, bits_used_in_last_bucket, data);
 }
 
-static inline const char *
-bytes_attach_bit_array_and_advance(BitArray *dst, const char *data, uint32 num_buckets,
-								   uint8 bits_in_last_bucket)
-{
-	bit_array_wrap_internal(dst, num_buckets, bits_in_last_bucket, (uint64 *) data);
-	return data + bit_array_data_bytes_used(dst);
-}
-
 static inline void
 bit_array_append(BitArray *array, uint8 num_bits, uint64 bits)
 {
@@ -244,7 +233,7 @@ bit_array_iterator_init(BitArrayIterator *iter, const BitArray *array)
 	};
 }
 
-static inline uint64
+pg_attribute_always_inline static uint64
 bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 {
 	uint8 bits_remaining_in_current_bucket;
@@ -255,6 +244,12 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 	if (num_bits == 0)
 		return 0;
 
+	CheckCompressedData(iter->current_bucket < iter->array->buckets.num_elements);
+	if (iter->current_bucket == iter->array->buckets.num_elements - 1)
+	{
+		Assert(iter->bits_used_in_current_bucket <= iter->array->bits_used_in_last_bucket);
+	}
+
 	bits_remaining_in_current_bucket = 64 - iter->bits_used_in_current_bucket;
 	if (bits_remaining_in_current_bucket >= num_bits)
 	{
@@ -262,9 +257,12 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 		value >>= iter->bits_used_in_current_bucket;
 		value &= bit_array_low_bits_mask(num_bits);
 		iter->bits_used_in_current_bucket += num_bits;
-		Assert(iter->current_bucket < iter->array->buckets.num_elements);
-		Assert(iter->current_bucket != iter->array->buckets.num_elements - 1 ||
-			   iter->bits_used_in_current_bucket <= iter->array->bits_used_in_last_bucket);
+
+		if (iter->current_bucket == iter->array->buckets.num_elements - 1)
+		{
+			CheckCompressedData(iter->bits_used_in_current_bucket <=
+								iter->array->bits_used_in_last_bucket);
+		}
 		return value;
 	}
 
@@ -277,6 +275,7 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 	}
 
 	/* The second bucket has the high-order bits */
+	CheckCompressedData(iter->current_bucket + 1 < iter->array->buckets.num_elements);
 	value_from_next_bucket = *uint64_vec_get(&iter->array->buckets, iter->current_bucket + 1) &
 							 bit_array_low_bits_mask(num_bits_from_next_bucket);
 	value_from_next_bucket <<= bits_remaining_in_current_bucket;
@@ -284,9 +283,12 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 
 	iter->current_bucket += 1;
 	iter->bits_used_in_current_bucket = num_bits_from_next_bucket;
-	Assert(iter->current_bucket < iter->array->buckets.num_elements);
-	Assert(iter->current_bucket != iter->array->buckets.num_elements - 1 ||
-		   iter->bits_used_in_current_bucket <= iter->array->bits_used_in_last_bucket);
+
+	if (iter->current_bucket == iter->array->buckets.num_elements - 1)
+	{
+		CheckCompressedData(iter->bits_used_in_current_bucket <=
+							iter->array->bits_used_in_last_bucket);
+	}
 	return value;
 }
 

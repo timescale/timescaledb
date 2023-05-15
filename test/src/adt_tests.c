@@ -19,6 +19,12 @@ TS_FUNCTION_INFO_V1(ts_test_adts);
 #define VEC_SCOPE static inline
 #include <adts/vec.h>
 
+/* We have to stub this for the unit tests. */
+#ifndef CheckCompressedData
+#define CheckCompressedData(X) Assert(X)
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
+#endif
+
 #include <adts/bit_array.h>
 
 static void

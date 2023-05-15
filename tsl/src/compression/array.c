@@ -244,7 +244,7 @@ array_compression_serialization_num_elements(ArrayCompressorSerializationInfo *i
 }
 
 char *
-bytes_serialize_array_compressor_and_advance(char *dst, Size dst_size,
+bytes_serialize_array_compressor_and_advance(char *dst, PG_USED_FOR_ASSERTS_ONLY Size dst_size,
 											 ArrayCompressorSerializationInfo *info)
 {
 	uint32 sizes_bytes = simple8brle_serialized_total_size(info->sizes);
@@ -310,33 +310,29 @@ array_compressor_finish(ArrayCompressor *compressor)
  ******************/
 
 static ArrayCompressedData
-array_compressed_data_from_bytes(const char *serialized_data, Size data_size, Oid element_type,
-								 bool has_nulls)
+array_compressed_data_from_bytes(StringInfo serialized_data, Oid element_type, bool has_nulls)
 {
 	ArrayCompressedData data = { .element_type = element_type };
 
 	if (has_nulls)
 	{
-		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&serialized_data);
-		data.nulls = nulls;
-		data_size -= simple8brle_serialized_total_size(nulls);
+		data.nulls = bytes_deserialize_simple8b_and_advance(serialized_data);
 	}
 
-	data.sizes = bytes_deserialize_simple8b_and_advance(&serialized_data);
-	data_size -= simple8brle_serialized_total_size(data.sizes);
+	data.sizes = bytes_deserialize_simple8b_and_advance(serialized_data);
 
-	data.data = serialized_data;
-	data.data_len = data_size;
+	data.data = serialized_data->data + serialized_data->cursor;
+	data.data_len = serialized_data->len - serialized_data->cursor;
 
 	return data;
 }
 
 DecompressionIterator *
-array_decompression_iterator_alloc_forward(const char *serialized_data, Size data_size,
-										   Oid element_type, bool has_nulls)
+array_decompression_iterator_alloc_forward(StringInfo serialized_data, Oid element_type,
+										   bool has_nulls)
 {
 	ArrayCompressedData data =
-		array_compressed_data_from_bytes(serialized_data, data_size, element_type, has_nulls);
+		array_compressed_data_from_bytes(serialized_data, element_type, has_nulls);
 
 	ArrayDecompressionIterator *iterator = palloc(sizeof(*iterator));
 	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_ARRAY;
@@ -361,23 +357,17 @@ array_decompression_iterator_alloc_forward(const char *serialized_data, Size dat
 DecompressionIterator *
 tsl_array_decompression_iterator_from_datum_forward(Datum compressed_array, Oid element_type)
 {
-	ArrayCompressed *compressed_array_header;
-	uint32 data_size;
-	const char *compressed_data = (void *) PG_DETOAST_DATUM(compressed_array);
+	void *compressed_data = (void *) PG_DETOAST_DATUM(compressed_array);
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
 
-	compressed_array_header = (ArrayCompressed *) compressed_data;
-	compressed_data += sizeof(*compressed_array_header);
+	ArrayCompressed *compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
-
-	data_size = VARSIZE(compressed_array_header);
-	data_size -= sizeof(*compressed_array_header);
 
 	if (element_type != compressed_array_header->element_type)
 		elog(ERROR, "trying to decompress the wrong type");
 
-	return array_decompression_iterator_alloc_forward(compressed_data,
-													  data_size,
+	return array_decompression_iterator_alloc_forward(&si,
 													  compressed_array_header->element_type,
 													  compressed_array_header->has_nulls == 1);
 }
@@ -435,27 +425,22 @@ DecompressionIterator *
 tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid element_type)
 {
 	ArrayCompressed *compressed_array_header;
-	uint32 data_size;
 	ArrayCompressedData array_compressed_data;
 	ArrayDecompressionIterator *iterator = palloc(sizeof(*iterator));
-	const char *compressed_data = (void *) PG_DETOAST_DATUM(compressed_array);
 	iterator->base.compression_algorithm = COMPRESSION_ALGORITHM_ARRAY;
 	iterator->base.forward = false;
 	iterator->base.element_type = element_type;
 	iterator->base.try_next = array_decompression_iterator_try_next_reverse;
 
-	compressed_array_header = (ArrayCompressed *) compressed_data;
-	compressed_data += sizeof(*compressed_array_header);
+	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
+	compressed_array_header = consumeCompressedData(&si, sizeof(ArrayCompressed));
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	if (element_type != compressed_array_header->element_type)
 		elog(ERROR, "trying to decompress the wrong type");
 
-	data_size = VARSIZE(compressed_array_header);
-	data_size -= sizeof(*compressed_array_header);
-
-	array_compressed_data = array_compressed_data_from_bytes(compressed_data,
-															 data_size,
+	array_compressed_data = array_compressed_data_from_bytes(&si,
 															 compressed_array_header->element_type,
 															 compressed_array_header->has_nulls);
 
@@ -572,20 +557,24 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 }
 
 void
-array_compressed_data_send(StringInfo buffer, const char *serialized_data, Size data_size,
+array_compressed_data_send(StringInfo buffer, const char *_serialized_data, Size _data_size,
 						   Oid element_type, bool has_nulls)
 {
-	ArrayCompressedData data;
-	DecompressionIterator *data_iter;
 	DecompressResult datum;
 	DatumSerializer *serializer = create_datum_serializer(element_type);
 	BinaryStringEncoding encoding = datum_serializer_binary_string_encoding(serializer);
 
-	data = array_compressed_data_from_bytes(serialized_data, data_size, element_type, has_nulls);
+	StringInfoData si = { .data = (char *) _serialized_data, .len = _data_size };
+	ArrayCompressedData array_compressed_data =
+		array_compressed_data_from_bytes(&si, element_type, has_nulls);
 
-	pq_sendbyte(buffer, data.nulls != NULL);
-	if (data.nulls != NULL)
-		simple8brle_serialized_send(buffer, data.nulls);
+	si.cursor = 0;
+	DecompressionIterator *data_iter =
+		array_decompression_iterator_alloc_forward(&si, element_type, has_nulls);
+
+	pq_sendbyte(buffer, array_compressed_data.nulls != NULL);
+	if (array_compressed_data.nulls != NULL)
+		simple8brle_serialized_send(buffer, array_compressed_data.nulls);
 
 	pq_sendbyte(buffer, encoding == BINARY_ENCODING);
 
@@ -595,11 +584,7 @@ array_compressed_data_send(StringInfo buffer, const char *serialized_data, Size 
 	 * to send the number of elements, which is always the same as the number
 	 * of sizes.
 	 */
-	pq_sendint32(buffer, data.sizes->num_elements);
-	data_iter = array_decompression_iterator_alloc_forward(serialized_data,
-														   data_size,
-														   element_type,
-														   has_nulls);
+	pq_sendint32(buffer, array_compressed_data.sizes->num_elements);
 	for (datum = array_decompression_iterator_try_next_forward(data_iter); !datum.is_done;
 		 datum = array_decompression_iterator_try_next_forward(data_iter))
 	{
