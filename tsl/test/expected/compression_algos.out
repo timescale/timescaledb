@@ -1550,8 +1550,8 @@ from ts_read_compressed_data_directory('gorilla', 'float8', (:'TEST_INPUT_DIR' |
 group by 2 order by 1 desc;
  count | result 
 -------+--------
-   521 | XX001
-   214 | true
+   657 | XX001
+    78 | true
     72 | 08P01
      2 | false
 (4 rows)
