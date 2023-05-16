@@ -410,9 +410,9 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 
-	bool has_nulls = header->has_nulls == 1;
+	const bool has_nulls = header->has_nulls == 1;
 
-	Assert(header->has_nulls == 0 || header->has_nulls == 1);
+	CheckCompressedData(has_nulls == 0 || has_nulls == 1);
 
 	*iter = (DeltaDeltaDecompressionIterator){
 		.base = {
@@ -533,7 +533,7 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 
 		if (result.val != 0)
 		{
-			Assert(result.val == 1);
+			CheckCompressedData(result.val == 1);
 			return (DecompressResultInternal){
 				.is_null = true,
 			};

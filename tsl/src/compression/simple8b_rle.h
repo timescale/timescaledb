@@ -211,7 +211,9 @@ simple8brle_serialized_recv(StringInfo buffer)
 {
 	uint32 i;
 	uint32 num_elements = pq_getmsgint32(buffer);
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	uint32 num_blocks = pq_getmsgint32(buffer);
+	CheckCompressedData(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(num_blocks);
 	Simple8bRleSerialized *data;
 	Size compressed_size =
@@ -652,6 +654,9 @@ simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIter
 			simple8brle_block_create(bit_array_iter_next(&iter->selectors,
 														 SIMPLE8B_BITS_PER_SELECTOR),
 									 iter->compressed_data[iter->current_compressed_pos]);
+		CheckCompressedData(iter->current_block.selector != 0);
+		CheckCompressedData(iter->current_block.num_elements_compressed <=
+							GLOBAL_MAX_ROWS_PER_COMPRESSION);
 		iter->current_compressed_pos += 1;
 		iter->current_in_compressed_pos = 0;
 	}
@@ -735,7 +740,7 @@ simple8brle_block_create_rle(uint32 rle_count, uint64 rle_val)
 	};
 }
 
-static inline Simple8bRleBlock
+static pg_attribute_always_inline Simple8bRleBlock
 simple8brle_block_create(uint8 selector, uint64 data)
 {
 	Simple8bRleBlock block = (Simple8bRleBlock){
@@ -743,11 +748,9 @@ simple8brle_block_create(uint8 selector, uint64 data)
 		.data = data,
 	};
 
-	CheckCompressedData(block.selector != 0);
 	if (simple8brle_selector_is_rle(block.selector))
 	{
 		block.num_elements_compressed = simple8brle_rledata_repeatcount(block.data);
-		CheckCompressedData(block.num_elements_compressed <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	}
 	else
 	{
@@ -820,7 +823,7 @@ simple8brle_block_get_element(Simple8bRleBlock block, uint32 position_in_value)
  ***  Utility Functions  ***
  ***************************/
 
-static inline bool
+static pg_attribute_always_inline bool
 simple8brle_selector_is_rle(uint8 selector)
 {
 	return selector == SIMPLE8B_RLE_SELECTOR;

@@ -2060,182 +2060,102 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	table_close(in_rel, NoLock);
 }
 
+#if !defined(NDEBUG) || defined(TS_COMPRESSION_FUZZING)
+
+static int
+get_compression_algorithm(char *name)
+{
+	if (pg_strcasecmp(name, "deltadelta") == 0)
+	{
+		return COMPRESSION_ALGORITHM_DELTADELTA;
+	}
+	else if (pg_strcasecmp(name, "gorilla") == 0)
+	{
+		return COMPRESSION_ALGORITHM_GORILLA;
+	}
+
+	ereport(ERROR, (errmsg("unknown comrpession algorithm %s", name)));
+	return _INVALID_COMPRESSION_ALGORITHM;
+}
+
+#define FUNCTION_NAME_HELPER(X, Y) decompress_##X##_##Y
+#define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
+
+#define TOSTRING_HELPER(x) #x
+#define TOSTRING(x) TOSTRING_HELPER(x)
+
 /* Try to decompress the given compressed data. Used for fuzzing. */
-static int
-test_one_input_throw(const uint8 *Data, size_t Size)
+#define DECOMPRESS_FN                                                                              \
+	static int FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size)                          \
+	{                                                                                              \
+		StringInfoData si = { .data = (char *) Data, .len = Size };                                \
+                                                                                                   \
+		int algo = pq_getmsgbyte(&si);                                                             \
+                                                                                                   \
+		CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);                       \
+                                                                                                   \
+		if (algo != get_compression_algorithm(TOSTRING(ALGO)))                                     \
+		{                                                                                          \
+			/*                                                                                     \
+			 * It's convenient to fuzz only one algorithm at a time. We specialize                 \
+			 * the fuzz target for one algorithm, so that the fuzzer doesn't waste                 \
+			 * time discovering others from scratch.                                               \
+			 */                                                                                    \
+			return -1;                                                                             \
+		}                                                                                          \
+                                                                                                   \
+		Datum compressed_data = definitions[algo].compressed_data_recv(&si);                       \
+		DecompressionIterator *iter =                                                              \
+			definitions[algo].iterator_init_forward(compressed_data, PGTYPE);                      \
+                                                                                                   \
+		int n = 0;                                                                                 \
+		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))      \
+		{                                                                                          \
+			n++;                                                                                   \
+		}                                                                                          \
+                                                                                                   \
+		return n;                                                                                  \
+	}
+
+#define ALGO gorilla
+#define CTYPE float8
+#define PGTYPE FLOAT8OID
+DECOMPRESS_FN
+#undef ALGO
+#undef CTYPE
+#undef PGTYPE
+
+#define ALGO deltadelta
+#define CTYPE int64
+#define PGTYPE INT8OID
+DECOMPRESS_FN
+#undef ALGO
+#undef CTYPE
+#undef PGTYPE
+
+#undef TOSTRING
+#undef TOSTRING_HELPER
+
+#undef FUNCTION_NAME
+#undef FUNCTION_NAME_HELPER
+
+static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size)
 {
-	StringInfoData si = { .data = (char *) Data, .len = Size };
-
-	int algo = pq_getmsgbyte(&si);
-
-	CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
-
-	/* Only for Gorilla for now. */
-	if (algo == COMPRESSION_ALGORITHM_GORILLA)
+	if (algo == COMPRESSION_ALGORITHM_GORILLA && type == FLOAT8OID)
 	{
-		return -1;
-
-		Datum compressed_data = definitions[algo].compressed_data_recv(&si);
-		DecompressionIterator *iter =
-				definitions[algo].iterator_init_forward(compressed_data, FLOAT8OID);
-
-		ArrowArray *arrow =
-				tsl_try_decompress_all(algo, compressed_data, FLOAT8OID);
-
-		int i = 0;
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-		{
-			if (i >= arrow->length)
-			{
-				elog(ERROR, "the decompression result does not match");
-			}
-
-			if (r.is_null)
-			{
-				if (arrow_validity_bitmap_get(arrow->buffers[0], i))
-				{
-					elog(ERROR, "the decompression result does not match");
-				}
-			}
-			else
-			{
-				if (!arrow_validity_bitmap_get(arrow->buffers[0], i)
-				 || ((float8 *) arrow->buffers[1])[i] != DatumGetFloat8(r.val))
-				{
-					elog(ERROR, "the decompression result does not match");
-				}
-			}
-
-			i++;
-		}
-
-		if (i != arrow->length)
-		{
-			elog(ERROR, "the decompression result does not match");
-		}
-
-		return 0;
+		return decompress_gorilla_float8;
 	}
-	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA)
+	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA && type == INT8OID)
 	{
-		Datum compressed_data = definitions[algo].compressed_data_recv(&si);
-		DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, INT8OID);
-
-		ArrowArray *arrow = tsl_try_decompress_all(algo, compressed_data, INT8OID);
-
-		int i = 0;
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-		{
-			if (i >= arrow->length)
-			{
-				elog(ERROR, "the decompression result does not match");
-			}
-
-			if (r.is_null)
-			{
-				if (arrow_validity_bitmap_get(arrow->buffers[0], i))
-				{
-					elog(ERROR, "the decompression result does not match");
-				}
-			}
-			else
-			{
-				if (!arrow_validity_bitmap_get(arrow->buffers[0], i))
-				{
-					elog(ERROR, "the decompression result does not match");
-				}
-
-				if (((int64 *) arrow->buffers[1])[i] != DatumGetInt64(r.val))
-				{
-					elog(ERROR, "the decompression result does not match");
-				}
-			}
-
-			i++;
-		}
-
-		if (i != arrow->length)
-		{
-			elog(ERROR, "the decompression result does not match");
-		}
-
-		return 0;
+		return decompress_deltadelta_int64;
 	}
 
-	return -1;
+	elog(ERROR,
+		 "no decompression function for compression algorithm %d with element type %d",
+		 algo,
+		 type);
+	return NULL;
 }
-
-#ifdef TS_COMPRESSION_FUZZING
-
-/*
- * This is our test function that will be called by the libfuzzer driver. It
- * has to catch the postgres exceptions normally produced for corrupt data.
- */
-static int
-LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
-{
-	MemoryContextReset(CurrentMemoryContext);
-
-	PG_TRY();
-	{
-		CHECK_FOR_INTERRUPTS();
-		return test_one_input_throw(Data, Size);
-	}
-	PG_CATCH();
-	{
-		if(geterrcode() == ERRCODE_INTERNAL_ERROR)
-		{
-			EmitErrorReport();
-			int encoded_len = pg_b64_enc_len(Size);
-			char *encoded = palloc(encoded_len + 1);
-			encoded_len = pg_b64_encode_compat((char *) Data, Size, encoded, encoded_len);
-			encoded[encoded_len] = '\0';
-			fprintf(stderr, "base64 encoded fuzzing input:\n%s\n", encoded);
-			abort();
-		}
-
-		FlushErrorState();
-		return -1;
-	}
-	PG_END_TRY();
-}
-
-/*
- * This is the libfuzzer fuzzing driver. It will run our test functions with
- * random inputs.
- */
-extern int LLVMFuzzerRunDriver(int *argc, char ***argv,
-							   int (*UserCb)(const uint8_t *Data, size_t Size));
-
-TS_FUNCTION_INFO_V1(ts_fuzz_compression);
-
-Datum
-ts_fuzz_compression(PG_FUNCTION_ARGS)
-{
-	MemoryContext fuzzing_context =
-		AllocSetContextCreate(CurrentMemoryContext, "fuzzing", 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
-	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
-
-	char *argvdata[] = { "PostgresFuzzer",
-						 "-verbosity=1",
-						 "-timeout=1",
-						 "-report_slow_units=1",
-						 "-use_value_profile=1",
-						 "-reload=1",
-						 "-runs=1",
-						 "corpus" /* in the database directory */,
-						 NULL };
-	char **argv = argvdata;
-	int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
-
-	int res = LLVMFuzzerRunDriver(&argc, &argv, LLVMFuzzerTestOneInput);
-
-	MemoryContextSwitchTo(old_context);
-
-	PG_RETURN_INT32(res);
-}
-
-#endif
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 
@@ -2243,7 +2163,7 @@ TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
 Datum
 ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 {
-	char *name = PG_GETARG_CSTRING(0);
+	char *name = PG_GETARG_CSTRING(2);
 	FILE *f = fopen(name, "r");
 
 	if (!f)
@@ -2254,6 +2174,15 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	fseek(f, 0, SEEK_END);
 	const size_t fsize = ftell(f);
 	fseek(f, 0, SEEK_SET); /* same as rewind(f); */
+
+	if (fsize == 0)
+	{
+		/*
+		 * Skip empty data, because we'll just get "no data left in message"
+		 * right away.
+		 */
+		return 0;
+	}
 
 	char *string = palloc(fsize + 1);
 	size_t elements_read = fread(string, fsize, 1, f);
@@ -2267,7 +2196,11 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 
 	string[fsize] = 0;
 
-	int res = test_one_input_throw((const uint8 *) string, fsize);
+	int algo = get_compression_algorithm(PG_GETARG_CSTRING(0));
+
+	Oid type = PG_GETARG_OID(1);
+
+	int res = get_decompress_fn(algo, type)((const uint8 *) string, fsize);
 
 	PG_RETURN_INT32(res);
 }
@@ -2276,58 +2209,121 @@ TS_FUNCTION_INFO_V1(ts_read_compressed_data_directory);
 
 /*
  * Read and decomrpess all compressed data files from directory. Useful for
- * checking the fuzzing corpora in the regression tests.
+ * checking the fuzzing corpuses in the regression tests.
  */
 Datum
 ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 {
-	char *name = PG_GETARG_CSTRING(0);
-	DIR *dp;
-	struct dirent *ep;
-	dp = opendir(name);
-
-	if (!dp)
+	struct user_context
 	{
-		elog(ERROR, "could not open directory '%s'", name);
+		DIR *dp;
+		struct dirent *ep;
+	};
+
+	char *name = PG_GETARG_CSTRING(2);
+
+	FuncCallContext *funcctx;
+	struct user_context *c;
+	MemoryContext call_memory_context = CurrentMemoryContext;
+
+	/* stuff done only on the first call of the function */
+	if (SRF_IS_FIRSTCALL())
+	{
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		/* switch to memory context appropriate for multiple function calls */
+		MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* total number of tuples to be returned */
+		funcctx->max_calls = PG_GETARG_INT32(0);
+
+		/* Build a tuple descriptor for our result type */
+		if (get_call_result_type(fcinfo, NULL, &funcctx->tuple_desc) != TYPEFUNC_COMPOSITE)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+
+		/*
+		 * generate attribute metadata needed later to produce tuples from raw
+		 * C strings
+		 */
+		funcctx->attinmeta = TupleDescGetAttInMetadata(funcctx->tuple_desc);
+
+		funcctx->user_fctx = palloc(sizeof(struct user_context));
+		c = funcctx->user_fctx;
+
+		c->dp = opendir(name);
+
+		if (!c->dp)
+		{
+			elog(ERROR, "could not open directory '%s'", name);
+		}
+
+		MemoryContextSwitchTo(call_memory_context);
 	}
 
-	int n = 0;
-	while ((ep = readdir(dp)))
+	funcctx = SRF_PERCALL_SETUP();
+	c = (struct user_context *) funcctx->user_fctx;
+
+	Datum values[4] = { 0 };
+	bool nulls[4] = { 0 };
+
+	while ((c->ep = readdir(c->dp)))
 	{
-		if (ep->d_name[0] == '.')
+		if (c->ep->d_name[0] == '.')
 		{
 			continue;
 		}
 
-		char *path = psprintf("%s/%s", name, ep->d_name);
+		char *path = psprintf("%s/%s", name, c->ep->d_name);
+
+		/* The return values are: path, ret, sqlstate, status, location. */
+		values[0] = PointerGetDatum(cstring_to_text(path));
+		nulls[1] = true;
+		nulls[2] = true;
+		nulls[3] = true;
 
 		PG_TRY();
 		{
-			DirectFunctionCall1(ts_read_compressed_data_file, CStringGetDatum(path));
+			int res = DatumGetInt32(DirectFunctionCall3(ts_read_compressed_data_file,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1),
+														CStringGetDatum(path)));
+			values[1] = Int32GetDatum(res);
+			nulls[1] = false;
 		}
 		PG_CATCH();
 		{
-			if (geterrcode() == ERRCODE_DATA_CORRUPTED)
+			MemoryContextSwitchTo(call_memory_context);
+
+			ErrorData *error = CopyErrorData();
+
+			values[2] = PointerGetDatum(cstring_to_text(unpack_sql_state(error->sqlerrcode)));
+			nulls[2] = false;
+
+			if (error->filename)
 			{
-				/*
-				 * We're testing the corrupt data handling, so we don't care about
-				 * these errors.
-				 */
-				FlushErrorState();
+				values[3] = PointerGetDatum(
+					cstring_to_text(psprintf("%s:%d", error->filename, error->lineno)));
+				nulls[3] = false;
 			}
-			else
-			{
-				errdetail("While processing file '%s'.", path);
-				PG_RE_THROW();
-			}
+
+			FlushErrorState();
 		}
 		PG_END_TRY();
-		n++;
+
+		SRF_RETURN_NEXT(funcctx,
+						HeapTupleGetDatum(heap_form_tuple(funcctx->tuple_desc, values, nulls)));
 	}
 
-	(void) closedir(dp);
-	PG_RETURN_INT32(n);
+	(void) closedir(c->dp);
+
+	SRF_RETURN_DONE(funcctx);
 }
+
+#endif
 
 #if PG14_GE
 static SegmentFilter *
