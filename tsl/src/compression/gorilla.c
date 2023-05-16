@@ -16,7 +16,7 @@
 
 #include "compression/compression.h"
 #include "compression/gorilla.h"
-
+#include "float_utils.h"
 #include "adts/bit_array.h"
 #include "compression/simple8b_rle.h"
 #include "compression/simple8b_rle_bitmap.h"

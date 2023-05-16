@@ -14,6 +14,10 @@
 #include <lib/stringinfo.h>
 
 #include <access/heapam.h>
+#include <utils/relcache.h>
+
+typedef struct BulkInsertStateData *BulkInsertState;
+
 #include <nodes/execnodes.h>
 #include <utils/date.h>
 #include <utils/lsyscache.h>
