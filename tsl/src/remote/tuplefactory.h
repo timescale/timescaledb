@@ -21,6 +21,7 @@ typedef struct TupleDescData *TupleDesc;
 extern TupleFactory *tuplefactory_create_for_tupdesc(TupleDesc tupdesc, bool force_text);
 extern TupleFactory *tuplefactory_create_for_rel(Relation rel, List *retrieved_attrs);
 extern TupleFactory *tuplefactory_create_for_scan(ScanState *ss, List *retrieved_attrs);
+extern void tuplefactory_destroy(TupleFactory *tf);
 extern HeapTuple tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format);
 extern ItemPointer tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row,
 												   int format, Datum *values, bool *nulls);

@@ -218,7 +218,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | metadata                                         | table | super_user
  _timescaledb_catalog | remote_txn                                       | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user
-(24 rows)
+ _timescaledb_catalog | telemetry_event                                  | table | super_user
+(25 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

@@ -973,6 +973,21 @@ DELETE FROM tab1 WHERE tab1.device_id = 1;
 SELECT count(*) FROM tab1 WHERE device_id = 1;
 ROLLBACK;
 
+-- github issue 5658
+-- verify that bitmap heap scans work on all the correct data and
+-- none of it left over after the dml command
+BEGIN;
+SELECT count(*) FROM tab1 WHERE device_id = 1;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 1000, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT count(*) FROM tab1 WHERE device_id = 1;
+ANALYZE tab1;
+SET enable_seqscan = off;
+SET enable_indexscan = off;
+EXPLAIN (costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
+DELETE FROM tab1 WHERE tab1.device_id = 1;
+SELECT count(*) FROM tab1 WHERE device_id = 1;
+ROLLBACK;
+
 -- create hypertable with space partitioning and compression
 CREATE TABLE tab2(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 CREATE INDEX ON tab2(time);

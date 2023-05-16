@@ -199,3 +199,34 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 ALTER TABLE _timescaledb_config.bgw_job
     ALTER COLUMN owner SET DEFAULT current_role::regrole;
+
+-- Rebuild the _timescaledb_catalog.continuous_agg_migrate_plan_step definition
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
+    DROP CONSTRAINT continuous_agg_migrate_plan_step_mat_hypertable_id_fkey;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+CREATE TABLE _timescaledb_catalog._tmp_continuous_agg_migrate_plan AS SELECT mat_hypertable_id, start_ts, end_ts FROM _timescaledb_catalog.continuous_agg_migrate_plan;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+
+CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
+  mat_hypertable_id integer NOT NULL,
+  start_ts TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
+  end_ts TIMESTAMPTZ,
+  -- table constraints
+  CONSTRAINT continuous_agg_migrate_plan_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id)
+);
+
+INSERT INTO _timescaledb_catalog.continuous_agg_migrate_plan SELECT * FROM _timescaledb_catalog._tmp_continuous_agg_migrate_plan;
+DROP TABLE _timescaledb_catalog._tmp_continuous_agg_migrate_plan;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
+    ADD CONSTRAINT continuous_agg_migrate_plan_step_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg_migrate_plan (mat_hypertable_id) ON DELETE CASCADE;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_migrate_plan', '');
+
+GRANT SELECT ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO PUBLIC;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.telemetry_event;
+
+DROP TABLE IF EXISTS _timescaledb_catalog.telemetry_event;

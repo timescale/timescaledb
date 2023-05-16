@@ -24,6 +24,7 @@
 #include <storage/sinvaladt.h>
 #include <utils/acl.h>
 #include <utils/elog.h>
+#include <executor/execdebug.h>
 #include <utils/jsonb.h>
 #include <utils/snapmgr.h>
 #include <unistd.h>
@@ -1205,7 +1206,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		if (job != NULL)
 		{
 			pfree(job);
-			job = NULL;
 		}
 
 		/*
@@ -1227,7 +1227,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
 			pfree(job);
-			job = NULL;
 		}
 
 		/*
@@ -1317,7 +1316,7 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 								  Interval *next_interval, bool atomic, bool mark)
 {
 	BgwJobStat *job_stat;
-	bool had_error;
+	bool result;
 
 	if (atomic)
 		StartTransactionCommand();
@@ -1325,10 +1324,10 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 	if (mark)
 		ts_bgw_job_stat_mark_start(job->fd.id);
 
-	had_error = func();
+	result = func();
 
 	if (mark)
-		ts_bgw_job_stat_mark_end(job, had_error ? JOB_FAILURE : JOB_SUCCESS);
+		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE);
 
 	/* Now update next_start. */
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
@@ -1351,7 +1350,7 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 	if (atomic)
 		CommitTransactionCommand();
 
-	return had_error;
+	return result;
 }
 
 /* Insert a new job in the bgw_job relation */

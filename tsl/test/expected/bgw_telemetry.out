@@ -28,7 +28,7 @@ SELECT last_finish > :'last_finish' AS job_executed,
  WHERE job_id = :job_id;
  job_executed | last_run_success 
 --------------+------------------
- t            | t
+ t            | f
 (1 row)
 
 -- Running it as the default user should fail since they do not own

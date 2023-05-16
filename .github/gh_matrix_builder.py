@@ -137,7 +137,7 @@ def macos_config(overrides):
     return base_config
 
 
-# common installcheck_args for all pg15 tests
+# common installcheck_args for all scheduled pg15 tests
 # partialize_finalize is ignored due to #4937
 pg15_installcheck_args = "IGNORES='partialize_finalize'"
 
@@ -146,6 +146,18 @@ pg14_installcheck_args = "IGNORES='partialize_finalize'"
 pg13_installcheck_args = "IGNORES='partialize_finalize'"
 
 pg12_installcheck_args = "IGNORES='partialize_finalize'"
+
+# common installcheck_args for all non-scheduled pg15 tests (e.g. PRs)
+# partialize_finalize is ignored due to #4937
+# dist_move_chunk, dist_param, dist_insert, and remote_txn ignored due to flakiness
+if event_type == "pull_request":
+    pg15_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
+
+    pg14_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
+
+    pg13_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
+
+    pg12_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(

@@ -2549,8 +2549,13 @@ build_update_delete_scankeys(RowDecompressor *decompressor, List *filters, int *
  * This method will:
  *  1.scan compressed chunk
  *  2.decompress the row
- *  3.insert decompressed rows to uncompressed chunk
- *  4.delete this row from compressed chunk
+ *  3.delete this row from compressed chunk
+ *  4.insert decompressed rows to uncompressed chunk
+ *
+ * Return value:
+ * if all 4 steps defined above pass set chunk_status_changed to true and return true
+ * if step 4 fails return false. Step 3 will fail if there are conflicting concurrent operations on
+ * same chunk.
  */
 static bool
 decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
@@ -2591,7 +2596,6 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 						  decompressor->compressed_datums,
 						  decompressor->compressed_is_nulls);
 
-		row_decompressor_decompress_row(decompressor, NULL);
 		TM_FailureData tmfd;
 		TM_Result result;
 		result = table_tuple_delete(decompressor->in_rel,
@@ -2603,19 +2607,49 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 									&tmfd,
 									false);
 
-		if (result == TM_Updated || result == TM_Deleted)
+		switch (result)
 		{
-			if (IsolationUsesXactSnapshot())
-				ereport(ERROR,
-						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-						 errmsg("could not serialize access due to concurrent update")));
-			return false;
+			/* If the tuple has been already deleted, most likely somebody
+			 * decompressed the tuple already */
+			case TM_Deleted:
+			{
+				if (IsolationUsesXactSnapshot())
+				{
+					/* For Repeatable Read isolation level report error */
+					table_endscan(heapScan);
+					ereport(ERROR,
+							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+							 errmsg("could not serialize access due to concurrent update")));
+				}
+				continue;
+			}
+			break;
+			/*
+			 * If another transaction is updating the compressed data,
+			 * we have to abort the transaction to keep consistency.
+			 */
+			case TM_Updated:
+			{
+				table_endscan(heapScan);
+				elog(ERROR, "tuple concurrently updated");
+			}
+			break;
+			case TM_Invisible:
+			{
+				table_endscan(heapScan);
+				elog(ERROR, "attempted to lock invisible tuple");
+			}
+			break;
+			case TM_Ok:
+				break;
+			default:
+			{
+				table_endscan(heapScan);
+				elog(ERROR, "unexpected tuple operation result: %d", result);
+			}
+			break;
 		}
-		if (result == TM_Invisible)
-		{
-			elog(ERROR, "attempted to lock invisible tuple");
-			return false;
-		}
+		row_decompressor_decompress_row(decompressor, NULL);
 		*chunk_status_changed = true;
 	}
 	if (scankeys)
@@ -2712,6 +2746,7 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 {
 	RangeTblEntry *rte = NULL;
 	bool needs_decompression = false;
+	bool should_rescan = false;
 	List *predicates = NIL;
 	Chunk *current_chunk;
 	if (ps == NULL)
@@ -2732,9 +2767,13 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 			needs_decompression = true;
 			break;
 		}
+		case T_BitmapHeapScanState:
+			predicates = list_union(((BitmapHeapScan *) ps->plan)->bitmapqualorig, ps->plan->qual);
+			needs_decompression = true;
+			should_rescan = true;
+			break;
 		case T_SeqScanState:
 		case T_SampleScanState:
-		case T_BitmapHeapScanState:
 		case T_TidScanState:
 		case T_TidRangeScanState:
 		{
@@ -2767,6 +2806,24 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
 				decompress_batches_for_update_delete(current_chunk, predicates);
+
+				/* This is a workaround specifically for bitmap heap scans:
+				 * during node initialization, initialize the scan state with the active snapshot
+				 * but since we are inserting data to be modified during the same query, they end up
+				 * missing that data by using a snapshot which doesn't account for this decompressed
+				 * data. To circumvent this issue, we change the internal scan state to use the
+				 * transaction snapshot and execute a rescan so the scan state is set correctly and
+				 * includes the new data.
+				 */
+				if (should_rescan)
+				{
+					ScanState *ss = ((ScanState *) ps);
+					if (ss && ss->ss_currentScanDesc)
+					{
+						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
+						ExecReScan(ps);
+					}
+				}
 			}
 		}
 	}

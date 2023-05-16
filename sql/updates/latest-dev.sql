@@ -55,3 +55,18 @@ ALTER FUNCTION _timescaledb_internal.rxid_out(@extschema@.rxid) SET SCHEMA _time
 
 ALTER TABLE _timescaledb_config.bgw_job
     ALTER COLUMN owner SET DEFAULT pg_catalog.quote_ident(current_role)::regrole;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan
+  ADD COLUMN user_view_definition TEXT,
+  DROP CONSTRAINT continuous_agg_migrate_plan_mat_hypertable_id_fkey;
+
+-- Log with events that will be sent out with the telemetry. The log
+-- will be flushed after it has been sent out. We do not save it to
+-- backups since it should not contain important data.
+CREATE TABLE _timescaledb_catalog.telemetry_event (
+       created timestamptz NOT NULL DEFAULT current_timestamp,
+       tag name NOT NULL,
+       body jsonb NOT NULL
+);
+
+GRANT SELECT ON _timescaledb_catalog.telemetry_event TO PUBLIC;
