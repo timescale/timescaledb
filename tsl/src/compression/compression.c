@@ -35,6 +35,7 @@
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
+#include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
@@ -152,7 +153,11 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
+#if PG16_LT
 	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
+#else
+	RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
+#endif
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
@@ -161,7 +166,11 @@ truncate_relation(Oid table_oid)
 	if (OidIsValid(toast_relid))
 	{
 		rel = table_open(toast_relid, AccessExclusiveLock);
+#if PG16_LT
 		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
+#else
+		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
+#endif
 		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
 		table_close(rel, NoLock);
 	}
