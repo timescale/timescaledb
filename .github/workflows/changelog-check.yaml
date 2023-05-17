@@ -30,11 +30,11 @@ jobs:
           fetch-depth: 0
       - name: Check CHANGELOG.md updated by pull request
         shell: bash --norc --noprofile {0}
+        env:
+          BODY: ${{ github.event.pull_request.body }}
         run: |
           diff=$(git diff --name-status origin/main | grep "CHANGELOG.md")
-          cat << "EOF" | egrep -qsi '^disable-check:.*\<force-changelog-changed\>'
-          ${{ github.event.pull_request.body }}
-          EOF
+          echo "$BODY" | egrep -qsi '^disable-check:.*\<force-changelog-changed\>'
           if [[ $? -ne 0 ]]; then
             if [[ $diff == '' ]]; then
               echo
