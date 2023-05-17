@@ -32,12 +32,10 @@ jobs:
         echo "GITHUB_CONTEXT: $GITHUB_CONTEXT"
     - name: Check number of commits
       shell: bash --norc --noprofile {0}
-      # If this becomes more advanced, we might be better of using,
-      # e.g., Perl.
+      env:
+        BODY: ${{ github.event.pull_request.body }}
       run: |
-        cat << "EOF" | egrep -qsi '^disable-check:.*\<commit-count\>'
-        ${{ github.event.pull_request.body }}
-        EOF
+        echo "$BODY" | egrep -qsi '^disable-check:.*\<commit-count\>'
         if [[ $? -ne 0 ]]; then
           base=${{ github.event.pull_request.base.sha }}
           head=${{ github.event.pull_request.head.sha }}
