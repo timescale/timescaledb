@@ -820,10 +820,18 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		relid = classform->oid;
 
 		/* check permissions of relation */
+#if PG16_LT
 		if (!vacuum_is_relation_owner(relid,
 									  classform,
 									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
 			continue;
+
+#else
+		if (!vacuum_is_permitted_for_relation(relid,
+											  classform,
+											  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+			continue;
+#endif
 
 		/*
 		 * We include partitioned tables here; depending on which operation is
