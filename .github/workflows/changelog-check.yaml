@@ -1,26 +1,27 @@
-name: Check CHANGELOG.md updated
+name: Check for changelog entry file
 "on":
   pull_request:
     types: [opened, synchronize, reopened, edited]
     # It's important to check that the changelog is updated with bug fixes that
     # we backport to the release branches, so these branches are included as
     # well.
-    branches: [main, '[0-9]+.[0-9]+.x']
+    branches: ["main", "[0-9]+.[0-9]+.x"]
 jobs:
-  # Check that the CHANGELOG is updated by the pull request. This can be
-  # disabled by adding a trailer line of the following form to the
-  # pull request message:
+  # Check if the PR creates a sperate file with changelog entry in the
+  # ".unreleased"  folder
   #
-  #    Disable-Check: force-changelog-changed
+  # This check can be disabled by adding the following line in the PR text
   #
-  # The check is case-insensitive and ignores other contents on the
-  # line as well, so it is possible to add several different checks if
-  # that is necessary.
+  # Disable-check: force-changelog-file
   #
-  # It is assumed that the trailer is following RFC2822 conventions,
-  # but this is currently not enforced.
-  check_changelog_update:
-    name: Check for CHANGELOG.md changes
+  # The file having the changelog entry is expected to have lines in the
+  # following format
+  #
+  # Fixes: #NNNN <bug description> (mandatory in case of bugfixes)
+  # Thanks: @name <thank you note> (optional)
+  # Implements: #NNNN <feature description> (mandatory in case of new features)
+  check_changelog_file:
+    name: Check for file with CHANGELOG entry
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -28,25 +29,43 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Check CHANGELOG.md updated by pull request
+      - name: Check if the pull request adds file in ".unreleased" folder
         shell: bash --norc --noprofile {0}
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
-          diff=$(git diff --name-status origin/main | grep "CHANGELOG.md")
-          echo "$BODY" | egrep -qsi '^disable-check:.*\<force-changelog-changed\>'
-          if [[ $? -ne 0 ]]; then
-            if [[ $diff == '' ]]; then
-              echo
-              echo "CHANGELOG.md not updated by pull request"
+          folder=".unreleased"
+
+          # Get the list of modified files in this pull request
+          files=$(git --no-pager diff --name-only HEAD $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}))
+
+          if  echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"; then
+            # skip changelog checks if forced
+            exit 0
+          else
+            # if no changelog files found, and the PR does not have the force disable check option
+            if ! echo "${files}" | grep -Eq "^(${folder})/.+$"; then
+              echo "PR does not add a change log file in .unlreased/ folder"
+              echo "Check .unlreased/template.rfc822 for the format of the change log file."
               echo
               echo "To disable changelog updated check, add this trailer to pull request message:"
               echo
-              echo "Disable-check: force-changelog-changed"
+              echo "Disable-check: force-changelog-file"
               echo
               echo "Trailers follow RFC2822 conventions, so no whitespace"
               echo "before field name and the check is case-insensitive for"
               echo "both the field name and the field body."
               exit 1
+            else
+              # check the format of the files in .unreleased folder
+              for file in $files; do
+                if echo "${file}" | grep -Eq "^(${folder})/.+$"; then
+                  if ! python scripts/check_changelog_format.py "$file"; then
+                    echo "Not valid CHANGELOG entries in $file."
+                    exit 1
+                  fi
+                fi
+              done
+              exit 0
             fi
           fi
