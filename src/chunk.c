@@ -47,6 +47,7 @@
 #include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
+#include "debug_assert.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
