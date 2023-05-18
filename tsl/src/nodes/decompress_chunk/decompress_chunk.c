@@ -125,7 +125,9 @@ append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_in
 
 	em->em_expr = (Expr *) var;
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
+#if PG16_LT
 	em->em_nullable_relids = NULL;
+#endif
 	em->em_is_const = false;
 	em->em_is_child = false;
 	em->em_datatype = INT4OID;
@@ -138,7 +140,9 @@ append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_in
 	newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	newec->ec_has_const = false;
 	newec->ec_has_volatile = false;
+#if PG16_LT
 	newec->ec_below_outer_join = false;
+#endif
 	newec->ec_broken = false;
 	newec->ec_sortref = 0;
 	newec->ec_min_security = UINT_MAX;
@@ -1148,10 +1152,12 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 			decompress_chunk_adjust_child_relids(oldinfo->outer_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
+#if PG16_LT
 		newinfo->nullable_relids =
 			decompress_chunk_adjust_child_relids(oldinfo->nullable_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
+#endif
 		newinfo->left_relids = decompress_chunk_adjust_child_relids(oldinfo->left_relids,
 																	context->chunk_rel->relid,
 																	context->compressed_rel->relid);
@@ -1349,7 +1355,6 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 	{
 		Expr *child_expr;
 		Relids new_relids;
-		Relids new_nullable_relids;
 		EquivalenceMember *cur_em = (EquivalenceMember *) lfirst(lc);
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
@@ -1397,28 +1402,31 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		new_relids = bms_difference(cur_em->em_relids, uncompressed_chunk_relids);
 		new_relids = bms_add_members(new_relids, info->compressed_rel->relids);
 
-		/*
-		 * And likewise for nullable_relids.  Note this code assumes
-		 * parent and child relids are singletons.
-		 */
-		new_nullable_relids = cur_em->em_nullable_relids;
-		if (bms_overlap(new_nullable_relids, uncompressed_chunk_relids))
-		{
-			new_nullable_relids = bms_difference(new_nullable_relids, uncompressed_chunk_relids);
-			new_nullable_relids =
-				bms_add_members(new_nullable_relids, info->compressed_rel->relids);
-		}
-
 		/* copied from add_eq_member */
 		{
 			EquivalenceMember *em = makeNode(EquivalenceMember);
 
 			em->em_expr = child_expr;
 			em->em_relids = new_relids;
-			em->em_nullable_relids = new_nullable_relids;
 			em->em_is_const = false;
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
+
+#if PG16_LT
+			/*
+			 * For versions less than PG16, transform and set em_nullable_relids similar to
+			 * em_relids. Note that this code assumes parent and child relids are singletons.
+			 */
+			Relids new_nullable_relids = cur_em->em_nullable_relids;
+			if (bms_overlap(new_nullable_relids, uncompressed_chunk_relids))
+			{
+				new_nullable_relids =
+					bms_difference(new_nullable_relids, uncompressed_chunk_relids);
+				new_nullable_relids =
+					bms_add_members(new_nullable_relids, info->compressed_rel->relids);
+			}
+			em->em_nullable_relids = new_nullable_relids;
+#endif
 
 			/*
 			 * In some cases the new EC member is likely to be accessed soon, so

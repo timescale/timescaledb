@@ -132,6 +132,9 @@
  *
  * https://github.com/postgres/postgres/commit/73fc2e5bab
  * https://github.com/postgres/postgres/commit/55dc86eca7
+ *
+ * PG16 removed outerjoin_delayed, nullable_relids arguments from make_restrictinfo
+ * https://github.com/postgres/postgres/commit/b448f1c8d8
  */
 
 #if PG14_LT
@@ -143,8 +146,27 @@
 #else
 #define pull_varnos_compat(root, expr) pull_varnos(root, expr)
 #define make_simple_restrictinfo_compat(root, clause) make_simple_restrictinfo(root, clause)
+#if PG16_LT
 #define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
 	make_restrictinfo(root, a, b, c, d, e, f, g, h)
+#else
+#define make_restrictinfo_compat(root,                                                             \
+								 clause,                                                           \
+								 is_pushed_down,                                                   \
+								 outerjoin_delayed,                                                \
+								 pseudoconstant,                                                   \
+								 security_level,                                                   \
+								 required_relids,                                                  \
+								 outer_relids,                                                     \
+								 nullable_relids)                                                  \
+	make_restrictinfo(root,                                                                        \
+					  clause,                                                                      \
+					  is_pushed_down,                                                              \
+					  pseudoconstant,                                                              \
+					  security_level,                                                              \
+					  required_relids,                                                             \
+					  outer_relids)
+#endif
 #endif
 
 /* PG14 renames predefined roles

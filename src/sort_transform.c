@@ -266,6 +266,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 			Oid type_oid = exprType((Node *) transformed_expr);
 			List *opfamilies = list_copy(orig->ec_opfamilies);
 
+#if PG16_LT
 			/*
 			 * if the transform already exists for even one member, assume
 			 * exists for all
@@ -279,6 +280,16 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 															   orig->ec_sortref,
 															   ec_mem->em_relids,
 															   false);
+#else
+			EquivalenceClass *exist = get_eclass_for_sort_expr(root,
+															   transformed_expr,
+															   opfamilies,
+															   type_oid,
+															   orig->ec_collation,
+															   orig->ec_sortref,
+															   ec_mem->em_relids,
+															   false);
+#endif
 
 			if (exist != NULL)
 			{
@@ -289,7 +300,9 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 
 			em->em_expr = transformed_expr;
 			em->em_relids = bms_copy(ec_mem->em_relids);
+#if PG16_LT
 			em->em_nullable_relids = bms_copy(ec_mem->em_nullable_relids);
+#endif
 			em->em_is_const = ec_mem->em_is_const;
 			em->em_is_child = ec_mem->em_is_child;
 			em->em_datatype = type_oid;
@@ -311,7 +324,9 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 				 * and should be propagated to the children.
 				 */
 				newec->ec_has_volatile = false;
+#if PG16_LT
 				newec->ec_below_outer_join = orig->ec_below_outer_join;
+#endif
 				newec->ec_broken = orig->ec_broken;
 				newec->ec_sortref = orig->ec_sortref;
 				newec->ec_merged = orig->ec_merged;
