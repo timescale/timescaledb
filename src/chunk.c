@@ -1691,10 +1691,19 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * ts_chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
+	Oid namespace_oid = get_namespace_oid(chunk->fd.schema_name.data, true);
+	Ensure(OidIsValid(namespace_oid), "namespace for schema %s has invalid OID", quote_identifier(NameStr(ht->fd.schema_name)));
+
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, true));
+										namespace_oid);
+	Ensure(OidIsValid(chunk->table_id), "namespace for chunk %s.%s has invalid OID", quote_identifier(NameStr(ht->fd.schema_name)),quote_identifier(NameStr(ht->fd.table_name)));
+
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
+	Ensure(OidIsValid(chunk->hypertable_relid), "hypertable for chunk %s.%s has invalid OID", quote_identifier(NameStr(ht->fd.schema_name)),quote_identifier(NameStr(ht->fd.table_name)));
+
 	chunk->relkind = get_rel_relkind(chunk->table_id);
+
+	Ensure(relkind > 0, "relkind(%d) for chunk %s.%s is invalid ", chunk->relkind,quote_identifier(NameStr(ht->fd.schema_name)),quote_identifier(NameStr(ht->fd.table_name)));
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE && !IS_OSM_CHUNK(chunk))
 		chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);

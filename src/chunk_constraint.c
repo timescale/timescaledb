@@ -594,6 +594,7 @@ ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, 
 	ts_scanner_foreach(&iterator)
 	{
 		num_found++;
+		Assert(num_found <= num_constraints_hint);
 		ts_chunk_constraints_add_from_tuple(constraints, ts_scan_iterator_tuple_info(&iterator));
 	}
 
