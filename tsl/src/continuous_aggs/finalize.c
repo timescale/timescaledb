@@ -9,6 +9,9 @@
  * Continuous Aggregates (with partials)
  */
 #include "finalize.h"
+
+#include <parser/parse_relation.h>
+
 #include "create.h"
 #include "common.h"
 #include <partialize_finalize.h>
@@ -609,6 +612,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	ListCell *lc;
 	FromExpr *fromexpr;
 	RangeTblEntry *rte;
+#if PG16_GE
+	RTEPermissionInfo *perminfo;
+#endif
 
 	/*
 	 * For initial cagg creation rtable will have only 1 entry,
@@ -628,6 +634,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		rte->inh = true;
 		rte->rellockmode = 1;
 		rte->eref = copyObject(rte->alias);
+#if PG16_GE
+		perminfo = addRTEPermissionInfo(&final_selquery->rteperminfos, rte);
+#endif
 		ListCell *l;
 		foreach (l, inp->final_userquery->jointree->fromlist)
 		{
@@ -648,7 +657,13 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 #if PG14_GE
 				rte->join_using_alias = jrte->join_using_alias;
 #endif
+#if PG16_LT
 				rte->selectedCols = jrte->selectedCols;
+#else
+				RTEPermissionInfo *jperminfo =
+					getRTEPermissionInfo(inp->final_userquery->rteperminfos, jrte);
+				perminfo->selectedCols = jperminfo->selectedCols;
+#endif
 			}
 		}
 	}
@@ -656,7 +671,12 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	{
 		rte = llast_node(RangeTblEntry, inp->final_userquery->rtable);
 		rte->eref->colnames = NIL;
+#if PG16_LT
 		rte->selectedCols = NULL;
+#else
+		perminfo = getRTEPermissionInfo(inp->final_userquery->rteperminfos, rte);
+		perminfo->selectedCols = NULL;
+#endif
 	}
 	if (rte->eref->colnames == NIL)
 	{
@@ -671,18 +691,28 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		{
 			ColumnDef *cdef = lfirst_node(ColumnDef, lc);
 			rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
-			rte->selectedCols = bms_add_member(rte->selectedCols,
-											   list_length(rte->eref->colnames) -
-												   FirstLowInvalidHeapAttributeNumber);
+			int attno = list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber;
+#if PG16_LT
+			rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+#else
+			perminfo->selectedCols = bms_add_member(perminfo->selectedCols, attno);
+#endif
 		}
 	}
 	rte->relid = mattbladdress->objectId;
 	rte->rtekind = RTE_RELATION;
 	rte->relkind = RELKIND_RELATION;
 	rte->tablesample = NULL;
+#if PG16_LT
 	rte->requiredPerms |= ACL_SELECT;
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
+#else
+	perminfo->relid = mattbladdress->objectId;
+	perminfo->requiredPerms |= ACL_SELECT;
+	perminfo->insertedCols = NULL;
+	perminfo->updatedCols = NULL;
+#endif
 
 	/* 2. Fixup targetlist with the correct rel information. */
 	foreach (lc, inp->final_seltlist)
@@ -709,6 +739,10 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	{
 		RangeTblRef *rtr;
 		final_selquery->rtable = list_make1(rte);
+#if PG16_GE
+		/* perminfo has been set already in the previous if/else */
+		Assert(list_length(final_selquery->rteperminfos) == 1);
+#endif
 		rtr = makeNode(RangeTblRef);
 		rtr->rtindex = 1;
 		fromexpr = makeFromExpr(list_make1(rtr), NULL);
@@ -716,6 +750,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	else
 	{
 		final_selquery->rtable = inp->final_userquery->rtable;
+#if PG16_GE
+		final_selquery->rteperminfos = inp->final_userquery->rteperminfos;
+#endif
 		fromexpr = inp->final_userquery->jointree;
 		fromexpr->quals = NULL;
 	}

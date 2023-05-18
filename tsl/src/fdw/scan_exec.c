@@ -239,8 +239,15 @@ get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *
 #if PG16_LT
 	user_oid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
 #else
-	RTEPermissionInfo *perminfo = getRTEPermissionInfo(estate->es_rteperminfos, rte);
-	user_oid = OidIsValid(perminfo->checkAsUser) ? perminfo->checkAsUser : GetUserId();
+	if (rte->perminfoindex > 0)
+	{
+		RTEPermissionInfo *perminfo = getRTEPermissionInfo(estate->es_rteperminfos, rte);
+		user_oid = OidIsValid(perminfo->checkAsUser) ? perminfo->checkAsUser : GetUserId();
+	}
+	else
+	{
+		user_oid = GetUserId();
+	}
 #endif
 
 	remote_connection_id_set(&id, server_id, user_oid);

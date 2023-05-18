@@ -20,6 +20,7 @@
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <utils/elog.h>
 #include <utils/fmgroids.h>
@@ -1285,6 +1286,12 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		{
 			RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 			Query *query = root->parse;
+#if PG16_LT
+			AclMode requiredPerms = rte->requiredPerms;
+#else
+			RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
+			AclMode requiredPerms = perminfo->requiredPerms;
+#endif
 			/* Mark hypertable RTEs we'd like to expand ourselves.
 			 * Hypertables inside inlineable functions don't get marked during the query
 			 * preprocessing step. Therefore we do an extra try here. However, we need to
@@ -1296,11 +1303,11 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * assumes permission checking has been done already during the first planner call.
 			 * We don't want to touch the UPDATE/DELETEs, so we need to check all the regular
 			 * conditions here that are checked during preprocess_query, as well as the
-			 * condition that rte->requiredPerms is not requiring UPDATE/DELETE on this rel.
+			 * condition that requiredPerms is not requiring UPDATE/DELETE on this rel.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				query->rowMarks == NIL && (rte->requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				query->rowMarks == NIL && (requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
 			{
 				rte_mark_for_expansion(rte);
 			}

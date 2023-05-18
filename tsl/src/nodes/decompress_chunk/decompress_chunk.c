@@ -15,6 +15,7 @@
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <planner/planner.h>
 #include <utils/builtins.h>
@@ -1536,6 +1537,11 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = NULL;
 
+#if PG16_GE
+	/* add perminfo for the new RTE */
+	addRTEPermissionInfo(&root->parse->rteperminfos, info->compressed_rte);
+#endif
+
 	RelOptInfo *compressed_rel = build_simple_rel(root, compressed_index, NULL);
 	/* github issue :1558
 	 * set up top_parent_relids for this rel as the same as the
@@ -1744,11 +1750,13 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	rte->inh = false;
 	rte->inFromCl = false;
 
+#if PG16_LT
 	rte->requiredPerms = 0;
 	rte->checkAsUser = InvalidOid; /* not set-uid by default, either */
 	rte->selectedCols = NULL;
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
+#endif
 
 	return rte;
 }

@@ -544,6 +544,9 @@ mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Quer
 	CAGG_MAKEQUERY(partial_selquery, userview_query);
 	partial_selquery->rtable = copyObject(userview_query->rtable);
 	partial_selquery->jointree = copyObject(userview_query->jointree);
+#if PG16_GE
+	partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
+#endif
 
 	partial_selquery->targetList = mattblinfo->partial_seltlist;
 	partial_selquery->groupClause = mattblinfo->partial_grouplist;

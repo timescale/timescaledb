@@ -1426,7 +1426,14 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		childrte->inh = false;
 		/* clear the magic bit */
 		childrte->ctename = NULL;
+#if PG16_LT
 		childrte->requiredPerms = 0;
+#else
+		/* Since PG16, the permission info is maintained separetely. Unlink
+		 * the old perminfo from the RTE to disable permission checking.
+		 */
+		childrte->perminfoindex = 0;
+#endif
 		childrte->securityQuals = NIL;
 		parse->rtable = lappend(parse->rtable, childrte);
 		child_rtindex = list_length(parse->rtable);
@@ -1476,8 +1483,15 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		data_node_rte->inh = false;
 		data_node_rte->ctename = NULL;
-		data_node_rte->requiredPerms = 0;
 		data_node_rte->securityQuals = NIL;
+#if PG16_LT
+		data_node_rte->requiredPerms = 0;
+#else
+		/* Since PG16, the permission info is maintained separetely. Unlink
+		 * the old perminfo from the RTE to disable permission checking.
+		 */
+		data_node_rte->perminfoindex = 0;
+#endif
 		parse->rtable = lappend(parse->rtable, data_node_rte);
 		rti = list_length(parse->rtable);
 		root->simple_rte_array[rti] = data_node_rte;
