@@ -1086,7 +1086,11 @@ ts_get_node_name(Node *node)
 		/*
 		 * plan nodes (plannodes.h)
 		 */
+#if PG16_LT
 		NODE_CASE(Plan);
+		NODE_CASE(Scan);
+		NODE_CASE(Join);
+#endif
 		NODE_CASE(Result);
 		NODE_CASE(ProjectSet);
 		NODE_CASE(ModifyTable);
@@ -1095,7 +1099,6 @@ ts_get_node_name(Node *node)
 		NODE_CASE(RecursiveUnion);
 		NODE_CASE(BitmapAnd);
 		NODE_CASE(BitmapOr);
-		NODE_CASE(Scan);
 		NODE_CASE(SeqScan);
 		NODE_CASE(SampleScan);
 		NODE_CASE(IndexScan);
@@ -1112,7 +1115,6 @@ ts_get_node_name(Node *node)
 		NODE_CASE(WorkTableScan);
 		NODE_CASE(ForeignScan);
 		NODE_CASE(CustomScan);
-		NODE_CASE(Join);
 		NODE_CASE(NestLoop);
 		NODE_CASE(MergeJoin);
 		NODE_CASE(HashJoin);
