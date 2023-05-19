@@ -15,6 +15,7 @@
 #include <nodes/pathnodes.h>
 #include <nodes/extensible.h>
 #include <utils/datetime.h>
+#include <debug_assert.h>
 
 #include "compat/compat.h"
 
@@ -220,14 +221,30 @@ extern TSDLLEXPORT AttrNumber ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber 
  * Return Oid for a schema-qualified relation.
  */
 static inline Oid
-ts_get_relation_relid(char const *schema_name, char const *relation_name, bool schema_missing_ok)
+ts_get_relation_relid(char const *schema_name, char const *relation_name, bool return_invalid)
 {
-	Oid schema_oid = get_namespace_oid(schema_name, schema_missing_ok);
+	Oid schema_oid = get_namespace_oid(schema_name, true);
 
 	if (OidIsValid(schema_oid))
-		return get_relname_relid(relation_name, schema_oid);
+	{
+		Oid rel_oid = get_relname_relid(relation_name, schema_oid);
 
-	return InvalidOid;
+		if (!return_invalid)
+			Ensure(OidIsValid(rel_oid), "relation \"%s.%s\" not found", schema_name, relation_name);
+
+		return rel_oid;
+	}
+	else
+	{
+		if (!return_invalid)
+			Ensure(OidIsValid(schema_oid),
+				   "schema \"%s\" not found (during lookup of relation \"%s.%s\")",
+				   schema_name,
+				   schema_name,
+				   relation_name);
+
+		return InvalidOid;
+	}
 }
 
 #endif /* TIMESCALEDB_UTILS_H */

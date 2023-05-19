@@ -708,7 +708,8 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 		{
 			const int32 hypertable_id = lfirst_int(cell);
 			detach_tablespace_from_hypertable_if_set(fcinfo->context,
-													 ts_hypertable_id_to_relid(hypertable_id),
+													 ts_hypertable_id_to_relid(hypertable_id,
+																			   false),
 													 tspcoid);
 		}
 	}

@@ -3186,7 +3186,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 static void
 process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	Oid index_relid = ts_get_relation_relid(NameStr(ht->fd.schema_name), cmd->name, false);
+	Oid index_relid = ts_get_relation_relid(NameStr(ht->fd.schema_name), cmd->name, true);
 
 	/* If this is part of changing the type of a column that is used in a clustered index
 	 * the above lookup might fail. But in this case we don't need to mark the index clustered

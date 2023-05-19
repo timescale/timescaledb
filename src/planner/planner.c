@@ -714,7 +714,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		int32 parent_hypertable_id = ts_chunk_get_hypertable_id_by_relid(chunk_reloid);
 		if (parent_hypertable_id != INVALID_HYPERTABLE_ID)
 		{
-			Assert(ts_hypertable_id_to_relid(parent_hypertable_id) == parent_reloid);
+			Assert(ts_hypertable_id_to_relid(parent_hypertable_id, false) == parent_reloid);
 
 			if (ht != NULL)
 			{
@@ -733,10 +733,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		if (hypertable_id != INVALID_HYPERTABLE_ID)
 		{
 			/* Hypertable reloid not specified by the caller, look it up. */
-			parent_reloid = ts_hypertable_id_to_relid(hypertable_id);
-			Ensure(OidIsValid(parent_reloid),
-				   "unable to get valid parent Oid for hypertable %d",
-				   hypertable_id);
+			parent_reloid = ts_hypertable_id_to_relid(hypertable_id, /* return_invalid */ false);
 
 			ht = ts_planner_get_hypertable(parent_reloid, CACHE_FLAG_NONE);
 			Assert(ht != NULL);
