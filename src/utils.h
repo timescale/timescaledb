@@ -220,7 +220,7 @@ extern TSDLLEXPORT AttrNumber ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber 
  * Return Oid for a schema-qualified relation.
  */
 static inline Oid
-ts_get_relation_relid(char *schema_name, char *relation_name, bool schema_missing_ok)
+ts_get_relation_relid(char const *schema_name, char const *relation_name, bool schema_missing_ok)
 {
 	Oid schema_oid = get_namespace_oid(schema_name, schema_missing_ok);
 
