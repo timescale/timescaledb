@@ -1016,7 +1016,7 @@ static ObjectAddress
 get_and_lock_rel_by_hypertable_id(int32 hypertable_id, LOCKMODE mode)
 {
 	ObjectAddress addr;
-	Oid relid = ts_hypertable_id_to_relid(hypertable_id);
+	Oid relid = ts_hypertable_id_to_relid(hypertable_id, true);
 	if (OidIsValid(relid))
 		LockRelationOid(relid, mode);
 	ObjectAddressSet(addr, RelationRelationId, relid);

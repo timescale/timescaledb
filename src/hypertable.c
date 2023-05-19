@@ -117,7 +117,7 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 void
 ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 {
-	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id);
+	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, false);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 }
 
@@ -247,7 +247,7 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 
 	ts_hypertable_formdata_fill(&h->fd, ti);
 	h->main_table_relid =
-		ts_get_relation_relid(NameStr(h->fd.schema_name), NameStr(h->fd.table_name), false);
+		ts_get_relation_relid(NameStr(h->fd.schema_name), NameStr(h->fd.table_name), true);
 	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, ti->mctx);
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
@@ -274,7 +274,7 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 }
 
 Oid
-ts_hypertable_id_to_relid(int32 hypertable_id)
+ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 {
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = InvalidOid;
@@ -298,6 +298,10 @@ ts_hypertable_id_to_relid(int32 hypertable_id)
 				Int32GetDatum(hypertable_id));
 
 	ts_scanner_scan(&scanctx);
+
+	Ensure(return_invalid || OidIsValid(relid),
+		   "unable to get valid parent Oid for hypertable %d",
+		   hypertable_id);
 
 	return relid;
 }
