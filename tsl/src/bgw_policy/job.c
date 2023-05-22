@@ -185,8 +185,7 @@ check_valid_index(Hypertable *ht, const char *index_name)
 	HeapTuple idxtuple;
 	Form_pg_index index_form;
 
-	index_oid =
-		get_relname_relid(index_name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+	index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), (char *) index_name, false);
 	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(idxtuple))
 		ereport(ERROR,
@@ -266,7 +265,7 @@ policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy
 	{
 		policy->hypertable = ht;
 		policy->index_relid =
-			get_relname_relid(index_name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+			ts_get_relation_relid(NameStr(ht->fd.schema_name), (char *) index_name, false);
 	}
 }
 
@@ -316,9 +315,9 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id);
 	if (cagg)
 	{
-		const char *const view_name = NameStr(cagg->data.user_view_name);
-		const char *const schema_name = NameStr(cagg->data.user_view_schema);
-		object_relid = get_relname_relid(view_name, get_namespace_oid(schema_name, false));
+		object_relid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
+											 NameStr(cagg->data.user_view_name),
+											 false);
 	}
 
 	ts_cache_release(hcache);

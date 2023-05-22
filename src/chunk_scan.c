@@ -19,6 +19,7 @@
 #include "chunk.h"
 #include "chunk_constraint.h"
 #include "ts_catalog/chunk_data_node.h"
+#include "utils.h"
 
 /*
  * Scan for chunks matching a query.
@@ -117,7 +118,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	 * Schema oid isn't likely to change, so cache it.
 	 */
 	char *last_schema_name = NULL;
-	Oid last_schema_oid = InvalidOid;
 	for (int i = 0; i < unlocked_chunk_count; i++)
 	{
 		Chunk *chunk = unlocked_chunks[i];
@@ -126,10 +126,10 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		if (last_schema_name == NULL || strcmp(last_schema_name, current_schema_name) != 0)
 		{
 			last_schema_name = current_schema_name;
-			last_schema_oid = get_namespace_oid(current_schema_name, false);
 		}
 
-		chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), last_schema_oid);
+		chunk->table_id =
+			ts_get_relation_relid(last_schema_name, NameStr(chunk->fd.table_name), false);
 		Assert(OidIsValid(chunk->table_id));
 	}
 

@@ -21,6 +21,7 @@
 #include "log.h"
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
+#include "utils.h"
 
 typedef struct FormData_bgw_dsm_handle
 {
@@ -37,7 +38,7 @@ typedef struct TestParamsWrapper
 static Oid
 get_dsm_handle_table_oid()
 {
-	return get_relname_relid("bgw_dsm_handle_store", get_namespace_oid("public", false));
+	return ts_get_relation_relid("public", "bgw_dsm_handle_store", false);
 }
 
 static void

@@ -22,6 +22,7 @@
 #include "ts_catalog/catalog.h"
 #include "extension.h"
 #include "cache_invalidate.h"
+#include "utils.h"
 
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[HYPERTABLE] = {
@@ -433,13 +434,13 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 
 	for (i = 0; i < max_tables; i++)
 	{
-		Oid schema_oid;
 		Oid id;
 		const char *sequence_name;
 		Size number_indexes, j;
 
-		schema_oid = get_namespace_oid(table_ary[i].schema_name, false);
-		id = get_relname_relid(table_ary[i].table_name, schema_oid);
+		id = ts_get_relation_relid((char *) table_ary[i].schema_name,
+								   (char *) table_ary[i].table_name,
+								   false);
 
 		if (!OidIsValid(id))
 			elog(ERROR,
@@ -454,7 +455,9 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 
 		for (j = 0; j < number_indexes; j++)
 		{
-			id = get_relname_relid(index_ary[i].names[j], schema_oid);
+			id = ts_get_relation_relid((char *) table_ary[i].schema_name,
+									   (char *) index_ary[i].names[j],
+									   true);
 
 			if (!OidIsValid(id))
 				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);
@@ -600,8 +603,6 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 {
 	if (!catalog_is_valid(catalog))
 	{
-		Oid schema;
-
 		/*
 		 * The catalog can be invalid during upgrade scripts. Try a non-cached
 		 * relation lookup, but we need to be in a transaction for
@@ -610,12 +611,9 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 		if (!IsTransactionState())
 			return InvalidOid;
 
-		schema = get_namespace_oid(CACHE_SCHEMA_NAME, true);
-
-		if (!OidIsValid(schema))
-			return InvalidOid;
-
-		return get_relname_relid(cache_proxy_table_names[type], schema);
+		return ts_get_relation_relid(CACHE_SCHEMA_NAME,
+									 (char *) cache_proxy_table_names[type],
+									 true);
 	}
 
 	return catalog->caches[type].inval_proxy_id;

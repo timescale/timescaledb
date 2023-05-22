@@ -15,6 +15,7 @@
 #include "scanner.h"
 #include "params.h"
 #include "ts_catalog/catalog.h"
+#include "utils.h"
 
 #include "compat/compat.h"
 
@@ -52,7 +53,7 @@ static void
 bgw_log_insert(char *msg)
 {
 	Relation rel;
-	Oid log_oid = get_relname_relid("bgw_log", get_namespace_oid("public", false));
+	Oid log_oid = ts_get_relation_relid("public", "bgw_log", false);
 
 	rel = table_open(log_oid, RowExclusiveLock);
 	bgw_log_insert_relation(rel, msg);
