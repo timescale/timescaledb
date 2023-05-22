@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 /*
  * This is a specialization of Simple8bRLE decoder for bitmaps, i.e. where the
  * elements are only 0 and 1.
@@ -18,55 +19,20 @@ typedef struct Simple8bRleBitmap
 	int16 num_ones;
 } Simple8bRleBitmap;
 
-pg_attribute_always_inline static Simple8bRleDecompressResult
-simple8brle_bitmap_get_next(Simple8bRleBitmap *bitmap)
-{
-	Simple8bRleDecompressResult res;
-	/* We have at least one element of padding so it's OK to overrun. */
-	res.val = bitmap->bitmap_bools_[bitmap->current_element];
-	res.is_done = bitmap->current_element >= bitmap->num_elements;
-	bitmap->current_element++;
-	return res;
-}
-
-pg_attribute_always_inline static Simple8bRleDecompressResult
-simple8brle_bitmap_get_next_reverse(Simple8bRleBitmap *bitmap)
-{
-	if (bitmap->current_element >= bitmap->num_elements)
-	{
-		return (Simple8bRleDecompressResult){ .is_done = true };
-	}
-
-	return (Simple8bRleDecompressResult){
-		.val = bitmap->bitmap_bools_[bitmap->num_elements - 1 - bitmap->current_element++]
-	};
-}
-
 pg_attribute_always_inline static bool
 simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, int i)
 {
 	Assert(i >= 0);
-	// Assert(i < bitmap->num_elements);
-	return bitmap->bitmap_bools_[i];
-}
 
-pg_attribute_always_inline static void
-simple8brle_bitmap_rewind(Simple8bRleBitmap *bitmap)
-{
-	bitmap->current_element = 0;
+	/* We have some padding on the right but we shouldn't overrun it. */
+	Assert(i < ((bitmap->num_elements + 63) / 64 + 1) * 64);
+
+	return bitmap->bitmap_bools_[i];
 }
 
 pg_attribute_always_inline static uint16
 simple8brle_bitmap_num_ones(Simple8bRleBitmap *bitmap)
 {
-#ifndef NDEBUG
-	int num_ones_2 = 0;
-	for (int i = 0; i < bitmap->num_elements; i++)
-	{
-		num_ones_2 += simple8brle_bitmap_get_at(bitmap, i);
-	}
-	Assert(num_ones_2 == bitmap->num_ones);
-#endif
 	return bitmap->num_ones;
 }
 
@@ -77,25 +43,8 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	result.current_element = 0;
 	result.num_elements = compressed->num_elements;
 
-	if (compressed->num_elements > GLOBAL_MAX_ROWS_PER_COMPRESSION)
-	{
-		/* Don't allocate too much if we got corrupt data or something. */
-		ereport(ERROR,
-				(errmsg("the number of elements in compressed data %d is larger than the maximum "
-						"allowed %d",
-						compressed->num_elements,
-						GLOBAL_MAX_ROWS_PER_COMPRESSION)));
-	}
-
-	if (compressed->num_blocks > GLOBAL_MAX_ROWS_PER_COMPRESSION)
-	{
-		ereport(ERROR,
-				(errmsg("the number of elements in compressed data %d is larger than the maximum "
-						"allowed %d",
-						compressed->num_elements,
-						GLOBAL_MAX_ROWS_PER_COMPRESSION)));
-	}
-
+	CheckCompressedData(compressed->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(compressed->num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	const int16 num_elements = compressed->num_elements;
 	int16 num_ones = 0;
@@ -104,11 +53,8 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
-	// int blocks[16] = {0};
-
 	/*
-	 * Decompress all the rows in one go for better throughput. Pad to next
-	 * multiple of 64 bytes on the right, so that we can simplify the
+	 * Pad to next multiple of 64 bytes on the right, so that we can simplify the
 	 * decompression loop and the get() function. Note that for get() we need at
 	 * least one byte of padding, hence the next multiple.
 	 */
@@ -126,7 +72,6 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 		const uint64 selector_mask = 0xFULL << selector_shift;
 		const uint8 selector_value = (slot_value & selector_mask) >> selector_shift;
 		Assert(selector_value < 16);
-
 
 		uint64 block_data = compressed_data[block_index];
 
@@ -206,19 +151,23 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	Assert(decompressed_index <= num_elements_padded);
 
 	/*
-	 * Stray ones in the higher unused bits of the last block?
+	 * Might happen if we have stray ones in the higher unused bits of the last
+	 * block.
 	 */
 	CheckCompressedData(num_ones <= num_elements);
-
-	//	mybt();
-	//	fprintf(stderr, "   1  15\n");
-	//	fprintf(stderr, " %3d %3d\n\n", blocks[1], blocks[15]);
 
 	result.bitmap_bools_ = bitmap_bools_;
 	result.num_ones = num_ones;
 
-	/* For sanity check. */
-	(void) simple8brle_bitmap_num_ones(&result);
+	/* Sanity check. */
+#ifndef NDEBUG
+	int num_ones_2 = 0;
+	for (int i = 0; i < num_elements; i++)
+	{
+		num_ones_2 += simple8brle_bitmap_get_at(&result, i);
+	}
+	Assert(num_ones_2 == num_ones);
+#endif
 
 	return result;
 }

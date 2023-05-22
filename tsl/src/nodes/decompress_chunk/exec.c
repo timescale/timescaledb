@@ -546,8 +546,8 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 				MemoryContext context_before_decompression =
 					MemoryContextSwitchTo(batch_state->arrow_context);
 				ArrowArray *arrow = NULL;
-				if (!chunk_state->reverse && !chunk_state->sorted_merge_append
-					&& ts_guc_enable_bulk_decompression)
+				if (!chunk_state->reverse && !chunk_state->sorted_merge_append &&
+					ts_guc_enable_bulk_decompression)
 				{
 					/*
 					 * In principle, we could do this for reverse decompression

@@ -68,9 +68,13 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool check_compressio
 			const bool arrow_isnull = !!!arrow_validity_bitmap_get(arrow->buffers[0], n);
 			if (arrow_isnull != r.is_null)
 			{
-				ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
-								errmsg("the bulk decompression result does not match"),
-					errdetail("Expected null %d, got %d at row %d.", r.is_null, arrow_isnull, n)));
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the bulk decompression result does not match"),
+						 errdetail("Expected null %d, got %d at row %d.",
+								   r.is_null,
+								   arrow_isnull,
+								   n)));
 			}
 
 			if (!r.is_null)
@@ -79,9 +83,10 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool check_compressio
 				const CTYPE rowbyrow_value = DATUM_TO_CTYPE(r.val);
 				if (arrow_value != rowbyrow_value)
 				{
-					ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
-					errmsg("the bulk decompression result does not match"),
-						errdetail("At row %d\n", n)));
+					ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("the bulk decompression result does not match"),
+							 errdetail("At row %d\n", n)));
 				}
 			}
 		}

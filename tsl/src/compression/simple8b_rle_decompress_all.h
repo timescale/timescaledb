@@ -7,11 +7,15 @@
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
+/*
+ * Specialization of bulk simple8brle decompression for a data type specified by
+ * ELEMENT_TYPE macro.
+ */
 static uint16
 FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
 														ELEMENT_TYPE **decompressed_)
 {
-	uint16 num_selector_slots =
+	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 
 	const uint16 n_total_values = compressed->num_elements;
@@ -20,7 +24,6 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 	const uint16 num_blocks = compressed->num_blocks;
 	const uint16 n_padded_values = ((n_total_values + 63) / 64 + 1) * 64;
 
-	// Decompress all.
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_padded_values);
 	uint32 decompressed_index = 0;
 
@@ -104,10 +107,6 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 		break;                                                                                     \
 	}
 
-			/*
-			 * FIXME reconsider if we need this switch? It's compiled to some
-			 * pretty crazy computed jump.
-			 */
 			switch (selector_value)
 			{
 				UNPACK_BLOCK(1);
@@ -142,18 +141,6 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 	 */
 	CheckCompressedData(decompressed_index >= n_total_values);
 	Assert(decompressed_index <= n_padded_values);
-
-	//  mybt();
-	//	for (int i = 0; i < 16; i++)
-	//	{
-	//		fprintf(stderr, " %6d", i);
-	//	}
-	//	fprintf(stderr, "\n");
-	//	for (int i = 0; i < 16; i++)
-	//	{
-	//		fprintf(stderr, " %6d", blocks[i]);
-	//	}
-	//	fprintf(stderr, "\n\n");
 
 	*decompressed_ = decompressed_values;
 	return n_total_values;

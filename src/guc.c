@@ -479,7 +479,8 @@ _guc_init(void)
 
 	DefineCustomBoolVariable("timescaledb.enable_bulk_decompression",
 							 "Enable decompression of the entire compressed batches",
-							 "Increases throughput of decompression, but might increase query memory usage",
+							 "Increases throughput of decompression, but might increase query "
+							 "memory usage",
 							 &ts_guc_enable_bulk_decompression,
 							 true,
 							 PGC_USERSET,
