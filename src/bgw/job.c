@@ -723,11 +723,22 @@ get_job_lock_for_delete(int32 job_id)
 			proc = BackendIdGetProc(vxid->backendId);
 			if (proc != NULL && proc->isBackgroundWorker)
 			{
-				elog(NOTICE,
-					 "cancelling the background worker for job %d (pid %d)",
-					 job_id,
-					 proc->pid);
-				DirectFunctionCall1(pg_cancel_backend, Int32GetDatum(proc->pid));
+				/* Simply assuming that this pid corresponds to the background worker
+				 * running the job is not sufficient. The scheduler could also be the
+				 * one holding the lock, when transitioning the state of the job back
+				 * to scheduled state. So we must check we don't kill the scheduler.
+				 * See https://github.com/timescale/timescaledb/issues/5224
+				 */
+				const char *worker_name = GetBackgroundWorkerTypeByPid(proc->pid);
+
+				if (strcmp(worker_name, SCHEDULER_APPNAME) != 0)
+				{
+					elog(NOTICE,
+						 "cancelling the background worker for job %d (pid %d)",
+						 job_id,
+						 proc->pid);
+					DirectFunctionCall1(pg_cancel_backend, Int32GetDatum(proc->pid));
+				}
 			}
 		}
 
