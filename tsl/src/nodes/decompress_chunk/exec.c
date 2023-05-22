@@ -437,6 +437,78 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 }
 
+/*
+ * Convert Arrow array to an array of Postgres Datum's.
+ */
+static void
+convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow)
+{
+	const int n = arrow->length;
+	Assert(n > 0);
+
+/* Unroll the conversion loop to generate more efficient code. */
+#define INNER_LOOP_SIZE 8
+	const int n_padded = ((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
+
+	const int arrow_bitmap_elements = (n + 64 - 1) / 64;
+	const int n_nulls_padded = arrow_bitmap_elements * 64;
+
+	/* Convert Arrow to Data/nulls arrays. */
+	const uint64 *restrict validity_bitmap = arrow->buffers[0];
+	const void *restrict arrow_values = arrow->buffers[1];
+	Datum *restrict datums = palloc(sizeof(Datum) * n_padded);
+	bool *restrict nulls = palloc(sizeof(bool) * n_nulls_padded);
+
+/*
+ * Specialize the conversion loop for the particular Arrow and Postgres type, to
+ * generate more efficient code.
+ */
+#define CONVERSION_LOOP(OID, CTYPE, CONVERSION)                                                    \
+	case OID:                                                                                      \
+		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
+		{                                                                                          \
+			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
+			{                                                                                      \
+				const int row = outer + inner;                                                     \
+				datums[row] = CONVERSION(((CTYPE *) arrow_values)[row]);                           \
+				Assert(row >= 0);                                                                  \
+				Assert(row < n_padded);                                                            \
+			}                                                                                      \
+		}                                                                                          \
+		break
+
+	switch (column->typid)
+	{
+		CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);
+		CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);
+		CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);
+		CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);
+		CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);
+		CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);
+		CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);
+		CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);
+		default:
+			Assert(false);
+	}
+#undef CONVERSION_LOOP
+#undef INNER_LOOP_SIZE
+
+	for (int outer = 0; outer < arrow_bitmap_elements; outer++)
+	{
+		const uint64 element = validity_bitmap[outer];
+		for (int inner = 0; inner < 64; inner++)
+		{
+			const int row = outer * 64 + inner;
+			nulls[row] = ((element >> inner) & 1) ? false : true;
+			Assert(row >= 0);
+			Assert(row < n_nulls_padded);
+		}
+	}
+	column->compressed.iterator = NULL;
+	column->compressed.datums = datums;
+	column->compressed.nulls = nulls;
+}
+
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
 							TupleTableSlot *subslot)
@@ -572,84 +644,21 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * Currently we're going to convert the Arrow arrays to postgres
 					 * Data right away, but in the future we will perform vectorized
 					 * operations on Arrow arrays directly before that.
-					 *
-					 *
-					 * FIXME split this out into a function.
 					 */
-					const int n = arrow->length;
-#define INNER_LOOP_SIZE 8
-
-					const int n_padded =
-						((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
-					Assert(n > 0);
-
-					const int arrow_bitmap_elements = (n + 64 - 1) / 64;
-					const int n_nulls_padded = arrow_bitmap_elements * 64;
 
 					if (batch_state->total_batch_rows == 0)
 					{
-						batch_state->total_batch_rows = n;
+						batch_state->total_batch_rows = arrow->length;
 					}
-					else if (batch_state->total_batch_rows != n)
+					else if (batch_state->total_batch_rows != arrow->length)
 					{
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
 
-					/* Convert Arrow to Data/nulls arrays. */
-					const uint64 *restrict validity_bitmap = arrow->buffers[0];
-					const void *restrict arrow_values = arrow->buffers[1];
-					Datum *restrict datums = palloc(sizeof(Datum) * n_padded);
-					bool *restrict nulls = palloc(sizeof(bool) * n_nulls_padded);
-
-#define CONVERSION_LOOP(OID, CTYPE, CONVERSION)                                                    \
-	case OID:                                                                                      \
-		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
-		{                                                                                          \
-			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
-			{                                                                                      \
-				const int row = outer + inner;                                                     \
-				datums[row] = CONVERSION(((CTYPE *) arrow_values)[row]);                           \
-				Assert(row >= 0);                                                                  \
-				Assert(row < n_padded);                                                            \
-			}                                                                                      \
-		}                                                                                          \
-		break
-
-					Assert(!chunk_state->reverse);
-					switch (column->typid)
-					{
-						CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);
-						CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);
-						CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);
-						CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);
-						CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);
-						CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);
-						CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);
-						CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);
-						default:
-							Assert(false);
-					}
-					for (int outer = 0; outer < arrow_bitmap_elements; outer++)
-					{
-						const uint64 element = validity_bitmap[outer];
-						for (int inner = 0; inner < 64; inner++)
-						{
-							const int row = outer * 64 + inner;
-							nulls[row] = ((element >> inner) & 1) ? false : true;
-							Assert(row >= 0);
-							Assert(row < n_nulls_padded);
-						}
-					}
-
-#undef CONVERSION_LOOP
-#undef INNER_LOOP_SIZE
+					convert_arrow_to_data(column, arrow);
 
 					// MemoryContextStats(batch_state->arrow_context);
 					MemoryContextReset(batch_state->arrow_context);
-
-					column->compressed.iterator = NULL;
-					column->compressed.datums = datums;
-					column->compressed.nulls = nulls;
 
 					/*
 					 * Note the fact that we are using bulk decompression, for

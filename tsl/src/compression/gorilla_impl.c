@@ -4,6 +4,11 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+/*
+ * Decompress the entire batch of gorilla-compressed rows into an Arrow array.
+ * Specialized for each supported data type.
+ */
+
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
@@ -41,13 +46,6 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	BitArray xors_bitarray = gorilla_data->xors;
 	BitArrayIterator xors_iterator;
 	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
-
-	//	/* Definitely slows things down, but why? Generated code is more simple. */
-	//	SimpleBitArrayIterator simple_xors_iterator = {
-	//		.start_bit_absolute = 0,
-	//		.data = gorilla_data->xors.buckets.data,
-	//		.this_word = gorilla_data->xors.buckets.data[0],
-	//	};
 
 	/*
 	 * Now decompress the non-null data.
@@ -192,11 +190,9 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	result->n_buffers = 2;
 	result->buffers = buffers;
 	result->length = n_total;
-	result->null_count = -1;
+	result->null_count = n_total - n_notnull;
 	return result;
 }
-
-#undef INNER_SIZE
 
 #undef FUNCTION_NAME
 #undef FUNCTION_NAME_HELPER

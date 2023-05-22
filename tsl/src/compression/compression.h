@@ -76,8 +76,8 @@ typedef struct DecompressResult
 } DecompressResult;
 
 /*
- * Let's use Arrow C data interface. There are many computation engines that are
- * compatible with it, even if it's a bit excessive for our current needs.
+ * Use the Arrow C data interface which is a well-known standard for in-memory
+ * interchange of columnar data.
  *
  * https://arrow.apache.org/docs/format/CDataInterface.html
  */
@@ -173,14 +173,7 @@ arrow_validity_bitmap_set(uint64 *bitmap, int row_number, bool value)
 	const int bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
 
-	if (value)
-	{
-		bitmap[qword_index] |= mask;
-	}
-	else
-	{
-		bitmap[qword_index] &= ~mask;
-	}
+	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | (((uint64) !!value) << bit_index);
 
 	Assert(arrow_validity_bitmap_get(bitmap, row_number) == value);
 }

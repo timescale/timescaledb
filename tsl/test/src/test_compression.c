@@ -501,9 +501,9 @@ test_delta3(bool have_nulls, bool have_random)
 	DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
 	Datum compressed;
 
-	int64 values[1015];
-	bool nulls[1015];
-	for (int i = 0; i < 1015; i++)
+	int64 values[TEST_ELEMENTS];
+	bool nulls[TEST_ELEMENTS];
+	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		if (have_random)
 		{
@@ -575,7 +575,7 @@ test_delta3(bool have_nulls, bool have_random)
 	/* Reverse decompression. */
 	iter =
 		delta_delta_decompression_iterator_from_datum_reverse(PointerGetDatum(compressed), INT8OID);
-	for (int i = 1015 - 1; i >= 0; i--)
+	for (int i = TEST_ELEMENTS - 1; i >= 0; i--)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_reverse(iter);
 		TestAssertTrue(!r.is_done);

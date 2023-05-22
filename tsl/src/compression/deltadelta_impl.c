@@ -4,10 +4,13 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+/*
+ * Decompress the entire batch of deltadelta-compressed rows into an Arrow array.
+ * Specialized for each supported data type.
+ */
+
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
-
-#define INNER_SIZE 8
 
 static ArrowArray *
 FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
@@ -49,8 +52,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;
 	ELEMENT_TYPE current_element = 0;
-	Assert(n_notnull_padded % INNER_SIZE == 0);
 	uint64 *restrict source = deltas_zigzag;
+#define INNER_SIZE 8
+	Assert(n_notnull_padded % INNER_SIZE == 0);
 	for (int outer = 0; outer < n_notnull_padded; outer += INNER_SIZE)
 	{
 		for (int inner = 0; inner < INNER_SIZE; inner++)
@@ -58,7 +62,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 			/*
 			 * Manual unrolling speeds up this function by about 10%, but my
 			 * attempts to get clang to vectorize the double-prefix-sum part
-			 * have failed. Also tried prefix sum from here:
+			 * have failed. Also tried SIMD prefix sum from here:
 			 * https://en.algorithmica.org/hpc/algorithms/prefix/
 			 * Only makes it slower.
 			 */
@@ -67,6 +71,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 			decompressed_values[outer + inner] = current_element;
 		}
 	}
+#undef INNER_SIZE
 
 	/* All data valid by default, we will fill in the nulls later. */
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
@@ -120,7 +125,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	result->n_buffers = 2;
 	result->buffers = buffers;
 	result->length = n_total;
-	result->null_count = -1;
+	result->null_count = n_total - n_notnull;
 	return result;
 }
 
