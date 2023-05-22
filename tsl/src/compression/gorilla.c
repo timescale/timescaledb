@@ -647,8 +647,20 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		iter->prev_xor_bits_used = num_xor_bits.val;
 		CheckCompressedData(iter->prev_xor_bits_used <= 64);
 
+		/*
+		 * More than 64 significant bits don't make sense. Exactly 64 we get for
+		 * the first encoded number.
+		 */
 		CheckCompressedData(iter->prev_xor_bits_used + iter->prev_leading_zeroes <= 64);
 	}
+
+	/*
+	 * Zero significant bits would mean that the previous number is repeated,
+	 * but this should have been encoded with tag0 = 0.
+	 * This also might fail if we haven't seen the tag1 = 1 for the first number
+	 * and didn't initialize the bit widths.
+	 */
+	CheckCompressedData(iter->prev_xor_bits_used + iter->prev_leading_zeroes > 0);
 
 	xor = bit_array_iter_next(&iter->xors, iter->prev_xor_bits_used);
 	if (iter->prev_leading_zeroes + iter->prev_xor_bits_used < 64)

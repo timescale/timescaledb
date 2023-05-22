@@ -2078,68 +2078,28 @@ get_compression_algorithm(char *name)
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 
-#define FUNCTION_NAME_HELPER(X, Y) decompress_##X##_##Y
-#define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
-
-#define TOSTRING_HELPER(x) #x
-#define TOSTRING(x) TOSTRING_HELPER(x)
-
-/* Try to decompress the given compressed data. Used for fuzzing. */
-#define DECOMPRESS_FN                                                                              \
-	static int FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size)                          \
-	{                                                                                              \
-		StringInfoData si = { .data = (char *) Data, .len = Size };                                \
-                                                                                                   \
-		int algo = pq_getmsgbyte(&si);                                                             \
-                                                                                                   \
-		CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);                       \
-                                                                                                   \
-		if (algo != get_compression_algorithm(TOSTRING(ALGO)))                                     \
-		{                                                                                          \
-			/*                                                                                     \
-			 * It's convenient to fuzz only one algorithm at a time. We specialize                 \
-			 * the fuzz target for one algorithm, so that the fuzzer doesn't waste                 \
-			 * time discovering others from scratch.                                               \
-			 */                                                                                    \
-			return -1;                                                                             \
-		}                                                                                          \
-                                                                                                   \
-		Datum compressed_data = definitions[algo].compressed_data_recv(&si);                       \
-		DecompressionIterator *iter =                                                              \
-			definitions[algo].iterator_init_forward(compressed_data, PGTYPE);                      \
-                                                                                                   \
-		int n = 0;                                                                                 \
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))      \
-		{                                                                                          \
-			n++;                                                                                   \
-		}                                                                                          \
-                                                                                                   \
-		return n;                                                                                  \
-	}
-
 #define ALGO gorilla
 #define CTYPE float8
 #define PGTYPE FLOAT8OID
-DECOMPRESS_FN
+#define DATUM_TO_CTYPE DatumGetFloat8
+#include "decompress_test_impl.c"
 #undef ALGO
 #undef CTYPE
 #undef PGTYPE
+#undef DATUM_TO_CTYPE
 
 #define ALGO deltadelta
 #define CTYPE int64
 #define PGTYPE INT8OID
-DECOMPRESS_FN
+#define DATUM_TO_CTYPE DatumGetInt64
+#include "decompress_test_impl.c"
 #undef ALGO
 #undef CTYPE
 #undef PGTYPE
+#undef DATUM_TO_CTYPE
 
-#undef TOSTRING
-#undef TOSTRING_HELPER
-
-#undef FUNCTION_NAME
-#undef FUNCTION_NAME_HELPER
-
-static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size)
+static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size,
+													bool check_compression)
 {
 	if (algo == COMPRESSION_ALGORITHM_GORILLA && type == FLOAT8OID)
 	{
@@ -2200,7 +2160,9 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 
 	Oid type = PG_GETARG_OID(1);
 
-	int res = get_decompress_fn(algo, type)((const uint8 *) string, fsize);
+	int res =
+		get_decompress_fn(algo,
+						  type)((const uint8 *) string, fsize, /* check_compression = */ true);
 
 	PG_RETURN_INT32(res);
 }

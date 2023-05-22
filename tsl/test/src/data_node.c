@@ -61,7 +61,10 @@ ts_test_data_node_show(PG_FUNCTION_ARGS)
 		funcctx->user_fctx = list_delete_first(node_names);
 		funcctx->call_cntr++;
 
-		values[0] = CStringGetDatum(node_name);
+		NameData dbnamedata;
+		NameData node_namedata;
+		namestrcpy(&node_namedata, node_name);
+		values[0] = NameGetDatum(&node_namedata);
 		nulls[0] = false;
 
 		foreach (lc, server->options)
@@ -76,7 +79,8 @@ ts_test_data_node_show(PG_FUNCTION_ARGS)
 			}
 			else if (strcmp("dbname", elem->defname) == 0)
 			{
-				values[2] = CStringGetDatum(defGetString(elem));
+				namestrcpy(&dbnamedata, defGetString(elem));
+				values[2] = NameGetDatum(&dbnamedata);
 				nulls[2] = false;
 			}
 		}

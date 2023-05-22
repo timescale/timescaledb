@@ -24,3 +24,7 @@ nonnull-attribute:*/src/backend/nodes/copyfuncs.c
 nonnull-attribute:write_item
 #division by 0, looks like a real postgres ug
 float-divide-by-zero:_bt_vacuum_needs_cleanup
+
+# It complains about casting -nan to int in histogram_test.sql. It is in the
+# postgres code and doesn't lead to bugs, because it is caught by a check later.
+float-cast-overflow:width_bucket_float8
