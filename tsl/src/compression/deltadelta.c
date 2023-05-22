@@ -56,7 +56,7 @@ typedef struct DeltaDeltaDecompressionIterator
 	uint64 prev_val;
 	uint64 prev_delta;
 	Simple8bRleDecompressionIterator delta_deltas;
-	Simple8bRleBitmap nulls;
+	Simple8bRleDecompressionIterator nulls;
 	bool has_nulls;
 } DeltaDeltaDecompressionIterator;
 
@@ -431,7 +431,7 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
-		iter->nulls = simple8brle_bitmap_decompress(nulls);
+		simple8brle_decompression_iterator_init_forward(&iter->nulls, nulls);
 	}
 }
 
@@ -462,7 +462,7 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 	if (header->has_nulls)
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
-		iter->nulls = simple8brle_bitmap_decompress(nulls);
+		simple8brle_decompression_iterator_init_reverse(&iter->nulls, nulls);
 	}
 }
 
@@ -516,7 +516,7 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 	pg_unreachable();
 }
 
-static pg_attribute_always_inline DecompressResultInternal
+static DecompressResultInternal
 delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompressionIterator *iter)
 {
 	Simple8bRleDecompressResult result;
@@ -525,7 +525,8 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 	/* check for a null value */
 	if (iter->has_nulls)
 	{
-		Simple8bRleDecompressResult result = simple8brle_bitmap_get_next(&iter->nulls);
+		Simple8bRleDecompressResult result =
+			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
 		if (result.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,
@@ -615,7 +616,8 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 	/* check for a null value */
 	if (iter->has_nulls)
 	{
-		Simple8bRleDecompressResult result = simple8brle_bitmap_get_next_reverse(&iter->nulls);
+		Simple8bRleDecompressResult result =
+			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 		if (result.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,
