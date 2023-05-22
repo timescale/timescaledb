@@ -757,3 +757,32 @@ SET enable_indexscan to off;
 SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
+
+-- Ensure partially compressed chunks can be accessed when enable_partitionwise_aggregate is enabled
+CREATE TABLE append_test(time timestamptz, device_id int);
+SELECT create_hypertable('append_test','time');
+ALTER TABLE append_test SET (timescaledb.compress, timescaledb.compress_segmentby='device_id', timescaledb.compress_orderby = 'time');
+
+-- Create two chunks
+INSERT INTO append_test VALUES('2000-01-01'::timestamptz,1);
+INSERT INTO append_test VALUES('2000-10-01'::timestamptz,1);
+
+SELECT compress_chunk(c) FROM show_chunks('append_test') c;
+
+SET enable_partitionwise_aggregate = 1;
+
+-- Insert into compressed chunk 1 to create a partially compressed chunk
+INSERT INTO append_test VALUES('2000-01-01'::timestamptz,2);
+
+SELECT MAX(device_id) FROM append_test;
+
+EXPLAIN (COSTS OFF)
+   SELECT MAX(device_id) FROM append_test;
+
+SET parallel_setup_cost = 0;
+
+EXPLAIN (COSTS OFF)
+   SELECT MAX(device_id) FROM append_test;
+
+RESET parallel_setup_cost;
+RESET enable_partitionwise_aggregate;

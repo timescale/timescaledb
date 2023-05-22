@@ -1,0 +1,1 @@
+Fixes: Fixed a crash when enable_partitionwise_aggregate is used together with partially compressed chunks 

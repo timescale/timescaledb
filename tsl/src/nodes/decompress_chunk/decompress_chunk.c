@@ -560,6 +560,46 @@ can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 	return merge_result;
 }
 
+/*
+ * Clone the info->chunk_rel ReloptInfo and set the relid to the relid of info->compressed_rel.
+ *
+ * When we access a partially compressed chunk, we create an append path that combines the data
+ * from the compressed part with the uncompressed part. The logic in make_partition_pruneinfo()
+ * contains a check to ensure that relids are unique in an append path.
+ *
+ * To create the path that reads the uncompressed chunk data, the planner calls
+ * decompress_chunk_path_create() again. Therefore, we end up with a second path with the same
+ * RelOptInfo data structure as the real compressed path. To be compliant with the planner logic,
+ * we need to adjust the relid in one of these data structures if we want to use both paths in an
+ * append path.
+ *
+ */
+static void
+adjust_compressed_relid_in_path(PlannerInfo *root, CompressionInfo *info, Path *compressed_path,
+								Path *uncompressed_path)
+{
+	/* The compressed path and the uncompressed path share the same RelOptInfo */
+	Assert(compressed_path->parent == uncompressed_path->parent);
+
+	Index compressed_relid = info->compressed_rel->relid;
+	Index uncompressed_relid = info->chunk_rel->relid;
+
+	/* Ensure the relid of the uncompressed and the compressed part of the chunk are different */
+	Assert(compressed_relid != uncompressed_relid);
+
+	/* Clone the chunk_rel RelOptInfo and adjust the relid */
+	RelOptInfo *newrel_opt_info = palloc(sizeof(RelOptInfo));
+	memcpy(newrel_opt_info, info->chunk_rel, sizeof(RelOptInfo));
+	newrel_opt_info->relid = compressed_relid;
+
+	/* Assign the new RelOptInfo structure to the compressed_path */
+	compressed_path->parent = newrel_opt_info;
+
+	/* Make sure the planner can find the append rel data structures for the compressed relid */
+	Assert(root->append_rel_array != NULL);
+	root->append_rel_array[compressed_relid] = root->append_rel_array[uncompressed_relid];
+}
+
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 								   Chunk *chunk)
@@ -801,6 +841,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					continue;
 			}
 
+			adjust_compressed_relid_in_path(root, info, path, uncompressed_path);
+			Assert(path->parent->relid != uncompressed_path->parent->relid);
+
 			path = (Path *) create_append_path_compat(root,
 													  chunk_rel,
 													  list_make2(path, uncompressed_path),
@@ -872,6 +915,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					if (!uncompressed_path)
 						continue;
 				}
+
+				adjust_compressed_relid_in_path(root, info, path, uncompressed_path);
+				Assert(path->parent->relid != uncompressed_path->parent->relid);
 
 				path = (Path *) create_append_path_compat(root,
 														  chunk_rel,

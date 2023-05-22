@@ -1711,3 +1711,77 @@ SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY ti
 
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
+-- Ensure partially compressed chunks can be accessed when enable_partitionwise_aggregate is enabled
+CREATE TABLE append_test(time timestamptz, device_id int);
+SELECT create_hypertable('append_test','time');
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable     
+---------------------------
+ (37,public,append_test,t)
+(1 row)
+
+ALTER TABLE append_test SET (timescaledb.compress, timescaledb.compress_segmentby='device_id', timescaledb.compress_orderby = 'time');
+-- Create two chunks
+INSERT INTO append_test VALUES('2000-01-01'::timestamptz,1);
+INSERT INTO append_test VALUES('2000-10-01'::timestamptz,1);
+SELECT compress_chunk(c) FROM show_chunks('append_test') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_37_71_chunk
+ _timescaledb_internal._hyper_37_72_chunk
+(2 rows)
+
+SET enable_partitionwise_aggregate = 1;
+-- Insert into compressed chunk 1 to create a partially compressed chunk
+INSERT INTO append_test VALUES('2000-01-01'::timestamptz,2);
+SELECT MAX(device_id) FROM append_test;
+ max 
+-----
+   2
+(1 row)
+
+EXPLAIN (COSTS OFF)
+   SELECT MAX(device_id) FROM append_test;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Result
+   InitPlan 1 (returns $0)
+     ->  Limit
+           ->  Merge Append
+                 Sort Key: _hyper_37_71_chunk.device_id DESC
+                 ->  Sort
+                       Sort Key: _hyper_37_71_chunk.device_id DESC
+                       ->  Custom Scan (DecompressChunk) on _hyper_37_71_chunk
+                             Filter: (device_id IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_38_73_chunk
+                                   Filter: (device_id IS NOT NULL)
+                 ->  Sort
+                       Sort Key: _hyper_37_71_chunk.device_id DESC
+                       ->  Seq Scan on _hyper_37_71_chunk
+                             Filter: (device_id IS NOT NULL)
+                 ->  Custom Scan (DecompressChunk) on _hyper_37_72_chunk
+                       ->  Sort
+                             Sort Key: compress_hyper_38_74_chunk.device_id DESC
+                             ->  Seq Scan on compress_hyper_38_74_chunk
+                                   Filter: (device_id IS NOT NULL)
+(20 rows)
+
+SET parallel_setup_cost = 0;
+EXPLAIN (COSTS OFF)
+   SELECT MAX(device_id) FROM append_test;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Append
+                     ->  Custom Scan (DecompressChunk) on _hyper_37_71_chunk
+                           ->  Parallel Seq Scan on compress_hyper_38_73_chunk
+                     ->  Custom Scan (DecompressChunk) on _hyper_37_72_chunk
+                           ->  Parallel Seq Scan on compress_hyper_38_74_chunk
+                     ->  Parallel Seq Scan on _hyper_37_71_chunk
+(10 rows)
+
+RESET parallel_setup_cost;
+RESET enable_partitionwise_aggregate;
