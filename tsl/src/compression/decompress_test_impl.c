@@ -41,6 +41,9 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool check_compressio
 	}
 
 	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+
+	ArrowArray *arrow = tsl_try_decompress_all(algo, compressed_data, PGTYPE);
+
 	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, PGTYPE);
 
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
@@ -58,6 +61,29 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool check_compressio
 				compressor->append_val(compressor, r.val);
 			}
 			results[n] = r;
+		}
+
+		if (arrow)
+		{
+			const bool arrow_isnull = !!!arrow_validity_bitmap_get(arrow->buffers[0], n);
+			if (arrow_isnull != r.is_null)
+			{
+				ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+								errmsg("the bulk decompression result does not match"),
+					errdetail("Expected null %d, got %d at row %d.", r.is_null, arrow_isnull, n)));
+			}
+
+			if (!r.is_null)
+			{
+				const CTYPE arrow_value = ((CTYPE *) arrow->buffers[1])[n];
+				const CTYPE rowbyrow_value = DATUM_TO_CTYPE(r.val);
+				if (arrow_value != rowbyrow_value)
+				{
+					ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+					errmsg("the bulk decompression result does not match"),
+						errdetail("At row %d\n", n)));
+				}
+			}
 		}
 
 		n++;

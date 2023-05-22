@@ -13,20 +13,14 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	const bool has_nulls = gorilla_data->nulls != NULL;
 	const int n_total =
 		has_nulls ? gorilla_data->nulls->num_elements : gorilla_data->tag0s->num_elements;
+	CheckCompressedData(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+
 	const int n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const int n_notnull = gorilla_data->tag0s->num_elements;
 	Assert(n_total_padded >= n_total);
-	Assert(n_total >= n_notnull);
-	if (n_total > GLOBAL_MAX_ROWS_PER_COMPRESSION)
-	{
-		/* Don't allocate too much if we got corrupt data or something. */
-		ereport(ERROR,
-				(errmsg("the number of elements in compressed data %d is larger than the maximum "
-						"allowed %d",
-						n_total,
-						GLOBAL_MAX_ROWS_PER_COMPRESSION)));
-	}
+
+	const int n_notnull = gorilla_data->tag0s->num_elements;
+	CheckCompressedData(n_total >= n_notnull);
 
 	/* Unpack the basic compressed data parts. */
 	Simple8bRleBitmap tag0s = simple8brle_bitmap_decompress(gorilla_data->tag0s);
