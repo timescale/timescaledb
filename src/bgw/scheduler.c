@@ -41,7 +41,6 @@
 #include "version.h"
 #include "worker.h"
 
-#define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 #define START_RETRY_MS (1 * INT64CONST(1000)) /* 1 seconds */
 
 static TimestampTz
