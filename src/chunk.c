@@ -1691,8 +1691,8 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * ts_chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
-	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, true));
+	chunk->table_id =
+		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), true);
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
 	chunk->relkind = get_rel_relkind(chunk->table_id);
 
@@ -2804,12 +2804,8 @@ ts_chunk_get_relid(int32 chunk_id, bool missing_ok)
 	Oid relid = InvalidOid;
 
 	if (chunk_simple_scan_by_id(chunk_id, &form, missing_ok))
-	{
-		Oid schemaid = get_namespace_oid(NameStr(form.schema_name), missing_ok);
-
-		if (OidIsValid(schemaid))
-			relid = get_relname_relid(NameStr(form.table_name), schemaid);
-	}
+		relid =
+			ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), missing_ok);
 
 	if (!OidIsValid(relid) && !missing_ok)
 		ereport(ERROR,

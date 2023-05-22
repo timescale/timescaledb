@@ -227,7 +227,6 @@ static bool function_allowed_in_cagg_definition(Oid funcid);
 
 static Const *cagg_boundary_make_lower_bound(Oid type);
 static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
-static Oid relation_oid(NameData schema, NameData name);
 static Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 								int materialize_htid);
 static Query *destroy_union_query(Query *q);
@@ -3013,7 +3012,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	Oid uid, saved_uid;
 
 	/* Cagg view created by the user. */
-	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
+	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
+											  NameStr(agg->data.user_view_name),
+											  false);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
 
@@ -3049,7 +3050,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 		.objectId = mat_ht->main_table_relid,
 	};
 
-	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
+	Oid direct_view_oid = ts_get_relation_relid(NameStr(agg->data.direct_view_schema),
+												NameStr(agg->data.direct_view_name),
+												false);
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 	remove_old_and_new_rte_from_query(direct_query);
@@ -3243,7 +3246,9 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	Query *result_view_query;
 
 	/* User view query of the user defined CAGG. */
-	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
+	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
+											  NameStr(agg->data.user_view_name),
+											  false);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = copyObject(get_view_query(user_view_rel));
 	/* Keep lock until end of transaction. */
@@ -3251,7 +3256,9 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	remove_old_and_new_rte_from_query(user_query);
 
 	/* Direct view query of the original user view definition at CAGG creation. */
-	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
+	Oid direct_view_oid = ts_get_relation_relid(NameStr(agg->data.direct_view_schema),
+												NameStr(agg->data.direct_view_name),
+												false);
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 	/* Keep lock until end of transaction. */
@@ -3294,7 +3301,9 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 	Oid uid, saved_uid;
 
 	/* User view query of the user defined CAGG. */
-	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
+	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
+											  NameStr(agg->data.user_view_name),
+											  false);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = copyObject(get_view_query(user_view_rel));
 	remove_old_and_new_rte_from_query(user_query);
@@ -3720,13 +3729,4 @@ destroy_union_query(Query *q)
 	query->jointree->quals = NULL;
 
 	return query;
-}
-
-/*
- * Return Oid for a schema-qualified relation.
- */
-static Oid
-relation_oid(NameData schema, NameData name)
-{
-	return get_relname_relid(NameStr(name), get_namespace_oid(NameStr(schema), false));
 }

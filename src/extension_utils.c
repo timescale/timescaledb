@@ -28,6 +28,7 @@
 
 #include "compat/compat.h"
 #include "extension_constants.h"
+#include "utils.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
@@ -114,12 +115,7 @@ extension_version(void)
 static Oid
 get_proxy_table_relid()
 {
-	Oid nsid = get_namespace_oid(CACHE_SCHEMA_NAME, true);
-
-	if (!OidIsValid(nsid))
-		return InvalidOid;
-
-	return get_relname_relid(EXTENSION_PROXY_TABLE, nsid);
+	return ts_get_relation_relid(CACHE_SCHEMA_NAME, EXTENSION_PROXY_TABLE, true);
 }
 
 inline static bool
