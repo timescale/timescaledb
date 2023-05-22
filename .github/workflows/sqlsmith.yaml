@@ -75,16 +75,22 @@ jobs:
         psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
 
     # we run these in a loop to reinitialize the random number generator
-    # 10 times 10000 queries seems to take roughly 40 minutes in CI
+    # 10000 queries seems to take roughly 4 minutes in CI
+    # so total runtime should be around 200 minutes in nightly run and 40 minutes otherwise
     - name: Run SQLsmith
       run: |
         set -o pipefail
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          LOOPS=50
+        else
+          LOOPS=10
+        fi
         cd sqlsmith
-        for _ in {1..10}
+        for _ in $(seq 1 $LOOPS)
         do
             ./sqlsmith --seed=$((16#$(openssl rand -hex 3))) --exclude-catalog \
                 --target="host=/tmp dbname=smith" --max-queries=10000 \
-            2>&1 | tee sqlsmith.log # We only keep the last log.
+            2>&1 | tee -a sqlsmith.log
         done
 
     - name: Check for coredumps
