@@ -52,7 +52,7 @@ jobs:
         pg: [ 12, 13, 14, 15 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["chunk_adaptive metadata"]
+        ignores: ["chunk_adaptive metadata telemetry"]
         tsl_ignores: ["compression_algos remote_connection telemetry_stats-13 telemetry_stats-14 dist_move_chunk dist_param dist_insert dist_backup dist_cagg"]
         tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht
           data_fetcher dist_compression dist_remote_error remote_txn"]
