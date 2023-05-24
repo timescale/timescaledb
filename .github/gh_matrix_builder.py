@@ -58,7 +58,11 @@ def build_debug_config(overrides):
             "coverage": True,
             "cxx": "g++",
             "extra_packages": "clang-14 llvm-14 llvm-14-dev llvm-14-tools",
-            "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed'",
+            "ignored_tests": {
+                "bgw_db_scheduler",
+                "bgw_db_scheduler_fixed",
+                "telemetry",
+            },
             "name": "Debug",
             "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config-14",
@@ -125,7 +129,14 @@ def macos_config(overrides):
             "coverage": False,
             "cxx": "clang++",
             "extra_packages": "",
-            "installcheck_args": "IGNORES='bgw_db_scheduler bgw_db_scheduler_fixed bgw_launcher pg_dump remote_connection compressed_collation'",
+            "ignored_tests": {
+                "bgw_db_scheduler",
+                "bgw_db_scheduler_fixed",
+                "bgw_launcher",
+                "pg_dump",
+                "remote_connection",
+                "compressed_collation",
+            },
             "os": "macos-11",
             "pg": PG12_LATEST,
             "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
@@ -137,31 +148,26 @@ def macos_config(overrides):
     return base_config
 
 
-# common installcheck_args for all scheduled pg15 tests
+# common ignored tests for all scheduled pg15 tests
 # partialize_finalize is ignored due to #4937
-pg15_installcheck_args = "IGNORES='partialize_finalize'"
+ignored_tests = {"partialize_finalize"}
 
-pg14_installcheck_args = "IGNORES='partialize_finalize'"
-
-pg13_installcheck_args = "IGNORES='partialize_finalize'"
-
-pg12_installcheck_args = "IGNORES='partialize_finalize'"
-
-# common installcheck_args for all non-scheduled pg15 tests (e.g. PRs)
+# common ignored tests for all non-scheduled pg15 tests (e.g. PRs)
 # partialize_finalize is ignored due to #4937
 # dist_move_chunk, dist_param, dist_insert, and remote_txn ignored due to flakiness
 if event_type == "pull_request":
-    pg15_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
-
-    pg14_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
-
-    pg13_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
-
-    pg12_installcheck_args = "IGNORES='partialize_finalize dist_move_chunk dist_param dist_insert remote_txn'"
+    ignored_tests = {
+        "dist_insert",
+        "dist_move_chunk",
+        "dist_param",
+        "partialize_finalize",
+        "remote_txn",
+        "telemetry",
+    }
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(
-    build_debug_config({"pg": PG12_LATEST, "installcheck_args": pg12_installcheck_args})
+    build_debug_config({"pg": PG12_LATEST, "ignored_tests": ignored_tests})
 )
 
 m["include"].append(
@@ -170,30 +176,28 @@ m["include"].append(
             "pg": PG13_LATEST,
             "cc": "clang-14",
             "cxx": "clang++-14",
-            "installcheck_args": pg13_installcheck_args,
+            "ignored_tests": ignored_tests,
         }
     )
 )
 
 m["include"].append(
-    build_debug_config({"pg": PG14_LATEST, "installcheck_args": pg14_installcheck_args})
+    build_debug_config({"pg": PG14_LATEST, "ignored_tests": ignored_tests})
 )
 
 m["include"].append(
-    build_debug_config({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args})
+    build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
 )
 
 # test latest postgres release in MacOS
 m["include"].append(
     build_release_config(
-        macos_config({"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args})
+        macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
     )
 )
 # test latest postgres release without telemetry
 m["include"].append(
-    build_without_telemetry(
-        {"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args}
-    )
+    build_without_telemetry({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
 )
 
 # if this is not a pull request e.g. a scheduled run or a push
@@ -207,7 +211,13 @@ if event_type != "pull_request":
         "pg": PG12_EARLIEST,
         # The early releases don't build with llvm 14.
         "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-        "installcheck_args": "SKIPS='chunk_utils tablespace telemetry' IGNORES='cluster-12 cagg_policy debug_notice dist_gapfill_pushdown-12'",
+        "skipped_tests": {"chunk_utils", "tablespace", "telemetry"},
+        "ignored_tests": {
+            "cluster-12",
+            "cagg_policy",
+            "debug_notice",
+            "dist_gapfill_pushdown-12",
+        },
         "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
     }
     m["include"].append(build_debug_config(pg12_debug_earliest))
@@ -217,7 +227,11 @@ if event_type != "pull_request":
         "pg": PG13_EARLIEST,
         # The early releases don't build with llvm 14.
         "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-        "installcheck_args": "SKIPS='001_extension' IGNORES='dist_gapfill_pushdown-13 transparent_decompress_chunk-13'",
+        "skipped_tests": {"001_extension"},
+        "ignored_tests": {
+            "dist_gapfill_pushdown-13",
+            "transparent_decompress_chunk-13",
+        },
         "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
     }
     m["include"].append(build_debug_config(pg13_debug_earliest))
@@ -229,16 +243,14 @@ if event_type != "pull_request":
                 "pg": PG14_EARLIEST,
                 # The early releases don't build with llvm 14.
                 "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-                "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'",
+                "ignored_tests": {"dist_gapfill_pushdown-14 memoize"},
             }
         )
     )
 
     # add debug test for first supported PG15 version
     m["include"].append(
-        build_debug_config(
-            {"pg": PG15_EARLIEST, "installcheck_args": pg15_installcheck_args}
-        )
+        build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_tests})
     )
 
     # add debug test for MacOS
@@ -249,9 +261,7 @@ if event_type != "pull_request":
     m["include"].append(build_release_config({"pg": PG13_LATEST}))
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
     m["include"].append(
-        build_release_config(
-            {"pg": PG15_LATEST, "installcheck_args": pg15_installcheck_args}
-        )
+        build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
     )
 
     # add apache only test for latest pg
@@ -267,7 +277,7 @@ if event_type != "pull_request":
     m["include"].append(
         build_debug_config(
             {
-                "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'",
+                "ignored_tests": {"dist_gapfill_pushdown-14 memoize"},
                 "pg": 14,
                 "snapshot": "snapshot",
             }
@@ -278,7 +288,7 @@ if event_type != "pull_request":
             {
                 "pg": 15,
                 "snapshot": "snapshot",
-                "installcheck_args": pg15_installcheck_args,
+                "ignored_tests": ignored_tests,
             }
         )
     )
@@ -345,4 +355,4 @@ else:
 
 # generate command to set github action variable
 with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-    print(str.format("matrix={0}", json.dumps(m)), file=output)
+    print(str.format("matrix={0}", json.dumps(m, default=list)), file=output)
