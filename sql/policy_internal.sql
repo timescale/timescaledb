@@ -49,6 +49,8 @@ DECLARE
   numchunks   INTEGER := 1;
   _message     text;
   _detail      text;
+  _context     text;
+  _sqlstate    text;
   -- chunk status bits:
   bit_compressed int := 1;
   bit_compressed_unordered int := 2;
@@ -96,10 +98,12 @@ BEGIN
       EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS
             _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL;
+            _context = PG_EXCEPTION_CONTEXT,
+            _detail = PG_EXCEPTION_DETAIL,
+            _sqlstate = RETURNED_SQLSTATE;
         RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = sqlstate;
+            USING DETAIL = format('Message: (%s), Detail: (%s), Context: (%s).', _message, _detail, _context),
+                  ERRCODE = _sqlstate;
       END;
     ELSIF
       (
@@ -111,9 +115,14 @@ BEGIN
       BEGIN
         PERFORM @extschema@.decompress_chunk(chunk_rec.oid, if_compressed => true);
       EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS
+            _message = MESSAGE_TEXT,
+            _context = PG_EXCEPTION_CONTEXT,
+            _detail = PG_EXCEPTION_DETAIL,
+            _sqlstate = RETURNED_SQLSTATE;
         RAISE WARNING 'decompressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = sqlstate;
+            USING DETAIL = format('Message: (%s), Detail: (%s), Context: (%s).', _message, _detail, _context),
+                  ERRCODE = _sqlstate;
       END;
       -- SET LOCAL is only active until end of transaction.
       -- While we could use SET at the start of the function we do not
@@ -122,9 +131,14 @@ BEGIN
       BEGIN
         PERFORM @extschema@.compress_chunk(chunk_rec.oid);
       EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS
+            _message = MESSAGE_TEXT,
+            _context = PG_EXCEPTION_CONTEXT,
+            _detail = PG_EXCEPTION_DETAIL,
+            _sqlstate = RETURNED_SQLSTATE;
         RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = sqlstate;
+            USING DETAIL = format('Message: (%s), Detail: (%s), Context: (%s).', _message, _detail, _context),
+                  ERRCODE = _sqlstate;
       END;
     END IF;
     COMMIT;
