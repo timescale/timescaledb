@@ -2272,6 +2272,108 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 
 #endif
 
+#ifdef TS_COMPRESSION_FUZZING
+
+/*
+ * This is our test function that will be called by the libfuzzer driver. It
+ * has to catch the postgres exceptions normally produced for corrupt data.
+ */
+static int
+llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size, bool check_compression),
+						 const uint8_t *Data, size_t Size)
+{
+	MemoryContextReset(CurrentMemoryContext);
+
+	PG_TRY();
+	{
+		CHECK_FOR_INTERRUPTS();
+		target(Data, Size, /* check_compression = */ false);
+	}
+	PG_CATCH();
+	{
+		FlushErrorState();
+	}
+	PG_END_TRY();
+
+	/* We always return 0, and -1 would mean "don't include it into corpus". */
+	return 0;
+}
+
+static int
+llvm_fuzz_target_gorilla_float8(const uint8_t *Data, size_t Size)
+{
+	return llvm_fuzz_target_generic(decompress_gorilla_float8, Data, Size);
+}
+static int
+llvm_fuzz_target_deltadelta_int64(const uint8_t *Data, size_t Size)
+{
+	return llvm_fuzz_target_generic(decompress_deltadelta_int64, Data, Size);
+}
+
+/*
+ * libfuzzer fuzzing driver that we import from LLVM libraries. It will run our
+ * test functions with random inputs.
+ */
+extern int LLVMFuzzerRunDriver(int *argc, char ***argv,
+							   int (*UserCb)(const uint8_t *Data, size_t Size));
+
+/*
+ * The SQL function to perform fuzzing.
+ */
+TS_FUNCTION_INFO_V1(ts_fuzz_compression);
+
+Datum
+ts_fuzz_compression(PG_FUNCTION_ARGS)
+{
+	/*
+	 * We use the memory context size larger than default here, so that all data
+	 * allocated by fuzzing fit into the first chunk. The first chunk is not
+	 * deallocated when the memory context is reset, so this reduces overhead
+	 * caused by repeated reallocations.
+	 * The particular value of 8MB is somewhat arbitrary and large. In practice,
+	 * we have inputs of 1k rows max here, which decompress to 8 kB max.
+	 */
+	MemoryContext fuzzing_context =
+		AllocSetContextCreate(CurrentMemoryContext, "fuzzing", 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
+	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
+
+	char *argvdata[] = { "PostgresFuzzer",
+						 "-verbosity=1",
+						 "-timeout=1",
+						 "-report_slow_units=1",
+						 "-use_value_profile=1",
+						 "-reload=1",
+						 psprintf("-runs=%d", PG_GETARG_INT32(2)),
+						 "corpus" /* in the database directory */,
+						 NULL };
+	char **argv = argvdata;
+	int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
+
+	int algo = get_compression_algorithm(PG_GETARG_CSTRING(0));
+	Oid type = PG_GETARG_OID(1);
+	int (*target)(const uint8_t *, size_t);
+	if (algo == COMPRESSION_ALGORITHM_GORILLA && type == FLOAT8OID)
+	{
+		target = llvm_fuzz_target_gorilla_float8;
+	}
+	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA && type == INT8OID)
+	{
+		target = llvm_fuzz_target_deltadelta_int64;
+	}
+	else
+	{
+		elog(ERROR, "no llvm fuzz target for compression algorithm %d and type %d", algo, type);
+	}
+
+	int res = LLVMFuzzerRunDriver(&argc, &argv, target);
+
+	MemoryContextSwitchTo(old_context);
+
+	PG_RETURN_INT32(res);
+}
+
+#endif
+
 #if PG14_GE
 static SegmentFilter *
 add_filter_column_strategy(char *column_name, StrategyNumber strategy, Const *value,
