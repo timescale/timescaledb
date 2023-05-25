@@ -29,8 +29,10 @@ FROM
     _timescaledb_catalog.hypertable h
     JOIN _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
         AND c.dropped IS FALSE
-    JOIN LATERAL _timescaledb_internal.relation_size(
-        format('%I.%I'::text, c.schema_name, c.table_name)::regclass) AS relsize ON TRUE
+    JOIN pg_class cl ON cl.relname = c.table_name AND cl.relkind = 'r'
+    JOIN pg_namespace n ON n.oid = cl.relnamespace
+    AND n.nspname = c.schema_name
+    JOIN LATERAL _timescaledb_internal.relation_size(cl.oid) AS relsize ON TRUE
     LEFT JOIN _timescaledb_catalog.chunk comp ON comp.id = c.compressed_chunk_id
     LEFT JOIN LATERAL _timescaledb_internal.relation_size(
         CASE WHEN comp.schema_name IS NOT NULL AND comp.table_name IS NOT NULL THEN
@@ -92,9 +94,11 @@ $BODY$
             0::BIGINT AS compressed_toast_size,
             0::BIGINT AS compressed_heap_size
         FROM
-            _timescaledb_catalog.hypertable
-            JOIN LATERAL _timescaledb_internal.relation_size(
-                format('%I.%I', schema_name, table_name)::regclass) AS relsize ON TRUE
+            _timescaledb_catalog.hypertable ht
+            JOIN pg_class c ON relname = ht.table_name AND c.relkind = 'r'
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            AND n.nspname = ht.schema_name
+            JOIN LATERAL _timescaledb_internal.relation_size(c.oid) AS relsize ON TRUE
         WHERE
             schema_name = schema_name_in
             AND table_name = table_name_in
@@ -207,6 +211,9 @@ BEGIN
                         RETURN;
                 END IF;
         END IF;
+
+        /* Lock hypertable to avoid risk of concurrent process dropping chunks */
+        EXECUTE format('LOCK TABLE %I.%I IN ACCESS SHARE MODE', schema_name, table_name);
 
         CASE WHEN is_distributed THEN
 			RETURN QUERY

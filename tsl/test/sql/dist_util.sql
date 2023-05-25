@@ -313,10 +313,15 @@ SELECT count(*) FROM size_test_table;
 SELECT 1 FROM pg_table_size('size_test_table');
 SELECT 1 FROM pg_table_size('disttable');
 SELECT 1 FROM pg_table_size('nondisttable');
+
+-- hypertable_size requires SELECT privilege on table
+\set ON_ERROR_STOP 0
 SELECT * FROM hypertable_size('disttable');
 SELECT * FROM hypertable_size('nondisttable');
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+\set ON_ERROR_STOP 1
+
 SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
 SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
 SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
@@ -328,9 +333,17 @@ SELECT * FROM hypertable_index_size('nondisttable_pkey');
 
 RESET ROLE;
 GRANT SELECT ON disttable TO :ROLE_1;
+GRANT SELECT ON nondisttable TO :ROLE_1;
+
 SET ROLE :ROLE_1;
 -- Querying should now work
 SELECT count(*) FROM disttable;
+
+-- hypertable_size should work now with SELECT privilege on tables
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
 
 -- Make sure timescaledb.ssl_dir and passfile gucs can be read by a non-superuser
 \c :TEST_DBNAME :ROLE_1
