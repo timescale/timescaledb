@@ -766,9 +766,31 @@ ht_ExecMergeNotMatched(ModifyTableContext * context, ResultRelInfo * resultRelIn
 			 */
 			newslot = ExecProject(action->mas_proj);
 			context->relaction = action;
+			if (cds->is_dropped_attr_exists)
+			{
+				AttrMap *map;
+				TupleDesc parenttupdesc, chunktupdesc;
+				TupleTableSlot *chunk_slot = NULL;
 
-			(void)
-				ExecInsert(context, mtstate->rootResultRelInfo, newslot, canSetTag);
+				parenttupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
+				chunktupdesc = RelationGetDescr(cds->rri->ri_RelationDesc);
+				/* map from parent to chunk */
+				map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc);
+				if (map != NULL)
+					chunk_slot =
+						execute_attr_map_slot(map,
+												newslot,
+												MakeSingleTupleTableSlot(chunktupdesc,
+																		&TTSOpsVirtual));
+				(void) ExecInsert(context,
+									cds->rri,
+									(chunk_slot ? chunk_slot : newslot),
+									canSetTag);
+				if (chunk_slot)
+					ExecDropSingleTupleTableSlot(chunk_slot);
+			}
+			else
+				(void) ExecInsert(context, cds->rri, newslot, canSetTag);
 			mtstate->mt_merge_inserted = 1;
 			break;
 		case CMD_NOTHING:

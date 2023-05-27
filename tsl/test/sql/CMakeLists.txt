@@ -117,6 +117,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
        compression_permissions.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+  list(APPEND TEST_FILES merge_compress.sql)
+endif()
+
 set(SOLO_TESTS
     # dist_hypertable needs a lot of memory when the Sanitizer is active
     dist_hypertable-${PG_VERSION_MAJOR}

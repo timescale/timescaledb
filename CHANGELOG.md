@@ -32,6 +32,7 @@ This release includes these noteworthy features:
 * #5584 Reduce decompression during constraint checking
 * #5530 Optimize compressed chunk resorting
 * #5639 Support sending telemetry event reports
+* #5150 MERGE support on hypertables
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down

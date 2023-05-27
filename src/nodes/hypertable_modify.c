@@ -121,7 +121,12 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	 */
 	if (mt->operation == CMD_DELETE || mt->operation == CMD_UPDATE)
 		mt->rootRelation = mt->nominalRelation;
-
+#if PG15_GE
+	if (mt->operation == CMD_MERGE)
+	{
+		mt->rootRelation = mt->nominalRelation;
+	}
+#endif
 	ps = ExecInitNode(&mt->plan, estate, eflags);
 	node->custom_ps = list_make1(ps);
 	mtstate = castNode(ModifyTableState, ps);
@@ -150,7 +155,11 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	PlanState *subplan = outerPlanState(mtstate);
 #endif
 
-	if (mtstate->operation == CMD_INSERT)
+	if (mtstate->operation == CMD_INSERT
+#if PG15_GE
+		|| mtstate->operation == CMD_MERGE
+#endif
+	)
 	{
 		/* setup chunk dispatch state only for INSERTs */
 		chunk_dispatch_states = get_chunk_dispatch_states(subplan);
@@ -210,7 +219,13 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		mtstate->ps.plan->lefttree->targetlist = NULL;
 		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
 	}
-
+#if PG15_GE
+	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_MERGE && es->verbose)
+	{
+		mtstate->ps.plan->lefttree->targetlist = NULL;
+		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+	}
+#endif
 	/*
 	 * Since we hijack the ModifyTable node instrumentation on ModifyTable will
 	 * be missing so we set it to instrumentation of HypertableModify node.
@@ -531,12 +546,16 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	cscan->scan.plan.targetlist = copyObject(root->processed_tlist);
 
 	/*
-	 * For UPDATE/DELETE processed_tlist will have ROWID_VAR. We need to remove
-	 * those because set_customscan_references will bail if it sees
-	 * ROWID_VAR entries in the targetlist.
+	 * For UPDATE/DELETE/MERGE processed_tlist will have ROWID_VAR. We
+	 * need to remove those because set_customscan_references will bail
+	 * if it sees ROWID_VAR entries in the targetlist.
 	 */
 #if PG14_GE
-	if (mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE)
+	if (mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE
+#if PG15_GE
+		|| mt->operation == CMD_MERGE
+#endif
+	)
 	{
 		cscan->scan.plan.targetlist =
 			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
@@ -609,7 +628,11 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 
 	Index rti = mtpath->nominalRelation;
 
-	if (mtpath->operation == CMD_INSERT)
+	if (mtpath->operation == CMD_INSERT
+#if PG15_GE
+		|| mtpath->operation == CMD_MERGE
+#endif
+	)
 	{
 		if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
 		{
@@ -646,6 +669,9 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	return path;
 }
 
+/*
+ * Callback for ModifyTableState->GetUpdateNewTuple for use by regular UPDATE.
+ */
 #if PG14_GE
 static TupleTableSlot *
 internalGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, TupleTableSlot *oldSlot,
@@ -730,7 +756,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	resultRelInfo = node->resultRelInfo + node->mt_lastResultIndex;
 	subplanstate = outerPlanState(node);
 
-	if (operation == CMD_INSERT)
+	if (operation == CMD_INSERT
+#if PG15_GE
+		|| operation == CMD_MERGE
+#endif
+	)
 	{
 		if (ts_is_chunk_dispatch_state(subplanstate))
 		{
@@ -774,6 +804,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	 */
 	for (;;)
 	{
+		Oid resultoid = InvalidOid;
 		/*
 		 * Reset the per-output-tuple exprcontext.  This is needed because
 		 * triggers expect to use that context as workspace.  It's a bit ugly
@@ -796,6 +827,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (TupIsNull(context.planSlot))
 			break;
 
+#if PG15_GE
+		/* copy INSERT merge action list to result relation info of corresponding chunk */
+		if (cds && cds->rri && operation == CMD_MERGE)
+			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
+#endif
 		/*
 		 * When there are multiple result relations, each tuple contains a
 		 * junk column that gives the OID of the rel from which it came.
@@ -805,11 +841,20 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		{
 			Datum datum;
 			bool isNull;
-			Oid resultoid;
 
 			datum = ExecGetJunkAttribute(context.planSlot, node->mt_resultOidAttno, &isNull);
 			if (isNull)
+			{
+#if PG15_GE
+				if (operation == CMD_MERGE)
+				{
+					EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
+					ht_ExecMerge(&context, node->resultRelInfo, cds, NULL, node->canSetTag);
+					continue; /* no RETURNING support yet */
+				}
+#endif
 				elog(ERROR, "tableoid is NULL");
+			}
 			resultoid = DatumGetObjectId(datum);
 
 			/* If it's not the same as last time, we need to locate the rel */
@@ -849,7 +894,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		 * Keep this in step with the part of ExecInitModifyTable that sets up
 		 * ri_RowIdAttNo.
 		 */
-		if (operation == CMD_UPDATE || operation == CMD_DELETE)
+		if (operation == CMD_UPDATE || operation == CMD_DELETE
+#if PG15_GE
+			|| operation == CMD_MERGE
+#endif
+		)
 		{
 			char relkind;
 			Datum datum;
@@ -870,7 +919,17 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				datum = ExecGetJunkAttribute(slot, resultRelInfo->ri_RowIdAttNo, &isNull);
 				/* shouldn't ever get a null result... */
 				if (isNull)
+				{
+#if PG15_GE
+					if (operation == CMD_MERGE)
+					{
+						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
+						ht_ExecMerge(&context, node->resultRelInfo, cds, NULL, node->canSetTag);
+						continue; /* no RETURNING support yet */
+					}
+#endif
 					elog(ERROR, "ctid is NULL");
+				}
 
 				tupleid = (ItemPointer) DatumGetPointer(datum);
 				tuple_ctid = *tupleid; /* be sure we don't free ctid!! */
@@ -974,6 +1033,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 								  NULL,
 								  NULL);
 				break;
+#if PG15_GE
+			case CMD_MERGE:
+				slot = ht_ExecMerge(&context, resultRelInfo, cds, tupleid, node->canSetTag);
+				break;
+#endif
 			default:
 				elog(ERROR, "unknown operation");
 				break;
@@ -1045,6 +1109,16 @@ fireBSTriggers(ModifyTableState *node)
 		case CMD_DELETE:
 			ExecBSDeleteTriggers(node->ps.state, resultRelInfo);
 			break;
+#if PG15_GE
+		case CMD_MERGE:
+			if (node->mt_merge_subcommands & MERGE_INSERT)
+				ExecBSInsertTriggers(node->ps.state, resultRelInfo);
+			if (node->mt_merge_subcommands & MERGE_UPDATE)
+				ExecBSUpdateTriggers(node->ps.state, resultRelInfo);
+			if (node->mt_merge_subcommands & MERGE_DELETE)
+				ExecBSDeleteTriggers(node->ps.state, resultRelInfo);
+			break;
+#endif
 		default:
 			elog(ERROR, "unknown operation");
 			break;
@@ -1075,6 +1149,16 @@ fireASTriggers(ModifyTableState *node)
 		case CMD_DELETE:
 			ExecASDeleteTriggers(node->ps.state, resultRelInfo, node->mt_transition_capture);
 			break;
+#if PG15_GE
+		case CMD_MERGE:
+			if (node->mt_merge_subcommands & MERGE_INSERT)
+				ExecASInsertTriggers(node->ps.state, resultRelInfo, node->mt_transition_capture);
+			if (node->mt_merge_subcommands & MERGE_UPDATE)
+				ExecASUpdateTriggers(node->ps.state, resultRelInfo, node->mt_transition_capture);
+			if (node->mt_merge_subcommands & MERGE_DELETE)
+				ExecASDeleteTriggers(node->ps.state, resultRelInfo, node->mt_transition_capture);
+			break;
+#endif
 		default:
 			elog(ERROR, "unknown operation");
 			break;
@@ -1574,8 +1658,20 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 		 * partition, we should instead check UPDATE policies, because we are
 		 * executing policies defined on the target table, and not those
 		 * defined on the child partitions.
+		 *
+		 * If we're running MERGE, we refer to the action that we're executing
+		 * to know if we're doing an INSERT or UPDATE to a partition table.
 		 */
-		wco_kind = (mtstate->operation == CMD_UPDATE) ? WCO_RLS_UPDATE_CHECK : WCO_RLS_INSERT_CHECK;
+		if (mtstate->operation == CMD_UPDATE)
+			wco_kind = WCO_RLS_UPDATE_CHECK;
+#if PG15_GE
+		else if (mtstate->operation == CMD_MERGE)
+			wco_kind = (context->relaction->mas_action->commandType == CMD_UPDATE) ?
+						   WCO_RLS_UPDATE_CHECK :
+						   WCO_RLS_INSERT_CHECK;
+#endif
+		else
+			wco_kind = WCO_RLS_INSERT_CHECK;
 
 		/*
 		 * ExecWithCheckOptions() will skip any WCOs which are not of the kind
@@ -2642,7 +2738,12 @@ ExecDelete(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ItemPointe
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("could not serialize access due to concurrent delete")));
-				/* tuple already deleted; nothing to do */
+				/*
+				 * tuple already deleted; nothing to do. But MERGE might want
+				 * to handle it differently. We've already filled-in
+				 * actionInfo with sufficient information for MERGE to look
+				 * at.
+				 */
 				return NULL;
 
 			default:

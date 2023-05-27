@@ -26,6 +26,12 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED compression_dml.sql memoize.sql)
 endif()
 
+# this test was changing the contents of tables in shared_setup.sql thus causing
+# other dependent tests to fail. Hence runing this test in solo
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+  list(APPEND SOLO_TESTS merge_dml.sql)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED dist_parallel_agg.sql dist_queries.sql
        timestamp_limits.sql with_clause_parser.sql)
@@ -64,6 +70,17 @@ endif()
 
 set(GROUP_MEMBERS 0)
 foreach(TEST_FILE ${TEST_FILES_SHARED})
+  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
+  if(GROUP_MEMBERS EQUAL 0)
+    file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
+  endif()
+  file(APPEND ${TEST_SCHEDULE_SHARED} "${TESTS_TO_RUN} ")
+  math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
+endforeach(TEST_FILE)
+file(APPEND ${TEST_SCHEDULE_SHARED} "\n")
+
+set(GROUP_MEMBERS 0)
+foreach(TEST_FILE ${SOLO_TESTS})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
   if(GROUP_MEMBERS EQUAL 0)
     file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
