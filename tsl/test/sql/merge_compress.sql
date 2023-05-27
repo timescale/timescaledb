@@ -1,0 +1,101 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+CREATE TABLE target (
+    time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    value DOUBLE PRECISION NOT NULL,
+    series_id BIGINT NOT NULL,
+    partition_column TIMESTAMPTZ NOT NULL
+);
+
+SELECT table_name FROM create_hypertable(
+                            'target'::regclass,
+                            'partition_column'::name, chunk_time_interval=>interval '8 hours',
+                            create_default_indexes=> false);
+
+-- enable compression
+ALTER TABLE target SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'series_id',
+    timescaledb.compress_orderby = 'partition_column, value'
+);
+
+SELECT '2022-10-10 14:33:44.1234+05:30' as start_date \gset
+INSERT INTO target (series_id, value, partition_column)
+  SELECT s,1,t from generate_series(:'start_date'::timestamptz, :'start_date'::timestamptz + interval '1 day', '5m') t cross join
+    generate_series(1,3, 1) s;
+
+-- compress chunks
+SELECT count(compress_chunk(c.schema_name|| '.' || c.table_name))
+  FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where
+    c.hypertable_id = ht.id and ht.table_name = 'target' and c.compressed_chunk_id IS NULL;
+
+CREATE TABLE source (
+        time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        value DOUBLE PRECISION NOT NULL,
+        series_id BIGINT NOT NULL
+    );
+SELECT table_name FROM create_hypertable(
+                                'source'::regclass,
+                                'time'::name, chunk_time_interval=>interval '6 hours',
+                                create_default_indexes=> false);
+
+SELECT '2022-10-10 10:00:00.0123+05:30' as start_date \gset
+INSERT INTO source (time, series_id, value)
+  SELECT t, s,1 from generate_series(:'start_date'::timestamptz, :'start_date'::timestamptz + interval '1 day', '5m') t cross join
+    generate_series(1,2, 1) s;
+
+\set ON_ERROR_STOP 0
+
+-- Merge UPDATE on compressed hypertables should report error
+MERGE INTO target t
+            USING source s
+            ON t.value = s.value AND t.series_id = s.series_id
+            WHEN MATCHED THEN
+            UPDATE SET series_id = (t.series_id * 0.123);
+
+-- Merge DELETE on compressed hypertables should report error
+MERGE INTO target t
+            USING source s
+            ON t.value = s.value AND t.series_id = s.series_id
+            WHEN MATCHED THEN
+            DELETE;
+
+-- Merge UPDATE/INSERT on compressed hypertables should report error
+MERGE INTO target t
+            USING source s
+            ON t.value = s.value AND t.series_id = s.series_id
+            WHEN MATCHED THEN
+            UPDATE SET series_id = (t.series_id * 0.123)
+            WHEN NOT MATCHED THEN
+            INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, '2021-11-01 00:00:05'::timestamp with time zone);
+
+-- Merge DELETE/INSERT on compressed hypertables should report error
+MERGE INTO target t
+            USING source s
+            ON t.value = s.value AND t.series_id = s.series_id
+            WHEN MATCHED THEN
+            DELETE
+            WHEN NOT MATCHED THEN
+            INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, '2021-11-01 00:00:05'::timestamp with time zone);
+
+\set ON_ERROR_STOP 1
+
+-- total compressed chunks
+SELECT count(*) AS "total compressed_chunks", is_compressed FROM timescaledb_information.chunks WHERE
+    hypertable_name = 'target' GROUP BY is_compressed;
+
+-- Merge INSERT on compressed hypertables should work
+MERGE INTO target t
+            USING source s
+            ON t.partition_column = s.time AND t.value = s.value
+            WHEN NOT MATCHED THEN
+            INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, '2021-11-01 00:00:05'::timestamp with time zone);
+
+-- you should notice 1 uncompressed chunk
+SELECT count(*) AS "total compressed_chunks", is_compressed FROM timescaledb_information.chunks WHERE
+    hypertable_name = 'target' GROUP BY is_compressed;
+
+DROP TABLE target;
+DROP TABLE source;

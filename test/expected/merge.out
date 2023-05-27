@@ -1,22 +1,24 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
--- Create conditions table with location and temperature
-CREATE TABLE conditions (
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Create target table with location and temperature
+CREATE TABLE target (
    time        TIMESTAMPTZ       NOT NULL,
    location    SMALLINT          NOT NULL,
-   temperature DOUBLE PRECISION  NULL
+   temperature DOUBLE PRECISION  NULL,
+   val text default 'string -'
 );
 SELECT create_hypertable(
-  'conditions',
+  'target',
   'time',
   chunk_time_interval => INTERVAL '5 seconds');
-    create_hypertable    
--------------------------
- (1,public,conditions,t)
+  create_hypertable  
+---------------------
+ (1,public,target,t)
 (1 row)
 
-INSERT INTO conditions
+INSERT INTO target
 SELECT time, location, 14 as temperature
 FROM generate_series(
 	'2021-01-01 00:00:00',
@@ -24,23 +26,23 @@ FROM generate_series(
     INTERVAL '5 seconds'
   ) as time,
 generate_series(1,4) as location;
--- Create conditions_updated table with location and temperature
-CREATE TABLE conditions_updated (
+-- Create source table with location and temperature
+CREATE TABLE source (
    time        TIMESTAMPTZ       NOT NULL,
    location    SMALLINT          NOT NULL,
    temperature DOUBLE PRECISION  NULL
 );
 SELECT create_hypertable(
-  'conditions_updated',
+  'source',
   'time',
   chunk_time_interval => INTERVAL '5 seconds');
-        create_hypertable        
----------------------------------
- (2,public,conditions_updated,t)
+  create_hypertable  
+---------------------
+ (2,public,source,t)
 (1 row)
 
--- Generate data that overlaps with conditions table
-INSERT INTO conditions_updated
+-- Generate data that overlaps with target table
+INSERT INTO source
 SELECT time, location, 80 as temperature
 FROM generate_series(
 	'2021-01-01 00:00:05',
@@ -49,20 +51,20 @@ FROM generate_series(
   ) as time,
 generate_series(1,4) as location;
 -- Print table/rows/num of chunks
-select * from conditions order by time, location asc;
-             time             | location | temperature 
-------------------------------+----------+-------------
- Fri Jan 01 00:00:00 2021 PST |        1 |          14
- Fri Jan 01 00:00:00 2021 PST |        2 |          14
- Fri Jan 01 00:00:00 2021 PST |        3 |          14
- Fri Jan 01 00:00:00 2021 PST |        4 |          14
- Fri Jan 01 00:00:05 2021 PST |        1 |          14
- Fri Jan 01 00:00:05 2021 PST |        2 |          14
- Fri Jan 01 00:00:05 2021 PST |        3 |          14
- Fri Jan 01 00:00:05 2021 PST |        4 |          14
+select * from target order by time, location asc;
+             time             | location | temperature |   val    
+------------------------------+----------+-------------+----------
+ Fri Jan 01 00:00:00 2021 PST |        1 |          14 | string -
+ Fri Jan 01 00:00:00 2021 PST |        2 |          14 | string -
+ Fri Jan 01 00:00:00 2021 PST |        3 |          14 | string -
+ Fri Jan 01 00:00:00 2021 PST |        4 |          14 | string -
+ Fri Jan 01 00:00:05 2021 PST |        1 |          14 | string -
+ Fri Jan 01 00:00:05 2021 PST |        2 |          14 | string -
+ Fri Jan 01 00:00:05 2021 PST |        3 |          14 | string -
+ Fri Jan 01 00:00:05 2021 PST |        4 |          14 | string -
 (8 rows)
 
-select * from conditions_updated order by time, location asc;
+select * from source order by time, location asc;
              time             | location | temperature 
 ------------------------------+----------+-------------
  Fri Jan 01 00:00:05 2021 PST |        1 |          80
@@ -75,85 +77,875 @@ select * from conditions_updated order by time, location asc;
  Fri Jan 01 00:00:10 2021 PST |        4 |          80
 (8 rows)
 
-select hypertable_name, count(*) as num_of_chunks from timescaledb_information.chunks group by hypertable_name;
-  hypertable_name   | num_of_chunks 
---------------------+---------------
- conditions         |             2
- conditions_updated |             2
-(2 rows)
-
--- Print expected values in the conditions table once conditions_updated is merged into it
--- If a key exists in both tables, we take average of the temperature measured
--- average logic here is a mess but it works
-SELECT COALESCE(c.time, cu.time) as time,
-       COALESCE(c.location, cu.location) as location,
-       (COALESCE(c.temperature, cu.temperature) + COALESCE(cu.temperature, c.temperature))/2 as temperature
-FROM conditions AS c FULL JOIN conditions_updated AS cu
-ON c.time = cu.time AND c.location = cu.location;
-             time             | location | temperature 
-------------------------------+----------+-------------
- Fri Jan 01 00:00:00 2021 PST |        1 |          14
- Fri Jan 01 00:00:00 2021 PST |        2 |          14
- Fri Jan 01 00:00:00 2021 PST |        3 |          14
- Fri Jan 01 00:00:00 2021 PST |        4 |          14
- Fri Jan 01 00:00:05 2021 PST |        1 |          47
- Fri Jan 01 00:00:05 2021 PST |        2 |          47
- Fri Jan 01 00:00:05 2021 PST |        3 |          47
- Fri Jan 01 00:00:05 2021 PST |        4 |          47
- Fri Jan 01 00:00:10 2021 PST |        1 |          80
- Fri Jan 01 00:00:10 2021 PST |        2 |          80
- Fri Jan 01 00:00:10 2021 PST |        3 |          80
- Fri Jan 01 00:00:10 2021 PST |        4 |          80
-(12 rows)
-
--- Test that normal PostgreSQL tables can merge without exceptions
-CREATE TABLE conditions_pg AS SELECT * FROM conditions;
-CREATE TABLE conditions_updated_pg AS SELECT * FROM conditions_updated;
-MERGE INTO conditions_pg c
-USING conditions_updated_pg cu
-ON c.time = cu.time AND c.location = cu.location
+-- CREATE normal PostgreSQL tables
+CREATE TABLE target_pg AS SELECT * FROM target;
+CREATE TABLE source_pg AS SELECT * FROM source;
+-- Merge UPDATE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
 WHEN MATCHED THEN
-UPDATE SET temperature = (c.temperature + cu.temperature)/2
-WHEN NOT MATCHED THEN
-INSERT (time, location, temperature) VALUES (cu.time, cu.location, cu.temperature);
-SELECT * FROM conditions_pg ORDER BY time, location ASC;
-             time             | location | temperature 
-------------------------------+----------+-------------
- Fri Jan 01 00:00:00 2021 PST |        1 |          14
- Fri Jan 01 00:00:00 2021 PST |        2 |          14
- Fri Jan 01 00:00:00 2021 PST |        3 |          14
- Fri Jan 01 00:00:00 2021 PST |        4 |          14
- Fri Jan 01 00:00:05 2021 PST |        1 |          47
- Fri Jan 01 00:00:05 2021 PST |        2 |          47
- Fri Jan 01 00:00:05 2021 PST |        3 |          47
- Fri Jan 01 00:00:05 2021 PST |        4 |          47
- Fri Jan 01 00:00:10 2021 PST |        1 |          80
- Fri Jan 01 00:00:10 2021 PST |        2 |          80
- Fri Jan 01 00:00:10 2021 PST |        3 |          80
- Fri Jan 01 00:00:10 2021 PST |        4 |          80
-(12 rows)
+UPDATE SET temperature = (t.temperature + s.temperature)/2, val = val || ' UPDATED BY MERGE';
+-- Merge UPDATE matched rows for hypertables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = (t.temperature + s.temperature)/2, val = val || ' UPDATED BY MERGE';
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
 
--- Merge conditions_updated into conditions
+-- Merge DELETE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+DELETE;
+-- Merge DELETE matched rows for hypertables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+DELETE;
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- clean up tables
+DELETE FROM target_pg;
+DELETE FROM target;
+DELETE FROM source_pg;
+DELETE FROM source;
+INSERT INTO target
+SELECT time, location, 14 as temperature
+FROM generate_series(
+	'2021-01-01 00:00:00',
+    '2021-01-01 00:00:09',
+    INTERVAL '5 seconds'
+  ) as time,
+generate_series(1,4) as location;
+INSERT INTO source
+SELECT time, location, 80 as temperature
+FROM generate_series(
+	'2021-01-01 00:00:05',
+    '2021-01-01 00:00:14',
+    INTERVAL '5 seconds'
+  ) as time,
+generate_series(1,4) as location;
+INSERT INTO target_pg SELECT * FROM target;
+INSERT INTO source_pg SELECT * FROM source;
+-- Merge UPDATE matched rows and INSERT new row for unmatched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = (t.temperature + s.temperature)/2, val = val || ' UPDATED BY MERGE'
+WHEN NOT MATCHED THEN
+INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'string - INSERTED BY MERGE');
+-- Merge UPDATE matched rows and INSERT new row for unmatched rows for hypertables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = (t.temperature + s.temperature)/2, val = val || ' UPDATED BY MERGE'
+WHEN NOT MATCHED THEN
+INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'string - INSERTED BY MERGE');
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge INSERT with constant literals for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.location = 1234
+WHEN NOT MATCHED THEN
+INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, 'string - INSERTED BY MERGE');
+-- Merge INSERT with constant literals for hypertables
+MERGE INTO target t
+USING source s
+ON t.location = 1234
+WHEN NOT MATCHED THEN
+INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, 'string - INSERTED BY MERGE');
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge with INSERT/DELETE/UPDATE on PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED AND t.location = 560076 THEN
+ UPDATE SET temperature = (t.temperature + s.temperature) * 2, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.location = 560083 THEN
+ DELETE
+WHEN NOT MATCHED THEN
+ INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'string - INSERTED BY MERGE');
+-- Merge with INSERT/DELETE/UPDATE on hypertables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED AND t.location = 560076 THEN
+ UPDATE SET temperature = (t.temperature + s.temperature) * 2, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.location = 560083 THEN
+ DELETE
+WHEN NOT MATCHED THEN
+ INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'string - INSERTED BY MERGE');
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge with Subqueries on PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location > (SELECT count(*) FROM source_pg)
+WHEN MATCHED AND t.temperature = 23 THEN
+ UPDATE SET temperature = (SELECT count(*) FROM target_pg) * 2, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.temperature = 47 THEN
+ DELETE
+WHEN NOT MATCHED THEN
+ INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'SUBQUERY string - INSERTED BY MERGE');
+-- Merge with Subqueries on hypertables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location > (SELECT count(*) FROM source)
+WHEN MATCHED AND t.temperature = 23 THEN
+ UPDATE SET temperature = (SELECT count(*) FROM target) * 2, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.temperature = 47 THEN
+ DELETE
+WHEN NOT MATCHED THEN
+ INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'SUBQUERY string - INSERTED BY MERGE');
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- clean up tables
+DELETE FROM target_pg;
+DELETE FROM target;
+DELETE FROM source_pg;
+DELETE FROM source;
+-- TEST with target as hypertable and source as normal PG table
+INSERT INTO target
+SELECT time, location, 14 as temperature
+FROM generate_series(
+	'2021-01-01 00:00:00',
+    '2021-01-01 00:00:09',
+    INTERVAL '5 seconds'
+  ) as time,
+generate_series(1,4) as location;
+INSERT INTO source
+SELECT time, location, 80 as temperature
+FROM generate_series(
+	'2021-01-01 00:00:05',
+    '2021-01-01 00:00:14',
+    INTERVAL '5 seconds'
+  ) as time,
+generate_series(1,4) as location;
+INSERT INTO target_pg SELECT * FROM target;
+INSERT INTO source_pg SELECT * FROM source;
+-- Merge UPDATE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = (t.temperature + s.temperature)/2, val = val || ' UPDATED BY MERGE';
+-- Merge UPDATE with target as hypertables and source as normal PG tables
+MERGE INTO target t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = (t.temperature + s.temperature)/2, val = val || ' UPDATED BY MERGE';
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge DELETE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+DELETE;
+-- Merge DELETE with target as hypertables and source as normal PG tables
+MERGE INTO target t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+DELETE;
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge INSERT with constant literals for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.location = 1234
+WHEN NOT MATCHED THEN
+INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, 'string - INSERTED BY MERGE');
+-- Merge INSERT with constant literals for target as hypertables and source as normal PG tables
+MERGE INTO target t
+USING source s
+ON t.location = 1234
+WHEN NOT MATCHED THEN
+INSERT VALUES ('2021-11-01 00:00:05'::timestamp with time zone, 5, 210, 'string - INSERTED BY MERGE');
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge with INSERT/DELETE/UPDATE on PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED AND t.temperature = 23 THEN
+ UPDATE SET temperature = (t.temperature + s.temperature) * 2, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.temperature = 47 THEN
+ DELETE
+WHEN NOT MATCHED THEN
+ INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'string - INSERTED BY MERGE');
+-- Merge with INSERT/DELETE/UPDATE on target as hypertables and source as normal PG tables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED  AND t.temperature = 23 THEN
+ UPDATE SET temperature = (t.temperature + s.temperature) * 2, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED  AND t.temperature = 47 THEN
+ DELETE
+WHEN NOT MATCHED THEN
+ INSERT (time, location, temperature, val) VALUES (s.time, s.location, s.temperature, 'string - INSERTED BY MERGE');
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+DROP TABLE target_pg CASCADE;
+DROP TABLE target CASCADE;
+DROP TABLE source_pg CASCADE;
+DROP TABLE source CASCADE;
+-- test MERGE with source being a PARTITION table
+CREATE TABLE source_pg(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_source_pky PRIMARY KEY (id)
+) PARTITION BY LIST (id);
+CREATE TABLE source_1_2_3_4 PARTITION OF source_pg FOR VALUES IN (1,2,3,4);
+CREATE TABLE source_5_6_7_8 PARTITION OF source_pg FOR VALUES IN (5,6,7,8);
+INSERT INTO source_pg SELECT generate_series(1,8), 44,55;
+CREATE TABLE target (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES source_pg(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'target',
+   time_column_name => 'ts'
+);
+  create_hypertable  
+---------------------
+ (3,public,target,t)
+(1 row)
+
+insert into target values ('2023-01-12 00:00:05'::timestamp with time zone, 1,2);
+insert into target values ('2023-01-12 00:00:10'::timestamp with time zone, 2,2);
+insert into target values ('2023-01-12 00:00:15'::timestamp with time zone, 3,2);
+insert into target values ('2023-01-12 00:00:20'::timestamp with time zone, 4,2);
+insert into target values ('2023-01-14 00:00:25'::timestamp with time zone, 5,2);
+insert into target values ('2023-01-14 00:00:30'::timestamp with time zone, 6,2);
+insert into target values ('2023-01-14 00:00:35'::timestamp with time zone, 7,2);
+insert into target values ('2023-01-14 00:00:40'::timestamp with time zone, 8,2);
+CREATE TABLE target_pg AS SELECT * FROM target;
+-- Merge UPDATE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.id = s.id
+WHEN MATCHED THEN
+UPDATE SET dev = (t.dev + s.dev)/2;
+-- Merge UPDATE matched rows for hypertables
+MERGE INTO target t
+USING source_pg s
+ON t.id = s.id
+WHEN MATCHED THEN
+UPDATE SET dev = (t.dev + s.dev)/2;
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge DELETE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.id = s.id
+WHEN MATCHED THEN
+DELETE;
+-- Merge DELETE matched rows for hypertables
+MERGE INTO target t
+USING source_pg s
+ON t.id = s.id
+WHEN MATCHED THEN
+DELETE;
+-- ensure TARGET PG table and hypertable are same
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- clean up tables
+DROP TABLE target_pg CASCADE;
+DROP TABLE target CASCADE;
+DROP TABLE source_pg CASCADE;
+-- test MERGE with hypertables with time and space partitions
+CREATE TABLE target (
+     filler_1 int,
+     filler_2 int,
+     filler_3 int,
+     time timestamptz NOT NULL,
+     device_id int,
+     device_id_peer int,
+     v0 int,
+     v1 float,
+     v2 float,
+     v3 float
+ );
+SELECT create_hypertable ('target', 'time', 'device_id', 5);
+  create_hypertable  
+---------------------
+ (4,public,target,t)
+(1 row)
+
+SELECT add_dimension('target', 'device_id_peer', 5);
+           add_dimension            
+------------------------------------
+ (6,public,target,device_id_peer,t)
+(1 row)
+
+SELECT add_dimension('target', 'v2', 5);
+     add_dimension      
+------------------------
+ (7,public,target,v2,t)
+(1 row)
+
+INSERT INTO target (time, device_id, device_id_peer, v0, v1, v2, v3)
+  SELECT time,
+    device_id,
+    0,
+    device_id + 1,
+    device_id + 2,
+    device_id + 0.5,
+    NULL
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', '20m') gtime (time),
+    generate_series(1, 2, 1) gdevice (device_id);
+CREATE TABLE source (
+         filler_1 int,
+         filler_2 int,
+         filler_3 int,
+         time timestamptz NOT NULL,
+         device_id int
+  );
+SELECT create_hypertable ('source', 'time', 'device_id', 3);
+  create_hypertable  
+---------------------
+ (5,public,source,t)
+(1 row)
+
+INSERT INTO source (time, device_id, filler_2, filler_3, filler_1)
+  SELECT time,
+    device_id,
+    device_id + 134,
+    device_id + 209,
+    device_id + 0.50127
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', '20m') gtime (time),
+    generate_series(1, 5, 1) gdevice (device_id);
+-- create PG tables to compare PG target and hypertable target tables
+CREATE table target_pg as SELECT * FROM target;
+CREATE table source_pg as SELECT * FROM source;
+-- Merge UDPATE matched rows for normal PG tables
+MERGE INTO target_pg t
+USING source_pg s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN MATCHED THEN
+UPDATE SET filler_2 = s.filler_1 + 100;
+-- Merge UDPATE matched rows for space partitioned hypertables
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN MATCHED THEN
+UPDATE SET filler_2 = s.filler_1 + 100;
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge DELETE matched rows for normal PG tables
+MERGE INTO target_pg t
+       USING source_pg s
+       ON t.time = s.time AND t.device_id = s.device_id
+       WHEN MATCHED THEN
+       DELETE;
+-- Merge DELETE matched rows for space partitioned hypertables
+MERGE INTO target t
+       USING source s
+       ON t.time = s.time AND t.device_id = s.device_id
+       WHEN MATCHED THEN
+       DELETE;
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge INSERT matched rows for normal PG tables
+MERGE INTO target_pg t
+              USING source_pg s
+              ON t.time = s.time AND t.device_id = s.device_id
+              WHEN NOT MATCHED THEN
+              INSERT (filler_1, filler_2, filler_3, time, device_id, device_id_peer, v0, v1, v2, v3) VALUES
+                     (s.filler_1, s.filler_2, s.filler_3, s.time, s.device_id, s.device_id + 10, 1,2,3,4);
+-- Merge INSERT matched rows for space partitioned hypertables
+MERGE INTO target t
+              USING source s
+              ON t.time = s.time AND t.device_id = s.device_id
+              WHEN NOT MATCHED THEN
+              INSERT (filler_1, filler_2, filler_3, time, device_id, device_id_peer, v0, v1, v2, v3) VALUES
+                     (s.filler_1, s.filler_2, s.filler_3, s.time, s.device_id, s.device_id + 10, 1,2,3,4);
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- Merge with INSERT/DELETE/UPDATE on PG tables
+MERGE INTO target_pg t
+    USING source_pg s
+        ON t.time = s.time AND t.device_id = s.device_id
+              WHEN MATCHED AND t.device_id_peer = 2 THEN
+                  UPDATE SET filler_2 = s.filler_1 + s.filler_2 + s.filler_3 + 100
+              WHEN MATCHED AND t.device_id_peer = 7 THEN
+                  DELETE
+              WHEN NOT MATCHED THEN
+                  INSERT (filler_1, filler_2, filler_3, time, device_id, device_id_peer, v0, v1, v2, v3) VALUES
+                         (s.filler_1, s.filler_2, s.filler_3, s.time, s.device_id, s.device_id + 10, 1,2,3,4);
+-- Merge with INSERT/DELETE/UPDATE on space partitioned hypertables
+MERGE INTO target t
+    USING source s
+        ON t.time = s.time AND t.device_id = s.device_id
+              WHEN MATCHED AND t.device_id_peer = 2 THEN
+                  UPDATE SET filler_2 = s.filler_1 + s.filler_2 + s.filler_3 + 100
+              WHEN MATCHED AND t.device_id_peer = 7 THEN
+                  DELETE
+              WHEN NOT MATCHED THEN
+                  INSERT (filler_1, filler_2, filler_3, time, device_id, device_id_peer, v0, v1, v2, v3) VALUES
+                         (s.filler_1, s.filler_2, s.filler_3, s.time, s.device_id, s.device_id + 10, 1,2,3,4);
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+-- clean up tables
+DROP TABLE target_pg CASCADE;
+DROP TABLE target CASCADE;
+DROP TABLE source_pg CASCADE;
+DROP TABLE source CASCADE;
+-- TEST with parition column place after similar data type column
+CREATE TABLE target (
+     filler_1 int,
+     filler_2 int,
+     filler_3 int,
+     time timestamptz NOT NULL,
+     device_id int,
+     device_id_peer int,
+     v0 int,
+     v1 float,
+     v2 float,
+     v3 float,
+     partition_column TIMESTAMPTZ NOT NULL
+ );
+SELECT create_hypertable ('target', 'partition_column');
+  create_hypertable  
+---------------------
+ (6,public,target,t)
+(1 row)
+
+INSERT INTO target (time, device_id, device_id_peer, v0, v1, v2, v3, partition_column)
+  SELECT time,
+    device_id,
+    0,
+    device_id + 1,
+    device_id + 2,
+    device_id + 0.5,
+    NULL,
+    time + interval '10m'
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', '20m') gtime (time),
+    generate_series(1, 2, 1) gdevice (device_id);
+CREATE TABLE source (
+         filler_1 int,
+         filler_2 int,
+         filler_3 int,
+         time timestamptz NOT NULL,
+         device_id int
+  );
+SELECT create_hypertable ('source', 'time', 'device_id', 3);
+  create_hypertable  
+---------------------
+ (7,public,source,t)
+(1 row)
+
+INSERT INTO source (time, device_id, filler_2, filler_3, filler_1)
+  SELECT time,
+    device_id,
+    device_id + 134,
+    device_id + 209,
+    device_id + 0.50127
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', '20m') gtime (time),
+    generate_series(1, 5, 1) gdevice (device_id);
+-- create PG tables to compare PG target and hypertable target tables
+CREATE table target_pg as SELECT * FROM target;
+MERGE INTO target_pg t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN NOT MATCHED THEN
+INSERT (time, device_id, device_id_peer, v0, v1, v2, v3, partition_column) VALUES
+('2010-01-06 05:30:00+05:30', 23, 2, 11, 22, 33, 44, '2023-01-06 05:33:00+05:30');
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN NOT MATCHED THEN
+INSERT (time, device_id, device_id_peer, v0, v1, v2, v3, partition_column) VALUES
+('2010-01-06 05:30:00+05:30', 23, 2, 11, 22, 33, 44, '2023-01-06 05:33:00+05:30');
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+MERGE INTO target_pg t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN  MATCHED THEN
+DELETE;
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN  MATCHED THEN
+DELETE;
+SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
+              OR EXISTS (TABLE target_pg EXCEPT TABLE target)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+ result 
+--------
+ same
+(1 row)
+
+MERGE INTO target_pg t
+              USING source s
+              ON t.time = s.time AND t.device_id = s.device_id
+              WHEN NOT MATCHED THEN
+              INSERT (filler_1, filler_2, filler_3, time, device_id, device_id_peer, v0, v1, v2, v3) VALUES
+                     (s.filler_1, s.filler_2, s.filler_3, s.time, s.device_id, s.device_id + 10, 1,2,3,4);
+-- time dimension column is NULL, this will report an null constraint violation error
 \set ON_ERROR_STOP 0
-MERGE INTO conditions c
-USING conditions_updated cu
-ON c.time = cu.time AND c.location = cu.location
-WHEN MATCHED THEN
-UPDATE SET temperature = (c.temperature + cu.temperature)/2
-WHEN NOT MATCHED THEN
-INSERT (time, location, temperature) VALUES (cu.time, cu.location, cu.temperature);
-ERROR:  The MERGE command does not support hypertables in this version
-SELECT * FROM conditions ORDER BY time, location ASC;
-             time             | location | temperature 
-------------------------------+----------+-------------
- Fri Jan 01 00:00:00 2021 PST |        1 |          14
- Fri Jan 01 00:00:00 2021 PST |        2 |          14
- Fri Jan 01 00:00:00 2021 PST |        3 |          14
- Fri Jan 01 00:00:00 2021 PST |        4 |          14
- Fri Jan 01 00:00:05 2021 PST |        1 |          14
- Fri Jan 01 00:00:05 2021 PST |        2 |          14
- Fri Jan 01 00:00:05 2021 PST |        3 |          14
- Fri Jan 01 00:00:05 2021 PST |        4 |          14
-(8 rows)
-
+MERGE INTO target t
+              USING source s
+              ON t.time = s.time AND t.device_id = s.device_id
+              WHEN NOT MATCHED THEN
+              INSERT (filler_1, filler_2, filler_3, time, device_id, device_id_peer, v0, v1, v2, v3) VALUES
+                     (s.filler_1, s.filler_2, s.filler_3, s.time, s.device_id, s.device_id + 10, 1,2,3,4);
+ERROR:  NULL value in column "partition_column" violates not-null constraint
 \set ON_ERROR_STOP 1
+DROP TABLE target CASCADE;
+DROP TABLE target_pg CASCADE;
+DROP TABLE source CASCADE;
+-- TEST with target table have CHECK constraints
+CREATE TABLE target (
+   time        TIMESTAMPTZ       NOT NULL,
+   location    SMALLINT          NOT NULL,
+   temperature DOUBLE PRECISION  NULL CHECK (temperature > 10),
+   val text default 'string -'
+);
+SELECT create_hypertable(
+  'target',
+  'time',
+  chunk_time_interval => INTERVAL '5 seconds');
+  create_hypertable  
+---------------------
+ (8,public,target,t)
+(1 row)
+
+INSERT INTO target
+SELECT time, location, 14 as temperature
+FROM generate_series(
+	'2021-01-01 00:00:00',
+    '2021-01-01 00:00:09',
+    INTERVAL '5 seconds'
+  ) as time,
+generate_series(1,4) as location;
+-- Create source table with location and temperature
+CREATE TABLE source (
+   time        TIMESTAMPTZ       NOT NULL,
+   location    SMALLINT          NOT NULL,
+   temperature DOUBLE PRECISION  NULL
+);
+-- Generate data that overlaps with target table
+INSERT INTO source
+SELECT time, location, 80 as temperature
+FROM generate_series(
+	'2021-01-01 00:00:05',
+    '2021-01-01 00:00:14',
+    INTERVAL '5 seconds'
+  ) as time,
+generate_series(1,4) as location;
+-- CREATE normal PostgreSQL tables
+CREATE TABLE target_pg AS SELECT * FROM target;
+-- Merge UPDATE/DELETE with DO NOTHING on pg tables
+MERGE INTO target_pg t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+DO NOTHING
+WHEN NOT MATCHED THEN
+DO NOTHING;
+-- Merge UPDATE/DELETE with DO NOTHING on hypertable
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+DO NOTHING
+WHEN NOT MATCHED THEN
+DO NOTHING;
+-- Error cases for Merge
+\set ON_ERROR_STOP 0
+-- Merge UPDATE should fail with check constraint violation
+MERGE INTO target_pg t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = 8, val = val || ' UPDATED BY MERGE';
+-- Merge UPDATE should fail with check constraint violation
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = 8, val = val || ' UPDATED BY MERGE';
+ERROR:  new row for relation "_hyper_8_24_chunk" violates check constraint "target_temperature_check"
+-- Merge error with unreachable WHEN clause on pg tables
+MERGE INTO target_pg t
+USING source s
+ON t.time = s.time AND t.location != s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = 8, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.time < now() THEN
+DELETE
+WHEN NOT MATCHED THEN
+DO NOTHING;
+ERROR:  unreachable WHEN clause specified after unconditional WHEN clause
+-- Merge error with unreachable WHEN clause on hypertable
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location != s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = 8, val = val || ' UPDATED BY MERGE'
+WHEN MATCHED AND t.time < now() THEN
+DELETE
+WHEN NOT MATCHED THEN
+DO NOTHING;
+ERROR:  unreachable WHEN clause specified after unconditional WHEN clause
+-- Merge error with unknown action in MERGE WHEN MATCHED clause on pg tables
+MERGE INTO target_pg t
+USING source s
+ON t.time = s.time AND t.location != s.location
+WHEN MATCHED THEN
+SELECT 1;
+ERROR:  syntax error at or near "SELECT" at character 105
+-- Merge error with unknown action in MERGE WHEN MATCHED clause on hypertable
+MERGE INTO target t
+USING source s
+ON t.time = s.time AND t.location != s.location
+WHEN MATCHED THEN
+SELECT 1;
+ERROR:  syntax error at or near "SELECT" at character 102
+-- Merge error cannot affect row a second time on pg tables
+MERGE INTO target_pg t
+USING source s
+ON  t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = 28, val = val || ' UPDATED BY MERGE';
+ERROR:  MERGE command cannot affect row a second time
+-- Merge error cannot affect row a second time on hypertable
+MERGE INTO target t
+USING source s
+ON  t.location = s.location
+WHEN MATCHED THEN
+UPDATE SET temperature = 28, val = val || ' UPDATED BY MERGE';
+ERROR:  MERGE command cannot affect row a second time
+\set ON_ERROR_STOP 1
+DROP TABLE target CASCADE;
+DROP TABLE target_pg CASCADE;
+DROP TABLE source CASCADE;
+-- TEST for PERMISSIONS
+CREATE USER priv_user;
+CREATE USER non_priv_user;
+CREATE TABLE target (
+    value DOUBLE PRECISION NOT NULL,
+    time TIMESTAMPTZ NOT NULL
+);
+SELECT table_name FROM create_hypertable(
+                            'target'::regclass,
+                            'time'::name, chunk_time_interval=>interval '8 hours',
+                            create_default_indexes=> false);
+ table_name 
+------------
+ target
+(1 row)
+
+SELECT '2022-10-10 14:33:44.1234+05:30' as start_date \gset
+INSERT INTO target (value, time)
+  SELECT 1,t from generate_series(:'start_date'::timestamptz, :'start_date'::timestamptz + interval '1 day', '5m') t cross join
+    generate_series(1,3) s;
+CREATE TABLE source (
+        time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        value DOUBLE PRECISION NOT NULL
+    );
+SELECT table_name FROM create_hypertable(
+                                'source'::regclass,
+                                'time'::name, chunk_time_interval=>interval '6 hours',
+                                create_default_indexes=> false);
+ table_name 
+------------
+ source
+(1 row)
+
+ALTER TABLE target OWNER TO priv_user;
+ALTER TABLE source OWNER TO priv_user;
+GRANT SELECT ON source TO non_priv_user;
+SET SESSION AUTHORIZATION non_priv_user;
+\set ON_ERROR_STOP 0
+-- non_priv_user does not have UPDATE privilege on target table
+MERGE INTO target
+USING source
+ON target.time = source.time
+WHEN MATCHED THEN
+	UPDATE SET value = 0;
+ERROR:  permission denied for table target
+-- non_priv_user does not have DELETE privilege on target table
+MERGE INTO target
+USING source
+ON target.time = source.time
+WHEN MATCHED THEN
+	DELETE;
+ERROR:  permission denied for table target
+-- non_priv_user does not have INSERT privilege on target table
+MERGE INTO target
+USING source
+ON target.time = source.time
+WHEN NOT MATCHED THEN
+	INSERT VALUES (10, '2023-01-15 00:00:10'::timestamp with time zone);
+ERROR:  permission denied for table target
+\set ON_ERROR_STOP 1
+RESET SESSION AUTHORIZATION;
+DROP TABLE target;
+DROP TABLE source;
+DROP USER priv_user;
+DROP USER non_priv_user;
