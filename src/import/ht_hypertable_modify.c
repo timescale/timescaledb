@@ -27,10 +27,14 @@
  * otherwise, return true.
  */
 bool
-ht_ExecUpdatePrologue(ModifyTableContext * context, ResultRelInfo * resultRelInfo, ItemPointer tupleid,
-		      HeapTuple oldtuple, TupleTableSlot * slot)
+ht_ExecUpdatePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
+					  ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot *slot,
+					  TM_Result *result)
 {
-	Relation	resultRelationDesc = resultRelInfo->ri_RelationDesc;
+	Relation resultRelationDesc = resultRelInfo->ri_RelationDesc;
+
+	if (result != NULL)
+		*result = TM_Ok;
 
 	ExecMaterializeSlot(slot);
 
@@ -49,6 +53,7 @@ ht_ExecUpdatePrologue(ModifyTableContext * context, ResultRelInfo * resultRelInf
 						  tupleid,
 						  oldtuple,
 						  slot,
+						  result,
 						  &context->tmfd);
 
 	return true;
@@ -193,8 +198,15 @@ ht_ExecUpdateEpilogue(ModifyTableContext * context, UpdateContext * updateCxt,
 	ModifyTableState *mtstate = context->mtstate;
 
 	/* insert index entries for tuple if necessary */
-
-	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
+	bool onlySummarizing = false;
+#if PG16_LT
+	bool updateIndexes = updateCxt->updateIndexes;
+	(void) onlySummarizing; /* onlySummarizing is unused in versions < PG16 */
+#else
+	bool updateIndexes = (updateCxt->updateIndexes != TU_None);
+	onlySummarizing = (updateCxt->updateIndexes == TU_Summarizing);
+#endif
+	if (resultRelInfo->ri_NumIndices > 0 && updateIndexes)
 		recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
 													 slot,
 													 context->estate,
@@ -202,7 +214,7 @@ ht_ExecUpdateEpilogue(ModifyTableContext * context, UpdateContext * updateCxt,
 													 false,
 													 NULL,
 													 NIL,
-													 false);
+													 onlySummarizing);
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggersCompat(context->estate,
@@ -240,17 +252,20 @@ ht_ExecUpdateEpilogue(ModifyTableContext * context, UpdateContext * updateCxt,
  * the delete a no-op; otherwise, return true.
  */
 bool
-ht_ExecDeletePrologue(ModifyTableContext * context, ResultRelInfo * resultRelInfo, ItemPointer tupleid,
-		      HeapTuple oldtuple, TupleTableSlot * *epqreturnslot)
+ht_ExecDeletePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
+					  ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot **epqreturnslot,
+					  TM_Result *result)
 {
 	/* BEFORE ROW DELETE triggers */
 	if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_delete_before_row)
-		return ExecBRDeleteTriggers(context->estate,
-					    context->epqstate,
-					    resultRelInfo,
-					    tupleid,
-					    oldtuple,
-					    epqreturnslot);
+		return ExecBRDeleteTriggersCompat(context->estate,
+										  context->epqstate,
+										  resultRelInfo,
+										  tupleid,
+										  oldtuple,
+										  epqreturnslot,
+										  result,
+										  &context->tmfd);
 
 	return true;
 }
@@ -453,8 +468,16 @@ lmerge_matched:;
 			context->GetUpdateNewTuple = mergeGetUpdateNewTuple;
 			context->cpUpdateRetrySlot = NULL;
 
-			if (!ht_ExecUpdatePrologue(context, resultRelInfo, tupleid, NULL, newslot)) {
+			if (!ht_ExecUpdatePrologue(context, resultRelInfo, tupleid, NULL, newslot, &result))
+			{
+#if PG16_LT
 				result = TM_Ok;
+#else
+				if (result == TM_Ok)
+					return true; /* "do nothing" */
+
+				/* if not TM_OK, it is concurrent update/delete */
+#endif
 				break;
 			}
 			ht_ExecUpdatePrepareSlot(resultRelInfo, newslot, context->estate);
@@ -480,8 +503,16 @@ lmerge_matched:;
 
 		case CMD_DELETE:
 			context->relaction = relaction;
-			if (!ht_ExecDeletePrologue(context, resultRelInfo, tupleid, NULL, NULL)) {
+			if (!ht_ExecDeletePrologue(context, resultRelInfo, tupleid, NULL, NULL, &result))
+			{
+#if PG16_LT
 				result = TM_Ok;
+#else
+				if (result == TM_Ok)
+					return true; /* "do nothing" */
+
+				/* if not TM_OK, it is concurrent update/delete */
+#endif
 				break;
 			}
 			result = ht_ExecDeleteAct(context, resultRelInfo, tupleid, false);

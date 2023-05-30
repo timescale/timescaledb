@@ -631,6 +631,12 @@ pg_strtoint64(const char *str)
 	} while (0)
 #endif
 
+/*
+ * PG15 updated the signatures of ExecARUpdateTriggers and ExecARDeleteTriggers while
+ * fixing foreign key handling during cross-partition updates
+ *
+ * https://github.com/postgres/postgres/commit/ba9a7e39217
+ */
 #if PG15_LT
 #define ExecARUpdateTriggersCompat(estate,                                                         \
 								   resultRelInfo,                                                  \
@@ -649,6 +655,13 @@ pg_strtoint64(const char *str)
 						 inewslot,                                                                 \
 						 recheckIndexes,                                                           \
 						 transtition_capture)
+#define ExecARDeleteTriggersCompat(estate,                                                         \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   ar_delete_trig_tcs,                                             \
+								   is_crosspart_update)                                            \
+	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs)
 #else
 #define ExecARUpdateTriggersCompat(estate,                                                         \
 								   resultRelInfo,                                                  \
@@ -670,37 +683,6 @@ pg_strtoint64(const char *str)
 						 recheckIndexes,                                                           \
 						 transtition_capture,                                                      \
 						 is_crosspart_update)
-#endif
-
-#if PG15_LT
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot)
-#else
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
-#endif
-
-#if PG15_LT
-#define ExecARDeleteTriggersCompat(estate,                                                         \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   ar_delete_trig_tcs,                                             \
-								   is_crosspart_update)                                            \
-	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs)
-#else
 #define ExecARDeleteTriggersCompat(estate,                                                         \
 								   resultRelInfo,                                                  \
 								   tupleid,                                                        \
@@ -713,6 +695,72 @@ pg_strtoint64(const char *str)
 						 oldtuple,                                                                 \
 						 ar_delete_trig_tcs,                                                       \
 						 is_crosspart_update)
+#endif
+
+/*
+ * PG15 adds new argument TM_FailureData to ExecBRUpdateTriggers
+ * as a part of adding support for Merge
+ * https://github.com/postgres/postgres/commit/9321c79c
+ *
+ * PG16 adds TMResult argument to ExecBRUpdateTriggers
+ * https://github.com/postgres/postgres/commit/7103ebb7
+ */
+#if PG15_LT
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   result,                                                         \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot)
+#elif PG16_LT
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   result,                                                         \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
+#else
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   resultRelInfo,                                                  \
+								   tupleid,                                                        \
+								   oldtuple,                                                       \
+								   slot,                                                           \
+								   result,                                                         \
+								   tmfdp)                                                          \
+	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
+#endif
+
+/*
+ * PG16 adds TMResult argument to ExecBRDeleteTriggers
+ * https://github.com/postgres/postgres/commit/9321c79c
+ */
+#if PG16_LT
+#define ExecBRDeleteTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd)                                                           \
+	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot)
+#else
+#define ExecBRDeleteTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd)                                                           \
+	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
 #endif
 
 #if (PG13 && PG_VERSION_NUM < 130010) || (PG14 && PG_VERSION_NUM < 140007)

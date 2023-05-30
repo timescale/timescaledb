@@ -1998,7 +1998,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ItemPointe
 	 * Prepare for the update. This includes BEFORE ROW triggers, so we're
 	 * done if it says we are.
 	 */
-	if (!ht_ExecUpdatePrologue(context, resultRelInfo, tupleid, oldtuple, slot))
+	if (!ht_ExecUpdatePrologue(context, resultRelInfo, tupleid, oldtuple, slot, NULL))
 		return NULL;
 
 	/* INSTEAD OF ROW UPDATE Triggers */
@@ -2539,7 +2539,7 @@ ExecDelete(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ItemPointe
 	 * Prepare for the delete.  This includes BEFORE ROW triggers, so we're
 	 * done if it says we are.
 	 */
-	if (!ht_ExecDeletePrologue(context, resultRelInfo, tupleid, oldtuple, epqreturnslot))
+	if (!ht_ExecDeletePrologue(context, resultRelInfo, tupleid, oldtuple, epqreturnslot, NULL))
 		return NULL;
 
 	/* INSTEAD OF ROW DELETE Triggers */
