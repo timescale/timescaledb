@@ -348,8 +348,11 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
 	chunk_rri->ri_onConflict = onconfl;
 
-#if PG14_GE
+#if PG14_GE && PG16_LT
 	chunk_rri->ri_RootToPartitionMap = map;
+#elif PG16_GE
+	chunk_rri->ri_RootToChildMap = map;
+	chunk_rri->ri_RootToChildMapValid = true;
 #endif
 
 	Assert(mt->onConflictSet);
