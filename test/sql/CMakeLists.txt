@@ -122,7 +122,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
-  list(APPEND TEST_FILES merge.sql)
+  list(APPEND TEST_FILES merge.sql ts_merge.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture
