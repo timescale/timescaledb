@@ -1580,11 +1580,9 @@ SELECT
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
-     chunk_name     | chunk_status | dropped | comp_id 
---------------------+--------------+---------+---------
- _hyper_13_33_chunk |            0 | t       |        
- _hyper_13_34_chunk |            0 | t       |        
-(2 rows)
+ chunk_name | chunk_status | dropped | comp_id 
+------------+--------------+---------+---------
+(0 rows)
 
 SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
              time             | cnt  
@@ -1614,8 +1612,8 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_13_33_chunk |            1 | f       |      64
- _hyper_13_34_chunk |            1 | f       |      65
+ _hyper_13_64_chunk |            1 | f       |      66
+ _hyper_13_65_chunk |            1 | f       |      67
 (2 rows)
 
 SELECT count(*) FROM metrics;
@@ -1642,7 +1640,7 @@ INSERT INTO local_seq SELECT '2000-01-01', generate_series(5,8);
 SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_33_66_chunk
+ _timescaledb_internal._hyper_33_68_chunk
 (1 row)
 
 SELECT
