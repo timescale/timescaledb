@@ -315,7 +315,7 @@ SELECT COUNT(*) AS dropped_chunks_count
  WHERE dropped = TRUE;
  dropped_chunks_count 
 ----------------------
-                   14
+                    0
 (1 row)
 
 SELECT count(*) FROM timescaledb_information.chunks
