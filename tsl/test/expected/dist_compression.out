@@ -1244,11 +1244,10 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' ORDER BY 1;
        chunk_name       | chunk_status | dropped | comp_id 
 ------------------------+--------------+---------+---------
- _dist_hyper_6_24_chunk |            0 | t       |        
  _dist_hyper_6_25_chunk |            1 | f       |        
  _dist_hyper_6_26_chunk |            1 | f       |        
  _dist_hyper_6_28_chunk |            0 | f       |        
-(4 rows)
+(3 rows)
 
 -- TEST drop should nuke everything
 DROP TABLE test_recomp_int CASCADE;
