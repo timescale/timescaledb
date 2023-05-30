@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <executor/executor.h>
 #include <commands/explain.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <nodes/nodeFuncs.h>
 #include <utils/lsyscache.h>
@@ -220,6 +221,7 @@ get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *
 	RangeTblEntry *rte;
 	TSConnectionId id;
 	int rtindex;
+	Oid user_oid;
 
 	/*
 	 * Identify which user to do the remote access as.  This should match what
@@ -234,7 +236,14 @@ get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *
 
 	rte = rt_fetch(rtindex, estate->es_range_table);
 
-	remote_connection_id_set(&id, server_id, rte->checkAsUser ? rte->checkAsUser : GetUserId());
+#if PG16_LT
+	user_oid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
+#else
+	RTEPermissionInfo *perminfo = getRTEPermissionInfo(estate->es_rteperminfos, rte);
+	user_oid = OidIsValid(perminfo->checkAsUser) ? perminfo->checkAsUser : GetUserId();
+#endif
+
+	remote_connection_id_set(&id, server_id, user_oid);
 
 	return remote_dist_txn_get_connection(id,
 										  list_length(exprs) ? REMOTE_TXN_USE_PREP_STMT :
