@@ -72,15 +72,21 @@ typedef struct ModifyTableContext {
 /*
  * Context struct containing output data specific to UPDATE operations.
  */
-typedef struct UpdateContext {
-	bool		updated;	/* did UPDATE actually occur? */
-	bool		updateIndexes;	/* index update required? */
-	bool		crossPartUpdate;	/* was it a cross-partition
-						 * update? */
-}		UpdateContext;
+typedef struct UpdateContext
+{
+	bool updated; /* did UPDATE actually occur? */
+#if PG16_LT
+	bool updateIndexes; /* index update required? */
+#else
+	TU_UpdateIndexes updateIndexes; /* result codes */
+#endif
+
+	bool crossPartUpdate; /* was it a cross-partition
+						   * update? */
+} UpdateContext;
 
 bool		ht_ExecUpdatePrologue(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
-	    ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot * slot);
+	    ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot * slot, TM_Result *result);
 void		ht_ExecUpdatePrepareSlot(ResultRelInfo * resultRelInfo, TupleTableSlot * slot, EState * estate);
 TM_Result	ht_ExecUpdateAct(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 	     ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot * slot,
@@ -90,7 +96,7 @@ void		ht_ExecUpdateEpilogue(ModifyTableContext * context, UpdateContext * update
 			      TupleTableSlot * slot, List * recheckIndexes);
 
 bool		ht_ExecDeletePrologue(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
-  ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot * *epqreturnslot);
+  ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot * *epqreturnslot, TM_Result *result);
 TM_Result	ht_ExecDeleteAct(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 				 ItemPointer tupleid, bool changingPart);
 void		ht_ExecDeleteEpilogue(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
