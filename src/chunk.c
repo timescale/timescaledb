@@ -113,6 +113,7 @@ typedef struct ChunkStubScanCtx
 {
 	ChunkStub *stub;
 	Chunk *chunk;
+	bool is_dropped;
 } ChunkStubScanCtx;
 
 static bool
@@ -159,6 +160,7 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
 			Int32GetDatum(fd->compressed_chunk_id);
 	}
+	values[AttrNumberGetAttrOffset(Anum_chunk_dropped)] = BoolGetDatum(fd->dropped);
 	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(fd->status);
 	values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)] = BoolGetDatum(fd->osm_chunk);
 
@@ -180,6 +182,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_table_name)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_status)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
 
@@ -198,6 +201,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 		fd->compressed_chunk_id =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)]);
 
+	fd->dropped = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_status)]);
 	fd->osm_chunk = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
 
@@ -1441,6 +1445,19 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 			 * release the lock early.
 			 */
 			UnlockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
+			if (found)
+				*found = true;
+			return chunk;
+		}
+
+		/*
+		 * If we managed to find some metadata for the chunk (chunk_id != 0),
+		 * but it is marked as dropped, try to resurrect it.
+		 * Not sure if this ever worked for distributed hypertables.
+		 */
+		chunk = chunk_resurrect(ht, chunk_id);
+		if (chunk != NULL)
+		{
 			if (found)
 				*found = true;
 			return chunk;

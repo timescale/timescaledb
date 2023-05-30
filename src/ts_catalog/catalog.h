@@ -425,7 +425,7 @@ typedef struct FormData_chunk
 	NameData schema_name;
 	NameData table_name;
 	int32 compressed_chunk_id;
-	bool old_dropped;
+	bool dropped;
 	int32 status;
 	bool osm_chunk;
 } FormData_chunk;
