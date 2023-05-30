@@ -3028,8 +3028,9 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 }
 
 static int
-chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_delete(ScanIterator *iterator, DropBehavior behavior)
 {
+	bool preserve_chunk_catalog_row=false;
 	int count = 0;
 
 	ts_scanner_foreach(iterator)
@@ -3056,14 +3057,13 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 }
 
 static int
-ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior,
-								 bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, behavior);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3075,19 +3075,18 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBeha
 int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
-	return ts_chunk_delete_by_name_internal(schema, table, behavior, false);
+	return ts_chunk_delete_by_name_internal(schema, table, behavior);
 }
 
 static int
-ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior)
 {
 	if (!OidIsValid(relid))
 		return 0;
 
 	return ts_chunk_delete_by_name_internal(get_namespace_name(get_rel_namespace(relid)),
 											get_rel_name(relid),
-											behavior,
-											preserve_chunk_catalog_row);
+											behavior);
 }
 
 static void
@@ -3108,7 +3107,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, DROP_RESTRICT);
 }
 
 bool
@@ -3771,8 +3770,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 static void
-ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_level,
-					   bool preserve_catalog_row)
+ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	ObjectAddress objaddr = {
 		.classId = RelationRelationId,
@@ -3786,7 +3784,7 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 			 chunk->fd.table_name.data);
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid(chunk->table_id, behavior, preserve_catalog_row);
+	ts_chunk_delete_by_relid(chunk->table_id, behavior);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
@@ -3795,13 +3793,7 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 void
 ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
-	ts_chunk_drop_internal(chunk, behavior, log_level, false);
-}
-
-void
-ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, int32 log_level)
-{
-	ts_chunk_drop_internal(chunk, behavior, log_level, true);
+	ts_chunk_drop_internal(chunk, behavior, log_level);
 }
 
 static void
@@ -3963,10 +3955,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		if (has_continuous_aggs)
-			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
-		else
-			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
+		ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 
 		/* Collect a list of affected data nodes so that we know which data
 		 * nodes we need to drop chunks on */
