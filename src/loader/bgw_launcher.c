@@ -368,7 +368,7 @@ populate_database_htab(HTAB *db_htab)
 					   * connections or are templates */
 		db_hash_entry_create_if_not_exists(db_htab, pgdb->oid);
 	}
-	heap_endscan(scan);
+	table_endscan(scan);
 	table_close(rel, AccessShareLock);
 
 	CommitTransactionCommand();
