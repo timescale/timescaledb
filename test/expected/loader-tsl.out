@@ -548,8 +548,19 @@ WARNING:  mock init "mock-2"
    100
 (1 row)
 
+CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
+WARNING:  mock post_analyze_hook "mock-2"
+WARNING:  mock post_analyze_hook "mock-2"
+WARNING:  OSM-mock-1 _PG_init
+WARNING:  mock post_analyze_hook "mock-2"
+WARNING:  mock post_analyze_hook "mock-2"
+-- Test that OSM process utility hook works:  it should see this DROP TABLE.
+DROP TABLE test;
+WARNING:  mock post_analyze_hook "mock-2"
+NOTICE:  OSM-mock-1 got DROP TABLE 'test'
 -- clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE :"TEST_DBNAME_2";
 WARNING:  mock init "mock-2"
 WARNING:  mock post_analyze_hook "mock-2"
+WARNING:  OSM-mock-1 _PG_init

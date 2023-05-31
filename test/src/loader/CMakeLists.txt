@@ -49,3 +49,18 @@ foreach(
     DESTINATION ${PG_PKGLIBDIR}
     OPTIONAL)
 endforeach(MOCK_VERSION)
+
+add_library(${PROJECT_NAME}_osm-mock-1 MODULE osm_init.c)
+target_compile_definitions(${PROJECT_NAME}_osm-mock-1
+                           PRIVATE OSM_VERSION_MOD="mock-1")
+
+foreach(MOCK_VERSION mock-1)
+  set_target_properties(
+    ${PROJECT_NAME}_osm-${MOCK_VERSION}
+    PROPERTIES OUTPUT_NAME ${PROJECT_NAME}_osm-${MOCK_VERSION} PREFIX "")
+
+  install(
+    TARGETS ${PROJECT_NAME}_osm-${MOCK_VERSION}
+    DESTINATION ${PG_PKGLIBDIR}
+    OPTIONAL)
+endforeach(MOCK_VERSION)
