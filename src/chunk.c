@@ -2847,9 +2847,15 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
 	return true;
 }
 
-static void
+/* 
+ * Removes unreferenced slices which are associated with the given constraints.
+ * 
+ * Returns true if all matching slices were removed.
+*/
+static bool
 chunk_remove_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 {
+	bool all_slices_removed=true;
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (int i = 0; i < ccs->num_constraints; i++)
 	{
@@ -2900,10 +2906,16 @@ chunk_remove_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 								   quote_identifier(NameStr(ht->fd.schema_name)),
 								   quote_identifier(NameStr(ht->fd.table_name)))));
 			}
-			else if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
+			else {
+				if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
 																	NULL,
-																	CurrentMemoryContext) == 0)
+																	CurrentMemoryContext) == 0){
+
 				ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+																	}else {
+			all_slices_removed=false;
+																	}
+			}
 		}
 	}
 }
