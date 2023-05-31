@@ -758,7 +758,11 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	if (run_for_interval_ms > 0)
 		quit_time = TimestampTzPlusMilliseconds(start, run_for_interval_ms);
 
-	ereport(DEBUG1, (errmsg("database scheduler starting for database %u", MyDatabaseId)));
+	int elevel = (bgw_register == NULL) ? DEBUG1 : NOTICE;
+	ereport(elevel, (errmsg("database scheduler starting for database x at start timestamp %s", 
+		timestamptz_to_str(start))));
+	if (bgw_register != NULL)
+		elog(NOTICE, "scheduled jobs list length: %d", list_length(scheduled_jobs));
 
 	/*
 	 * on SIGTERM the process will usually die from the CHECK_FOR_INTERRUPTS
