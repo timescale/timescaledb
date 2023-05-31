@@ -495,7 +495,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 		}
 	}
 
-	heap_endscan(heapScan);
+	table_endscan(heapScan);
 
 	/* Perform an analyze on the chunk to get up-to-date stats before compressing.
 	 * We do it at this point because we've just read out the entire chunk into
@@ -689,7 +689,7 @@ table_scan_sequence_number(Relation table_rel, int16 seq_num_column_num, ScanKey
 		}
 	}
 
-	heap_endscan(heap_scan);
+	table_endscan(heap_scan);
 
 	return max_seq_num;
 }
@@ -1396,7 +1396,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 		row_decompressor_decompress_row(&decompressor, NULL);
 	}
 
-	heap_endscan(heapScan);
+	table_endscan(heapScan);
 
 	FreeBulkInsertState(decompressor.bistate);
 	MemoryContextDelete(decompressor.per_compressed_row_ctx);
@@ -2035,7 +2035,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 		Assert(result == TM_Ok);
 	}
 
-	heap_endscan(heapScan);
+	table_endscan(heapScan);
 
 	ts_catalog_close_indexes(decompressor.indexstate);
 	FreeBulkInsertState(decompressor.bistate);

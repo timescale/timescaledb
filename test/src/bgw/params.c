@@ -56,7 +56,7 @@ params_register_dsm_handle(dsm_handle handle)
 	fd->handle = handle;
 	ts_catalog_update(rel, tuple);
 	heap_freetuple(tuple);
-	heap_endscan(scan);
+	table_endscan(scan);
 	table_close(rel, RowExclusiveLock);
 }
 
@@ -77,7 +77,7 @@ params_load_dsm_handle()
 	fd = (FormData_bgw_dsm_handle *) GETSTRUCT(tuple);
 	handle = fd->handle;
 	heap_freetuple(tuple);
-	heap_endscan(scan);
+	table_endscan(scan);
 	table_close(rel, RowExclusiveLock);
 
 	return handle;

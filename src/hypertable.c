@@ -1317,7 +1317,7 @@ relation_has_tuples(Relation rel)
 		MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
 	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);
 
-	heap_endscan(scandesc);
+	table_endscan(scandesc);
 	ExecDropSingleTupleTableSlot(slot);
 	return hastuples;
 }
