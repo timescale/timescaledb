@@ -28,6 +28,7 @@
 
 #include "compat/compat.h"
 #include "extension_constants.h"
+#include "utils.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
@@ -68,7 +69,7 @@ enum ExtensionState
 };
 
 static char *
-extension_version(void)
+extension_version(char const *const extension_name)
 {
 	Datum result;
 	Relation rel;
@@ -84,7 +85,7 @@ extension_version(void)
 				Anum_pg_extension_extname,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				CStringGetDatum(EXTENSION_NAME));
+				CStringGetDatum(extension_name));
 
 	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true, NULL, 1, entry);
 
@@ -111,25 +112,14 @@ extension_version(void)
 	return sql_version;
 }
 
-static Oid
-get_proxy_table_relid()
+inline static bool
+extension_exists(char const *const extension_name)
 {
-	Oid nsid = get_namespace_oid(CACHE_SCHEMA_NAME, true);
-
-	if (!OidIsValid(nsid))
-		return InvalidOid;
-
-	return get_relname_relid(EXTENSION_PROXY_TABLE, nsid);
+	return OidIsValid(get_extension_oid(extension_name, true));
 }
 
 inline static bool
-extension_exists()
-{
-	return OidIsValid(get_extension_oid(EXTENSION_NAME, true));
-}
-
-inline static bool
-extension_is_transitioning()
+extension_is_transitioning(char const *const extension_name)
 {
 	/*
 	 * Determine whether the extension is being created or upgraded (as a
@@ -137,17 +127,20 @@ extension_is_transitioning()
 	 */
 	if (creating_extension)
 	{
-		return get_extension_oid(EXTENSION_NAME, true) == CurrentExtensionObject;
+		return get_extension_oid(extension_name, true) == CurrentExtensionObject;
 	}
 	return false;
 }
 
-/* Returns the recomputed current state */
+/* Returns the recomputed current state.
+ *
+ * (schema_name, table_name) refer to a table that is owned by the extension.
+ * thus it is created with the extension and dropped with the extension.
+ */
 static enum ExtensionState
-extension_current_state()
+extension_current_state(char const *const extension_name, char const *const schema_name,
+						char const *const table_name)
 {
-	Oid proxy_relid;
-
 	/*
 	 * NormalProcessingMode necessary to avoid accessing cache before its
 	 * ready (which may result in an infinite loop). More concretely we need
@@ -157,23 +150,24 @@ extension_current_state()
 		return EXTENSION_STATE_UNKNOWN;
 
 	/*
-	 * NOTE: do not check for proxy_table_exists here. Want to be in
-	 * TRANSITIONING state even before the proxy table is created
+	 * NOTE: do not check for (schema_name, table_name) existing here. Want to be in
+	 * TRANSITIONING state even before that table is created
 	 */
-	if (extension_is_transitioning())
+	if (extension_is_transitioning(extension_name))
 		return EXTENSION_STATE_TRANSITIONING;
 
 	/*
-	 * proxy_table_exists uses syscache. Must come first. NOTE: during DROP
-	 * EXTENSION proxy_table_exists() will return false right away, while
-	 * extension_exists will return true until the end of the command
+	 * We use syscache to check (schema_name, table_name) exists. Must come first.
+	 *
+	 * A table that is owned by the extension is dropped before the extension itself is dropped.
+	 * this logic lets us detect that an extension is being dropped early on in the drop process and
+	 * return `EXTENSION_STATE_NOT_INSTALLED` if that is the case.
+	 * It is best to use a table created early on in the extension creation process because
+	 * that means it will be dropped early in the drop process.
 	 */
-
-	proxy_relid = get_proxy_table_relid();
-
-	if (OidIsValid(proxy_relid))
+	if (OidIsValid(ts_get_relation_relid(schema_name, table_name, true)))
 	{
-		Assert(extension_exists());
+		Assert(extension_exists(extension_name));
 		return EXTENSION_STATE_CREATED;
 	}
 

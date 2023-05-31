@@ -13,5 +13,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           timescaledb--mock-5--mock-6.sql
           timescaledb--mock-broken--mock-5.sql
           timescaledb--0.0.0.sql
+          timescaledb_osm.control
+          timescaledb_osm--mock-1.sql
     DESTINATION "${PG_SHAREDIR}/extension")
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
