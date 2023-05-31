@@ -1,0 +1,6 @@
+comment = 'Manages object storage on S3'
+default_version = '0'
+module_pathname = '$libdir/timescaledb_osm-0'
+relocatable = false
+superuser = false
+requires = timescaledb
