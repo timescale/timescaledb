@@ -2891,7 +2891,7 @@ chunk_remove_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 			{
 				const Hypertable *const ht = ts_hypertable_get_by_id(form->hypertable_id);
 				ereport(WARNING,
-						(errmsg("unexpected state for chunk %s.%s, dropping anyway",
+						(errmsg("A slice for chunk %s.%s, continuing",
 								quote_identifier(NameStr(form->schema_name)),
 								quote_identifier(NameStr(form->table_name))),
 						 errdetail("The integrity of hypertable %s.%s might be "
