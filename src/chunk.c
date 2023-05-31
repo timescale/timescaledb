@@ -138,7 +138,7 @@ static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, 
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
-static void chunk_remove_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs);
+static bool chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs);
 static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 
 static HeapTuple
@@ -2847,15 +2847,15 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
 	return true;
 }
 
-/* 
- * Removes unreferenced slices which are associated with the given constraints.
- * 
+/*
+ * Cleans up unreferenced slices which are associated with the given constraints.
+ *
  * Returns true if all matching slices were removed.
-*/
+ */
 static bool
-chunk_remove_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
+chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 {
-	bool all_slices_removed=true;
+	bool all_slices_removed = true;
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (int i = 0; i < ccs->num_constraints; i++)
 	{
@@ -2906,18 +2906,22 @@ chunk_remove_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 								   quote_identifier(NameStr(ht->fd.schema_name)),
 								   quote_identifier(NameStr(ht->fd.table_name)))));
 			}
-			else {
+			else
+			{
 				if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
-																	NULL,
-																	CurrentMemoryContext) == 0){
-
-				ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
-																	}else {
-			all_slices_removed=false;
-																	}
+																   NULL,
+																   CurrentMemoryContext) == 0)
+				{
+					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+				}
+				else
+				{
+					all_slices_removed = false;
+				}
 			}
 		}
 	}
+	return all_slices_removed;
 }
 
 /*
@@ -2976,7 +2980,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	{
 		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
 
-		chunk_remove_ophaned_slices(&form, ccs);
+		chunk_cleanup_ophaned_slices(&form, ccs);
 	}
 
 	ts_chunk_index_delete_by_chunk_id(form.id, true);
