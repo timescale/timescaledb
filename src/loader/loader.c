@@ -84,7 +84,6 @@ PG_MODULE_MAGIC;
 #endif
 
 #define POST_LOAD_INIT_FN "ts_post_load_init"
-#define GUC_DISABLE_LOAD_NAME "timescaledb.disable_load"
 #define GUC_LAUNCHER_POLL_TIME_MS "timescaledb.bgw_launcher_poll_time"
 
 /*
@@ -102,13 +101,6 @@ extern void TSDLLEXPORT _PG_init(void);
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
 
-/* The shared object library version loaded, as a string. Will be all
- * zero-initialized if no extension is loaded. */
-static char soversion[MAX_VERSION_LEN];
-
-/* GUC to disable the load */
-static bool guc_disable_load = false;
-
 int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 
 /* This is the hook that existed before the loader was installed */
@@ -119,40 +111,91 @@ static shmem_request_hook_type prev_shmem_request_hook;
 #endif
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
-/* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
-static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
+typedef struct TsExtension
+{
+	/*
+	 * Static data
+	 */
 
-inline static void extension_check(void);
+	/* Name of the extension (must be part of the so file name) */
+	char const *const name;
+	/* Name of the schema for table_name. */
+	char const *const schema_name;
+	/* Name of the table whose existence indicates the extension is loaded. */
+	char const *const table_name;
+	/* Name of the GUC for disabling loading this extension. */
+	char const *const guc_disable_load_name;
+
+	/*
+	 * Run-time state
+	 */
+
+	/* Current value of this extension's disable GUC. */
+	bool guc_disable_load;
+
+	/* Shared object library version loaded; empty if none. */
+	char soversion[MAX_VERSION_LEN];
+
+	/* TODO Remove.  Neither timescaledb nor OSM actually have this hook,
+	 * never have, and we don't plan to add them. */
+	post_parse_analyze_hook_type post_parse_analyze_hook;
+} TsExtension;
+
+TsExtension extensions[] = {
+	/* Redundant default initializers are here because we compile with
+	 * `-Werror -Wmissing-field-initializers` for our PG13 build... */
+	{
+		.name = "timescaledb",
+		.schema_name = CACHE_SCHEMA_NAME,
+		.table_name = EXTENSION_PROXY_TABLE,
+		.guc_disable_load_name = "timescaledb.disable_load",
+		.guc_disable_load = false,
+		.soversion = "",
+		.post_parse_analyze_hook = NULL,
+	},
+	{
+		.name = "timescaledb_osm",
+		.schema_name = "_osm_catalog",
+		.table_name = "metadata",
+		.guc_disable_load_name = "timescaledb_osm.disable_load",
+		.guc_disable_load = false,
+		.soversion = "",
+		.post_parse_analyze_hook = NULL,
+	},
+};
+
+inline static void extension_check(TsExtension *);
 #if PG14_LT
-static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query);
+static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
+												   TsExtension const *);
 #else
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   JumbleState *jstate);
+												   TsExtension const *, JumbleState *jstate);
 #endif
 
 static bool
-extension_is_loaded(void)
+extension_is_loaded(TsExtension const *const ext)
 {
 	/* The extension is loaded when the version is set to a non-null string */
-	return soversion[0] != '\0';
+	return ext->soversion[0] != '\0';
 }
 
 extern char *
 ts_loader_extension_version(void)
 {
-	return extension_version();
+	return extension_version(EXTENSION_NAME);
 }
 
 extern bool
 ts_loader_extension_exists(void)
 {
-	return extension_exists();
+	return extension_exists(EXTENSION_NAME);
 }
 
 static bool
-drop_statement_drops_extension(DropStmt *stmt)
+drop_statement_drops_extension(DropStmt const *const stmt, TsExtension const *const ext)
 {
-	if (!extension_exists())
+	if (!extension_exists(ext->name))
 		return false;
 
 	if (stmt->removeType == OBJECT_EXTENSION)
@@ -163,7 +206,7 @@ drop_statement_drops_extension(DropStmt *stmt)
 			void *name = linitial(stmt->objects);
 
 			ext_name = strVal(name);
-			if (strcmp(ext_name, EXTENSION_NAME) == 0)
+			if (strcmp(ext_name, ext->name) == 0)
 				return true;
 		}
 	}
@@ -171,7 +214,7 @@ drop_statement_drops_extension(DropStmt *stmt)
 }
 
 static Oid
-extension_owner(void)
+extension_owner(TsExtension const *const ext)
 {
 	Datum result;
 	Relation rel;
@@ -187,7 +230,7 @@ extension_owner(void)
 				Anum_pg_extension_extname,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				CStringGetDatum(EXTENSION_NAME));
+				CStringGetDatum(ext->name));
 
 	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true, NULL, 1, entry);
 
@@ -212,17 +255,17 @@ extension_owner(void)
 }
 
 static bool
-drop_owned_statement_drops_extension(DropOwnedStmt *stmt)
+drop_owned_statement_drops_extension(DropOwnedStmt const *const stmt, TsExtension const *const ext)
 {
 	Oid extension_owner_oid;
 	List *role_ids;
 	ListCell *lc;
 
-	if (!extension_exists())
+	if (!extension_exists(ext->name))
 		return false;
 
 	Assert(IsTransactionState());
-	extension_owner_oid = extension_owner();
+	extension_owner_oid = extension_owner(ext);
 
 	role_ids = roleSpecsToIds(stmt->roles);
 
@@ -238,7 +281,7 @@ drop_owned_statement_drops_extension(DropOwnedStmt *stmt)
 }
 
 static bool
-should_load_on_variable_set(Node *utility_stmt)
+should_load_on_variable_set(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	VariableSetStmt *stmt = (VariableSetStmt *) utility_stmt;
 
@@ -248,22 +291,22 @@ should_load_on_variable_set(Node *utility_stmt)
 		case VAR_SET_DEFAULT:
 		case VAR_RESET:
 			/* Do not load when setting the guc to disable load */
-			return stmt->name == NULL || strcmp(stmt->name, GUC_DISABLE_LOAD_NAME) != 0;
+			return stmt->name == NULL || strcmp(stmt->name, ext->guc_disable_load_name) != 0;
 		default:
 			return true;
 	}
 }
 
 static bool
-should_load_on_alter_extension(Node *utility_stmt)
+should_load_on_alter_extension(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	AlterExtensionStmt *stmt = (AlterExtensionStmt *) utility_stmt;
 
-	if (strcmp(stmt->extname, EXTENSION_NAME) != 0)
+	if (strcmp(stmt->extname, ext->name) != 0)
 		return true;
 
 	/* disallow loading two .so from different versions */
-	if (extension_is_loaded())
+	if (extension_is_loaded(ext))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("extension \"%s\" cannot be updated after the old version has already been "
@@ -276,16 +319,15 @@ should_load_on_alter_extension(Node *utility_stmt)
 }
 
 static bool
-should_load_on_create_extension(Node *utility_stmt)
+should_load_on_create_extension(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	CreateExtensionStmt *stmt = (CreateExtensionStmt *) utility_stmt;
-	bool is_extension = strcmp(stmt->extname, EXTENSION_NAME) == 0;
 
-	if (!is_extension)
+	if (strcmp(stmt->extname, ext->name) != 0)
 		return false;
 
 	/* If set, a library has already been loaded */
-	if (!extension_is_loaded())
+	if (!extension_is_loaded(ext))
 		return true;
 
 	/*
@@ -299,38 +341,32 @@ should_load_on_create_extension(Node *utility_stmt)
 	 * version of the library, in addition to the currently loaded version, we
 	 * might taint the backend.
 	 */
-	if (extension_exists() && stmt->if_not_exists)
+	if (extension_exists(ext->name) && stmt->if_not_exists)
 		return false;
 
 	/* disallow loading two .so from different versions */
 	ereport(ERROR,
 			(errcode(ERRCODE_DUPLICATE_OBJECT),
 			 errmsg("extension \"%s\" has already been loaded with another version", stmt->extname),
-			 errdetail("The loaded version is \"%s\".", soversion),
+			 errdetail("The loaded version is \"%s\".", ext->soversion),
 			 errhint("Start a new session and execute CREATE EXTENSION as the first command. "
 					 "Make sure to pass the \"-X\" flag to psql.")));
 	return false;
 }
 
 static bool
-should_load_on_drop_extension(Node *utility_stmt)
-{
-	return !drop_statement_drops_extension((DropStmt *) utility_stmt);
-}
-
-static bool
-load_utility_cmd(Node *utility_stmt)
+load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	switch (nodeTag(utility_stmt))
 	{
 		case T_VariableSetStmt:
-			return should_load_on_variable_set(utility_stmt);
+			return should_load_on_variable_set(utility_stmt, ext);
 		case T_AlterExtensionStmt:
-			return should_load_on_alter_extension(utility_stmt);
+			return should_load_on_alter_extension(utility_stmt, ext);
 		case T_CreateExtensionStmt:
-			return should_load_on_create_extension(utility_stmt);
+			return should_load_on_create_extension(utility_stmt, ext);
 		case T_DropStmt:
-			return should_load_on_drop_extension(utility_stmt);
+			return !drop_statement_drops_extension((DropStmt *) utility_stmt, ext);
 		default:
 			return true;
 	}
@@ -427,19 +463,30 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 				break;
 			}
 			case T_DropStmt:
-				if (drop_statement_drops_extension((DropStmt *) query->utilityStmt))
-
-				/*
-				 * if we drop the extension we should restart (in case of
-				 * a rollback) the scheduler
-				 */
+				for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
 				{
-					ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
+					if (drop_statement_drops_extension((DropStmt *) query->utilityStmt,
+													   &extensions[i]))
+					{
+						/*
+						 * if we drop the extension we should restart (in case of
+						 * a rollback) the scheduler
+						 */
+						ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
+						break;
+					}
 				}
 				break;
 			case T_DropOwnedStmt:
-				if (drop_owned_statement_drops_extension((DropOwnedStmt *) query->utilityStmt))
-					ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
+				for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
+				{
+					if (drop_owned_statement_drops_extension((DropOwnedStmt *) query->utilityStmt,
+															 &extensions[i]))
+					{
+						ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
+						break;
+					}
+				}
 				break;
 			case T_RenameStmt:
 				if (((RenameStmt *) query->utilityStmt)->renameType == OBJECT_DATABASE)
@@ -461,9 +508,21 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 				break;
 		}
 	}
-	if (!guc_disable_load &&
-		(query->commandType != CMD_UTILITY || load_utility_cmd(query->utilityStmt)))
-		extension_check();
+	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
+	{
+		TsExtension *const ext = &extensions[i];
+
+		/* timescaledb.disable_load prevents loading of all extensions.
+		 * timescaledb_osm.disable_load prevents loading of timescaledb_osm.
+		 * If we ever had a third extension to load, we might need to make
+		 * this smarter, but not today. */
+		bool const disable_load = extensions[0].guc_disable_load || ext->guc_disable_load;
+
+		if (!disable_load &&
+			(query->commandType != CMD_UTILITY || load_utility_cmd(query->utilityStmt, ext)))
+		{
+			extension_check(ext);
+		}
 
 		/*
 		 * Call the extension's hook. This is necessary since the extension is
@@ -474,10 +533,11 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 		 * the extension.
 		 */
 #if PG14_LT
-	call_extension_post_parse_analyze_hook(pstate, query);
+		call_extension_post_parse_analyze_hook(pstate, query, ext);
 #else
-	call_extension_post_parse_analyze_hook(pstate, query, jstate);
+		call_extension_post_parse_analyze_hook(pstate, query, ext, jstate);
 #endif
+	}
 
 	if (prev_post_parse_analyze_hook != NULL)
 	{
@@ -661,16 +721,20 @@ _PG_init(void)
 	ts_seclabel_init();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
-	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME,
-							 "Disable the loading of the actual extension",
-							 NULL,
-							 &guc_disable_load,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
+	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
+	{
+		TsExtension *const ext = &extensions[i];
+		DefineCustomBoolVariable(ext->guc_disable_load_name,
+								 "Disable the loading of the actual extension",
+								 NULL,
+								 &ext->guc_disable_load,
+								 false,
+								 PGC_USERSET,
+								 0,
+								 NULL,
+								 NULL,
+								 NULL);
+	}
 
 	DefineCustomIntVariable(GUC_LAUNCHER_POLL_TIME_MS,
 							"Launcher timeout value in milliseconds",
@@ -710,9 +774,9 @@ _PG_init(void)
 }
 
 inline static void
-do_load()
+do_load(TsExtension *const ext)
 {
-	char *version = extension_version();
+	char *version = extension_version(ext->name);
 	char soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
 
@@ -720,21 +784,21 @@ do_load()
 	 * skip the actual loading. If the wrong version of the library is loaded,
 	 * we need to kill the session since it will not be able to continue
 	 * operate. */
-	if (extension_is_loaded())
+	if (extension_is_loaded(ext))
 	{
-		if (strcmp(soversion, version) == 0)
+		if (strcmp(ext->soversion, version) == 0)
 			return;
 		ereport(FATAL,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("\"%s\" already loaded with a different version", EXTENSION_NAME),
+				 errmsg("\"%s\" already loaded with a different version", ext->name),
 				 errdetail("The new version is \"%s\", this session is using version \"%s\". The "
 						   "session will be restarted.",
 						   version,
-						   soversion)));
+						   ext->soversion)));
 	}
 
-	strlcpy(soversion, version, MAX_VERSION_LEN);
-	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
+	strlcpy(ext->soversion, version, MAX_VERSION_LEN);
+	snprintf(soname, MAX_SO_NAME_LEN, "%s%s-%s", TS_LIBDIR, ext->name, version);
 
 	/*
 	 * In a parallel worker, we're not responsible for loading libraries, it's
@@ -742,14 +806,19 @@ do_load()
 	 * library state.
 	 */
 	if (CalledInParallelWorker())
+	{
 		return;
+	}
 
 	/*
 	 * Set the config option to let versions 0.9.0 and 0.9.1 know that the
 	 * loader was preloaded, newer versions use rendezvous variables instead.
 	 */
-	if (strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0)
+	if ((strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0) &&
+		strcmp(ext->name, "timescaledb") == 0)
+	{
 		SetConfigOption("timescaledb.loader_present", "on", PGC_USERSET, PGC_S_SESSION);
+	}
 
 	/*
 	 * we need to capture the loaded extension's post analyze hook, giving it
@@ -768,28 +837,27 @@ do_load()
 	{
 		PGFunction ts_post_load_init =
 			load_external_function(soname, POST_LOAD_INIT_FN, false, NULL);
-
 		if (ts_post_load_init != NULL)
+		{
 			DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
+		}
 	}
 	PG_CATCH();
 	{
-		extension_post_parse_analyze_hook = post_parse_analyze_hook;
+		ext->post_parse_analyze_hook = post_parse_analyze_hook;
 		post_parse_analyze_hook = old_hook;
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
-	extension_post_parse_analyze_hook = post_parse_analyze_hook;
+	ext->post_parse_analyze_hook = post_parse_analyze_hook;
 	post_parse_analyze_hook = old_hook;
 }
 
 inline static void
-extension_check()
+extension_check(TsExtension *const ext)
 {
-	enum ExtensionState state = extension_current_state();
-
-	switch (state)
+	switch (extension_current_state(ext->name, ext->schema_name, ext->table_name))
 	{
 		case EXTENSION_STATE_TRANSITIONING:
 			/*
@@ -799,7 +867,7 @@ extension_check()
 			 * without capturing the post_parse_analyze_hook.
 			 */
 		case EXTENSION_STATE_CREATED:
-			do_load();
+			do_load(ext);
 			return;
 		case EXTENSION_STATE_UNKNOWN:
 		case EXTENSION_STATE_NOT_INSTALLED:
@@ -810,22 +878,27 @@ extension_check()
 extern void
 ts_loader_extension_check(void)
 {
-	extension_check();
+	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
+	{
+		extension_check(&extensions[i]);
+	}
 }
 
 static void
 #if PG14_LT
-call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query)
+call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
+									   TsExtension const *const ext)
 #else
-call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
+call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
+									   TsExtension const *const ext, JumbleState *jstate)
 #endif
 {
-	if (extension_is_loaded() && extension_post_parse_analyze_hook != NULL)
+	if (extension_is_loaded(ext) && ext->post_parse_analyze_hook != NULL)
 	{
 #if PG14_LT
-		extension_post_parse_analyze_hook(pstate, query);
+		ext->post_parse_analyze_hook(pstate, query);
 #else
-		extension_post_parse_analyze_hook(pstate, query, jstate);
+		ext->post_parse_analyze_hook(pstate, query, jstate);
 #endif
 	}
 }
