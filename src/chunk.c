@@ -2847,6 +2847,73 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
 	return true;
 }
 
+static bool chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc);
+
+/*
+ * Deletes the dimension slice if there are no remaining constraints referencing it.
+ */
+static bool
+chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc)
+{
+	if (!is_dimension_constraint(cc))
+	{
+		return true;
+	}
+	/*
+	 * Dimension slices are shared between chunk constraints and
+	 * subsequently between chunks as well. Since different chunks
+	 * can reference the same dimension slice (through the chunk
+	 * constraint), we must lock the dimension slice in FOR UPDATE
+	 * mode *prior* to scanning the chunk constraints table. If we
+	 * do not do that, we can have the following scenario:
+	 *
+	 * - T1: Prepares to create a chunk that uses an existing dimension slice X
+	 * - T2: Deletes a chunk and dimension slice X because it is not
+	 *   references by a chunk constraint.
+	 * - T1: Adds a chunk constraint referencing dimension
+	 *   slice X (which is about to be deleted by T2).
+	 */
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleExclusive,
+		.waitpolicy = LockWaitBlock,
+	};
+	DimensionSlice *slice = ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
+																   &tuplock,
+																   CurrentMemoryContext);
+	/* If the slice is not found in the scan above, the table is
+	 * broken so we do not delete the slice. We proceed
+	 * anyway since users need to be able to drop broken tables or
+	 * remove broken chunks. */
+	if (!slice)
+	{
+		const Hypertable *const ht = ts_hypertable_get_by_id(form->hypertable_id);
+		ereport(WARNING,
+				(errmsg("A slice for chunk %s.%s, continuing",
+						quote_identifier(NameStr(form->schema_name)),
+						quote_identifier(NameStr(form->table_name))),
+				 errdetail("The integrity of hypertable %s.%s might be "
+						   "compromised "
+						   "since one of its chunks lacked a dimension slice.",
+						   quote_identifier(NameStr(ht->fd.schema_name)),
+						   quote_identifier(NameStr(ht->fd.table_name)))));
+		return true;
+	}
+	else
+	{
+		if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
+														   NULL,
+														   CurrentMemoryContext) == 0)
+		{
+			ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+}
+
 /*
  * Cleans up unreferenced slices which are associated with the given constraints.
  *
@@ -2860,66 +2927,7 @@ chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 	for (int i = 0; i < ccs->num_constraints; i++)
 	{
 		ChunkConstraint *cc = &ccs->constraints[i];
-
-		/*
-		 * Delete the dimension slice if there are no remaining constraints
-		 * referencing it
-		 */
-		if (is_dimension_constraint(cc))
-		{
-			/*
-			 * Dimension slices are shared between chunk constraints and
-			 * subsequently between chunks as well. Since different chunks
-			 * can reference the same dimension slice (through the chunk
-			 * constraint), we must lock the dimension slice in FOR UPDATE
-			 * mode *prior* to scanning the chunk constraints table. If we
-			 * do not do that, we can have the following scenario:
-			 *
-			 * - T1: Prepares to create a chunk that uses an existing dimension slice X
-			 * - T2: Deletes a chunk and dimension slice X because it is not
-			 *   references by a chunk constraint.
-			 * - T1: Adds a chunk constraint referencing dimension
-			 *   slice X (which is about to be deleted by T2).
-			 */
-			ScanTupLock tuplock = {
-				.lockmode = LockTupleExclusive,
-				.waitpolicy = LockWaitBlock,
-			};
-			DimensionSlice *slice =
-				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   &tuplock,
-													   CurrentMemoryContext);
-			/* If the slice is not found in the scan above, the table is
-			 * broken so we do not delete the slice. We proceed
-			 * anyway since users need to be able to drop broken tables or
-			 * remove broken chunks. */
-			if (!slice)
-			{
-				const Hypertable *const ht = ts_hypertable_get_by_id(form->hypertable_id);
-				ereport(WARNING,
-						(errmsg("A slice for chunk %s.%s, continuing",
-								quote_identifier(NameStr(form->schema_name)),
-								quote_identifier(NameStr(form->table_name))),
-						 errdetail("The integrity of hypertable %s.%s might be "
-								   "compromised "
-								   "since one of its chunks lacked a dimension slice.",
-								   quote_identifier(NameStr(ht->fd.schema_name)),
-								   quote_identifier(NameStr(ht->fd.table_name)))));
-			}
-			else
-			{
-				if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
-																   NULL,
-																   CurrentMemoryContext) == 0)
-				{
-					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
-				}
-				else
-				{
-					all_slices_removed = false;
-				}
-			}
-		}
+		all_slices_removed &= chunk_cleanup_ophaned_slice(form, cc);
 	}
 	return all_slices_removed;
 }
