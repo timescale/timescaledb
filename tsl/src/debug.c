@@ -244,7 +244,7 @@ append_relids(StringInfo buf, PlannerInfo *root, Relids relids)
 }
 
 static void
-append_pathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
+ts_append_pathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
 {
 	const ListCell *i;
 
@@ -435,7 +435,7 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 	if (path->pathkeys)
 	{
 		appendStringInfoString(buf, " with pathkeys: ");
-		append_pathkeys(buf, path->pathkeys, root->parse->rtable);
+		ts_append_pathkeys(buf, path->pathkeys, root->parse->rtable);
 	}
 
 	appendStringInfoString(buf, "\n");
