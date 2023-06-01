@@ -25,6 +25,9 @@
 #include "bgw_policy/policies_v2.h"
 #include "funcapi.h"
 #include "compat/compat.h"
+#if PG16_GE
+#include "nodes/miscnodes.h"
+#endif
 
 /* Check if the provided argument is infinity */
 bool
@@ -37,11 +40,19 @@ ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 	{
 		double val;
 		char *num = DatumGetCString(arg);
+#if PG16_LT
 		bool have_error = false;
 		val = float8in_internal_opt_error(num, NULL, "double precision", num, &have_error);
 
 		if (have_error)
 			return false;
+#else
+		ErrorSaveContext escontext = { .type = T_ErrorSaveContext };
+		val = float8in_internal(num, NULL, "double precision", num, (Node *) &escontext);
+
+		if (escontext.error_occurred)
+			return false;
+#endif
 
 		arg = Float8GetDatum(val);
 	}
