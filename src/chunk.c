@@ -2855,9 +2855,7 @@ static bool
 chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc)
 {
 	if (!is_dimension_constraint(cc))
-	{
 		return true;
-	}
 	/*
 	 * Dimension slices are shared between chunk constraints and
 	 * subsequently between chunks as well. Since different chunks
