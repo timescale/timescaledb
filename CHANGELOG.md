@@ -20,7 +20,7 @@ This release includes these noteworthy features:
 
 **Features**
 * #5212 Allow pushdown of reference table joins
-* #5221 Improve Realtime Continuous Aggregate performance
+* #5261 Improve Realtime Continuous Aggregate performance
 * #5252 Improve unique constraint support on compressed hypertables
 * #5339 Support UPDATE/DELETE on compressed hypertables
 * #5344 Enable JOINS for Hierarchical Continuous Aggregates

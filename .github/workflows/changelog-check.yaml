@@ -33,6 +33,7 @@ jobs:
         shell: bash --norc --noprofile {0}
         env:
           BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           folder=".unreleased"
 
