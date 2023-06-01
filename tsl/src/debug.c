@@ -64,7 +64,9 @@ static const char *reloptkind_name[] = {
 	[RELOPT_OTHER_JOINREL] = "OTHER_JOINREL",
 	[RELOPT_UPPER_REL] = "UPPER_REL",
 	[RELOPT_OTHER_UPPER_REL] = "OTHER_UPPER_REL",
+#if PG16_LT
 	[RELOPT_DEADREL] = "DEADREL",
+#endif
 };
 
 /* clang-format off */

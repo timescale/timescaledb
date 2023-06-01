@@ -896,8 +896,15 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * freed if it's planned */
 		compressed_rel->partial_pathlist = NIL;
 	}
+#if PG16_LT
 	/* set reloptkind to RELOPT_DEADREL to prevent postgresql from replanning this relation */
 	compressed_rel->reloptkind = RELOPT_DEADREL;
+#else
+	/* remove the compressed_rel from the simple_rel_array to prevent it from being referenced again
+	 */
+	root->simple_rel_array[compressed_rel->relid] = NULL;
+	pfree(compressed_rel);
+#endif
 
 	/* We should never get in the situation with no viable paths. */
 	Ensure(chunk_rel->pathlist, "could not create decompression path");
