@@ -116,6 +116,13 @@ typedef struct ChunkStubScanCtx
 	bool is_dropped;
 } ChunkStubScanCtx;
 
+typedef struct DropOptions
+{
+	DropBehavior behavior;
+	int32 log_level;
+	bool preserve_catalog_row;
+} DropOptions;
+
 static bool
 chunk_stub_is_valid(const ChunkStub *stub, int16 expected_slices)
 {
@@ -141,6 +148,15 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 static bool chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc);
 static bool chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs);
 static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
+
+static void
+init_drop_options(DropOptions *drop_options, DropBehavior behavior, int32 log_level,
+				  bool preserve_catalog_row)
+{
+	drop_options->behavior = behavior;
+	drop_options->log_level = log_level;
+	drop_options->preserve_catalog_row = preserve_catalog_row;
+}
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -2962,13 +2978,13 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, DropOptions drop_options)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
 	ChunkConstraints *ccs = ts_chunk_constraints_alloc(2, ti->mctx);
 	ChunkDeleteResult res;
-
+	bool preserve_chunk_catalog_row = drop_options.preserve_catalog_row;
 	ts_chunk_formdata_fill(&form, ti);
 
 	if (preserve_chunk_catalog_row && form.dropped)
@@ -2997,7 +3013,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 		if (compressed_chunk != NULL)
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
-			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
+			ts_chunk_drop(compressed_chunk, drop_options.behavior, DEBUG1);
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -3049,7 +3065,7 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 }
 
 static int
-chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_delete(ScanIterator *iterator, DropOptions drop_options)
 {
 	int count = 0;
 
@@ -3057,9 +3073,7 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 	{
 		ChunkDeleteResult res;
 
-		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
-								 behavior,
-								 preserve_chunk_catalog_row);
+		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator), drop_options);
 
 		switch (res)
 		{
@@ -3077,14 +3091,13 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 }
 
 static int
-ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior,
-								 bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropOptions drop_options)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, drop_options);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3096,19 +3109,20 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBeha
 int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
-	return ts_chunk_delete_by_name_internal(schema, table, behavior, false);
+	DropOptions drop_options;
+	init_drop_options(&drop_options, behavior, LOG, false);
+	return ts_chunk_delete_by_name_internal(schema, table, drop_options);
 }
 
 static int
-ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_relid(Oid relid, DropOptions drop_options)
 {
 	if (!OidIsValid(relid))
 		return 0;
 
 	return ts_chunk_delete_by_name_internal(get_namespace_name(get_rel_namespace(relid)),
 											get_rel_name(relid),
-											behavior,
-											preserve_chunk_catalog_row);
+											drop_options);
 }
 
 static void
@@ -3129,7 +3143,10 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, DROP_RESTRICT, false);
+	DropOptions drop_options;
+	init_drop_options(&drop_options, DROP_RESTRICT, LOG, true);
+
+	return chunk_delete(&iterator, drop_options);
 }
 
 bool
@@ -3792,37 +3809,40 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 static void
-ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_level,
-					   bool preserve_catalog_row)
+ts_chunk_drop_internal(const Chunk *chunk, DropOptions drop_options)
 {
 	ObjectAddress objaddr = {
 		.classId = RelationRelationId,
 		.objectId = chunk->table_id,
 	};
 
-	if (log_level >= 0)
-		elog(log_level,
+	if (drop_options.log_level >= 0)
+		elog(drop_options.log_level,
 			 "dropping chunk %s.%s",
 			 chunk->fd.schema_name.data,
 			 chunk->fd.table_name.data);
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid(chunk->table_id, behavior, preserve_catalog_row);
+	ts_chunk_delete_by_relid(chunk->table_id, drop_options);
 
 	/* Drop the table */
-	performDeletion(&objaddr, behavior, 0);
+	performDeletion(&objaddr, drop_options.behavior, 0);
 }
 
 void
 ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
-	ts_chunk_drop_internal(chunk, behavior, log_level, false);
+	DropOptions drop_options;
+	init_drop_options(&drop_options, behavior, log_level, false);
+	ts_chunk_drop_internal(chunk, drop_options);
 }
 
 void
 ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
-	ts_chunk_drop_internal(chunk, behavior, log_level, true);
+	DropOptions drop_options;
+	init_drop_options(&drop_options, behavior, log_level, true);
+	ts_chunk_drop_internal(chunk, drop_options);
 }
 
 static void
