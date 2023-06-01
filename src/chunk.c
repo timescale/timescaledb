@@ -138,6 +138,7 @@ static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, 
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
+static bool chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc);
 static bool chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs);
 static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 
@@ -2847,8 +2848,6 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
 	return true;
 }
 
-static bool chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc);
-
 /*
  * Deletes the dimension slice if there are no remaining constraints referencing it.
  */
@@ -2898,20 +2897,14 @@ chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc)
 						   quote_identifier(NameStr(ht->fd.table_name)))));
 		return true;
 	}
-	else
+
+	if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, NULL, CurrentMemoryContext) ==
+		0)
 	{
-		if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
-														   NULL,
-														   CurrentMemoryContext) == 0)
-		{
-			ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
-			return true;
-		}
-		else
-		{
-			return false;
-		}
+		ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+		return true;
 	}
+	return false;
 }
 
 /*
