@@ -585,7 +585,7 @@ pg_strtoint64(const char *str)
 						  NULL,                                                                    \
 						  multiXactCutoff,                                                         \
 						  NULL)
-#else
+#elif PG16_LT
 #define vacuum_set_xid_limits_compat(rel,                                                          \
 									 freeze_min_age,                                               \
 									 freeze_table_age,                                             \
@@ -606,6 +606,28 @@ pg_strtoint64(const char *str)
 							  &oldestMxact,                                                        \
 							  freezeLimit,                                                         \
 							  multiXactCutoff);                                                    \
+	} while (0)
+#else
+#define vacuum_set_xid_limits_compat(rel,                                                          \
+									 freezeMinAge,                                                 \
+									 freezeTableAge,                                               \
+									 multixactFreezeMinAge,                                        \
+									 multixactFreezeTableAge,                                      \
+									 oldestXmin,                                                   \
+									 freezeLimit,                                                  \
+									 multiXactCutoff)                                              \
+	do                                                                                             \
+	{                                                                                              \
+		struct VacuumCutoffs cutoffs;                                                              \
+		/* vacuum_get_cutoffs uses only the *_age members of the VacuumParams object */            \
+		VacuumParams params = { .freeze_min_age = freezeMinAge,                                    \
+								.freeze_table_age = freezeTableAge,                                \
+								.multixact_freeze_min_age = multixactFreezeMinAge,                 \
+								.multixact_freeze_table_age = multixactFreezeTableAge };           \
+		vacuum_get_cutoffs(rel, &params, &cutoffs);                                                \
+		*(oldestXmin) = cutoffs.OldestXmin;                                                        \
+		*(freezeLimit) = cutoffs.FreezeLimit;                                                      \
+		*(multiXactCutoff) = cutoffs.MultiXactCutoff;                                              \
 	} while (0)
 #endif
 
