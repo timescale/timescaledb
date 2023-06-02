@@ -80,6 +80,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
+TS_FUNCTION_INFO_V1(ts_chunk_detach);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
@@ -3844,18 +3845,6 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 	ts_chunk_drop_internal(chunk, drop_options);
 }
 
-// void
-// ts_chunk_detach(const Chunk *chunk)
-// {
-// 	// FIXME: checks:
-// 	// no-caggs
-// 	// no-compression
-// 	// no-multidim 
-// 	DropOptions drop_options;
-// 	init_drop_options(&drop_options, DROP_RESTRICT, LOG, false,true);
-// 	ts_chunk_delete_by_relid(chunk->table_id, drop_options);
-// }
-
 void
 ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
@@ -4168,6 +4157,76 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 	return ht;
 }
 
+// void
+// ts_chunk_detach(const Chunk *chunk)
+// {
+// 	// FIXME: checks:
+// 	// no-caggs
+// 	// no-compression
+// 	// no-multidim 
+// 	DropOptions drop_options;
+// 	init_drop_options(&drop_options, DROP_RESTRICT, LOG, false,true);
+// 	ts_chunk_delete_by_relid(chunk->table_id, drop_options);
+// }
+
+Datum
+ts_chunk_detach(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+
+	DropOptions drop_options;
+	init_drop_options(&drop_options, DROP_RESTRICT, LOG, false,true);
+
+	const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
+
+	ts_chunk_validate_chunk_status_for_operation(chunk_relid,
+												 ch->fd.status,
+												 CHUNK_DETACH,
+												 true /*throw_error */);
+
+	/* Remove the chunk from the chunk table */
+	ts_chunk_delete_by_relid(chunk_relid, drop_options);
+
+	PG_RETURN_BOOL(true);
+}
+
+// Datum
+// ts_chunk_attach(PG_FUNCTION_ARGS)
+// {
+// 	Oid ht_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+// 	Oid new_chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+// 	Jsonb *slices = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
+
+// 	LOCAL_FCINFO(fcinfo, 5);
+
+// 	FC_ARG(fcinfo, 0) = ObjectIdGetDatum(new_chunk_relid);
+// 	FC_NULL(fcinfo,0)=false;
+// 	FC_ARG(fcinfo, 1) = JsonbPGetDatum(slices);
+// 	FC_NULL(fcinfo,1)=false;
+// 	FC_NULL(fcinfo,2)=true;
+// 	FC_NULL(fcinfo,3)=true;
+// 	FC_ARG(fcinfo, 4) = ObjectIdGetDatum(new_chunk_relid);
+// 	FC_NULL(fcinfo,4)=false;
+
+	
+// 	InitFunctionCallInfoData(*fcinfo, &chunk_create, 5, InvalidOid, NULL, NULL);
+
+
+
+// 	// chunk_create(fcinfo);
+
+// 	// ts_chunk_validate_chunk_status_for_operation(chunk_relid,
+// 	// 											 ch->fd.status,
+// 	// 											 CHUNK_ATTACH,
+// 	// 											 true /*throw_error */);
+
+// 	// /* Remove the chunk from the chunk table */
+// 	// ts_chunk_delete_by_relid(chunk_relid, drop_options);
+
+// 	PG_RETURN_BOOL(true);
+// }
+
+
 Datum
 ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 {
@@ -4441,12 +4500,11 @@ ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status
 		/* Data modification is not permitted on a frozen chunk */
 		switch (cmd)
 		{
-			case CHUNK_INSERT:
-			case CHUNK_DELETE:
-			case CHUNK_UPDATE:
-			case CHUNK_COMPRESS:
-			case CHUNK_DECOMPRESS:
-			case CHUNK_DROP:
+			case CHUNK_SELECT:
+			{
+				break; /*supported operations */
+			}
+			default:
 			{
 				if (throw_error)
 					elog(ERROR,
@@ -4456,8 +4514,6 @@ ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status
 				return false;
 				break;
 			}
-			default:
-				break; /*supported operations */
 		}
 	}
 	/* Handle unfrozen chunks */

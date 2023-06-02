@@ -337,10 +337,6 @@ get_hypercube_from_slices(Jsonb *slices, const Hypertable *ht)
 	return hc;
 }
 
-HeapTuple
-chunk_create_internal(Oid hypertable_relid, Jsonb *slices, const char *schema_name, const char *table_name,
-			 Oid chunk_table_relid)
-;
 /*
  * Create a chunk and its metadata.
  *
@@ -358,17 +354,6 @@ chunk_create(PG_FUNCTION_ARGS)
 	const char *schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
 	const char *table_name = PG_ARGISNULL(3) ? NULL : PG_GETARG_CSTRING(3);
 	Oid chunk_table_relid = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4);
-
-	HeapTuple tuple =
-		chunk_create_internal(hypertable_relid, slices, schema_name, table_name,chunk_table_relid);
-
-	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
-}
-
-HeapTuple
-chunk_create_internal(Oid hypertable_relid, Jsonb *slices, const char *schema_name, const char *table_name,
-			 Oid chunk_table_relid)
-{
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Hypercube *hc;
@@ -1838,3 +1823,5 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	chunk_update_foreign_server_if_needed(chunk, serverid, false);
 	ts_chunk_data_node_delete_by_chunk_id_and_node_name(chunk->fd.id, node_name);
 }
+
+

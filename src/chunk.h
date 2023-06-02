@@ -47,6 +47,8 @@ typedef enum ChunkOperation
 	CHUNK_SELECT,
 	CHUNK_COMPRESS,
 	CHUNK_DECOMPRESS,
+	CHUNK_DETACH,
+	CHUNK_ATTACH,
 } ChunkOperation;
 
 typedef struct Hypercube Hypercube;
