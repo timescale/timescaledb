@@ -44,6 +44,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.show_chunk(chunk REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB)
 AS '@MODULE_PATHNAME@', 'ts_chunk_show' LANGUAGE C VOLATILE;
 
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_detach(chunk REGCLASS) RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_chunk_detach' LANGUAGE C VOLATILE;
+
 -- Create a chunk with the given dimensional constraints (slices) as
 -- given in the JSONB. If chunk_table is a valid relation, it will be
 -- attached to the hypertable and used as the data table for the new

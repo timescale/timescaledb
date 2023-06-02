@@ -4187,6 +4187,14 @@ ts_chunk_detach(PG_FUNCTION_ARGS)
 	/* Remove the chunk from the chunk table */
 	ts_chunk_delete_by_relid(chunk_relid, drop_options);
 
+	Cache *hcache;
+	Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+
+	chunk_table_drop_inherit(ch, ht);
+	ts_cache_release(hcache);
+	
+
 	PG_RETURN_BOOL(true);
 }
 

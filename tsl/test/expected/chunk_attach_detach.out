@@ -30,7 +30,7 @@ select show_chunks('main_table');
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('main_table')
-ORDER BY chunk_id;
+ORDER BY slices;
  chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                     slices                     
 ----------+---------------+-----------------------+------------------+---------+------------------------------------------------
         1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1519948800000000, 1519992000000000]}
@@ -41,4 +41,54 @@ ORDER BY chunk_id;
         6 |             1 | _timescaledb_internal | _hyper_1_6_chunk | r       | {"time": [1520164800000000, 1520208000000000]}
         7 |             1 | _timescaledb_internal | _hyper_1_7_chunk | r       | {"time": [1520208000000000, 1520251200000000]}
 (7 rows)
+
+select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
+select count(1) from :chunk;
+ count 
+-------
+    12
+(1 row)
+
+select count(1) from main_table;
+ count 
+-------
+    75
+(1 row)
+
+\d :chunk
+            Table "_timescaledb_internal._hyper_1_3_chunk"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | text                     |           |          | 
+Indexes:
+    "_hyper_1_3_chunk_main_table_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_3" CHECK ("time" >= 'Fri Mar 02 16:00:00 2018 PST'::timestamp with time zone AND "time" < 'Sat Mar 03 04:00:00 2018 PST'::timestamp with time zone)
+Inherits: main_table
+
+select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
+ chunk_detach 
+--------------
+ t
+(1 row)
+
+select count(1) from :chunk;
+ count 
+-------
+    12
+(1 row)
+
+select count(1) from main_table;
+ count 
+-------
+    63
+(1 row)
+
+\d :chunk
+            Table "_timescaledb_internal._hyper_1_3_chunk"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | text                     |           |          | 
 

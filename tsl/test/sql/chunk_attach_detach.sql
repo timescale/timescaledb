@@ -21,4 +21,17 @@ INSERT INTO main_table SELECT t, 'dev1'  FROM generate_series('2018-03-02 1:00':
 select show_chunks('main_table');
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('main_table')
-ORDER BY chunk_id;
+ORDER BY slices;
+
+
+select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
+
+select count(1) from :chunk;
+select count(1) from main_table;
+\d :chunk
+
+select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
+
+select count(1) from :chunk;
+select count(1) from main_table;
+\d :chunk
