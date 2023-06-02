@@ -1295,7 +1295,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	 * from updating it
 	 */
 	ts_chunk_clear_status(uncompressed_chunk,
-						  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL);
+						  CHUNK_STATUS_COMPRESSED_UNORDERED);
 
 	/* lock both chunks, compresssed and uncompressed */
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */

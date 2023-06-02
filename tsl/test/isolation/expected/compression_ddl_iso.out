@@ -313,15 +313,13 @@ step LockChunkTuple:
 
 chunk_status
 ------------
-           1
+           9
 (1 row)
 
-step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); <waiting ...>
-step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100); <waiting ...>
+step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100);
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
 step UnlockChunkTuple: ROLLBACK;
-step I1: <... completed>
 step Ic: COMMIT;
-step IN1: <... completed>
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -397,25 +395,23 @@ step LockChunkTuple:
 
 chunk_status
 ------------
-           1
+           9
 (1 row)
 
-step IR1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100) RETURNING *; <waiting ...>
-step INR1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) RETURNING *; <waiting ...>
-step UnlockChunkTuple: ROLLBACK;
-step IR1: <... completed>
+step IR1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100) RETURNING *;
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|  100
 (1 row)
 
-step Ic: COMMIT;
-step INR1: <... completed>
+step INR1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) RETURNING *;
 time|device|location|value
 ----+------+--------+-----
    1|     1|     200|  100
 (1 row)
 
+step UnlockChunkTuple: ROLLBACK;
+step Ic: COMMIT;
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -654,7 +650,6 @@ step RC2:
 step UnlockChunk: ROLLBACK;
 step RC1: <... completed>
 step RC2: <... completed>
-ERROR:  nothing to recompress in chunk _timescaledb_internal._hyper_X_X_chunk
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -701,6 +696,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
