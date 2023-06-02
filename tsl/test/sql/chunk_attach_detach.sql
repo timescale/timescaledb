@@ -49,8 +49,6 @@ create table n (like main_table);
 insert into n 
 select * from :chunk union all select * from :chunk2;
 
-
-
 select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
 
 select count(1) from main_table;
