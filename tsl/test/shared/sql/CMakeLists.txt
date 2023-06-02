@@ -2,6 +2,7 @@ set(TEST_FILES_SHARED
     cagg_compression.sql
     classify_relation.sql
     constify_timestamptz_op_interval.sql
+    constraint_aware_append.sql
     constraint_exclusion_prepared.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
