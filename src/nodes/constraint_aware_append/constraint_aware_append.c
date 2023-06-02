@@ -28,6 +28,7 @@
 
 #include "compat/compat.h"
 #include "constraint_aware_append.h"
+#include "debug_assert.h"
 #include "nodes/chunk_append/transform.h"
 #include "guc.h"
 #include "utils.h"
@@ -64,8 +65,8 @@ get_plans_for_exclusion(Plan *plan)
 	{
 		case T_Result:
 		case T_Sort:
-			Assert(plan->lefttree != NULL && plan->righttree == NULL);
-			return plan->lefttree;
+			Ensure(plan->lefttree != NULL, "subplan is null");
+			return get_plans_for_exclusion(plan->lefttree);
 
 		default:
 			return plan;
