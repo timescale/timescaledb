@@ -25,6 +25,10 @@ ORDER BY slices;
 
 
 select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
+select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
+
+select _timescaledb_internal.show_chunk(:'chunk');
+select _timescaledb_internal.show_chunk(:'chunk2');
 
 select count(1) from :chunk;
 select count(1) from main_table;
@@ -35,3 +39,18 @@ select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
 select count(1) from :chunk;
 select count(1) from main_table;
 \d :chunk
+
+select _timescaledb_internal.chunk_detach(:'chunk2'::regclass);
+
+--create table n as table main_table with no data;
+create table n (like main_table);
+
+\d n
+insert into n 
+select * from :chunk union all select * from :chunk2;
+
+
+
+select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
+
+select count(1) from main_table;

@@ -43,6 +43,19 @@ ORDER BY slices;
 (7 rows)
 
 select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
+select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
+select _timescaledb_internal.show_chunk(:'chunk');
+                                            show_chunk                                             
+---------------------------------------------------------------------------------------------------
+ (3,1,_timescaledb_internal,_hyper_1_3_chunk,r,"{""time"": [1520035200000000, 1520078400000000]}")
+(1 row)
+
+select _timescaledb_internal.show_chunk(:'chunk2');
+                                            show_chunk                                             
+---------------------------------------------------------------------------------------------------
+ (4,1,_timescaledb_internal,_hyper_1_4_chunk,r,"{""time"": [1520078400000000, 1520121600000000]}")
+(1 row)
+
 select count(1) from :chunk;
  count 
 -------
@@ -91,4 +104,33 @@ select count(1) from main_table;
 -----------+--------------------------+-----------+----------+---------
  time      | timestamp with time zone |           | not null | 
  device_id | text                     |           |          | 
+
+select _timescaledb_internal.chunk_detach(:'chunk2'::regclass);
+ chunk_detach 
+--------------
+ t
+(1 row)
+
+--create table n as table main_table with no data;
+create table n (like main_table);
+\d n
+                           Table "public.n"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | text                     |           |          | 
+
+insert into n 
+select * from :chunk union all select * from :chunk2;
+select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
+                                            create_chunk                                             
+-----------------------------------------------------------------------------------------------------
+ (8,1,_timescaledb_internal,_hyper_1_8_chunk,r,"{""time"": [1520035200000000, 1520121600000000]}",t)
+(1 row)
+
+select count(1) from main_table;
+ count 
+-------
+    75
+(1 row)
 
