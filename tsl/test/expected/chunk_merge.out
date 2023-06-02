@@ -25,6 +25,12 @@ ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby='i',
 INSERT INTO test1 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 -- This creates chunks 4 - 6 on first hypertable.
 INSERT INTO test1 SELECT t, 2, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
+select count(1) from test1;
+ count 
+-------
+   242
+(1 row)
+
 CREATE TABLE test2 ("Time" timestamptz, i integer, value integer);
 SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 NOTICE:  adding not-null constraint to column "Time"
@@ -67,6 +73,12 @@ ERROR:  cannot merge chunks with different partitioning schemas
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_1_chunk', 999);
 ERROR:  cannot find slice for merging dimension
 \set ON_ERROR_STOP 1
+select count(1) from test1;
+ count 
+-------
+   242
+(1 row)
+
 -- Merge on open (time) dimension.
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_5_chunk','_timescaledb_internal._hyper_1_6_chunk', 1);
  test_merge_chunks_on_dimension 
@@ -74,11 +86,23 @@ SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_intern
  
 (1 row)
 
+select count(1) from test1;
+ count 
+-------
+   241
+(1 row)
+
 -- Merge on closed dimension.
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 2);
  test_merge_chunks_on_dimension 
 --------------------------------
  
+(1 row)
+
+select count(1) from test1;
+ count 
+-------
+   181
 (1 row)
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
@@ -89,6 +113,12 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_5_chunk
 (4 rows)
+
+select count(1) from test1;
+ count 
+-------
+   181
+(1 row)
 
 \set ON_ERROR_STOP 0
 -- Cannot merge chunks internal compressed chunks, no dimensions on them.

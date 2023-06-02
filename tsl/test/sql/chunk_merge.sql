@@ -18,6 +18,8 @@ INSERT INTO test1 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMES
 -- This creates chunks 4 - 6 on first hypertable.
 INSERT INTO test1 SELECT t, 2, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 
+select count(1) from test1;
+
 CREATE TABLE test2 ("Time" timestamptz, i integer, value integer);
 SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
@@ -47,13 +49,18 @@ SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_intern
 
 \set ON_ERROR_STOP 1
 
+select count(1) from test1;
 -- Merge on open (time) dimension.
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_5_chunk','_timescaledb_internal._hyper_1_6_chunk', 1);
 
+select count(1) from test1;
 -- Merge on closed dimension.
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 2);
 
+select count(1) from test1;
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
+
+select count(1) from test1;
 
 \set ON_ERROR_STOP 0
 
