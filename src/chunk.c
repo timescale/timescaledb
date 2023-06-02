@@ -121,6 +121,7 @@ typedef struct DropOptions
 	DropBehavior behavior;
 	int32 log_level;
 	bool preserve_catalog_row;
+	bool full_catalog_removal;
 } DropOptions;
 
 static bool
@@ -151,11 +152,14 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 
 static void
 init_drop_options(DropOptions *drop_options, DropBehavior behavior, int32 log_level,
-				  bool preserve_catalog_row)
+				  bool preserve_catalog_row,
+				  bool full_catalog_removal)
 {
 	drop_options->behavior = behavior;
 	drop_options->log_level = log_level;
 	drop_options->preserve_catalog_row = preserve_catalog_row;
+	drop_options->full_catalog_removal=	full_catalog_removal;
+	
 }
 
 static HeapTuple
@@ -2995,7 +2999,10 @@ chunk_tuple_delete(TupleInfo *ti, DropOptions drop_options)
 	{
 		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
 
-		chunk_cleanup_ophaned_slices(&form, ccs);
+		bool all_slices_removed = chunk_cleanup_ophaned_slices(&form, ccs);
+		if(drop_options.full_catalog_removal && !all_slices_removed) {
+			elog(ERROR, "not-all slices can be removed!");
+		}
 	}
 
 	ts_chunk_index_delete_by_chunk_id(form.id, true);
@@ -3110,7 +3117,7 @@ int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
 	DropOptions drop_options;
-	init_drop_options(&drop_options, behavior, LOG, false);
+	init_drop_options(&drop_options, behavior, LOG, false,false);
 	return ts_chunk_delete_by_name_internal(schema, table, drop_options);
 }
 
@@ -3144,7 +3151,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
 	DropOptions drop_options;
-	init_drop_options(&drop_options, DROP_RESTRICT, LOG, true);
+	init_drop_options(&drop_options, DROP_RESTRICT, LOG, true,false);
 
 	return chunk_delete(&iterator, drop_options);
 }
@@ -3833,15 +3840,27 @@ void
 ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	DropOptions drop_options;
-	init_drop_options(&drop_options, behavior, log_level, false);
+	init_drop_options(&drop_options, behavior, log_level, false,false);
 	ts_chunk_drop_internal(chunk, drop_options);
 }
+
+// void
+// ts_chunk_detach(const Chunk *chunk)
+// {
+// 	// FIXME: checks:
+// 	// no-caggs
+// 	// no-compression
+// 	// no-multidim 
+// 	DropOptions drop_options;
+// 	init_drop_options(&drop_options, DROP_RESTRICT, LOG, false,true);
+// 	ts_chunk_delete_by_relid(chunk->table_id, drop_options);
+// }
 
 void
 ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	DropOptions drop_options;
-	init_drop_options(&drop_options, behavior, log_level, true);
+	init_drop_options(&drop_options, behavior, log_level, true,false);
 	ts_chunk_drop_internal(chunk, drop_options);
 }
 
