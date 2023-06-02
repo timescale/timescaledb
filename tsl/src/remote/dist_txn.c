@@ -9,6 +9,7 @@
 #include <storage/lmgr.h>
 #include <utils/hsearch.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 #include "dist_txn.h"
