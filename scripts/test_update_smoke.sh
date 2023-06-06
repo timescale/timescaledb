@@ -51,12 +51,9 @@ UPDATE_TO_TAG=${UPDATE_TO_TAG:-2.0.1}
 WITH_SUPERUSER=false
 WITH_ROLES=false
 
-while getopts "ds:t:" opt;
+while getopts "s:t:" opt;
 do
     case $opt in
-        d)
-            cleanup=1
-            ;;
         s)
             UPDATE_FROM_TAG=$OPTARG
             ;;
@@ -75,7 +72,7 @@ echo "**** pg_restore at" "$(which pg_restore)"
 
 # Extra options to pass to psql
 PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=${WITH_ROLES} -v WITH_CHUNK=false"
-PSQL="psql -qX $PGOPTS"
+PSQL="psql -a -qX $PGOPTS"
 
 # If we are providing a URI for the connection, we parse it here and
 # set the PG??? variables since that is the only reliable way to
@@ -106,17 +103,27 @@ if [[ $# -gt 0 ]]; then
     fi
 fi
 
-cleanup() {
-    rm -rf $SCRATCHDIR
+err_trap() {
+    exit 3
 }
 
-if [[ "x$cleanup" != "x" ]]; then
-    echo "**** Debug mode: $SCRATCHDIR will not be removed"
-    trap cleanup EXIT
-fi
+exit_trap() {
+    exit_code=$?
+    if [ "$exit_code" != "0" ]; then
+        echo "!!!! FAILED !!!!"
+    else
+        echo "**** passed ****"
+    fi
+    echo "**** logs can be found in $SCRATCHDIR"
+}
+
+set -e
+set -o pipefail
+trap exit_trap EXIT
+trap err_trap ERR
 
 missing_versions() {
-        $PSQL -t <<-EOF
+        $PSQL -v ECHO=none -t <<-EOF
 	SELECT * FROM (VALUES ('$1'), ('$2')) AS foo
 	EXCEPT
 	SELECT version FROM pg_available_extension_versions
@@ -124,7 +131,6 @@ missing_versions() {
 	EOF
 }
 
-set -e
 
 echo "**** Scratch directory: ${SCRATCHDIR}"
 echo "**** Update files in directory ${BASE_DIR}/test/sql/updates"
@@ -146,6 +152,7 @@ fi
 
 # Create a 1.7.5 version Upgrade
 echo "---- Connecting to ${FORGE_CONNINFO} and running setup ----"
+$PSQL -f cleanup.${TEST_VERSION}.sql >>$LOGFILE 2>&1
 $PSQL -c "DROP EXTENSION IF EXISTS timescaledb CASCADE" >>$LOGFILE 2>&1
 $PSQL -f pre.cleanup.sql >>$LOGFILE 2>&1
 $PSQL -c "CREATE EXTENSION timescaledb VERSION '${UPDATE_FROM_TAG}'" >>$LOGFILE 2>&1
@@ -154,9 +161,9 @@ $PSQL -c "\dx"
 # Run setup on Upgrade
 $PSQL -f pre.smoke.sql >>$LOGFILE 2>&1
 $PSQL -f setup.${TEST_VERSION}.sql >>$LOGFILE 2>&1
-
 # Run update on Upgrade. You now have a 2.0.2 version in Upgrade.
 $PSQL -c "ALTER EXTENSION timescaledb UPDATE TO '${UPDATE_TO_TAG}'" >>$LOGFILE 2>&1
+$PSQL -f <(echo '\c dn1';echo "ALTER EXTENSION timescaledb UPDATE TO '${UPDATE_TO_TAG}'") >>$LOGFILE 2>&1
 
 echo -n "Dumping the contents of Upgrade..."
 pg_dump -Fc -f $DUMPFILE >>$LOGFILE 2>&1
@@ -167,6 +174,8 @@ echo "done"
 echo -n "Collecting post-update status..."
 $PSQL -f post.${TEST_VERSION}.sql >$UPGRADE_OUT
 echo "done"
+
+$PSQL -f cleanup.${TEST_VERSION}.sql >>$LOGFILE 2>&1
 
 echo "---- Create a ${UPDATE_TO_TAG} version Clean ----"
 $PSQL -c "DROP EXTENSION IF EXISTS timescaledb CASCADE" >>$LOGFILE 2>&1
@@ -200,9 +209,9 @@ echo "---- Run the post scripts on Restore to get a RestoreOut ----"
 $PSQL -f post.${TEST_VERSION}.sql >$RESTORE_OUT
 
 echo "---- Compare UpgradeOut with CleanOut and make sure they are identical ----"
-diff -u $UPGRADE_OUT $CLEAN_OUT && echo "No difference between $UPGRADE_OUT and $CLEAN_OUT" | tee $SCRATCHDIR/upgrade-clean.diff
+diff -u $UPGRADE_OUT $CLEAN_OUT | tee $SCRATCHDIR/upgrade-clean.diff
 
 echo "---- Compare RestoreOut with CleanOut and make sure they are identical ----"
-diff -u $RESTORE_OUT $CLEAN_OUT && echo "No difference between $RESTORE_OUT and $CLEAN_OUT" | tee $SCRATCHDIR/restore-clean.diff
+diff -u $RESTORE_OUT $CLEAN_OUT | tee $SCRATCHDIR/restore-clean.diff
 
 $PSQL -f cleanup.${TEST_VERSION}.sql >>$LOGFILE 2>&1

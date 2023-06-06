@@ -3,4 +3,5 @@
 -- LICENSE-APACHE for a copy of the license.
 
 DROP TABLE disthyper;
-SELECT drop_data_node('dn1');
+SELECT delete_data_node('dn1');
+drop database if exists dn1;
