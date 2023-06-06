@@ -501,6 +501,15 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		bool *nullsFirst = NULL;
 		int numsortkeys = 0;
 
+		/* We need a targetlist at this point to build the sort info below. If the target list is
+		 * not populated by PostgreSQL already, populate it here.
+		 */
+		if (decompress_plan->scan.plan.targetlist == NIL)
+			decompress_plan->scan.plan.targetlist = ts_build_path_tlist(root, (Path *) path);
+
+		Assert(decompress_plan->scan.plan.targetlist != NIL);
+		Assert(dcpath->cpath.path.pathkeys != NIL);
+
 		ts_prepare_sort_from_pathkeys(&decompress_plan->scan.plan,
 									  dcpath->cpath.path.pathkeys,
 									  bms_make_singleton(dcpath->info->chunk_rel->relid),

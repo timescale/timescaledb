@@ -467,3 +467,34 @@ SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
 -- Test query plan with predicate (query should be optimized due to ~100 segments)
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
+
+-- Target list creation - Issue 5738
+CREATE TABLE bugtab(
+ time timestamp without time zone,
+ hin   character varying(128) NOT NULL,
+ model character varying(128) NOT NULL,
+ block character varying(128) NOT NULL,
+ message_name character varying(128) NOT NULL,
+ signal_name  character varying(128) NOT NULL,
+ signal_numeric_value double precision,
+ signal_string_value character varying(128)
+);
+
+SELECT create_hypertable('bugtab', 'time');
+
+INSERT INTO bugtab values('2020-01-01 10:00', 'hin1111', 'model111', 'blok111', 'message_here', 'signal1', 12.34, '12.34');
+
+ALTER TABLE bugtab SET (timescaledb.compress, timescaledb.compress_segmentby = 'hin, signal_name', timescaledb.compress_orderby = 'time');
+
+SELECT chunk_schema || '.' || chunk_name AS "chunk_table_bugtab"
+       FROM timescaledb_information.chunks
+       WHERE hypertable_name = 'bugtab' ORDER BY range_start LIMIT 1 \gset
+
+SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
+
+:PREFIX
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
+
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
+
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM bugtab ORDER BY "time" DESC;
