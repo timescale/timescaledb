@@ -1346,3 +1346,68 @@ SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_b
                Index Cond: ((compress_hyper_10_22_chunk.segment_by > 900) AND (compress_hyper_10_22_chunk.segment_by < 999))
 (10 rows)
 
+-- Target list creation - Issue 5738
+CREATE TABLE bugtab(
+ time timestamp without time zone,
+ hin   character varying(128) NOT NULL,
+ model character varying(128) NOT NULL,
+ block character varying(128) NOT NULL,
+ message_name character varying(128) NOT NULL,
+ signal_name  character varying(128) NOT NULL,
+ signal_numeric_value double precision,
+ signal_string_value character varying(128)
+);
+SELECT create_hypertable('bugtab', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+WARNING:  column type "character varying" used for "hin" does not follow best practices
+WARNING:  column type "character varying" used for "model" does not follow best practices
+WARNING:  column type "character varying" used for "block" does not follow best practices
+WARNING:  column type "character varying" used for "message_name" does not follow best practices
+WARNING:  column type "character varying" used for "signal_name" does not follow best practices
+WARNING:  column type "character varying" used for "signal_string_value" does not follow best practices
+NOTICE:  adding not-null constraint to column "time"
+  create_hypertable   
+----------------------
+ (11,public,bugtab,t)
+(1 row)
+
+INSERT INTO bugtab values('2020-01-01 10:00', 'hin1111', 'model111', 'blok111', 'message_here', 'signal1', 12.34, '12.34');
+ALTER TABLE bugtab SET (timescaledb.compress, timescaledb.compress_segmentby = 'hin, signal_name', timescaledb.compress_orderby = 'time');
+SELECT chunk_schema || '.' || chunk_name AS "chunk_table_bugtab"
+       FROM timescaledb_information.chunks
+       WHERE hypertable_name = 'bugtab' ORDER BY range_start LIMIT 1 \gset
+SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_23_chunk
+(1 row)
+
+:PREFIX
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
+                                                                                                                                                                                                                                                               QUERY PLAN                                                                                                                                                                                                                                                               
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=1 loops=1)
+   Output: _hyper_11_23_chunk."time", (_hyper_11_23_chunk.hin)::text, (_hyper_11_23_chunk.model)::text, (_hyper_11_23_chunk.block)::text, (_hyper_11_23_chunk.message_name)::text, (_hyper_11_23_chunk.signal_name)::text, _hyper_11_23_chunk.signal_numeric_value, (_hyper_11_23_chunk.signal_string_value)::text
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_11_23_chunk (actual rows=1 loops=1)
+         Output: _hyper_11_23_chunk."time", _hyper_11_23_chunk.hin, _hyper_11_23_chunk.model, _hyper_11_23_chunk.block, _hyper_11_23_chunk.message_name, _hyper_11_23_chunk.signal_name, _hyper_11_23_chunk.signal_numeric_value, _hyper_11_23_chunk.signal_string_value
+         Sorted merge append: true
+         ->  Sort (actual rows=1 loops=1)
+               Output: compress_hyper_12_24_chunk."time", compress_hyper_12_24_chunk.hin, compress_hyper_12_24_chunk.model, compress_hyper_12_24_chunk.block, compress_hyper_12_24_chunk.message_name, compress_hyper_12_24_chunk.signal_name, compress_hyper_12_24_chunk.signal_numeric_value, compress_hyper_12_24_chunk.signal_string_value, compress_hyper_12_24_chunk._ts_meta_count, compress_hyper_12_24_chunk._ts_meta_sequence_num, compress_hyper_12_24_chunk._ts_meta_min_1, compress_hyper_12_24_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_12_24_chunk._ts_meta_max_1 DESC
+               Sort Method: quicksort 
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_12_24_chunk (actual rows=1 loops=1)
+                     Output: compress_hyper_12_24_chunk."time", compress_hyper_12_24_chunk.hin, compress_hyper_12_24_chunk.model, compress_hyper_12_24_chunk.block, compress_hyper_12_24_chunk.message_name, compress_hyper_12_24_chunk.signal_name, compress_hyper_12_24_chunk.signal_numeric_value, compress_hyper_12_24_chunk.signal_string_value, compress_hyper_12_24_chunk._ts_meta_count, compress_hyper_12_24_chunk._ts_meta_sequence_num, compress_hyper_12_24_chunk._ts_meta_min_1, compress_hyper_12_24_chunk._ts_meta_max_1
+(11 rows)
+
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
+           time           |   hin   |  model   |  block  | message_name | signal_name | signal_numeric_value | signal_string_value 
+--------------------------+---------+----------+---------+--------------+-------------+----------------------+---------------------
+ Wed Jan 01 10:00:00 2020 | hin1111 | model111 | blok111 | message_here | signal1     |                12.34 | 12.34
+(1 row)
+
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM bugtab ORDER BY "time" DESC;
+           time           |   hin   |  model   |  block  | message_name | signal_name | signal_numeric_value | signal_string_value 
+--------------------------+---------+----------+---------+--------------+-------------+----------------------+---------------------
+ Wed Jan 01 10:00:00 2020 | hin1111 | model111 | blok111 | message_here | signal1     |                12.34 | 12.34
+(1 row)
+
