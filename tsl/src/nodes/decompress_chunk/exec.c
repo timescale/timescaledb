@@ -14,17 +14,20 @@
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "compression/array.h"
+#include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/sorted_merge.h"
+#include "guc.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/sorted_merge.h"
 #include "ts_catalog/hypertable_compression.h"
 
 static TupleTableSlot *decompress_chunk_exec(CustomScanState *node);
@@ -206,6 +209,12 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 	if (batch_state->decompressed_slot_scan != NULL)
 		ExecClearTuple(batch_state->decompressed_slot_scan);
 
+	MemoryContextReset(batch_state->per_batch_context);
+	if (batch_state->arrow_context)
+	{
+		MemoryContextReset(batch_state->arrow_context);
+	}
+
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
 }
 
@@ -251,8 +260,12 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	}
 
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
-														   "DecompressChunk per_batch",
-														   ALLOCSET_DEFAULT_SIZES);
+														   "DecompressChunk batch",
+														   /* minContextSize = */ 0,
+														   /* initBlockSize = */ 64 * 1024,
+														   /* maxBlockSize = */ 64 * 1024);
+	/* Initialized on demand to save memory. */
+	batch_state->arrow_context = NULL;
 
 	batch_state->columns =
 		palloc0(list_length(chunk_state->decompression_map) * sizeof(DecompressChunkColumnState));
@@ -424,6 +437,78 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 }
 
+/*
+ * Convert Arrow array to an array of Postgres Datum's.
+ */
+static void
+convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow)
+{
+	const int n = arrow->length;
+	Assert(n > 0);
+
+/* Unroll the conversion loop to generate more efficient code. */
+#define INNER_LOOP_SIZE 8
+	const int n_padded = ((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
+
+	const int arrow_bitmap_elements = (n + 64 - 1) / 64;
+	const int n_nulls_padded = arrow_bitmap_elements * 64;
+
+	/* Convert Arrow to Data/nulls arrays. */
+	const uint64 *restrict validity_bitmap = arrow->buffers[0];
+	const void *restrict arrow_values = arrow->buffers[1];
+	Datum *restrict datums = palloc(sizeof(Datum) * n_padded);
+	bool *restrict nulls = palloc(sizeof(bool) * n_nulls_padded);
+
+/*
+ * Specialize the conversion loop for the particular Arrow and Postgres type, to
+ * generate more efficient code.
+ */
+#define CONVERSION_LOOP(OID, CTYPE, CONVERSION)                                                    \
+	case OID:                                                                                      \
+		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
+		{                                                                                          \
+			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
+			{                                                                                      \
+				const int row = outer + inner;                                                     \
+				datums[row] = CONVERSION(((CTYPE *) arrow_values)[row]);                           \
+				Assert(row >= 0);                                                                  \
+				Assert(row < n_padded);                                                            \
+			}                                                                                      \
+		}                                                                                          \
+		break
+
+	switch (column->typid)
+	{
+		CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);
+		CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);
+		CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);
+		CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);
+		CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);
+		CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);
+		CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);
+		CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);
+		default:
+			Assert(false);
+	}
+#undef CONVERSION_LOOP
+#undef INNER_LOOP_SIZE
+
+	for (int outer = 0; outer < arrow_bitmap_elements; outer++)
+	{
+		const uint64 element = validity_bitmap[outer];
+		for (int inner = 0; inner < 64; inner++)
+		{
+			const int row = outer * 64 + inner;
+			nulls[row] = ((element >> inner) & 1) ? false : true;
+			Assert(row >= 0);
+			Assert(row < n_nulls_padded);
+		}
+	}
+	column->compressed.iterator = NULL;
+	column->compressed.datums = datums;
+	column->compressed.nulls = nulls;
+}
+
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
 							TupleTableSlot *subslot)
@@ -505,6 +590,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		{
 			case COMPRESSED_COLUMN:
 			{
+				column->compressed.datums = NULL;
 				column->compressed.iterator = NULL;
 				value = slot_getattr(batch_state->compressed_slot,
 									 column->compressed_scan_attno,
@@ -515,6 +601,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * The column will have a default value for the entire batch,
 					 * set it now.
 					 */
+					column->compressed.iterator = NULL;
 					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
 					batch_state->decompressed_slot_scan->tts_values[attr] =
@@ -524,8 +611,75 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					break;
 				}
 
+				/* Decompress the entire batch if it is supported. */
 				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 
+				ArrowArray *arrow = NULL;
+				if (!chunk_state->reverse && !chunk_state->sorted_merge_append &&
+					ts_guc_enable_bulk_decompression)
+				{
+					/*
+					 * In principle, we could do this for reverse decompression
+					 * as well, but have to figure out how to do the batch
+					 * Arrow->Datum conversion while respecting the paddings.
+					 * Maybe have to allocate the output array at offset so that the
+					 * padding is at the beginning.
+					 *
+					 * For now we also disable bulk decompression for batch sorted
+					 * merge plans. They involve keeping many open batches at
+					 * the same time, so the memory usage might increase greatly.
+					 */
+					if (batch_state->arrow_context == NULL)
+					{
+						batch_state->arrow_context =
+							AllocSetContextCreate(MemoryContextGetParent(
+													  batch_state->per_batch_context),
+												  "DecompressChunk Arrow arrays",
+												  /* minContextSize = */ 0,
+												  /* initBlockSize = */ 64 * 1024,
+												  /* maxBlockSize = */ 64 * 1024);
+					}
+
+					MemoryContext context_before_decompression =
+						MemoryContextSwitchTo(batch_state->arrow_context);
+
+					arrow = tsl_try_decompress_all(header->compression_algorithm,
+												   PointerGetDatum(header),
+												   column->typid);
+					MemoryContextSwitchTo(context_before_decompression);
+				}
+
+				if (arrow)
+				{
+					/*
+					 * Currently we're going to convert the Arrow arrays to postgres
+					 * Data right away, but in the future we will perform vectorized
+					 * operations on Arrow arrays directly before that.
+					 */
+
+					if (batch_state->total_batch_rows == 0)
+					{
+						batch_state->total_batch_rows = arrow->length;
+					}
+					else if (batch_state->total_batch_rows != arrow->length)
+					{
+						elog(ERROR, "compressed column out of sync with batch counter");
+					}
+
+					convert_arrow_to_data(column, arrow);
+
+					MemoryContextReset(batch_state->arrow_context);
+
+					/*
+					 * Note the fact that we are using bulk decompression, for
+					 * EXPLAIN ANALYZE.
+					 */
+					chunk_state->using_bulk_decompression = true;
+
+					break;
+				}
+
+				/* As a fallback, decompress row-by-row. */
 				column->compressed.iterator =
 					tsl_get_decompression_iterator_init(header->compression_algorithm,
 														chunk_state->reverse)(PointerGetDatum(
@@ -562,8 +716,16 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 							(errmsg("the compressed data is corrupt: got a segment with length %d",
 									count_value)));
 				}
-				Assert(batch_state->total_batch_rows == 0);
-				batch_state->total_batch_rows = count_value;
+
+				if (batch_state->total_batch_rows == 0)
+				{
+					batch_state->total_batch_rows = count_value;
+				}
+				else if (batch_state->total_batch_rows != count_value)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
+
 				break;
 			}
 			case SEQUENCE_NUM_COLUMN:
@@ -719,6 +881,11 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 		{
 			ExplainPropertyBool("Sorted merge append", chunk_state->sorted_merge_append, es);
 		}
+
+		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
+		{
+			ExplainPropertyBool("Bulk Decompression", chunk_state->using_bulk_decompression, es);
+		}
 	}
 }
 
@@ -792,6 +959,13 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 
 				decompressed_slot_scan->tts_isnull[attr] = result.is_null;
 				decompressed_slot_scan->tts_values[attr] = result.val;
+			}
+			else if (column->compressed.datums != NULL)
+			{
+				decompressed_slot_scan->tts_isnull[attr] =
+					column->compressed.nulls[batch_state->current_batch_row];
+				decompressed_slot_scan->tts_values[attr] =
+					column->compressed.datums[batch_state->current_batch_row];
 			}
 		}
 

@@ -95,10 +95,9 @@ psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result"
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test1 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -164,6 +163,31 @@ SELECT DISTINCT attname, attstattarget
  t                     |             0
 (8 rows)
 
+-- Test that the GUC to disable bulk decompression works.
+explain (analyze, verbose, timing off, costs off, summary off)
+select * from _timescaledb_internal._hyper_1_10_chunk;
+                                                                                                                                                       QUERY PLAN                                                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
+   Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
+(5 rows)
+
+set timescaledb.enable_bulk_decompression to false;
+explain (analyze, verbose, timing off, costs off, summary off)
+select * from _timescaledb_internal._hyper_1_10_chunk;
+                                                                                                                                                       QUERY PLAN                                                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
+   Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
+   Bulk Decompression: false
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
+(5 rows)
+
+reset timescaledb.enable_bulk_decompression;
 TRUNCATE test1;
 /* should be no data in table */
 SELECT * FROM test1;
@@ -227,10 +251,9 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test2 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -340,10 +363,9 @@ group by location ORDER BY location;
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test4 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -454,10 +476,9 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test5 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -535,10 +556,9 @@ INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test6 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -613,10 +633,9 @@ INSERT INTO test7
  t
 (1 row)
 
- table | diff between original and compressed 
--------+--------------------------------------
- test7 |                                    0
-(1 row)
+ original | decompressed 
+----------+--------------
+(0 rows)
 
  count decompress 
 ------------------
@@ -648,3 +667,66 @@ INSERT INTO test7
 (1 row)
 
 DROP TABLE test7;
+-- helper function: float -> pseudorandom float [0..1].
+create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
+-- test gorilla for float4 and deltadelta for int32 and other types
+create table test8(ts date, id int, value float4, valueint2 int2, valuebool bool);
+select create_hypertable('test8', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+  create_hypertable  
+---------------------
+ (13,public,test8,t)
+(1 row)
+
+alter table test8 set (timescaledb.compress,
+    timescaledb.compress_segmentby = 'id',
+    timescaledb.compress_orderby = 'ts desc')
+;
+insert into test8
+    select '2022-02-02 02:02:02+03'::timestamptz + interval '1 month' * mix(x),
+        mix(x + 1.) * 20,
+        mix(x + 2.) * 50,
+        mix(x + 3.) * 100,
+        mix(x + 4.) > 0.1
+    from generate_series(1, 10000) x(x)
+;
+select compress_chunk(x) from show_chunks('test8') x;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_13_148_chunk
+ _timescaledb_internal._hyper_13_149_chunk
+ _timescaledb_internal._hyper_13_150_chunk
+ _timescaledb_internal._hyper_13_151_chunk
+ _timescaledb_internal._hyper_13_152_chunk
+ _timescaledb_internal._hyper_13_153_chunk
+(6 rows)
+
+select distinct on (id) * from test8
+order by id, ts desc, value
+;
+     ts     | id |  value   | valueint2 | valuebool 
+------------+----+----------+-----------+-----------
+ 03-03-2022 |  0 |  9.49871 |        97 | t
+ 03-03-2022 |  1 |  2.96871 |         8 | t
+ 03-03-2022 |  2 |  4.17897 |        33 | f
+ 03-03-2022 |  3 |  8.08533 |        96 | t
+ 03-03-2022 |  4 |   16.959 |        46 | f
+ 03-03-2022 |  5 |  2.10652 |        20 | t
+ 03-03-2022 |  6 |  6.77508 |        58 | t
+ 03-03-2022 |  7 |  4.64613 |        56 | t
+ 03-03-2022 |  8 |  2.66474 |        82 | t
+ 03-03-2022 |  9 |  2.59844 |        56 | t
+ 03-03-2022 | 10 |  1.21461 |        44 | t
+ 03-03-2022 | 11 |  6.70618 |        84 | t
+ 03-03-2022 | 12 |  1.52959 |        18 | t
+ 03-03-2022 | 13 |  5.20262 |        84 | t
+ 03-03-2022 | 14 |  2.92403 |        15 | t
+ 03-03-2022 | 15 |  1.70258 |        82 | t
+ 03-03-2022 | 16 |  11.6858 |        43 | t
+ 03-03-2022 | 17 |  11.4363 |        14 | t
+ 03-03-2022 | 18 | 0.496188 |        59 | t
+ 03-03-2022 | 19 |   4.7812 |        51 | t
+ 03-03-2022 | 20 |  8.25849 |        30 | t
+(21 rows)
+
+drop table test8;

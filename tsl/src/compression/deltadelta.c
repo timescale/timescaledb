@@ -20,8 +20,10 @@
 
 #include <utils.h>
 
+#include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 
 static uint64 zig_zag_encode(uint64 value);
 static uint64 zig_zag_decode(uint64 value);
@@ -568,6 +570,46 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 								 iter->element_type);
 }
 
+#define ELEMENT_TYPE uint64
+#include "simple8b_rle_decompress_all.h"
+#undef ELEMENT_TYPE
+
+/* Functions for bulk decompression. */
+#define ELEMENT_TYPE uint16
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint32
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+#define ELEMENT_TYPE uint64
+#include "deltadelta_impl.c"
+#undef ELEMENT_TYPE
+
+ArrowArray *
+delta_delta_decompress_all(Datum compressed_data, Oid element_type)
+{
+	switch (element_type)
+	{
+		case INT8OID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			return delta_delta_decompress_all_uint64(compressed_data);
+		case INT4OID:
+		case DATEOID:
+			return delta_delta_decompress_all_uint32(compressed_data);
+		case INT2OID:
+			return delta_delta_decompress_all_uint16(compressed_data);
+		default:
+			elog(ERROR,
+				 "type '%s' is not supported for deltadelta decompression",
+				 format_type_be(element_type));
+			pg_unreachable();
+	}
+}
+
+/* Functions for reverse iterator. */
 static DecompressResultInternal
 delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompressionIterator *iter)
 {
