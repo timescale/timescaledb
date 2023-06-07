@@ -1,0 +1,44 @@
+decoder_raw, Output plugin for logical replication
+==================================================
+
+This output plugin for logical replication generates raw queries based
+on the logical changes it finds. Those queries can be consumed as they
+are by any remote source.
+
+UPDATE and DELETE queries are generated for relations using a level of
+REPLICA IDENTITY sufficient to ensure that tuple selectivity is guaranteed:
+- FULL, all the old tuple values are decoded from WAL all the time so
+they are used for WHERE clause generation.
+- DEFAULT, when relation has an index usable for selectivity like a
+primary key.
+- USING INDEX, because the UNIQUE index on NOT NULL values ensures
+that tuples are uniquely identified.
+In those cases, for DEFAULT and USING INDEX, WHERE clause is generated
+with new tuple values if no columns mused by the selectivity index are
+updated as server does not need to provide old tuple values. If at least
+one column is updated, new tuple values are added, of course only on the
+columns managing tuple selectivity.
+Based on that, UPDATE and DELETE queries are not generated for the following
+cases of REPLICA IDENTITY:
+- NOTHING
+- DEFAULT without a selectivity index
+
+INSERT queries are generated for all relations everytime using the new
+tuple values fetched from WAL.
+
+Options
+-------
+
+The following options can be used:
+- include_transaction, 'on' will print BEGIN and COMMIT messages, while
+'off' bypasses them and generates nothing.
+- output_format, 'textual' for textual format, or 'binary' for binary
+format. Default is 'textual'.
+
+This worker is compatible with PostgreSQL 9.4 and newer versions.
+
+TODO
+----
+
+- Implement options filtering INSERT generation depending on REPLICA
+IDENTITY level of relation involved.

@@ -1,0 +1,346 @@
+--
+-- Basic tests
+--
+-- Create a replication slot
+SELECT slot_name FROM pg_create_logical_replication_slot('custom_slot', 'decoder_raw');
+  slot_name  
+-------------
+ custom_slot
+(1 row)
+
+-- DEFAULT case with PRIMARY KEY
+CREATE TABLE aa (a int primary key, b text NOT NULL);
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+-- Update of Non-selective column
+UPDATE aa SET b = 'cc' WHERE a = 1;
+-- Update of only selective column
+UPDATE aa SET a = 3 WHERE a = 1;
+-- Update of both columns
+UPDATE aa SET a = 4, b = 'dd' WHERE a = 2;
+DELETE FROM aa WHERE a = 4;
+-- Have a look at changes with different modes.
+-- In the second call changes are consumed to not impact the next cases.
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                       data                        
+---------------------------------------------------
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ UPDATE public.aa SET a = 1, b = 'cc' WHERE a = 1;
+ UPDATE public.aa SET a = 3, b = 'cc' WHERE a = 1;
+ UPDATE public.aa SET a = 4, b = 'dd' WHERE a = 2;
+ DELETE FROM public.aa WHERE a = 4;
+(6 rows)
+
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'on');
+                       data                        
+---------------------------------------------------
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 1, b = 'cc' WHERE a = 1;
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 3, b = 'cc' WHERE a = 1;
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 4, b = 'dd' WHERE a = 2;
+ COMMIT;
+ BEGIN;
+ DELETE FROM public.aa WHERE a = 4;
+ COMMIT;
+(18 rows)
+
+DROP TABLE aa;
+-- DEFAULT case without PRIMARY KEY
+CREATE TABLE aa (a int, b text NOT NULL);
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+-- Update of Non-selective column
+UPDATE aa SET b = 'cc' WHERE a = 1;
+-- Update of only selective column
+UPDATE aa SET a = 3 WHERE a = 1;
+-- Update of both columns
+UPDATE aa SET a = 4, b = 'dd' WHERE a = 2;
+DELETE FROM aa WHERE a = 4;
+-- Have a look at changes with different modes.
+-- In the second call changes are consumed to not impact the next cases.
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                      data                      
+------------------------------------------------
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+(2 rows)
+
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'on');
+                      data                      
+------------------------------------------------
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+(16 rows)
+
+DROP TABLE aa;
+-- INDEX case
+CREATE TABLE aa (a int NOT NULL, b text);
+CREATE UNIQUE INDEX aai ON aa(a);
+ALTER TABLE aa REPLICA IDENTITY USING INDEX aai;
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+-- Update of Non-selective column
+UPDATE aa SET b = 'cc' WHERE a = 1;
+-- Update of only selective column
+UPDATE aa SET a = 3 WHERE a = 1;
+-- Update of both columns
+UPDATE aa SET a = 4, b = 'dd' WHERE a = 2;
+DELETE FROM aa WHERE a = 4;
+-- Have a look at changes with different modes
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                       data                        
+---------------------------------------------------
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ UPDATE public.aa SET a = 1, b = 'cc' WHERE a = 1;
+ UPDATE public.aa SET a = 3, b = 'cc' WHERE a = 1;
+ UPDATE public.aa SET a = 4, b = 'dd' WHERE a = 2;
+ DELETE FROM public.aa WHERE a = 4;
+(6 rows)
+
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'on');
+                       data                        
+---------------------------------------------------
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 1, b = 'cc' WHERE a = 1;
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 3, b = 'cc' WHERE a = 1;
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 4, b = 'dd' WHERE a = 2;
+ COMMIT;
+ BEGIN;
+ DELETE FROM public.aa WHERE a = 4;
+ COMMIT;
+(24 rows)
+
+DROP TABLE aa;
+-- INDEX case using a second column
+CREATE TABLE aa (b text, a int NOT NULL);
+CREATE UNIQUE INDEX aai ON aa(a);
+ALTER TABLE aa REPLICA IDENTITY USING INDEX aai;
+INSERT INTO aa VALUES ('aa', 1), ('bb', 2);
+-- Update of Non-selective column
+UPDATE aa SET b = 'cc' WHERE a = 1;
+-- Update of only selective column
+UPDATE aa SET a = 3 WHERE a = 1;
+-- Update of both columns
+UPDATE aa SET a = 4, b = 'dd' WHERE a = 2;
+DELETE FROM aa WHERE a = 4;
+-- Have a look at changes with different modes
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                       data                        
+---------------------------------------------------
+ INSERT INTO public.aa (b, a) VALUES ('aa', 1);
+ INSERT INTO public.aa (b, a) VALUES ('bb', 2);
+ UPDATE public.aa SET b = 'cc', a = 1 WHERE a = 1;
+ UPDATE public.aa SET b = 'cc', a = 3 WHERE a = 1;
+ UPDATE public.aa SET b = 'dd', a = 4 WHERE a = 2;
+ DELETE FROM public.aa WHERE a = 4;
+(6 rows)
+
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'on');
+                       data                        
+---------------------------------------------------
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ INSERT INTO public.aa (b, a) VALUES ('aa', 1);
+ INSERT INTO public.aa (b, a) VALUES ('bb', 2);
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET b = 'cc', a = 1 WHERE a = 1;
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET b = 'cc', a = 3 WHERE a = 1;
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET b = 'dd', a = 4 WHERE a = 2;
+ COMMIT;
+ BEGIN;
+ DELETE FROM public.aa WHERE a = 4;
+ COMMIT;
+(24 rows)
+
+DROP TABLE aa;
+-- FULL case
+CREATE TABLE aa (a int primary key, b text NOT NULL);
+ALTER TABLE aa REPLICA IDENTITY FULL;
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+-- Update of Non-selective column
+UPDATE aa SET b = 'cc' WHERE a = 1;
+-- Update of only selective column
+UPDATE aa SET a = 3 WHERE a = 1;
+-- Update of both columns
+UPDATE aa SET a = 4, b = 'dd' WHERE a = 2;
+DELETE FROM aa WHERE a = 4;
+-- Have a look at changes with different modes
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                              data                              
+----------------------------------------------------------------
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ UPDATE public.aa SET a = 1, b = 'cc' WHERE a = 1 AND b = 'aa';
+ UPDATE public.aa SET a = 3, b = 'cc' WHERE a = 1 AND b = 'cc';
+ UPDATE public.aa SET a = 4, b = 'dd' WHERE a = 2 AND b = 'bb';
+ DELETE FROM public.aa WHERE a = 4 AND b = 'dd';
+(6 rows)
+
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'on');
+                              data                              
+----------------------------------------------------------------
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 1, b = 'cc' WHERE a = 1 AND b = 'aa';
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 3, b = 'cc' WHERE a = 1 AND b = 'cc';
+ COMMIT;
+ BEGIN;
+ UPDATE public.aa SET a = 4, b = 'dd' WHERE a = 2 AND b = 'bb';
+ COMMIT;
+ BEGIN;
+ DELETE FROM public.aa WHERE a = 4 AND b = 'dd';
+ COMMIT;
+(22 rows)
+
+DROP TABLE aa;
+-- NOTHING case
+CREATE TABLE aa (a int primary key, b text NOT NULL);
+ALTER TABLE aa REPLICA IDENTITY NOTHING;
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+UPDATE aa SET b = 'cc' WHERE a = 1;
+UPDATE aa SET a = 3 WHERE a = 1;
+DELETE FROM aa WHERE a = 4;
+-- Have a look at changes with different modes
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                      data                      
+------------------------------------------------
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+(2 rows)
+
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'on');
+                      data                      
+------------------------------------------------
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ COMMIT;
+ BEGIN;
+ COMMIT;
+ BEGIN;
+ COMMIT;
+(14 rows)
+
+DROP TABLE aa;
+-- Special value handling for various data types
+-- boolean, with true and false values correctly shaped
+CREATE TABLE aa (a boolean);
+INSERT INTO aa VALUES (true);
+INSERT INTO aa VALUES (false);
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                   data                    
+-------------------------------------------
+ INSERT INTO public.aa (a) VALUES (true);
+ INSERT INTO public.aa (a) VALUES (false);
+(2 rows)
+
+DROP TABLE aa;
+-- numeric and flost with Nan and infinity - quotes should be correctly placed
+CREATE TABLE aa (a numeric, b float4, c float8);
+INSERT INTO aa VALUES ('Nan'::numeric, 'Nan'::float4, 'Nan'::float8);
+INSERT INTO aa VALUES (1.0, '+Infinity'::float4, '+Infinity'::float8);
+INSERT INTO aa VALUES (2.0, '-Infinity'::float4, '-Infinity'::float8);
+INSERT INTO aa VALUES (3.0, 4.0, 5.0);
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                                  data                                   
+-------------------------------------------------------------------------
+ INSERT INTO public.aa (a, b, c) VALUES ('NaN', 'NaN', 'NaN');
+ INSERT INTO public.aa (a, b, c) VALUES (1.0, 'Infinity', 'Infinity');
+ INSERT INTO public.aa (a, b, c) VALUES (2.0, '-Infinity', '-Infinity');
+ INSERT INTO public.aa (a, b, c) VALUES (3.0, 4, 5);
+(4 rows)
+
+DROP TABLE aa;
+-- Unchanged toast datum
+CREATE TABLE tt (a int primary key, t text);
+ALTER TABLE tt ALTER COLUMN t SET STORAGE EXTERNAL;
+INSERT INTO tt VALUES (1, 'foo');
+INSERT INTO tt VALUES (2, repeat('x', 3000));
+UPDATE tt SET t=t WHERE a=1;
+UPDATE tt SET t=t WHERE a=2;
+SELECT substr(data, 1, 50), substr(data, 3000, 45)
+  FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
+                       substr                       |                    substr                     
+----------------------------------------------------+-----------------------------------------------
+ INSERT INTO public.tt (a, t) VALUES (1, 'foo');    | 
+ INSERT INTO public.tt (a, t) VALUES (2, 'xxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+ UPDATE public.tt SET a = 1, t = 'foo' WHERE a = 1; | 
+ UPDATE public.tt SET a = 2 WHERE a = 2;            | 
+(4 rows)
+
+DROP TABLE tt;
+-- Drop replication slot
+SELECT pg_drop_replication_slot('custom_slot');
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
