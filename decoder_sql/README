@@ -1,4 +1,4 @@
-decoder_raw, Output plugin for logical replication
+decoder_sql, Output plugin for logical replication
 ==================================================
 
 This output plugin for logical replication generates raw queries based

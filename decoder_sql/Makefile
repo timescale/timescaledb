@@ -1,4 +1,4 @@
-MODULES = decoder_raw
+MODULES = decoder_sql
 
 REGRESS = basic
 REGRESS_OPTS = --temp-config=./logical.conf

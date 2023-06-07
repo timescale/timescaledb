@@ -3,7 +3,7 @@
 --
 
 -- Create a replication slot
-SELECT slot_name FROM pg_create_logical_replication_slot('custom_slot', 'decoder_raw');
+SELECT slot_name FROM pg_create_logical_replication_slot('custom_slot', 'decoder_sql');
 
 -- DEFAULT case with PRIMARY KEY
 CREATE TABLE aa (a int primary key, b text NOT NULL);

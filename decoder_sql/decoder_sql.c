@@ -1,13 +1,13 @@
 /*-------------------------------------------------------------------------
  *
- * decoder_raw.c
+ * decoder_sql.c
  *		Logical decoding output plugin generating SQL queries based
  *		on things decoded.
  *
  * Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
- *		  decoder_raw/decoder_raw.c
+ *		  decoder_sql/decoder_sql.c
  *
  *-------------------------------------------------------------------------
  */
@@ -45,16 +45,16 @@ typedef struct
 	bool		include_transaction;
 }			DecoderRawData;
 
-static void decoder_raw_startup(LogicalDecodingContext *ctx,
+static void decoder_sql_startup(LogicalDecodingContext *ctx,
 								OutputPluginOptions *opt,
 								bool is_init);
-static void decoder_raw_shutdown(LogicalDecodingContext *ctx);
-static void decoder_raw_begin_txn(LogicalDecodingContext *ctx,
+static void decoder_sql_shutdown(LogicalDecodingContext *ctx);
+static void decoder_sql_begin_txn(LogicalDecodingContext *ctx,
 								  ReorderBufferTXN *txn);
-static void decoder_raw_commit_txn(LogicalDecodingContext *ctx,
+static void decoder_sql_commit_txn(LogicalDecodingContext *ctx,
 								   ReorderBufferTXN *txn,
 								   XLogRecPtr commit_lsn);
-static void decoder_raw_change(LogicalDecodingContext *ctx,
+static void decoder_sql_change(LogicalDecodingContext *ctx,
 							   ReorderBufferTXN *txn, Relation rel,
 							   ReorderBufferChange *change);
 
@@ -70,17 +70,17 @@ _PG_output_plugin_init(OutputPluginCallbacks *cb)
 {
 	AssertVariableIsOfType(&_PG_output_plugin_init, LogicalOutputPluginInit);
 
-	cb->startup_cb = decoder_raw_startup;
-	cb->begin_cb = decoder_raw_begin_txn;
-	cb->change_cb = decoder_raw_change;
-	cb->commit_cb = decoder_raw_commit_txn;
-	cb->shutdown_cb = decoder_raw_shutdown;
+	cb->startup_cb = decoder_sql_startup;
+	cb->begin_cb = decoder_sql_begin_txn;
+	cb->change_cb = decoder_sql_change;
+	cb->commit_cb = decoder_sql_commit_txn;
+	cb->shutdown_cb = decoder_sql_shutdown;
 }
 
 
 /* initialize this plugin */
 static void
-decoder_raw_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt,
+decoder_sql_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt,
 					bool is_init)
 {
 	ListCell   *option;
@@ -149,7 +149,7 @@ decoder_raw_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt,
 
 /* cleanup this plugin's resources */
 static void
-decoder_raw_shutdown(LogicalDecodingContext *ctx)
+decoder_sql_shutdown(LogicalDecodingContext *ctx)
 {
 	DecoderRawData *data = ctx->output_plugin_private;
 
@@ -159,7 +159,7 @@ decoder_raw_shutdown(LogicalDecodingContext *ctx)
 
 /* BEGIN callback */
 static void
-decoder_raw_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
+decoder_sql_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 {
 	DecoderRawData *data = ctx->output_plugin_private;
 
@@ -174,7 +174,7 @@ decoder_raw_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 
 /* COMMIT callback */
 static void
-decoder_raw_commit_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
+decoder_sql_commit_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 					   XLogRecPtr commit_lsn)
 {
 	DecoderRawData *data = ctx->output_plugin_private;
@@ -408,7 +408,7 @@ print_where_clause(StringInfo s,
  * Decode an INSERT entry
  */
 static void
-decoder_raw_insert(StringInfo s,
+decoder_sql_insert(StringInfo s,
 				   Relation relation,
 				   HeapTuple tuple)
 {
@@ -468,7 +468,7 @@ decoder_raw_insert(StringInfo s,
  * Decode a DELETE entry
  */
 static void
-decoder_raw_delete(StringInfo s,
+decoder_sql_delete(StringInfo s,
 				   Relation relation,
 				   HeapTuple tuple)
 {
@@ -488,7 +488,7 @@ decoder_raw_delete(StringInfo s,
  * Decode an UPDATE entry
  */
 static void
-decoder_raw_update(StringInfo s,
+decoder_sql_update(StringInfo s,
 				   Relation relation,
 				   HeapTuple oldtuple,
 				   HeapTuple newtuple)
@@ -559,7 +559,7 @@ decoder_raw_update(StringInfo s,
  * Callback for individual changed tuples
  */
 static void
-decoder_raw_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
+decoder_sql_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 				   Relation relation, ReorderBufferChange *change)
 {
 	DecoderRawData *data;
@@ -590,7 +590,7 @@ decoder_raw_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			if (change->data.tp.newtuple != NULL)
 			{
 				OutputPluginPrepareWrite(ctx, true);
-				decoder_raw_insert(ctx->out,
+				decoder_sql_insert(ctx->out,
 								   relation,
 								   &change->data.tp.newtuple->tuple);
 				OutputPluginWrite(ctx, true);
@@ -605,7 +605,7 @@ decoder_raw_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 				&change->data.tp.newtuple->tuple : NULL;
 
 				OutputPluginPrepareWrite(ctx, true);
-				decoder_raw_update(ctx->out,
+				decoder_sql_update(ctx->out,
 								   relation,
 								   oldtuple,
 								   newtuple);
@@ -616,7 +616,7 @@ decoder_raw_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			if (!is_rel_non_selective)
 			{
 				OutputPluginPrepareWrite(ctx, true);
-				decoder_raw_delete(ctx->out,
+				decoder_sql_delete(ctx->out,
 								   relation,
 								   &change->data.tp.oldtuple->tuple);
 				OutputPluginWrite(ctx, true);
