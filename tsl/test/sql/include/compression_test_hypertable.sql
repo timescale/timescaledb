@@ -33,7 +33,7 @@ with original AS (
 decompressed AS (
   SELECT row_number() OVER() row_number, * FROM (:QUERY :QUERY_ORDER) as q
 )
-SELECT :'HYPERTABLE_NAME' AS table, count(*) AS "diff between original and compressed"
+select original, decompressed
 FROM original
 FULL OUTER JOIN decompressed ON (original.row_number = decompressed.row_number)
 WHERE (original.*) IS DISTINCT FROM (decompressed.*);

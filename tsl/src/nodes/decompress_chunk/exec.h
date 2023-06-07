@@ -58,9 +58,15 @@ typedef struct DecompressChunkColumnState
 			bool isnull;
 			int count;
 		} segmentby;
+
 		struct
 		{
+			/* For row-by-row decompression. */
 			DecompressionIterator *iterator;
+
+			/* For entire batch decompression, mutually exclusive with the above. */
+			Datum *datums;
+			bool *nulls;
 		} compressed;
 	};
 } DecompressChunkColumnState;
@@ -78,6 +84,7 @@ typedef struct DecompressBatchState
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
+	MemoryContext arrow_context;
 } DecompressBatchState;
 
 typedef struct DecompressChunkState
@@ -101,6 +108,8 @@ typedef struct DecompressChunkState
 	struct binaryheap *merge_heap; /* Binary heap of slot indices */
 	int n_sortkeys;				   /* Number of sort keys for heap compare function */
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
+
+	bool using_bulk_decompression; /* For EXPLAIN ANALYZE. */
 } DecompressChunkState;
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);

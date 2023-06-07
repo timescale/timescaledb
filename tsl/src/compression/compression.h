@@ -73,6 +73,8 @@ struct Compressor
 	void *(*finish)(Compressor *data);
 };
 
+typedef struct ArrowArray ArrowArray;
+
 typedef struct DecompressionIterator
 {
 	uint8 compression_algorithm;
@@ -166,6 +168,7 @@ typedef struct CompressionAlgorithmDefinition
 {
 	DecompressionIterator *(*iterator_init_forward)(Datum, Oid element_type);
 	DecompressionIterator *(*iterator_init_reverse)(Datum, Oid element_type);
+	ArrowArray *(*decompress_all)(Datum, Oid element_type);
 	void (*compressed_data_send)(CompressedDataHeader *, StringInfo);
 	Datum (*compressed_data_recv)(StringInfo);
 
@@ -288,8 +291,10 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_GORILLA == 3, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DELTADELTA == 4, "algorithm index has changed");
 
-	/* This should change when adding a new algorithm after adding the new algorithm to the assert
-	 * list above. This statement prevents adding a new algorithm without updating the asserts above
+	/*
+	 * This should change when adding a new algorithm after adding the new
+	 * algorithm to the assert list above. This statement prevents adding a
+	 * new algorithm without updating the asserts above
 	 */
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 5,
 					 "number of algorithms have changed, the asserts should be updated");
@@ -303,6 +308,9 @@ extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
+
+extern ArrowArray *tsl_try_decompress_all(CompressionAlgorithms algorithm, Datum compressed_data,
+										  Oid element_type);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;

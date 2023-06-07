@@ -56,8 +56,11 @@
 
 #define SIMPLE8B_MAX_VALUES_PER_SLOT 64
 
-#define SIMPLE8B_NUM_ELEMENTS ((uint8[]){ 0, 64, 32, 21, 16, 12, 10, 9, 8, 6, 5, 4, 3, 2, 1 })
-#define SIMPLE8B_BIT_LENGTH ((uint8[]){ 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 21, 32, 64, 36 })
+/* clang-format off */
+/* selector value:                        0,  1,  2,  3,  4,  5,  6, 7, 8,  9, 10, 11, 12, 13, 14, RLE */
+#define SIMPLE8B_NUM_ELEMENTS ((uint8[]){ 0, 64, 32, 21, 16, 12, 10, 9, 8,  6,  5,  4,  3,  2,  1, 0  })
+#define SIMPLE8B_BIT_LENGTH   ((uint8[]){ 0,  1,  2,  3,  4,  5,  6, 7, 8, 10, 12, 16, 21, 32, 64, 36 })
+/* clang-format on */
 
 /********************
  ***  Public API  ***
@@ -145,9 +148,9 @@ simple8brle_decompression_iterator_init_forward(Simple8bRleDecompressionIterator
 static inline void
 simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator *iter,
 												Simple8bRleSerialized *compressed);
-static inline Simple8bRleDecompressResult
+static pg_attribute_always_inline Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIterator *iter);
-static inline Simple8bRleDecompressResult
+static pg_attribute_always_inline Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIterator *iter);
 
 static inline void simple8brle_serialized_send(StringInfo buffer,
@@ -832,21 +835,22 @@ simple8brle_rledata_repeatcount(uint64 rledata)
 	return (uint32) ((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
 }
 
-static inline uint64
+static pg_attribute_always_inline uint64
 simple8brle_rledata_value(uint64 rledata)
 {
 	return rledata & SIMPLE8B_RLE_MAX_VALUE_MASK;
 }
 
-static inline uint64
+static pg_attribute_always_inline uint64
 simple8brle_selector_get_bitmask(uint8 selector)
 {
 	uint8 bitLen = SIMPLE8B_BIT_LENGTH[selector];
-	/* note: left shift by 64 bits is UB */
-	return bitLen < 64 ? (1ULL << bitLen) - 1 : PG_UINT64_MAX;
+	Assert(bitLen != 0);
+	uint64 result = ((-1ULL) >> (64 - bitLen));
+	return result;
 }
 
-static uint32
+static pg_attribute_always_inline uint32
 simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks)
 {
 	return (num_blocks / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT) +

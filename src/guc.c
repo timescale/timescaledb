@@ -82,6 +82,7 @@ bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
+TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 int ts_guc_max_open_chunks_per_insert; /* default is computed at runtime */
 int ts_guc_max_cached_chunks_per_hypertable = 100;
@@ -469,6 +470,18 @@ _guc_init(void)
 							 "Enable compression to take indexscan path",
 							 "Enable indexscan during compression, if matching index is found",
 							 &ts_guc_enable_compression_indexscan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_bulk_decompression",
+							 "Enable decompression of the entire compressed batches",
+							 "Increases throughput of decompression, but might increase query "
+							 "memory usage",
+							 &ts_guc_enable_bulk_decompression,
 							 true,
 							 PGC_USERSET,
 							 0,
