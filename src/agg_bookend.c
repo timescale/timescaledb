@@ -340,10 +340,10 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum va
 		typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 		typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
 	}
-	else
+	else if (!cmp.is_null)
 	{
 		/* only do comparison if cmp is not NULL */
-		if (!cmp.is_null && cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
+		if (state->cmp.is_null || cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
 		{
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 			typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);

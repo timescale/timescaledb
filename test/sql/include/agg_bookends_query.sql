@@ -118,3 +118,40 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 
 ROLLBACK;
 
+-- Test with NULL numeric values
+BEGIN;
+TRUNCATE btest_numeric;
+
+-- Empty table
+:PREFIX SELECT first(btest_numeric, time) FROM btest_numeric;
+:PREFIX SELECT last(btest_numeric, time) FROM btest_numeric;
+
+-- Only NULL values
+INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
+INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
+:PREFIX SELECT first(quantity, time) FROM btest_numeric;
+:PREFIX SELECT last(quantity, time) FROM btest_numeric;
+:PREFIX SELECT first(time, quantity) FROM btest_numeric;
+:PREFIX SELECT last(time, quantity) FROM btest_numeric;
+
+-- NULL values followed by non-NULL values
+INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 1);
+INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
+:PREFIX SELECT first(quantity, time) FROM btest_numeric;
+:PREFIX SELECT last(quantity, time) FROM btest_numeric;
+:PREFIX SELECT first(time, quantity) FROM btest_numeric;
+:PREFIX SELECT last(time, quantity) FROM btest_numeric;
+
+TRUNCATE btest_numeric;
+
+-- non-NULL values followed by NULL values
+INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 1);
+INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
+INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
+INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
+:PREFIX SELECT first(quantity, time) FROM btest_numeric;
+:PREFIX SELECT last(quantity, time) FROM btest_numeric;
+:PREFIX SELECT first(time, quantity) FROM btest_numeric;
+:PREFIX SELECT last(time, quantity) FROM btest_numeric;
+
+ROLLBACK;
