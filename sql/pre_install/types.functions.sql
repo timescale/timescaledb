@@ -40,3 +40,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.rxid_in(cstring) RETURNS @exts
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.rxid_out(@extschema@.rxid) RETURNS cstring
     AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_in(cstring)
+    RETURNS _timescaledb_internal.dimension_info
+    LANGUAGE C STRICT IMMUTABLE
+    AS '@MODULE_PATHNAME@', 'ts_dimension_info_in';
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_out(_timescaledb_internal.dimension_info)
+    RETURNS cstring
+    LANGUAGE C STRICT IMMUTABLE
+    AS '@MODULE_PATHNAME@', 'ts_dimension_info_out';
+

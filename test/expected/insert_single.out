@@ -387,13 +387,12 @@ SELECT * FROM "3dim" ORDER BY (time, device);
  Fri Jan 20 09:00:47 2017 | 25.1 | yellow | la
 (3 rows)
 
--- Test that large intervals and no interval fail for INTEGER
+-- Test large intervals as default interval for integer is
+-- supported as part of hypertable generalization
 \set ON_ERROR_STOP 0
 CREATE TABLE "inttime_err"(time INTEGER PRIMARY KEY, temp float);
 SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483648);
 ERROR:  invalid interval: must be between 1 and 2147483647
-SELECT create_hypertable('"inttime_err"', 'time');
-ERROR:  integer dimensions require an explicit interval
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483647);
     create_hypertable     
@@ -401,13 +400,12 @@ SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>214748364
  (8,public,inttime_err,t)
 (1 row)
 
--- Test that large intervals and no interval fail for SMALLINT
+-- Test large intervals as default interval is supported
+-- for integer types as part of hypertable generalization.
 \set ON_ERROR_STOP 0
 CREATE TABLE "smallinttime_err"(time SMALLINT PRIMARY KEY, temp float);
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>32768);
 ERROR:  invalid interval: must be between 1 and 32767
-SELECT create_hypertable('"smallinttime_err"', 'time');
-ERROR:  integer dimensions require an explicit interval
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>32767);
        create_hypertable       

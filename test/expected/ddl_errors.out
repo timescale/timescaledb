@@ -7,14 +7,13 @@ CREATE TABLE PUBLIC."Hypertable_1" (
   temp_c int NOT NULL DEFAULT -1
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
+-- Default integer interval is supported as part of
+-- hypertable generalization, verify additional secnarios
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable(NULL, NULL);
 ERROR:  relation cannot be NULL
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', NULL);
-ERROR:  time column cannot be NULL
--- integer time dimensions require an explicit interval
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time');
-ERROR:  integer dimensions require an explicit interval
+ERROR:  partition column cannot be NULL
 -- space dimensions require explicit number of partitions
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  invalid number of partitions for dimension "Device_id"

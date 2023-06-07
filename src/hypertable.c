@@ -1654,11 +1654,10 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 }
 
 static Datum
-create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool created)
+create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool created,
+						bool is_generic)
 {
 	TupleDesc tupdesc;
-	Datum values[Natts_create_hypertable];
-	bool nulls[Natts_create_hypertable] = { false };
 	HeapTuple tuple;
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
@@ -1668,13 +1667,31 @@ create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool crea
 						"context that cannot accept type record")));
 
 	tupdesc = BlessTupleDesc(tupdesc);
-	values[AttrNumberGetAttrOffset(Anum_create_hypertable_id)] = Int32GetDatum(ht->fd.id);
-	values[AttrNumberGetAttrOffset(Anum_create_hypertable_schema_name)] =
-		NameGetDatum(&ht->fd.schema_name);
-	values[AttrNumberGetAttrOffset(Anum_create_hypertable_table_name)] =
-		NameGetDatum(&ht->fd.table_name);
-	values[AttrNumberGetAttrOffset(Anum_create_hypertable_created)] = BoolGetDatum(created);
-	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	if (is_generic)
+	{
+		Datum values[Natts_generic_create_hypertable];
+		bool nulls[Natts_generic_create_hypertable] = { false };
+
+		values[AttrNumberGetAttrOffset(Anum_generic_create_hypertable_id)] =
+			Int32GetDatum(ht->fd.id);
+		values[AttrNumberGetAttrOffset(Anum_generic_create_hypertable_created)] =
+			BoolGetDatum(created);
+		tuple = heap_form_tuple(tupdesc, values, nulls);
+	}
+	else
+	{
+		Datum values[Natts_create_hypertable];
+		bool nulls[Natts_create_hypertable] = { false };
+
+		values[AttrNumberGetAttrOffset(Anum_create_hypertable_id)] = Int32GetDatum(ht->fd.id);
+		values[AttrNumberGetAttrOffset(Anum_create_hypertable_schema_name)] =
+			NameGetDatum(&ht->fd.schema_name);
+		values[AttrNumberGetAttrOffset(Anum_create_hypertable_table_name)] =
+			NameGetDatum(&ht->fd.table_name);
+		values[AttrNumberGetAttrOffset(Anum_create_hypertable_created)] = BoolGetDatum(created);
+		tuple = heap_form_tuple(tupdesc, values, nulls);
+	}
 
 	return HeapTupleGetDatum(tuple);
 }
@@ -1847,80 +1864,22 @@ hypertable_validate_create_call(const char *hypertable_name, bool distributed,
 
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
+TS_FUNCTION_INFO_V1(ts_hypertable_create_general);
 
 /*
- * Create a hypertable from an existing table.
- *
- * Arguments:
- * relation                REGCLASS
- * time_column_name        NAME
- * partitioning_column     NAME = NULL
- * number_partitions       INTEGER = NULL
- * associated_schema_name  NAME = NULL
- * associated_table_prefix NAME = NULL
- * chunk_time_interval     anyelement = NULL::BIGINT
- * create_default_indexes  BOOLEAN = TRUE
- * if_not_exists           BOOLEAN = FALSE
- * partitioning_func       REGPROC = NULL
- * migrate_data            BOOLEAN = FALSE
- * chunk_target_size       TEXT = NULL
- * chunk_sizing_func       OID = NULL
- * time_partitioning_func  REGPROC = NULL
- * replication_factor      INTEGER = NULL
- * data nodes              NAME[] = NULL
- * distributed             BOOLEAN = NULL (not present for dist call)
+ * Create a hypertable from an existing table. The specific version of create hypertable API
+ * process the function arguments before calling this function.
  */
 static Datum
-ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
+ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
+							  DimensionInfo *open_dim_info, DimensionInfo *closed_dim_info,
+							  Name associated_schema_name, Name associated_table_prefix,
+							  bool create_default_indexes, bool if_not_exists, bool migrate_data,
+							  text *target_size, Oid sizing_func, bool replication_factor_is_null,
+							  int32 replication_factor_in, ArrayType *data_node_arr,
+							  bool distributed_is_null, bool distributed, bool is_generic)
 {
-	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Name time_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
-	Name space_dim_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
-	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
-	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
-	bool create_default_indexes =
-		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
-	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
-	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
-	DimensionInfo *time_dim_info =
-		ts_dimension_info_create_open(table_relid,
-									  /* column name */
-									  time_dim_name,
-									  /* interval */
-									  PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
-									  /* interval type */
-									  PG_ARGISNULL(6) ? InvalidOid :
-														get_fn_expr_argtype(fcinfo->flinfo, 6),
-									  /* partitioning func */
-									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
-	DimensionInfo *space_dim_info = NULL;
-	bool replication_factor_is_null = PG_ARGISNULL(14);
-	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
 	int16 replication_factor;
-	ArrayType *data_node_arr = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
-	ChunkSizingInfo chunk_sizing_info = {
-		.table_relid = table_relid,
-		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
-		.func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12),
-		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1),
-		.check_for_index = !create_default_indexes,
-	};
-	bool distributed_is_null;
-	bool distributed;
-
-	/* create_distributed_hypertable() does not have explicit
-	 * distributed argument */
-	if (!is_dist_call)
-	{
-		distributed_is_null = PG_ARGISNULL(16);
-		distributed = distributed_is_null ? false : PG_GETARG_BOOL(16);
-	}
-	else
-	{
-		distributed_is_null = false;
-		distributed = true;
-	}
-
 	Cache *hcache;
 	Hypertable *ht;
 	Datum retval;
@@ -1930,20 +1889,20 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE);
 
+	ChunkSizingInfo chunk_sizing_info = {
+		.table_relid = table_relid,
+		.target_size = target_size,
+		.func = sizing_func,
+		.colname = NameStr(open_dim_info->colname),
+		.check_for_index = !create_default_indexes,
+	};
+
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	if (!OidIsValid(table_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("relation cannot be NULL")));
-
-	if (migrate_data && is_dist_call)
+	if (migrate_data && distributed)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot migrate data for distributed hypertable")));
-
-	if (NULL == time_dim_name)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("time column cannot be NULL")));
 
 	if (NULL != data_node_arr && ARR_NDIM(data_node_arr) > 1)
 		ereport(ERROR,
@@ -1985,12 +1944,11 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 															 data_node_arr,
 															 &data_nodes);
 
-		if (NULL != space_dim_name)
+		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
-			int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
-
 			/* If the number of partitions isn't specified, default to setting it
 			 * to the number of data nodes */
+			int16 num_partitions = closed_dim_info->num_slices;
 			if (num_partitions < 1 && replication_factor > 0)
 			{
 				int num_nodes = list_length(data_nodes);
@@ -1998,15 +1956,8 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 				Assert(num_nodes >= 0);
 				num_partitions = num_nodes & 0xFFFF;
 			}
-
-			space_dim_info =
-				ts_dimension_info_create_closed(table_relid,
-												/* column name */
-												space_dim_name,
-												/* number partitions */
-												num_partitions,
-												/* partitioning func */
-												PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9));
+			closed_dim_info->num_slices = num_partitions;
+			closed_dim_info->num_slices_is_set = true;
 		}
 
 		if (if_not_exists)
@@ -2019,8 +1970,8 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		created = ts_hypertable_create_from_info(table_relid,
 												 INVALID_HYPERTABLE_ID,
 												 flags,
-												 time_dim_info,
-												 space_dim_info,
+												 open_dim_info,
+												 closed_dim_info,
 												 associated_schema_name,
 												 associated_table_prefix,
 												 &chunk_sizing_info,
@@ -2029,26 +1980,194 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 
 		Assert(created);
 		ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
-		if (NULL != space_dim_info)
-			ts_hypertable_check_partitioning(ht, space_dim_info->dimension_id);
+		if (NULL != closed_dim_info)
+			ts_hypertable_check_partitioning(ht, closed_dim_info->dimension_id);
 	}
 
-	retval = create_hypertable_datum(fcinfo, ht, created);
+	retval = create_hypertable_datum(fcinfo, ht, created, is_generic);
 	ts_cache_release(hcache);
 
 	PG_RETURN_DATUM(retval);
 }
 
+/*
+ * Process create_hypertable parameters for time specific implementation.
+ *
+ * Arguments:
+ * relation                REGCLASS
+ * time_column_name        NAME
+ * partitioning_column     NAME = NULL
+ * number_partitions       INTEGER = NULL
+ * associated_schema_name  NAME = NULL
+ * associated_table_prefix NAME = NULL
+ * chunk_time_interval     anyelement = NULL::BIGINT
+ * create_default_indexes  BOOLEAN = TRUE
+ * if_not_exists           BOOLEAN = FALSE
+ * partitioning_func       REGPROC = NULL
+ * migrate_data            BOOLEAN = FALSE
+ * chunk_target_size       TEXT = NULL
+ * chunk_sizing_func       OID = NULL
+ * time_partitioning_func  REGPROC = NULL
+ * replication_factor      INTEGER = NULL
+ * data nodes              NAME[] = NULL
+ * distributed             BOOLEAN = NULL (not present for dist call)
+ */
+static Datum
+ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
+{
+	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Name open_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
+	Name closed_dim_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
+	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
+	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
+	Datum default_interval = PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6);
+	Oid interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6);
+	bool create_default_indexes =
+		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
+	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
+	regproc closed_partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
+	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
+	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
+	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
+	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
+	bool replication_factor_is_null = PG_ARGISNULL(14);
+	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
+	ArrayType *data_node_arr = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
+
+	bool distributed_is_null;
+	bool distributed;
+
+	if (!OidIsValid(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("relation cannot be NULL")));
+
+	if (!open_dim_name)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("partition column cannot be NULL")));
+
+	/* create_distributed_hypertable() does not have explicit
+	 * distributed argument */
+	if (!is_dist_call)
+	{
+		distributed_is_null = PG_ARGISNULL(16);
+		distributed = distributed_is_null ? false : PG_GETARG_BOOL(16);
+	}
+	else
+	{
+		distributed_is_null = false;
+		distributed = true;
+	}
+
+	DimensionInfo *open_dim_info =
+		ts_dimension_info_create_open(table_relid,
+									  open_dim_name,		 /* column name */
+									  default_interval,		 /* interval */
+									  interval_type,		 /* interval type */
+									  open_partitioning_func /* partitioning func */
+		);
+
+	DimensionInfo *closed_dim_info = NULL;
+	if (closed_dim_name)
+		closed_dim_info =
+			ts_dimension_info_create_closed(table_relid,
+											closed_dim_name,		 /* column name */
+											num_partitions,			 /* number partitions */
+											closed_partitioning_func /* partitioning func */
+			);
+
+	return ts_hypertable_create_internal(fcinfo,
+										 table_relid,
+										 open_dim_info,
+										 closed_dim_info,
+										 associated_schema_name,
+										 associated_table_prefix,
+										 create_default_indexes,
+										 if_not_exists,
+										 migrate_data,
+										 target_size,
+										 sizing_func,
+										 replication_factor_is_null,
+										 replication_factor_in,
+										 data_node_arr,
+										 distributed_is_null,
+										 distributed,
+										 false);
+}
+
 Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
 {
-	return ts_hypertable_create_internal(fcinfo, false);
+	return ts_hypertable_create_time_prev(fcinfo, false);
 }
 
 Datum
 ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
 {
-	return ts_hypertable_create_internal(fcinfo, true);
+	return ts_hypertable_create_time_prev(fcinfo, true);
+}
+
+static Oid
+get_sizing_func_oid()
+{
+	const char *sizing_func_name = "calculate_chunk_interval";
+	const int sizing_func_nargs = 3;
+	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
+
+	return ts_get_function_oid(sizing_func_name,
+							   INTERNAL_SCHEMA_NAME,
+							   sizing_func_nargs,
+							   sizing_func_arg_types);
+}
+
+/*
+ * Process create_hypertable parameters for generic implementation.
+ *
+ * Arguments:
+ * relation                REGCLASS
+ * dimension               dimension_info
+ * create_default_indexes  BOOLEAN = TRUE
+ * if_not_exists           BOOLEAN = FALSE
+ * migrate_data            BOOLEAN = FALSE
+ */
+Datum
+ts_hypertable_create_general(PG_FUNCTION_ARGS)
+{
+	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	DimensionInfo *dim_info = (DimensionInfo *) PG_GETARG_POINTER(1);
+	bool create_default_indexes = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	bool if_not_exists = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	bool migrate_data = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+
+	/*
+	 * Current implementation requires to provide a valid chunk sizing function
+	 * that is being used to populate hypertable catalog information.
+	 */
+	Oid sizing_func = get_sizing_func_oid();
+
+	/*
+	 * Fill in the rest of the info.
+	 */
+	dim_info->table_relid = table_relid;
+
+	return ts_hypertable_create_internal(fcinfo,
+										 table_relid,
+										 dim_info,
+										 NULL, /* closed_dim_info */
+										 NULL, /* associated_schema_name */
+										 NULL, /* associated_table_prefix */
+										 create_default_indexes,
+										 if_not_exists,
+										 migrate_data,
+										 NULL,
+										 sizing_func,
+										 true,
+										 0,
+										 NULL,
+										 true,
+										 false,
+										 true);
 }
 
 /* Go through columns of parent table and check for column data types. */
@@ -2098,7 +2217,7 @@ ts_validate_basetable_columns(Relation *rel)
  */
 bool
 ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
-							   DimensionInfo *time_dim_info, DimensionInfo *space_dim_info,
+							   DimensionInfo *time_dim_info, DimensionInfo *closed_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
 							   ChunkSizingInfo *chunk_sizing_info, int16 replication_factor,
 							   List *data_node_names)
@@ -2275,8 +2394,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Validate that the dimensions are OK */
 	ts_dimension_info_validate(time_dim_info);
 
-	if (DIMENSION_INFO_IS_SET(space_dim_info))
-		ts_dimension_info_validate(space_dim_info);
+	if (DIMENSION_INFO_IS_SET(closed_dim_info))
+		ts_dimension_info_validate(closed_dim_info);
 
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
@@ -2290,7 +2409,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &chunk_sizing_info->func_schema,
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
-					  DIMENSION_INFO_IS_SET(space_dim_info) ? 2 : 1,
+					  DIMENSION_INFO_IS_SET(closed_dim_info) ? 2 : 1,
 					  false,
 					  replication_factor);
 
@@ -2301,12 +2420,12 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Add validated dimensions */
 	ts_dimension_add_from_info(time_dim_info);
 
-	if (DIMENSION_INFO_IS_SET(space_dim_info))
+	if (DIMENSION_INFO_IS_SET(closed_dim_info))
 	{
-		space_dim_info->ht = time_dim_info->ht;
-		ts_dimension_add_from_info(space_dim_info);
-		ts_dimension_partition_info_recreate(space_dim_info->dimension_id,
-											 space_dim_info->num_slices,
+		closed_dim_info->ht = time_dim_info->ht;
+		ts_dimension_add_from_info(closed_dim_info);
+		ts_dimension_partition_info_recreate(closed_dim_info->dimension_id,
+											 closed_dim_info->num_slices,
 											 data_node_names,
 											 replication_factor);
 	}
@@ -2745,14 +2864,14 @@ List *
 ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube)
 {
 	List *chunk_data_nodes = NIL;
-	const Dimension *space_dim = hyperspace_get_closed_dimension(ht->space, 0);
+	const Dimension *closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
 
-	if (NULL != space_dim && NULL != space_dim->dimension_partitions)
+	if (NULL != closed_dim && NULL != closed_dim->dimension_partitions)
 	{
 		const DimensionSlice *slice =
-			ts_hypercube_get_slice_by_dimension_id(cube, space_dim->fd.id);
+			ts_hypercube_get_slice_by_dimension_id(cube, closed_dim->fd.id);
 		const DimensionPartition *dp =
-			ts_dimension_partition_find(space_dim->dimension_partitions, slice->fd.range_start);
+			ts_dimension_partition_find(closed_dim->dimension_partitions, slice->fd.range_start);
 		ListCell *lc;
 
 		/* Filter out data nodes that aren't available */
@@ -3002,17 +3121,17 @@ ts_hypertable_has_compression_table(const Hypertable *ht)
 bool
 ts_hypertable_update_dimension_partitions(const Hypertable *ht)
 {
-	const Dimension *space_dim = hyperspace_get_closed_dimension(ht->space, 0);
+	const Dimension *closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
 
-	if (NULL != space_dim)
+	if (NULL != closed_dim)
 	{
 		List *data_node_names = NIL;
 
 		if (hypertable_is_distributed(ht))
 			data_node_names = ts_hypertable_get_available_data_node_names(ht, false);
 
-		ts_dimension_partition_info_recreate(space_dim->fd.id,
-											 space_dim->fd.num_slices,
+		ts_dimension_partition_info_recreate(closed_dim->fd.id,
+											 closed_dim->fd.num_slices,
 											 data_node_names,
 											 ht->fd.replication_factor);
 		return true;

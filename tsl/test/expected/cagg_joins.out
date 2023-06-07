@@ -39,7 +39,7 @@ SELECT create_hypertable(
   migrate_data => true
 );
 NOTICE:  adding not-null constraint to column "day"
-DETAIL:  Time dimensions cannot have NULL values.
+DETAIL:  Dimensions cannot have NULL values.
 NOTICE:  migrating data to chunks
 DETAIL:  Migration might take a while depending on the amount of data.
       create_hypertable      

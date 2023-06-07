@@ -10,4 +10,3 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.get_partition_for_key(val anye
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_partition_hash(val anyelement)
     RETURNS int
     AS '@MODULE_PATHNAME@', 'ts_get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-
