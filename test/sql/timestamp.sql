@@ -897,9 +897,17 @@ SELECT test.interval_to_internal('TIMESTAMP'::regtype, 86400);
 SELECT test.interval_to_internal('TIMESTAMP'::regtype);
 SELECT test.interval_to_internal('BIGINT'::regtype, 2147483649::bigint);
 
+-- Default interval for integer is supported as part of
+-- hypertable generalization
+SELECT test.interval_to_internal('INT'::regtype);
+SELECT test.interval_to_internal('SMALLINT'::regtype);
+SELECT test.interval_to_internal('BIGINT'::regtype);
+SELECT test.interval_to_internal('TIMESTAMPTZ'::regtype);
+SELECT test.interval_to_internal('TIMESTAMP'::regtype);
+SELECT test.interval_to_internal('DATE'::regtype);
+
 \set VERBOSITY terse
 \set ON_ERROR_STOP 0
-SELECT test.interval_to_internal('INT'::regtype);
 SELECT test.interval_to_internal('INT'::regtype, 2147483649::bigint);
 SELECT test.interval_to_internal('SMALLINT'::regtype, 32768::bigint);
 SELECT test.interval_to_internal('TEXT'::regtype, 32768::bigint);

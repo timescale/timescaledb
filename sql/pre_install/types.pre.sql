@@ -13,3 +13,6 @@ CREATE TYPE _timescaledb_internal.compressed_data;
 CREATE TYPE @extschema@.rxid;
 
 --placeholder to allow creation of functions below
+
+CREATE TYPE _timescaledb_internal.dimension_info;
+

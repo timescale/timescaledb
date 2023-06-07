@@ -2006,10 +2006,46 @@ SELECT test.interval_to_internal('BIGINT'::regtype, 2147483649::bigint);
            2147483649
 (1 row)
 
+-- Default interval for integer is supported as part of
+-- hypertable generalization
+SELECT test.interval_to_internal('INT'::regtype);
+ interval_to_internal 
+----------------------
+               100000
+(1 row)
+
+SELECT test.interval_to_internal('SMALLINT'::regtype);
+ interval_to_internal 
+----------------------
+                10000
+(1 row)
+
+SELECT test.interval_to_internal('BIGINT'::regtype);
+ interval_to_internal 
+----------------------
+              1000000
+(1 row)
+
+SELECT test.interval_to_internal('TIMESTAMPTZ'::regtype);
+ interval_to_internal 
+----------------------
+         604800000000
+(1 row)
+
+SELECT test.interval_to_internal('TIMESTAMP'::regtype);
+ interval_to_internal 
+----------------------
+         604800000000
+(1 row)
+
+SELECT test.interval_to_internal('DATE'::regtype);
+ interval_to_internal 
+----------------------
+         604800000000
+(1 row)
+
 \set VERBOSITY terse
 \set ON_ERROR_STOP 0
-SELECT test.interval_to_internal('INT'::regtype);
-ERROR:  integer dimensions require an explicit interval
 SELECT test.interval_to_internal('INT'::regtype, 2147483649::bigint);
 ERROR:  invalid interval: must be between 1 and 2147483647
 SELECT test.interval_to_internal('SMALLINT'::regtype, 32768::bigint);

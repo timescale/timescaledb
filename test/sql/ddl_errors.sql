@@ -9,11 +9,12 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 
+-- Default integer interval is supported as part of
+-- hypertable generalization, verify additional secnarios
+
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable(NULL, NULL);
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', NULL);
--- integer time dimensions require an explicit interval
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time');
 -- space dimensions require explicit number of partitions
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));

@@ -77,16 +77,28 @@ typedef struct Point
 	(USECS_PER_DAY) /* 1 day with adaptive                                                         \
 					 * chunking enabled */
 
+/* Default intervals for integer types */
+#define DEFAULT_SMALLINT_INTERVAL 10000
+#define DEFAULT_INT_INTERVAL 100000
+#define DEFAULT_BIGINT_INTERVAL 1000000
+
 typedef struct Hypertable Hypertable;
 
 /*
  * Dimension information used to validate, create and update dimensions.
+ *
+ * This structure is used both partially filled in from the dimension info
+ * constructors as well as when building dimension info for the storage into
+ * the dimension table.
+ *
+ * @see ts_hash_dimension
+ * @see ts_range_dimension
  */
 typedef struct DimensionInfo
 {
 	Oid table_relid;
 	int32 dimension_id;
-	Name colname;
+	NameData colname;
 	Oid coltype;
 	DimensionType type;
 	Datum interval_datum;
@@ -102,8 +114,8 @@ typedef struct DimensionInfo
 	Hypertable *ht;
 } DimensionInfo;
 
-#define DIMENSION_INFO_IS_SET(di)                                                                  \
-	(di != NULL && OidIsValid((di)->table_relid) && (di)->colname != NULL)
+#define DIMENSION_INFO_IS_SET(di) (di != NULL && OidIsValid((di)->table_relid))
+#define DIMENSION_INFO_IS_VALID(di) (info->num_slices_is_set || OidIsValid(info->interval_type))
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
@@ -149,6 +161,8 @@ extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData
 extern TSDLLEXPORT List *ts_dimension_get_partexprs(const Dimension *dim, Index hyper_varno);
 extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
 extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid left, Oid right);
+extern TSDLLEXPORT Datum ts_dimension_info_in(PG_FUNCTION_ARGS);
+extern TSDLLEXPORT Datum ts_dimension_info_out(PG_FUNCTION_ARGS);
 
 #define hyperspace_get_open_dimension(space, i)                                                    \
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

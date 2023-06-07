@@ -73,6 +73,16 @@ enum Anum_create_hypertable
 
 #define Natts_create_hypertable (_Anum_create_hypertable_max - 1)
 
+/* Create a generic hypertable */
+enum Anum_generic_create_hypertable
+{
+	Anum_generic_create_hypertable_id = 1,
+	Anum_generic_create_hypertable_created,
+	_Anum_generic_create_hypertable_max,
+};
+
+#define Natts_generic_create_hypertable (_Anum_generic_create_hypertable_max - 1)
+
 extern TSDLLEXPORT Oid ts_rel_get_owner(Oid relid);
 extern List *ts_hypertable_get_all(void);
 

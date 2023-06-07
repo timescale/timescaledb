@@ -260,7 +260,7 @@ HINT:  Use CREATE MATERIALIZED VIEW to create a continuous aggregate.
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "a"
-DETAIL:  Time dimensions cannot have NULL values.
+DETAIL:  Dimensions cannot have NULL values.
  table_name 
 ------------
  rowsec_tab

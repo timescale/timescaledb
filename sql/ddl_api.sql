@@ -62,6 +62,23 @@ CREATE OR REPLACE FUNCTION @extschema@.create_distributed_hypertable(
     data_nodes              NAME[] = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
 
+-- A generalized hypertable creation API that can be used to convert a PostgreSQL table
+-- with TIME/SERIAL/BIGSERIAL columns to a hypertable.
+--
+-- relation - The OID of the table to be converted
+-- dimension - The dimension to use for partitioning
+-- create_default_indexes (Optional) Whether or not to create the default indexes
+-- if_not_exists (Optional) Do not fail if table is already a hypertable
+-- migrate_data (Optional) Set to true to migrate any existing data in the table to chunks
+CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
+    relation                REGCLASS,
+    dimension               _timescaledb_internal.dimension_info,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    migrate_data            BOOLEAN = FALSE
+) RETURNS TABLE(hypertable_id INT, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create_general' LANGUAGE C VOLATILE;
+
+
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
 CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
     hypertable                     REGCLASS,
@@ -70,7 +87,7 @@ CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
     OUT chunk_target_size          BIGINT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_chunk_adaptive_set' LANGUAGE C VOLATILE;
 
--- Update chunk_time_interval for a hypertable.
+-- Update chunk_time_interval for a hypertable [DEPRECATED].
 --
 -- hypertable - The OID of the table corresponding to a hypertable whose time
 --     interval should be updated
@@ -81,6 +98,20 @@ CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
 CREATE OR REPLACE FUNCTION @extschema@.set_chunk_time_interval(
     hypertable              REGCLASS,
     chunk_time_interval     ANYELEMENT,
+    dimension_name          NAME = NULL
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
+
+-- Update partition_interval for a hypertable.
+--
+-- hypertable - The OID of the table corresponding to a hypertable whose
+--     partition interval should be updated
+-- partition_interval - The new interval. For hypertables with integral/serial/bigserial
+--     time columns, this must be an integral type. For hypertables with a
+--     TIMESTAMP/TIMESTAMPTZ/DATE type, it can be integral which is treated as
+--     microseconds, or an INTERVAL type.
+CREATE OR REPLACE FUNCTION @extschema@.set_partitioning_interval(
+    hypertable              REGCLASS,
+    partition_interval      ANYELEMENT,
     dimension_name          NAME = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
@@ -109,12 +140,12 @@ CREATE OR REPLACE FUNCTION @extschema@.show_chunks(
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
 
--- Add a dimension (of partitioning) to a hypertable
+-- Add a dimension (of partitioning) to a hypertable [DEPRECATED]
 --
 -- hypertable - OID of the table to add a dimension to
 -- column_name - NAME of the column to use in partitioning for this dimension
 -- number_partitions - Number of partitions, for non-time dimensions
--- interval_length - Size of intervals for time dimensions (can be integral or INTERVAL)
+-- chunk_time_interval - Size of intervals for time dimensions (can be integral or INTERVAL)
 -- partitioning_func - Function used to partition the column
 -- if_not_exists - If set, and the dimension already exists, generate a notice instead of an error
 CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
@@ -126,6 +157,29 @@ CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
+
+-- Add a dimension (of partitioning) to a hypertable.
+--
+-- hypertable - OID of the table to add a dimension to
+-- dimension - Dimension to add
+-- if_not_exists - If set, and the dimension already exists, generate a notice instead of an error
+CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
+    hypertable              REGCLASS,
+    dimension               _timescaledb_internal.dimension_info,
+    if_not_exists           BOOLEAN = FALSE
+) RETURNS TABLE(dimension_id INT, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_dimension_add_general' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION @extschema@.by_hash(column_name NAME, number_partitions INTEGER,
+                                               partition_func regproc = NULL)
+    RETURNS _timescaledb_internal.dimension_info LANGUAGE C
+    AS '@MODULE_PATHNAME@', 'ts_hash_dimension';
+
+CREATE OR REPLACE FUNCTION @extschema@.by_range(column_name NAME,
+                                                partition_interval ANYELEMENT = NULL::bigint,
+                                                partition_func regproc = NULL)
+    RETURNS _timescaledb_internal.dimension_info LANGUAGE C
+    AS '@MODULE_PATHNAME@', 'ts_range_dimension';
 
 CREATE OR REPLACE FUNCTION @extschema@.attach_tablespace(
     tablespace NAME,
@@ -166,7 +220,7 @@ CREATE OR REPLACE FUNCTION @extschema@.delete_data_node(
     if_exists              BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE,
     repartition            BOOLEAN = TRUE,
-	drop_database          BOOLEAN = FALSE
+    drop_database          BOOLEAN = FALSE
 ) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
 
 -- Attach a data node to a distributed hypertable
@@ -185,7 +239,7 @@ CREATE OR REPLACE FUNCTION @extschema@.detach_data_node(
     if_attached            BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE,
     repartition            BOOLEAN = TRUE,
-	drop_remote_data       BOOLEAN = FALSE
+    drop_remote_data       BOOLEAN = FALSE
 ) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
@@ -222,6 +276,6 @@ CREATE OR REPLACE FUNCTION @extschema@.alter_data_node(
     host                   TEXT = NULL,
     database               NAME = NULL,
     port                   INTEGER = NULL,
-	available              BOOLEAN = NULL
+    available              BOOLEAN = NULL
 ) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, available BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_data_node_alter' LANGUAGE C VOLATILE;
