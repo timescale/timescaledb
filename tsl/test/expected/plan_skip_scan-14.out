@@ -49,7 +49,7 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select
 -- we want to run with analyze here so we can see counts in the nodes
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TABLE skip_scan
-\ir include/skip_scan_query.sql
+\ir include/skip_scan_query-14.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -1310,7 +1310,7 @@ TRUNCATE skip_scan_insert;
 (5 rows)
 
 \set TABLE skip_scan_ht
-\ir include/skip_scan_query.sql
+\ir include/skip_scan_query-14.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.

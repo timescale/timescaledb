@@ -21,7 +21,7 @@ ANALYZE test;
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=2);
 SET work_mem TO '50MB';
-SET force_parallel_mode = 'on';
+SET debug_parallel_query = 'on';
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
 EXPLAIN (costs off) SELECT first(i, j) FROM "test";

@@ -204,7 +204,8 @@ CREATE TABLE test (i int, j double precision);
 INSERT INTO test SELECT x, x+0.1 FROM generate_series(1,100) AS x;
 
 DISCARD ALL;
-SET force_parallel_mode = 'on';
+
+SET @TS_PARALLEL_QUERY_GUC@ = 'on';
 SET max_parallel_workers_per_gather = 1;
 SELECT count(*) FROM test;
 

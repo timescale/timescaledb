@@ -5,7 +5,7 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 \set TEST_BASE_NAME skip_scan
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
-    format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('include/%s_query-15.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
     format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNOPTIMIZED",
     format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED" \gset
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') AS "DIFF_CMD" \gset

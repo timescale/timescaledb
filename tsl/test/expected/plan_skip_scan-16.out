@@ -49,7 +49,7 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select
 -- we want to run with analyze here so we can see counts in the nodes
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TABLE skip_scan
-\ir include/skip_scan_query.sql
+\ir include/skip_scan_query-16.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -1274,7 +1274,7 @@ UNION SELECT b.* FROM
 (6 rows)
 
 -- parallel query
-SET force_parallel_mode TO true;
+SET debug_parallel_query TO true;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
@@ -1285,7 +1285,7 @@ SET force_parallel_mode TO true;
                Heap Fetches: 12
 (5 rows)
 
-RESET force_parallel_mode;
+RESET debug_parallel_query;
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
@@ -1310,7 +1310,7 @@ TRUNCATE skip_scan_insert;
 (5 rows)
 
 \set TABLE skip_scan_ht
-\ir include/skip_scan_query.sql
+\ir include/skip_scan_query-16.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -3708,7 +3708,7 @@ UNION SELECT b.* FROM
 (14 rows)
 
 -- parallel query
-SET force_parallel_mode TO true;
+SET debug_parallel_query TO true;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
@@ -3733,7 +3733,7 @@ SET force_parallel_mode TO true;
                      Heap Fetches: 11
 (19 rows)
 
-RESET force_parallel_mode;
+RESET debug_parallel_query;
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;

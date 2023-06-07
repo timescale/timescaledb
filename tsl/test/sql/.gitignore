@@ -17,9 +17,11 @@
 /dist_remote_error-*.sql
 /dist_remote_error.text
 /hypertable_distributed-*.sql
+/include/skip_scan_query-*.sql
 /jit-*.sql
 /modify_exclusion-*.sql
 /plan_skip_scan-*.sql
+/skip_scan-*.sql
 /remote-copy-*sv
 /telemetry_stats-*.sql
 /transparent_decompression-*.sql

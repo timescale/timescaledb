@@ -1539,7 +1539,7 @@ FROM conditions
 GROUP BY 1
 ORDER BY 2 DESC;
 
-SET force_parallel_mode = 'on';
+SET @TS_PARALLEL_QUERY_GUC@ = 'on';
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;

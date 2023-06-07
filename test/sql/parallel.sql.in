@@ -20,7 +20,7 @@ ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=2);
 
 SET work_mem TO '50MB';
-SET force_parallel_mode = 'on';
+SET @TS_PARALLEL_QUERY_GUC@ = 'on';
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
 

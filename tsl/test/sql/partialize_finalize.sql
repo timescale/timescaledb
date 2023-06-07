@@ -313,7 +313,6 @@ INSERT INTO issue4922 (time, value)
 SELECT '2022-01-01 00:00:00-03'::timestamptz + interval '1 year' * mix(x), mix(x)
 FROM generate_series(1, 100000) x(x);
 
-SET force_parallel_mode = 'on';
 SET parallel_setup_cost = 0;
 
 -- Materialize partials from execution of parallel query plan

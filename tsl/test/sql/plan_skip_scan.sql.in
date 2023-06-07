@@ -9,10 +9,10 @@
 -- we want to run with analyze here so we can see counts in the nodes
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TABLE skip_scan
-\ir include/skip_scan_query.sql
+\ir include/skip_scan_query-@PG_VERSION_MAJOR@.sql
 
 \set TABLE skip_scan_ht
-\ir include/skip_scan_query.sql
+\ir include/skip_scan_query-@PG_VERSION_MAJOR@.sql
 \ir include/skip_scan_query_ht.sql
 
 -- try one query with EXPLAIN only for coverage

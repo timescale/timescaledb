@@ -2310,7 +2310,7 @@ FROM conditions
 GROUP BY 1
 ORDER BY 2 DESC;
 NOTICE:  refreshing continuous aggregate "conditions_daily"
-SET force_parallel_mode = 'on';
+SET debug_parallel_query = 'on';
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;

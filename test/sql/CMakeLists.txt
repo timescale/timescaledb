@@ -72,12 +72,6 @@ set(TEST_TEMPLATES
     parallel.sql.in
     query.sql.in)
 
-# Loader test must distinguish between Apache and TSL builds so we parametrize
-# this here
-set(LOADER_TEST_FILE loader-${TEST_LICENSE_SUFFIX})
-configure_file(loader.sql.in
-               ${CMAKE_CURRENT_SOURCE_DIR}/${LOADER_TEST_FILE}.sql)
-
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
 set(SOLO_TESTS
@@ -90,8 +84,6 @@ set(SOLO_TESTS
     pg_dump_unprivileged
     tablespace
     telemetry)
-
-list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -106,8 +98,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     net.sql
     pg_dump.sql
     symbol_conflict.sql
-    test_utils.sql
-    ${LOADER_TEST_FILE}.sql)
+    test_utils.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
   endif()
@@ -129,6 +120,28 @@ endif()
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
   list(APPEND TEST_FILES custom_type.sql)
 endif()
+
+# PG16 renamed GUC force_parallel_mode to debug_parallel_query - so, use
+# ${TS_PARALLEL_QUERY_GUC} variable and replace it with the right GUC names for
+# the respective versions during compilation
+# https://github.com/postgres/postgres/commit/5352ca22e
+if(${PG_VERSION_MAJOR} LESS "16")
+  set(TS_PARALLEL_QUERY_GUC "force_parallel_mode")
+else()
+  set(TS_PARALLEL_QUERY_GUC "debug_parallel_query")
+endif()
+
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  # Loader test is parametrized as it must distinguish between Apache and TSL
+  # builds and is also affected by the force_parallel_mode to
+  # debug_parallel_query GUC rename
+  set(LOADER_TEST_FILE loader-${TEST_LICENSE_SUFFIX}-${TEST_VERSION_SUFFIX})
+  configure_file(loader.sql.in
+                 ${CMAKE_CURRENT_SOURCE_DIR}/${LOADER_TEST_FILE}.sql @ONLY)
+  list(APPEND TEST_FILES ${LOADER_TEST_FILE}.sql)
+  # Mark it as solo as it might fail in parallel
+  list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are
 # put in the original source directory since all tests must be in the same
