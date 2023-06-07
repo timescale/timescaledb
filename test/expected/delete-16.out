@@ -1,0 +1,185 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\o /dev/null
+\ir include/insert_two_partitions.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE PUBLIC."two_Partitions" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set QUIET off
+BEGIN;
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COMMIT;
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 2);
+\set QUIET on
+\o
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+(12 rows)
+
+DELETE FROM "two_Partitions" WHERE series_0 = 1.5;
+DELETE FROM "two_Partitions" WHERE series_0 = 100;
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(6 rows)
+
+-- Make sure DELETE isn't optimized if it includes Append plans
+-- Need to turn of nestloop to make append appear the same on PG96 and PG10
+set enable_nestloop = 'off';
+CREATE OR REPLACE FUNCTION series_val()
+RETURNS integer LANGUAGE PLPGSQL STABLE AS
+$BODY$
+BEGIN
+    RETURN 5;
+END;
+$BODY$;
+-- ConstraintAwareAppend applied for SELECT
+EXPLAIN (costs off)
+SELECT FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
+                                                                   QUERY PLAN                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join
+   Hash Cond: ("two_Partitions".series_1 = "two_Partitions_1".series_1)
+   ->  Custom Scan (ChunkAppend) on "two_Partitions"
+         Chunks excluded during startup: 0
+         ->  Index Only Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk
+               Index Cond: (series_1 > (series_val())::double precision)
+         ->  Index Only Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk
+               Index Cond: (series_1 > (series_val())::double precision)
+         ->  Index Only Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_3_chunk
+               Index Cond: (series_1 > (series_val())::double precision)
+         ->  Index Only Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk
+               Index Cond: (series_1 > (series_val())::double precision)
+   ->  Hash
+         ->  HashAggregate
+               Group Key: "two_Partitions_1".series_1
+               ->  Custom Scan (ChunkAppend) on "two_Partitions" "two_Partitions_1"
+                     Chunks excluded during startup: 0
+                     ->  Index Only Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Only Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Only Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Only Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+(25 rows)
+
+-- ConstraintAwareAppend NOT applied for DELETE
+EXPLAIN (costs off)
+DELETE FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on "two_Partitions"
+         Delete on _hyper_1_1_chunk "two_Partitions_2"
+         Delete on _hyper_1_2_chunk "two_Partitions_3"
+         Delete on _hyper_1_3_chunk "two_Partitions_4"
+         Delete on _hyper_1_4_chunk "two_Partitions_5"
+         ->  Hash Join
+               Hash Cond: ("two_Partitions".series_1 = "two_Partitions_1".series_1)
+               ->  Append
+                     ->  Seq Scan on _hyper_1_1_chunk "two_Partitions_2"
+                     ->  Seq Scan on _hyper_1_2_chunk "two_Partitions_3"
+                     ->  Seq Scan on _hyper_1_3_chunk "two_Partitions_4"
+                     ->  Seq Scan on _hyper_1_4_chunk "two_Partitions_5"
+               ->  Hash
+                     ->  HashAggregate
+                           Group Key: "two_Partitions_1".series_1
+                           ->  Append
+                                 ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk "two_Partitions_6"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk "two_Partitions_7"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_3_chunk "two_Partitions_8"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk "two_Partitions_9"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+(25 rows)
+
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(6 rows)
+
+BEGIN;
+DELETE FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(4 rows)
+
+ROLLBACK;
+BEGIN;
+DELETE FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val()) RETURNING "timeCustom";
+     timeCustom      
+---------------------
+ 1257894002000000000
+ 1257894002000000000
+(2 rows)
+
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(4 rows)
+
+ROLLBACK;

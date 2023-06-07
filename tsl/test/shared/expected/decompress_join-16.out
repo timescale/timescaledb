@@ -1,0 +1,62 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- disable memoize on PG14+
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+ enable_memoize 
+ off
+(1 row)
+
+SET enable_indexscan TO false;
+-- test join on compressed time column
+-- #3079, #4465
+CREATE TABLE compressed_join_temp AS SELECT * FROM metrics ORDER BY time DESC LIMIT 10;
+ANALYZE compressed_join_temp;
+EXPLAIN (analyze,costs off,timing off,summary off) SELECT *
+FROM compressed_join_temp t
+INNER JOIN metrics_compressed m ON t.time = m.time AND t.device_id = m.device_id
+LIMIT 1;
+QUERY PLAN
+ Limit (actual rows=1 loops=1)
+   ->  Hash Join (actual rows=1 loops=1)
+         Hash Cond: ((m_1."time" = t."time") AND (m_1.device_id = t.device_id))
+         ->  Append (actual rows=43181 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_1 (actual rows=17990 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_2 (actual rows=25190 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_3 (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+         ->  Hash (actual rows=10 loops=1)
+               Buckets: 1024  Batches: 1 
+               ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=1)
+(13 rows)
+
+DROP TABLE compressed_join_temp;
+-- test join with partially compressed chunks
+CREATE TABLE partial_join(time timestamptz,device text);
+SELECT table_name FROM create_hypertable('partial_join','time');
+NOTICE:  adding not-null constraint to column "time"
+  table_name  
+ partial_join
+(1 row)
+
+ALTER TABLE partial_join set(timescaledb.compress,timescaledb.compress_segmentby='device');
+INSERT INTO partial_join SELECT '2000-01-01','d1';
+SELECT count(*) FROM (SELECT compress_chunk(show_chunks('partial_join'),true)) compress;
+ count 
+     1
+(1 row)
+
+-- make chunk partially compressed
+INSERT INTO partial_join SELECT '2000-01-01','d1';
+SELECT * FROM partial_join m1 INNER JOIN partial_join m2 ON m1.device = m2.device;
+             time             | device |             time             | device 
+------------------------------+--------+------------------------------+--------
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+ Sat Jan 01 00:00:00 2000 PST | d1     | Sat Jan 01 00:00:00 2000 PST | d1
+(4 rows)
+
+DROP TABLE partial_join;

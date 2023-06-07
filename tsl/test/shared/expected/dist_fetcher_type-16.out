@@ -1,0 +1,414 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ON_ERROR_STOP off
+-- Test that we use the correct type of remote data fetcher.
+set timescaledb.remote_data_fetcher = 'auto';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ x 
+ 1
+(1 row)
+
+-- This query should choose COPY fetcher.
+select 1 x from distinct_on_distributed t1
+limit 1;
+ x 
+ 1
+(1 row)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 x from distinct_on_distributed t1
+limit 1;
+QUERY PLAN
+ Limit (actual rows=1 loops=1)
+   Output: 1
+   ->  Result (actual rows=1 loops=1)
+         Output: 1
+         ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1 (actual rows=1 loops=1)
+               Data node: data_node_1
+               Fetcher Type: COPY
+               Chunks: _dist_hyper_X_X_chunk
+               Remote SQL: SELECT NULL FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) LIMIT 1
+(9 rows)
+
+set timescaledb.remote_data_fetcher = 'cursor';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id
+limit 1;
+ x 
+ 1
+(1 row)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id
+limit 1;
+QUERY PLAN
+ Limit (actual rows=1 loops=1)
+   Output: 1
+   ->  Nested Loop (actual rows=1 loops=1)
+         Output: 1
+         Join Filter: (t1.id = t2.id)
+         ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1 (actual rows=1 loops=1)
+               Output: t1.id
+               Data node: data_node_1
+               Fetcher Type: Cursor
+               Chunks: _dist_hyper_X_X_chunk
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
+         ->  Materialize (actual rows=1 loops=1)
+               Output: t2.id
+               ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2 (actual rows=1 loops=1)
+                     Output: t2.id
+                     Data node: data_node_1
+                     Fetcher Type: Cursor
+                     Chunks: _dist_hyper_X_X_chunk
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
+(19 rows)
+
+-- This query can't work with copy or prepared fetcher.
+set timescaledb.remote_data_fetcher = 'copy';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ERROR:  only cursor fetcher is supported for this query
+set timescaledb.remote_data_fetcher = 'prepared';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ERROR:  only cursor fetcher is supported for this query
+-- Check once again that 'auto' is used after 'copy'.
+set timescaledb.remote_data_fetcher = 'auto';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ x 
+ 1
+(1 row)
+
+reset timescaledb.remote_data_fetcher;
+-- #3786 test for assertion failure in cursor_fetcher_rewind
+SET jit TO off;
+SELECT *
+FROM devices AS d
+WHERE
+  EXISTS(
+    SELECT 1
+    FROM metrics_dist AS m,
+      LATERAL(
+        SELECT 1
+        FROM insert_test it
+        WHERE
+          EXISTS(
+            SELECT 1
+            FROM dist_chunk_copy AS ref_2
+            WHERE
+              it.id IS NOT NULL AND
+              EXISTS(SELECT d.name AS c0 FROM metrics_int WHERE NULL::TIMESTAMP <= m.time)
+          )
+      ) AS l
+    WHERE d.name ~~ d.name
+  )
+ORDER BY 1, 2;
+ device_id | name 
+-----------+------
+(0 rows)
+
+RESET jit;
+-- COPY fetcher should fail on a custom type that has no binary
+-- serialization.
+set timescaledb.remote_data_fetcher = 'copy';
+explain (analyze, verbose, costs off, timing off, summary off)
+select time, txn_id, val, substring(info for 20) from disttable_with_ct;
+ERROR:  cannot use COPY fetcher because some of the column types do not have binary serialization
+-- Cursor fetcher should be chosen automatically if we have a data type with no
+-- binary serialization.
+set timescaledb.remote_data_fetcher = 'auto';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_ct;
+QUERY PLAN
+ Custom Scan (DataNodeScan) on public.disttable_with_ct (actual rows=2 loops=1)
+   Output: disttable_with_ct."time", disttable_with_ct.txn_id, disttable_with_ct.val, disttable_with_ct.info
+   Data node: data_node_2
+   Fetcher Type: Cursor
+   Chunks: _dist_hyper_X_X_chunk
+   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[..])
+(6 rows)
+
+-- COPY fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'copy';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_bytea;
+QUERY PLAN
+ Custom Scan (DataNodeScan) on public.disttable_with_bytea (actual rows=2 loops=1)
+   Output: disttable_with_bytea."time", disttable_with_bytea.bdata
+   Data node: data_node_3
+   Fetcher Type: COPY
+   Chunks: _dist_hyper_X_X_chunk
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+(6 rows)
+
+select * from disttable_with_bytea;
+ time | bdata 
+------+-------
+ 1001 | \x
+ 1001 | 
+(2 rows)
+
+-- Cursor fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'cursor';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_bytea;
+QUERY PLAN
+ Custom Scan (DataNodeScan) on public.disttable_with_bytea (actual rows=2 loops=1)
+   Output: disttable_with_bytea."time", disttable_with_bytea.bdata
+   Data node: data_node_3
+   Fetcher Type: Cursor
+   Chunks: _dist_hyper_X_X_chunk
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+(6 rows)
+
+select * from disttable_with_bytea;
+ time | bdata 
+------+-------
+ 1001 | \x
+ 1001 | 
+(2 rows)
+
+-- Prepared statement fetcher with bytea data
+set timescaledb.remote_data_fetcher = 'prepared';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_bytea;
+QUERY PLAN
+ Custom Scan (DataNodeScan) on public.disttable_with_bytea (actual rows=2 loops=1)
+   Output: disttable_with_bytea."time", disttable_with_bytea.bdata
+   Data node: data_node_3
+   Fetcher Type: Prepared statement
+   Chunks: _dist_hyper_X_X_chunk
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+(6 rows)
+
+select * from disttable_with_bytea;
+ time | bdata 
+------+-------
+ 1001 | \x
+ 1001 | 
+(2 rows)
+
+-- #4515 test for assertion failure in copy_fetcher_close
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+ time | device | value 
+------+--------+-------
+(0 rows)
+
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+ time | device | value 
+------+--------+-------
+(0 rows)
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT *
+FROM
+  conditions ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed,
+    LATERAL (
+      SELECT *
+      FROM pg_class,
+      LATERAL (
+        SELECT ref_0.device FROM pg_class WHERE false LIMIT 1) as lat_1
+      ) as lat_2
+  WHERE (SELECT 1 FROM pg_class LIMIT 1) >= ref_0.device
+);
+ time | device | value 
+------+--------+-------
+(0 rows)
+
+-- #4518
+-- test error handling for queries with multiple distributed hypertables
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1, 2;
+ERROR:  only cursor fetcher is supported for this query
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1, 2;
+ERROR:  only cursor fetcher is supported for this query
+SET timescaledb.remote_data_fetcher = 'auto';
+SELECT * FROM
+  conditions_dist1 ref_0
+WHERE EXISTS (
+  SELECT FROM
+    distinct_on_distributed as ref_1,
+    LATERAL (select * from metrics as ref_2) as subq_3
+  WHERE
+    (SELECT device_id FROM metrics_compressed limit 1 offset 3) >= ref_0.device
+)
+ORDER BY 1, 2;
+             time             | device | value 
+------------------------------+--------+-------
+ Sun Jan 01 06:01:00 2017 PST |      1 |   1.2
+ Sun Jan 01 08:01:00 2017 PST |      1 |   7.3
+(2 rows)
+
+-- Check that we don't use COPY fetcher for parameterized plans.
+CREATE TABLE lookup (id SERIAL NOT NULL, key TEXT, val TEXT);
+CREATE TABLE metric (ts TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, lookup_id INT NOT NULL);
+SELECT 1 FROM create_distributed_hypertable('metric', 'ts');
+ ?column? 
+        1
+(1 row)
+
+INSERT INTO lookup (key, val) VALUES ('host', 'localhost');
+INSERT INTO metric (ts, val, lookup_id) SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-08-17 00:00:00'::timestamp, '2021-08-17 00:59:59'::timestamp, '1 s'::interval) s;
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    ARRAY[m.lookup_id] && (SELECT array_agg(l.id)::int[] FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+              ts              | val  
+------------------------------+------
+ Tue Aug 17 00:59:59 2021 PDT | 4.14
+(1 row)
+
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+              ts              | val  
+------------------------------+------
+ Tue Aug 17 00:59:59 2021 PDT | 4.14
+(1 row)
+
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT
+    m.ts,
+    m.val
+FROM metric m
+WHERE
+    m.lookup_id = ANY((SELECT array_agg(l.id) FROM lookup l WHERE l.key = 'host' AND l.val = 'localhost')::int[])
+    AND m.ts BETWEEN '2021-08-17 00:00:00' AND '2021-08-17 01:00:00'
+ORDER BY 1 DESC LIMIT 1;
+ERROR:  cannot use COPY fetcher because the plan is parameterized
+-- Test fetcher when query is aborted before EOF due to LIMIT
+SET timescaledb.remote_data_fetcher = 'copy';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+             time             | device_id | v0 | v1 | v2  | v3 
+------------------------------+-----------+----+----+-----+----
+ Fri Dec 31 16:00:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+(11 rows)
+
+SET timescaledb.remote_data_fetcher = 'prepared';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+             time             | device_id | v0 | v1 | v2  | v3 
+------------------------------+-----------+----+----+-----+----
+ Fri Dec 31 16:00:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+(11 rows)
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT * FROM metrics_dist ORDER BY time, device_id LIMIT 11;
+             time             | device_id | v0 | v1 | v2  | v3 
+------------------------------+-----------+----+----+-----+----
+ Fri Dec 31 16:00:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:00:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         2 |  3 |  4 | 2.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         3 |  4 |  5 | 3.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         4 |  5 |  6 | 4.5 |   
+ Fri Dec 31 16:02:00 1999 PST |         5 |  6 |  7 | 5.5 |   
+ Fri Dec 31 16:04:00 1999 PST |         1 |  2 |  3 | 1.5 |   
+(11 rows)
+
+-- Verify that cursor fetcher can be rewind before EOF due to an
+-- intermediate JOIN product reaching LIMIT
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT * FROM metrics_dist as m
+WHERE EXISTS
+    (SELECT *
+     FROM (SELECT m.time as t
+           FROM metrics_dist a INNER JOIN devices b
+                ON a.device_id = b.device_id
+           LIMIT 50) as subq
+     WHERE subq.t is NULL)
+LIMIT 1;
+ time | device_id | v0 | v1 | v2 | v3 
+------+-----------+----+----+----+----
+(0 rows)
+

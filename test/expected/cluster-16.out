@@ -1,0 +1,172 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE cluster_test(time timestamptz, temp float, location int);
+SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => interval '1 day');
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable     
+---------------------------
+ (1,public,cluster_test,t)
+(1 row)
+
+-- Show default indexes
+SELECT * FROM test.show_indexes('cluster_test');
+         Index         | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+-----------------------+---------+------+--------+---------+-----------+------------
+ cluster_test_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+-- Create two chunks
+INSERT INTO cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1),
+       ('2017-01-21T09:00:01', 21.3, 2);
+-- Run cluster
+CLUSTER VERBOSE cluster_test USING cluster_test_time_idx;
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using index scan on "_hyper_1_1_chunk_cluster_test_time_idx"
+INFO:  "_timescaledb_internal._hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using index scan on "_hyper_1_2_chunk_cluster_test_time_idx"
+INFO:  "_timescaledb_internal._hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+-- Create a third chunk
+INSERT INTO cluster_test VALUES ('2017-01-22T09:00:01', 19.5, 3);
+-- Show clustered indexes
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true ORDER BY 1;
+                          indexrelid                          | indisclustered 
+--------------------------------------------------------------+----------------
+ cluster_test_time_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
+(3 rows)
+
+-- Reorder just our table
+CLUSTER VERBOSE cluster_test;
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using index scan on "_hyper_1_3_chunk_cluster_test_time_idx"
+INFO:  "_timescaledb_internal._hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+-- Show clustered indexes, including new chunk
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true ORDER BY 1;
+                          indexrelid                          | indisclustered 
+--------------------------------------------------------------+----------------
+ cluster_test_time_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
+(4 rows)
+
+-- Reorder all tables (although will only be our test table)
+CLUSTER VERBOSE;
+INFO:  clustering "public.cluster_test" using sequential scan and sort
+INFO:  "public.cluster_test": found 0 removable, 0 nonremovable row versions in 0 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+-- Change the clustered index
+CREATE INDEX ON cluster_test (time, location);
+CLUSTER VERBOSE cluster_test using cluster_test_time_location_idx;
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+-- Show updated clustered indexes
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true ORDER BY 1;
+                              indexrelid                               | indisclustered 
+-----------------------------------------------------------------------+----------------
+ cluster_test_time_location_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_location_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_location_idx | t
+ _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_location_idx | t
+(4 rows)
+
+--check the setting of cluster indexes on hypertables and chunks
+ALTER TABLE cluster_test CLUSTER ON cluster_test_time_idx;
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+                          indexrelid                          | indisclustered 
+--------------------------------------------------------------+----------------
+ cluster_test_time_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
+(4 rows)
+
+CLUSTER VERBOSE cluster_test;
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+ALTER TABLE cluster_test SET WITHOUT CLUSTER;
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+ indexrelid | indisclustered 
+------------+----------------
+(0 rows)
+
+\set ON_ERROR_STOP 0
+CLUSTER VERBOSE cluster_test;
+ERROR:  there is no previously clustered index for table "cluster_test"
+\set ON_ERROR_STOP 1
+ALTER TABLE _timescaledb_internal._hyper_1_1_chunk CLUSTER ON _hyper_1_1_chunk_cluster_test_time_idx;
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+                          indexrelid                          | indisclustered 
+--------------------------------------------------------------+----------------
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
+(1 row)
+
+CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_timescaledb_internal._hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+ALTER TABLE _timescaledb_internal._hyper_1_1_chunk SET WITHOUT CLUSTER;
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+ indexrelid | indisclustered 
+------------+----------------
+(0 rows)
+
+\set ON_ERROR_STOP 0
+CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
+ERROR:  there is no previously clustered index for table "_hyper_1_1_chunk"
+\set ON_ERROR_STOP 1
+-- test alter column type on hypertable with clustering
+CREATE TABLE cluster_alter(time timestamp, id text, val int);
+CREATE INDEX idstuff ON cluster_alter USING btree (id ASC NULLS LAST, time);
+SELECT table_name FROM create_hypertable('cluster_alter', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+NOTICE:  adding not-null constraint to column "time"
+  table_name   
+---------------
+ cluster_alter
+(1 row)
+
+INSERT INTO cluster_alter VALUES('2020-01-01', '123', 1);
+CLUSTER cluster_alter using idstuff;
+--attempt the alter table
+ALTER TABLE cluster_alter ALTER COLUMN id TYPE int USING id::int;
+-- try recluster
+-- this fails on PG11 < 11.8 and PG12 < 12.3
+\set ON_ERROR_STOP 0
+CLUSTER cluster_alter;
+\set ON_ERROR_STOP 1
+CLUSTER cluster_alter using idstuff;

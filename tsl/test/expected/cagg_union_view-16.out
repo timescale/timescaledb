@@ -1,0 +1,1023 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- disable background workers to make results reproducible
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+CREATE TABLE metrics(f1 int, f2 int, time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('metrics','time');
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+(1 row)
+
+ALTER TABLE metrics DROP COLUMN f1;
+INSERT INTO metrics(time, device_id, value) SELECT '2000-01-01'::timestamptz, device_id, 0.5 FROM generate_series(1,3) g(device_id);
+--
+-- test switching continuous agg view between different modes
+--
+-- check default view for new continuous aggregate
+CREATE MATERIALIZED VIEW metrics_summary
+  WITH (timescaledb.continuous)
+AS
+  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
+ALTER TABLE metrics DROP COLUMN f2;
+-- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                                                                                pg_get_viewdef                                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                              +
+     _materialized_hypertable_2.avg                                                                                                                                           +
+    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                     +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                    +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
+     avg(metrics.value) AS avg                                                                                                                                                +
+    FROM metrics                                                                                                                                                              +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
+   GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- downgrade view to non-union view
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
+-- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                      pg_get_viewdef                       
+-----------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,          +
+     _materialized_hypertable_2.avg                       +
+    FROM _timescaledb_internal._materialized_hypertable_2;
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+ time_bucket | avg 
+-------------+-----
+(0 rows)
+
+-- upgrade view to union view again
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=false);
+-- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                                                                                pg_get_viewdef                                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                              +
+     _materialized_hypertable_2.avg                                                                                                                                           +
+    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                     +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                    +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
+     avg(metrics.value) AS avg                                                                                                                                                +
+    FROM metrics                                                                                                                                                              +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
+   GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- try upgrade view to union view that is already union view
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=false);
+-- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                                                                                pg_get_viewdef                                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                              +
+     _materialized_hypertable_2.avg                                                                                                                                           +
+    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                     +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                    +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
+     avg(metrics.value) AS avg                                                                                                                                                +
+    FROM metrics                                                                                                                                                              +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
+   GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- refresh
+CALL refresh_continuous_aggregate('metrics_summary', NULL, NULL);
+-- result should not change after refresh for union view
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- downgrade view to non-union view
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
+-- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                      pg_get_viewdef                       
+-----------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,          +
+     _materialized_hypertable_2.avg                       +
+    FROM _timescaledb_internal._materialized_hypertable_2;
+(1 row)
+
+-- view should have results now after refresh
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+DROP MATERIALIZED VIEW metrics_summary;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+-- check default view for new continuous aggregate with materialized_only to true
+CREATE MATERIALIZED VIEW metrics_summary
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
+-- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                      pg_get_viewdef                       
+-----------------------------------------------------------
+  SELECT _materialized_hypertable_3.time_bucket,          +
+     _materialized_hypertable_3.avg                       +
+    FROM _timescaledb_internal._materialized_hypertable_3;
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+ time_bucket | avg 
+-------------+-----
+(0 rows)
+
+-- upgrade view to union view
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=false);
+-- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                                                                                pg_get_viewdef                                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_3.time_bucket,                                                                                                                              +
+     _materialized_hypertable_3.avg                                                                                                                                           +
+    FROM _timescaledb_internal._materialized_hypertable_3                                                                                                                     +
+   WHERE _materialized_hypertable_3.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                    +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
+     avg(metrics.value) AS avg                                                                                                                                                +
+    FROM metrics                                                                                                                                                              +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)                       +
+   GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- downgrade view to non-union view
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
+-- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
+SELECT pg_get_viewdef('metrics_summary',true);
+                      pg_get_viewdef                       
+-----------------------------------------------------------
+  SELECT _materialized_hypertable_3.time_bucket,          +
+     _materialized_hypertable_3.avg                       +
+    FROM _timescaledb_internal._materialized_hypertable_3;
+(1 row)
+
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+ time_bucket | avg 
+-------------+-----
+(0 rows)
+
+DROP MATERIALIZED VIEW metrics_summary;
+--
+-- test queries on union view
+--
+CREATE MATERIALIZED VIEW metrics_summary
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
+-- should be marked as materialized_only in catalog
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
+-- query should not have results since cagg is materialized only and no refresh has happened yet
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+ time_bucket | avg 
+-------------+-----
+(0 rows)
+
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=false);
+-- after switch to union view all results should be returned
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+CALL refresh_continuous_aggregate('metrics_summary', NULL, NULL);
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
+-- materialized only view should return data now too because refresh has happened
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- add some more data
+INSERT INTO metrics(time, device_id, value) SELECT '2000-02-01'::timestamptz, device_id, device_id/10.0 FROM generate_series(1,3) g(device_id);
+-- materialized only view should not have new data yet
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- but union view should
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=false);
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+ Mon Jan 31 16:00:00 2000 PST | 0.2
+(2 rows)
+
+-- and after refresh non union view should have new data too
+CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-30');
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
+SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
+         time_bucket          | avg 
+------------------------------+-----
+ Fri Dec 31 16:00:00 1999 PST | 0.5
+(1 row)
+
+-- hardcoding now to 50 will lead to 30 watermark
+CREATE OR REPLACE FUNCTION boundary_test_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 50;
+$BODY$;
+-- test watermark interaction with just in time aggregates
+CREATE TABLE boundary_test(time int, value float);
+SELECT create_hypertable('boundary_test','time',chunk_time_interval:=10);
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable      
+----------------------------
+ (5,public,boundary_test,t)
+(1 row)
+
+SELECT set_integer_now_func('boundary_test','boundary_test_int_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW boundary_view
+  WITH (timescaledb.continuous)
+AS
+  SELECT time_bucket(10,time), avg(value) FROM boundary_test GROUP BY 1 WITH NO DATA;
+INSERT INTO boundary_test SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
+SELECT mat_hypertable_id AS boundary_view_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'boundary_view' \gset
+-- watermark should be NULL
+SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
+ cagg_watermark 
+----------------
+    -2147483648
+(1 row)
+
+-- first UNION child should have no rows because no materialization has happened yet and 2nd child should have 4 rows
+:PREFIX SELECT * FROM boundary_view;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate (actual rows=4 loops=1)
+   Group Key: time_bucket(10, boundary_test."time")
+   Batches: 1 
+   ->  Result (actual rows=4 loops=1)
+         ->  Custom Scan (ChunkAppend) on boundary_test (actual rows=4 loops=1)
+               Chunks excluded during startup: 0
+               ->  Index Scan Backward using _hyper_5_5_chunk_boundary_test_time_idx on _hyper_5_5_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+               ->  Index Scan Backward using _hyper_5_6_chunk_boundary_test_time_idx on _hyper_5_6_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+               ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+               ->  Index Scan Backward using _hyper_5_8_chunk_boundary_test_time_idx on _hyper_5_8_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+(14 rows)
+
+-- result should have 4 rows
+SELECT * FROM boundary_view ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+(4 rows)
+
+-- Refresh up to 30 to leave some unmaterialized data at the head and
+-- thus have something to union.
+CALL refresh_continuous_aggregate('boundary_view', NULL, 30);
+-- watermark should be 30
+SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
+ cagg_watermark 
+----------------
+             30
+(1 row)
+
+-- both sides of the UNION should return 2 rows
+:PREFIX SELECT * FROM boundary_view;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=4 loops=1)
+   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_6 (actual rows=2 loops=1)
+         Chunks excluded during startup: 0
+         ->  Index Scan using _hyper_6_9_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_9_chunk (actual rows=2 loops=1)
+               Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+   ->  HashAggregate (actual rows=2 loops=1)
+         Group Key: time_bucket(10, boundary_test."time")
+         Batches: 1 
+         ->  Result (actual rows=2 loops=1)
+               ->  Custom Scan (ChunkAppend) on boundary_test (actual rows=2 loops=1)
+                     Chunks excluded during startup: 2
+                     ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk (actual rows=1 loops=1)
+                           Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+                     ->  Index Scan Backward using _hyper_5_8_chunk_boundary_test_time_idx on _hyper_5_8_chunk (actual rows=1 loops=1)
+                           Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
+(15 rows)
+
+-- result should have 4 rows
+SELECT * FROM boundary_view ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+(4 rows)
+
+---- TEST union view with WHERE, GROUP BY and HAVING clause ----
+create table ht_intdata (a integer, b integer, c integer);
+select table_name FROM create_hypertable('ht_intdata', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ ht_intdata
+(1 row)
+
+INSERT into ht_intdata values( 3 , 16 , 20);
+INSERT into ht_intdata values( 1 , 10 , 20);
+INSERT into ht_intdata values( 1 , 11 , 20);
+INSERT into ht_intdata values( 1 , 12 , 20);
+INSERT into ht_intdata values( 1 , 13 , 20);
+INSERT into ht_intdata values( 1 , 14 , 20);
+INSERT into ht_intdata values( 2 , 14 , 20);
+INSERT into ht_intdata values( 2 , 15 , 20);
+INSERT into ht_intdata values( 2 , 16 , 20);
+INSERT into ht_intdata values( 20 , 16 , 20);
+INSERT into ht_intdata values( 20 , 26 , 20);
+INSERT into ht_intdata values( 20 , 16 , 20);
+INSERT into ht_intdata values( 21 , 15 , 30);
+INSERT into ht_intdata values( 21 , 15 , 30);
+INSERT into ht_intdata values( 21 , 15 , 30);
+CREATE OR REPLACE FUNCTION integer_now_ht_intdata() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM ht_intdata $$;
+SELECT set_integer_now_func('ht_intdata', 'integer_now_ht_intdata');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW mat_m1(a, countb, sumbc, spreadcb, avgc)
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50 WITH NO DATA;
+-- Do partial refresh to have something to union
+CALL refresh_continuous_aggregate('mat_m1', NULL, 11);
+--results from real time cont.agg and direct query should match
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50
+ORDER BY 1;
+ time_bucket | count | sum | ?column? | avg 
+-------------+-------+-----+----------+-----
+           1 |     5 | 160 |       10 |  20
+          21 |     3 | 135 |       15 |  30
+(2 rows)
+
+SELECT * FROM mat_m1 ORDER BY 1;
+ a  | countb | sumbc | spreadcb | avgc 
+----+--------+-------+----------+------
+  1 |      5 |   160 |       10 |   20
+ 21 |      3 |   135 |       15 |   30
+(2 rows)
+
+--verify that materialized only doesn't have rows with a> 20
+ALTER MATERIALIZED VIEW mat_m1 SET(timescaledb.materialized_only = true);
+SELECT * FROM mat_m1 ORDER BY 1;
+ a | countb | sumbc | spreadcb | avgc 
+---+--------+-------+----------+------
+ 1 |      5 |   160 |       10 |   20
+(1 row)
+
+--again revert the view to include real time aggregates
+ALTER MATERIALIZED VIEW mat_m1 SET(timescaledb.materialized_only = false);
+INSERT into ht_intdata values( 31 , 15 , 30);
+INSERT into ht_intdata values( 31 , 14 , 70);
+--cagg was not refreshed, should include all rows
+SELECT * FROM mat_m1 ORDER BY 1;
+ a  | countb | sumbc | spreadcb | avgc 
+----+--------+-------+----------+------
+  1 |      5 |   160 |       10 |   20
+ 21 |      3 |   135 |       15 |   30
+ 31 |      2 |   129 |       56 |   50
+(3 rows)
+
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
+SELECT * FROM mat_m1 ORDER BY 1;
+ a  | countb | sumbc | spreadcb | avgc 
+----+--------+-------+----------+------
+  1 |      5 |   160 |       10 |   20
+ 21 |      3 |   135 |       15 |   30
+ 31 |      2 |   129 |       56 |   50
+(3 rows)
+
+--the selects against mat_m1 before and after refresh should match this query
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50
+ORDER BY 1;
+ time_bucket | count | sum | ?column? | avg 
+-------------+-------+-----+----------+-----
+           1 |     5 | 160 |       10 |  20
+          21 |     3 | 135 |       15 |  30
+          31 |     2 | 129 |       56 |  50
+(3 rows)
+
+DROP MATERIALIZED VIEW mat_m1;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_12_chunk
+--- TEST union view with multiple WHERE and HAVING clauses
+CREATE MATERIALIZED VIEW mat_m1
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(5, a), sum(b+c)
+FROM ht_intdata
+WHERE b < 16 and c > 20
+GROUP BY time_bucket(5, a)
+HAVING sum(c) > 50 and avg(b)::int > 12  WITH NO DATA;
+INSERT into ht_intdata values( 42 , 15 , 80);
+INSERT into ht_intdata values( 42 , 15 , 18);
+INSERT into ht_intdata values( 41 , 18 , 21);
+-- Do partial refresh so that we leave data to UNION
+CALL refresh_continuous_aggregate('mat_m1', NULL, 25);
+SELECT mat_hypertable_id AS mat_m1_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'mat_m1' \gset
+-- Show the new watermark
+SELECT _timescaledb_internal.cagg_watermark(:mat_m1_id);
+ cagg_watermark 
+----------------
+             25
+(1 row)
+
+-- Data inserted after refresh and after cagg_watermark should be
+-- reflected in the real-time aggregation
+INSERT into ht_intdata VALUES (34, 13, 65), (26, 12, 78), (28, 9, 32);
+--view and direct query should return same results
+SELECT * from mat_m1 ORDER BY 1;
+ time_bucket | sum 
+-------------+-----
+          20 | 135
+          30 | 207
+          40 |  95
+(3 rows)
+
+SELECT time_bucket(5, a), sum(b+c)
+FROM ht_intdata
+WHERE b < 16 and c > 20
+GROUP BY time_bucket(5, a)
+HAVING sum(c) > 50 and avg(b)::int > 12
+ORDER by 1;
+ time_bucket | sum 
+-------------+-----
+          20 | 135
+          30 | 207
+          40 |  95
+(3 rows)
+
+-- plan output
+:PREFIX SELECT * FROM mat_m1 ORDER BY 1;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=3 loops=1)
+   Sort Key: _materialized_hypertable_9.time_bucket
+   Sort Method: quicksort 
+   ->  Append (actual rows=3 loops=1)
+         ->  Custom Scan (ChunkAppend) on _materialized_hypertable_9 (actual rows=1 loops=1)
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
+                     Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
+         ->  HashAggregate (actual rows=2 loops=1)
+               Group Key: time_bucket(5, ht_intdata.a)
+               Filter: ((sum(ht_intdata.c) > 50) AND ((avg(ht_intdata.b))::integer > 12))
+               Batches: 1 
+               Rows Removed by Filter: 1
+               ->  Result (actual rows=6 loops=1)
+                     ->  Custom Scan (ChunkAppend) on ht_intdata (actual rows=6 loops=1)
+                           Chunks excluded during startup: 1
+                           ->  Index Scan Backward using _hyper_7_11_chunk_ht_intdata_a_idx on _hyper_7_11_chunk (actual rows=2 loops=1)
+                                 Index Cond: (a >= COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
+                                 Filter: ((b < 16) AND (c > 20))
+                           ->  Index Scan Backward using _hyper_7_13_chunk_ht_intdata_a_idx on _hyper_7_13_chunk (actual rows=3 loops=1)
+                                 Index Cond: (a >= COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
+                                 Filter: ((b < 16) AND (c > 20))
+                           ->  Index Scan Backward using _hyper_7_14_chunk_ht_intdata_a_idx on _hyper_7_14_chunk (actual rows=1 loops=1)
+                                 Index Cond: (a >= COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
+                                 Filter: ((b < 16) AND (c > 20))
+                                 Rows Removed by Filter: 2
+(26 rows)
+
+-- Test caggs with different time types
+CREATE TABLE smallint_table (time smallint, value int);
+CREATE TABLE int_table (time int, value int);
+CREATE TABLE bigint_table (time bigint, value int);
+CREATE TABLE date_table (time date, value int);
+CREATE TABLE timestamp_table (time timestamp, value int);
+CREATE TABLE timestamptz_table (time timestamptz, value int);
+SELECT create_hypertable('smallint_table', 'time', chunk_time_interval=>20);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable       
+------------------------------
+ (10,public,smallint_table,t)
+(1 row)
+
+SELECT create_hypertable('int_table', 'time', chunk_time_interval=>20);
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (11,public,int_table,t)
+(1 row)
+
+SELECT create_hypertable('bigint_table', 'time', chunk_time_interval=>20);
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable      
+----------------------------
+ (12,public,bigint_table,t)
+(1 row)
+
+SELECT create_hypertable('date_table', 'time');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable     
+--------------------------
+ (13,public,date_table,t)
+(1 row)
+
+SELECT create_hypertable('timestamp_table', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+NOTICE:  adding not-null constraint to column "time"
+       create_hypertable       
+-------------------------------
+ (14,public,timestamp_table,t)
+(1 row)
+
+SELECT create_hypertable('timestamptz_table', 'time');
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (15,public,timestamptz_table,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION smallint_now()
+RETURNS smallint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)::smallint
+    FROM smallint_table
+$$;
+CREATE OR REPLACE FUNCTION int_now()
+RETURNS int LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM int_table
+$$;
+CREATE OR REPLACE FUNCTION bigint_now()
+RETURNS bigint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)::bigint
+    FROM bigint_table
+$$;
+SELECT set_integer_now_func('smallint_table', 'smallint_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT set_integer_now_func('int_table', 'int_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT set_integer_now_func('bigint_table', 'bigint_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW smallint_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(SMALLINT '10', time) AS bucket, avg(value)
+FROM smallint_table
+GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW int_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(5, time) AS bucket, avg(value)
+FROM int_table
+GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW bigint_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(BIGINT '10', time) AS bucket, avg(value)
+FROM bigint_table
+GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW date_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('2 days', time) AS bucket, avg(value)
+FROM date_table
+GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW timestamp_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('2 days', time) AS bucket, avg(value)
+FROM timestamp_table
+GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW timestamptz_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('2 days', time) AS bucket, avg(value)
+FROM timestamptz_table
+GROUP BY 1 WITH NO DATA;
+-- Refresh first without data
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+NOTICE:  continuous aggregate "int_agg" is already up-to-date
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+NOTICE:  continuous aggregate "smallint_agg" is already up-to-date
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+NOTICE:  continuous aggregate "bigint_agg" is already up-to-date
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+NOTICE:  continuous aggregate "date_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
+-- Watermarks at min for the above caggs:
+SELECT
+  user_view_name,
+  _timescaledb_internal.cagg_watermark(mat_hypertable_id),
+  _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id),
+  _timescaledb_internal.cagg_watermark(mat_hypertable_id) = _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id) AS is_equal
+FROM _timescaledb_catalog.continuous_agg
+NATURAL JOIN _timescaledb_catalog.continuous_aggs_watermark
+ORDER BY 1, 2, 3;
+ user_view_name  |    cagg_watermark    | cagg_watermark_materialized | is_equal 
+-----------------+----------------------+-----------------------------+----------
+ bigint_agg      | -9223372036854775808 |        -9223372036854775808 | t
+ boundary_view   |                   30 |                          30 | t
+ date_agg        |  -210866803200000000 |         -210866803200000000 | t
+ int_agg         |          -2147483648 |                 -2147483648 | t
+ mat_m1          |                   25 |                          25 | t
+ metrics_summary |      946771200000000 |             946771200000000 | t
+ smallint_agg    |               -32768 |                      -32768 | t
+ timestamp_agg   |  -210866803200000000 |         -210866803200000000 | t
+ timestamptz_agg |  -210866803200000000 |         -210866803200000000 | t
+(9 rows)
+
+INSERT INTO smallint_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
+INSERT INTO int_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
+INSERT INTO bigint_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
+INSERT INTO date_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
+INSERT INTO timestamp_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
+INSERT INTO timestamptz_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
+-- Refresh to move the watermarks
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+-- Watermarks should reflect the new materializations
+SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+ORDER BY 1,2;
+ user_view_name  |  cagg_watermark  
+-----------------+------------------
+ bigint_agg      |               20
+ boundary_view   |               30
+ date_agg        | 1578614400000000
+ int_agg         |               20
+ mat_m1          |               25
+ metrics_summary |  946771200000000
+ smallint_agg    |               20
+ timestamp_agg   | 1578614400000000
+ timestamptz_agg | 1578614400000000
+(9 rows)
+
+-- Test overflow of valid ranges by inserting values close to the max
+-- supported time values. Adding one bucket to these values overflow
+-- the valid time ranges so the watermark should end up at the end of
+-- valid range for the type.
+INSERT INTO smallint_table VALUES (32765, 1);
+INSERT INTO int_table VALUES (2147483645, 1);
+INSERT INTO bigint_table VALUES (9223372036854775804, 1);
+INSERT INTO date_table VALUES ('294247-01-01', 1);
+INSERT INTO timestamp_table VALUES ('294247-01-01 00:00:00-00', 1);
+INSERT INTO timestamptz_table VALUES ('294247-01-01 00:00:00-00', 1);
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+-- Watermarks after refresh hould be at the end of the valid range for
+-- the time type
+SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+ORDER BY 1,2;
+ user_view_name  |   cagg_watermark    
+-----------------+---------------------
+ bigint_agg      | 9223372036854775807
+ boundary_view   |                  30
+ date_agg        | 9223372036854775807
+ int_agg         |          2147483647
+ mat_m1          |                  25
+ metrics_summary |     946771200000000
+ smallint_agg    |               32767
+ timestamp_agg   | 9223372036854775807
+ timestamptz_agg | 9223372036854775807
+(9 rows)
+
+-- Querying the aggs should work even when fully materialized
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+ bucket |          avg           
+--------+------------------------
+      0 |     4.2500000000000000
+     10 |    19.0000000000000000
+  32760 | 1.00000000000000000000
+(3 rows)
+
+SELECT * FROM int_agg
+ORDER BY 1,2;
+   bucket   |          avg           
+------------+------------------------
+          0 |     1.5000000000000000
+          5 |     7.0000000000000000
+         15 |    19.0000000000000000
+ 2147483645 | 1.00000000000000000000
+(4 rows)
+
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+       bucket        |          avg           
+---------------------+------------------------
+                   0 |     4.2500000000000000
+                  10 |    19.0000000000000000
+ 9223372036854775800 | 1.00000000000000000000
+(3 rows)
+
+SELECT * FROM date_agg
+ORDER BY 1,2;
+    bucket    |          avg           
+--------------+------------------------
+ 12-31-2019   | 1.00000000000000000000
+ 01-02-2020   |     2.0000000000000000
+ 01-06-2020   |     6.0000000000000000
+ 01-08-2020   |     8.0000000000000000
+ 12-31-294246 | 1.00000000000000000000
+(5 rows)
+
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+           bucket           |          avg           
+----------------------------+------------------------
+ Tue Dec 31 00:00:00 2019   | 1.00000000000000000000
+ Thu Jan 02 00:00:00 2020   |     2.0000000000000000
+ Mon Jan 06 00:00:00 2020   |     6.0000000000000000
+ Wed Jan 08 00:00:00 2020   |     8.0000000000000000
+ Thu Dec 31 00:00:00 294246 | 1.00000000000000000000
+(5 rows)
+
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+             bucket             |          avg           
+--------------------------------+------------------------
+ Mon Dec 30 16:00:00 2019 PST   | 1.00000000000000000000
+ Wed Jan 01 16:00:00 2020 PST   |     2.0000000000000000
+ Sun Jan 05 16:00:00 2020 PST   |     6.0000000000000000
+ Tue Jan 07 16:00:00 2020 PST   |     8.0000000000000000
+ Wed Dec 30 16:00:00 294246 PST | 1.00000000000000000000
+(5 rows)
+
+\set ON_ERROR_STOP 0
+-------------------------------------
+-- Test invalid inputs for cagg_watermark
+-------------------------------------
+-- Non-existing materialized hypertable
+SELECT _timescaledb_internal.cagg_watermark(100);
+ERROR:  invalid materialized hypertable ID: 100
+-- NULL hypertable ID. Function is STRICT, so does nothing:
+SELECT _timescaledb_internal.cagg_watermark(NULL);
+ cagg_watermark 
+----------------
+               
+(1 row)
+
+\set ON_ERROR_STOP 1
+-- Remove stored watermark, so query and refresh should error
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.continuous_aggs_watermark;
+\set ON_ERROR_STOP 0
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 16
+SELECT * FROM int_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 17
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 18
+SELECT * FROM date_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 19
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 20
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+ERROR:  watermark not defined for continuous aggregate: 21
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+ERROR:  watermark not defined for continuous aggregate: 17
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+ERROR:  watermark not defined for continuous aggregate: 16
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+ERROR:  watermark not defined for continuous aggregate: 18
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+NOTICE:  continuous aggregate "date_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
+\set ON_ERROR_STOP 1
+-- Fix all continuous aggregates inserting materialized watermark into the metadata table
+INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
+SELECT a.mat_hypertable_id, _timescaledb_internal.cagg_watermark_materialized(a.mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg a
+LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark b ON b.mat_hypertable_id = a.mat_hypertable_id
+WHERE b.mat_hypertable_id IS NULL
+ORDER BY 1;
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+ bucket |          avg           
+--------+------------------------
+      0 |     4.2500000000000000
+     10 |    19.0000000000000000
+  32760 | 1.00000000000000000000
+(3 rows)
+
+SELECT * FROM int_agg
+ORDER BY 1,2;
+   bucket   |          avg           
+------------+------------------------
+          0 |     1.5000000000000000
+          5 |     7.0000000000000000
+         15 |    19.0000000000000000
+ 2147483645 | 1.00000000000000000000
+(4 rows)
+
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+       bucket        |          avg           
+---------------------+------------------------
+                   0 |     4.2500000000000000
+                  10 |    19.0000000000000000
+ 9223372036854775800 | 1.00000000000000000000
+(3 rows)
+
+SELECT * FROM date_agg
+ORDER BY 1,2;
+    bucket    |          avg           
+--------------+------------------------
+ 12-31-2019   | 1.00000000000000000000
+ 01-02-2020   |     2.0000000000000000
+ 01-06-2020   |     6.0000000000000000
+ 01-08-2020   |     8.0000000000000000
+ 12-31-294246 | 1.00000000000000000000
+(5 rows)
+
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+           bucket           |          avg           
+----------------------------+------------------------
+ Tue Dec 31 00:00:00 2019   | 1.00000000000000000000
+ Thu Jan 02 00:00:00 2020   |     2.0000000000000000
+ Mon Jan 06 00:00:00 2020   |     6.0000000000000000
+ Wed Jan 08 00:00:00 2020   |     8.0000000000000000
+ Thu Dec 31 00:00:00 294246 | 1.00000000000000000000
+(5 rows)
+
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+             bucket             |          avg           
+--------------------------------+------------------------
+ Mon Dec 30 16:00:00 2019 PST   | 1.00000000000000000000
+ Wed Jan 01 16:00:00 2020 PST   |     2.0000000000000000
+ Sun Jan 05 16:00:00 2020 PST   |     6.0000000000000000
+ Tue Jan 07 16:00:00 2020 PST   |     8.0000000000000000
+ Wed Dec 30 16:00:00 294246 PST | 1.00000000000000000000
+(5 rows)
+
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+NOTICE:  continuous aggregate "date_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date

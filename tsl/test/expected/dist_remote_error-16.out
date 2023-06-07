@@ -1,0 +1,433 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--\set DATA_NODE_1 data_node_1
+--\set DATA_NODE_2 data_node_2
+--\set DATA_NODE_3 data_node_3
+-- Set up the data nodes.
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+       node_name        |        database        | node_created | database_created | extension_created 
+------------------------+------------------------+--------------+------------------+-------------------
+ db_dist_remote_error_1 | db_dist_remote_error_1 | t            | t                | t
+ db_dist_remote_error_2 | db_dist_remote_error_2 | t            | t                | t
+ db_dist_remote_error_3 | db_dist_remote_error_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
+-- Import setup file to data nodes.
+\unset ECHO
+-- Disable SSL to get stable error output across versions. SSL adds some output
+-- that changed in PG 14.
+set timescaledb.debug_enable_ssl to off;
+set client_min_messages to error;
+SET timescaledb.hide_data_node_name_in_errors = 'on';
+-- A relatively big table on one data node
+CREATE TABLE metrics_dist_remote_error(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+SELECT create_distributed_hypertable('metrics_dist_remote_error','time','device_id',3,
+    data_nodes => ARRAY[:'DATA_NODE_1']);
+     create_distributed_hypertable      
+----------------------------------------
+ (1,public,metrics_dist_remote_error,t)
+(1 row)
+
+ALTER TABLE metrics_dist_remote_error DROP COLUMN filler_1;
+INSERT INTO metrics_dist_remote_error(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','6m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics_dist_remote_error DROP COLUMN filler_2;
+INSERT INTO metrics_dist_remote_error(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','6m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics_dist_remote_error DROP COLUMN filler_3;
+INSERT INTO metrics_dist_remote_error(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','6m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ANALYZE metrics_dist_remote_error;
+-- The error messages vary wildly between the Postgres versions, dependent on
+-- the particular behavior of libqp in this or that case. The purpose of this
+-- test is not to solidify this accidental behavior, but to merely exercise the
+-- error handling code to make sure it doesn't have fatal errors. Unfortunately,
+-- there is no way to suppress error output from a psql script.
+set client_min_messages to ERROR;
+\set ON_ERROR_STOP off
+set timescaledb.remote_data_fetcher = 'copy';
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 0 rows, 0 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1 rows, 1 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(2, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 2 rows, 2 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(701, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 701 rows, 701 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 10000 rows, 10000 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(16384, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 16384 rows, 16384 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+                                                                                                                            QUERY PLAN                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=22799 loops=1)
+   Output: 1
+   ->  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=22799 loops=1)
+         Data node: db_dist_remote_error_1
+         Fetcher Type: COPY
+         Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk
+         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+(7 rows)
+
+-- We don't test fatal errors here, because PG versions before 14 are unable to
+-- report them properly to the access node, so we get different errors in these
+-- versions.
+-- Now test the same with the cursor fetcher.
+set timescaledb.remote_data_fetcher = 'cursor';
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 0 rows, 0 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1 rows, 1 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(2, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 2 rows, 2 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(701, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 701 rows, 701 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 10000 rows, 10000 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+                                                                                                                            QUERY PLAN                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=22799 loops=1)
+   Output: 1
+   ->  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=22799 loops=1)
+         Data node: db_dist_remote_error_1
+         Fetcher Type: Cursor
+         Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk
+         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+(7 rows)
+
+-- Now test the same with the prepared statement fetcher.
+set timescaledb.remote_data_fetcher = 'prepared';
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(0, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 0 rows, 0 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1 rows, 1 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(2, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 2 rows, 2 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(701, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 701 rows, 701 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 10000 rows, 10000 rows seen
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+                                                                                                                            QUERY PLAN                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=22799 loops=1)
+   Output: 1
+   ->  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=22799 loops=1)
+         Data node: db_dist_remote_error_1
+         Fetcher Type: Prepared statement
+         Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk
+         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+(7 rows)
+
+reset timescaledb.remote_data_fetcher;
+-- Table with broken send for a data type.
+create table metrics_dist_bs(like metrics_dist_remote_error);
+alter table metrics_dist_bs alter column v0 type bs;
+select table_name from create_distributed_hypertable('metrics_dist_bs',
+    'time', 'device_id');
+   table_name    
+-----------------
+ metrics_dist_bs
+(1 row)
+
+set timescaledb.enable_connection_binary_data to off;
+insert into metrics_dist_bs
+    select * from metrics_dist_remote_error;
+set timescaledb.enable_connection_binary_data to on;
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_bs;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+drop table metrics_dist_bs;
+-- Table with broken receive for a data type.
+create table metrics_dist_br(like metrics_dist_remote_error);
+alter table metrics_dist_br alter column v0 type br;
+select table_name from create_distributed_hypertable('metrics_dist_br',
+    'time', 'device_id');
+   table_name    
+-----------------
+ metrics_dist_br
+(1 row)
+
+select hypertable_name, replication_factor from timescaledb_information.hypertables
+where hypertable_name = 'metrics_dist_br';
+ hypertable_name | replication_factor 
+-----------------+--------------------
+ metrics_dist_br |                  1
+(1 row)
+
+-- Test that INSERT and COPY fail on data nodes.
+-- Note that we use the text format for the COPY input, so that the access node
+-- doesn't call `recv` and fail by itself. It's going to use binary format for
+-- transfer to data nodes regardless of the input format.
+set timescaledb.dist_copy_transfer_format = 'binary';
+-- First, create the reference.
+\copy (select * from metrics_dist_remote_error) to 'dist_remote_error.text' with (format text);
+-- We have to test various interleavings of COPY and INSERT to check that
+-- one can recover from connection failure states introduced by another.
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+-- Fail at different points
+set timescaledb.debug_broken_sendrecv_error_after = 1;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1 rows, 1 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 2;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 2 rows, 2 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1023;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1023 rows, 1023 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1024;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1024 rows, 1024 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1025;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1025 rows, 1025 rows seen
+reset timescaledb.debug_broken_sendrecv_error_after;
+-- Same with different replication factor
+truncate metrics_dist_br;
+select set_replication_factor('metrics_dist_br', 2);
+ set_replication_factor 
+------------------------
+ 
+(1 row)
+
+select hypertable_name, replication_factor from timescaledb_information.hypertables
+where hypertable_name = 'metrics_dist_br';
+ hypertable_name | replication_factor 
+-----------------+--------------------
+ metrics_dist_br |                  2
+(1 row)
+
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+insert into metrics_dist_br select * from metrics_dist_remote_error;
+ERROR:  [<hidden node name>]: debug point: requested to error out after 7103 rows, 7103 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1 rows, 1 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 2;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 2 rows, 2 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1023;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1023 rows, 1023 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1024;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1024 rows, 1024 rows seen
+set timescaledb.debug_broken_sendrecv_error_after = 1025;
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+ERROR:  [<hidden node name>]: debug point: requested to error out after 1025 rows, 1025 rows seen
+-- Should succeed with text format for data transfer.
+set timescaledb.dist_copy_transfer_format = 'text';
+\copy metrics_dist_br from 'dist_remote_error.text' with (format text);
+-- Final check.
+set timescaledb.enable_connection_binary_data = false;
+select count(*) from metrics_dist_br;
+ count 
+-------
+ 22800
+(1 row)
+
+set timescaledb.enable_connection_binary_data = true;
+reset timescaledb.debug_broken_sendrecv_error_after;
+drop table metrics_dist_br;
+-- Table with sleepy receive for a data type, to improve coverage of the waiting
+-- code on the access node.
+create table metrics_dist_sr(like metrics_dist_remote_error);
+alter table metrics_dist_sr alter column v0 type sr;
+select table_name from create_distributed_hypertable('metrics_dist_sr',
+    'time', 'device_id');
+   table_name    
+-----------------
+ metrics_dist_sr
+(1 row)
+
+-- We're using sleepy recv function, so need the binary transfer format for it
+-- to be called on the data nodes.
+set timescaledb.dist_copy_transfer_format = 'binary';
+-- Test INSERT and COPY with slow data node.
+\copy metrics_dist_sr from 'dist_remote_error.text' with (format text);
+insert into metrics_dist_sr select * from metrics_dist_remote_error;
+select count(*) from metrics_dist_sr;
+ count 
+-------
+ 45600
+(1 row)
+
+drop table metrics_dist_sr;
+-- Table with sleepy send for a data type, on one data node, to improve coverage
+-- of waiting in data fetchers.
+create table metrics_dist_ss(like metrics_dist_remote_error);
+alter table metrics_dist_ss alter column v0 type ss;
+select table_name from create_distributed_hypertable('metrics_dist_ss',
+    'time', 'device_id');
+   table_name    
+-----------------
+ metrics_dist_ss
+(1 row)
+
+-- Populate the table, using text COPY to avoid the sleepy stuff.
+set timescaledb.dist_copy_transfer_format = 'text';
+\copy metrics_dist_ss from 'dist_remote_error.text' with (format text);
+-- We're using sleepy send function, so need the binary transfer format for it
+-- to be called on the data nodes.
+set timescaledb.enable_connection_binary_data = true;
+set timescaledb.remote_data_fetcher = 'prepared';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_ss;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=22800 loops=1)
+   Output: metrics_dist_ss."time", metrics_dist_ss.device_id, metrics_dist_ss.v0, metrics_dist_ss.v1, metrics_dist_ss.v2, metrics_dist_ss.v3
+   ->  Append (actual rows=22800 loops=1)
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_1 (actual rows=4560 loops=1)
+               Output: metrics_dist_ss_1."time", metrics_dist_ss_1.device_id, metrics_dist_ss_1.v0, metrics_dist_ss_1.v1, metrics_dist_ss_1.v2, metrics_dist_ss_1.v3
+               Data node: db_dist_remote_error_1
+               Fetcher Type: Prepared statement
+               Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
+               Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
+               Data node: db_dist_remote_error_2
+               Fetcher Type: Prepared statement
+               Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
+               Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
+               Data node: db_dist_remote_error_3
+               Fetcher Type: Prepared statement
+               Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
+(21 rows)
+
+set timescaledb.remote_data_fetcher = 'copy';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_ss;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=22800 loops=1)
+   Output: metrics_dist_ss."time", metrics_dist_ss.device_id, metrics_dist_ss.v0, metrics_dist_ss.v1, metrics_dist_ss.v2, metrics_dist_ss.v3
+   ->  Append (actual rows=22800 loops=1)
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_1 (actual rows=4560 loops=1)
+               Output: metrics_dist_ss_1."time", metrics_dist_ss_1.device_id, metrics_dist_ss_1.v0, metrics_dist_ss_1.v1, metrics_dist_ss_1.v2, metrics_dist_ss_1.v3
+               Data node: db_dist_remote_error_1
+               Fetcher Type: COPY
+               Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
+               Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
+               Data node: db_dist_remote_error_2
+               Fetcher Type: COPY
+               Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
+               Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
+               Data node: db_dist_remote_error_3
+               Fetcher Type: COPY
+               Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
+(21 rows)
+
+set timescaledb.remote_data_fetcher = 'cursor';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_ss;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=22800 loops=1)
+   Output: metrics_dist_ss."time", metrics_dist_ss.device_id, metrics_dist_ss.v0, metrics_dist_ss.v1, metrics_dist_ss.v2, metrics_dist_ss.v3
+   ->  Append (actual rows=22800 loops=1)
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_1 (actual rows=4560 loops=1)
+               Output: metrics_dist_ss_1."time", metrics_dist_ss_1.device_id, metrics_dist_ss_1.v0, metrics_dist_ss_1.v1, metrics_dist_ss_1.v2, metrics_dist_ss_1.v3
+               Data node: db_dist_remote_error_1
+               Fetcher Type: Cursor
+               Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
+               Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
+               Data node: db_dist_remote_error_2
+               Fetcher Type: Cursor
+               Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
+         ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
+               Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
+               Data node: db_dist_remote_error_3
+               Fetcher Type: Cursor
+               Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
+(21 rows)
+
+-- Incorrect int output, to cover the error handling in tuplefactory.
+create table metrics_dist_io(like metrics_dist_remote_error);
+alter table metrics_dist_io alter column v0 type io;
+select table_name from create_distributed_hypertable('metrics_dist_io',
+    'time', 'device_id');
+   table_name    
+-----------------
+ metrics_dist_io
+(1 row)
+
+-- Populate the table, using binary COPY to avoid the broken in4out.
+set timescaledb.enable_connection_binary_data = true;
+set timescaledb.dist_copy_transfer_format = 'binary';
+\copy metrics_dist_io from 'dist_remote_error.text' with (format text);
+-- For testing, force the text format to exerices our broken out function.
+set timescaledb.enable_connection_binary_data = false;
+set timescaledb.dist_copy_transfer_format = 'text';
+set timescaledb.remote_data_fetcher = 'prepared';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_io;
+ERROR:  invalid input syntax for type integer: "surprise"
+set timescaledb.remote_data_fetcher = 'copy';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_io;
+ERROR:  cannot use COPY fetcher because some of the column types do not have binary serialization
+set timescaledb.remote_data_fetcher = 'cursor';
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from metrics_dist_io;
+ERROR:  invalid input syntax for type integer: "surprise"
+-- cleanup
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;

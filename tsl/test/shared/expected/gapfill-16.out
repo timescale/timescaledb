@@ -1,0 +1,3326 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set EXPLAIN 'EXPLAIN (COSTS OFF)'
+-- we want to see error details in the output
+\set VERBOSITY default
+-- simple example
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,now(),now()),
+  avg(c2)
+FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
+GROUP BY 1
+ORDER BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  GroupAggregate
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+         ->  Sort
+               Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+               ->  Values Scan on "*VALUES*"
+(6 rows)
+
+-- test sorting
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,now(),now()),
+  avg(c2)
+FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
+GROUP BY 1
+ORDER BY 2;
+QUERY PLAN
+ Sort
+   Sort Key: (avg("*VALUES*".column2))
+   ->  Custom Scan (GapFill)
+         ->  GroupAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+               ->  Sort
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+                     ->  Values Scan on "*VALUES*"
+(8 rows)
+
+-- test sort direction
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,now(),now()),
+  avg(c2)
+FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
+GROUP BY 1
+ORDER BY 1 DESC;
+QUERY PLAN
+ Sort
+   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now())) DESC
+   ->  Custom Scan (GapFill)
+         ->  Sort
+               Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now())) NULLS FIRST
+               ->  HashAggregate
+                     Group Key: time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now())
+                     ->  Values Scan on "*VALUES*"
+(8 rows)
+
+-- test order by aggregate function
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,now(),now()),
+  avg(c2)
+FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
+GROUP BY 1
+ORDER BY 2,1;
+QUERY PLAN
+ Sort
+   Sort Key: (avg("*VALUES*".column2)), (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+   ->  Custom Scan (GapFill)
+         ->  GroupAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+               ->  Sort
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+                     ->  Values Scan on "*VALUES*"
+(8 rows)
+
+-- test query without order by
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,now(),now()),
+  avg(c2)
+FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
+GROUP BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  GroupAggregate
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+         ->  Sort
+               Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
+               ->  Values Scan on "*VALUES*"
+(6 rows)
+
+-- test parallel query
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  avg(value)
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  Finalize GroupAggregate
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  Gather Merge
+               Workers Planned: 2
+               ->  Sort
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           ->  Result
+                                 ->  Parallel Append
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+(15 rows)
+
+-- test parallel query with locf
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  locf(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  Finalize GroupAggregate
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  Gather Merge
+               Workers Planned: 2
+               ->  Sort
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           ->  Result
+                                 ->  Parallel Append
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+(15 rows)
+
+-- test parallel query with interpolate
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  Finalize GroupAggregate
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  Gather Merge
+               Workers Planned: 2
+               ->  Sort
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           ->  Result
+                                 ->  Parallel Append
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+(15 rows)
+
+-- make sure we can run gapfill in parallel workers
+-- ensure this plan runs in parallel
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 2
+LIMIT 1;
+QUERY PLAN
+ Limit
+   ->  Sort
+         Sort Key: (interpolate(avg(gapfill_plan_test.value), NULL::record, NULL::record))
+         ->  Custom Scan (GapFill)
+               ->  Finalize GroupAggregate
+                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     ->  Gather Merge
+                           Workers Planned: 2
+                           ->  Sort
+                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                                 ->  Partial HashAggregate
+                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                       ->  Result
+                                             ->  Parallel Append
+                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
+(18 rows)
+
+-- actually run a parallel gapfill
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 2
+LIMIT 1;
+     time_bucket_gapfill      | interpolate 
+------------------------------+-------------
+ Mon Jan 01 00:00:00 2018 PST |           1
+(1 row)
+
+-- test sort optimizations
+-- test sort optimization with single member order by,
+-- should use index scan (no GapFill node for this one since we're not gapfilling)
+:EXPLAIN SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 1;
+QUERY PLAN
+ Sort
+   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+   ->  Result
+         ->  Append
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+(8 rows)
+
+SET max_parallel_workers_per_gather TO 0;
+-- test sort optimizations with locf
+:EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), locf(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  Sort
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  HashAggregate
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+(11 rows)
+
+-- test sort optimizations with interpolate
+:EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  Sort
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  HashAggregate
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+(11 rows)
+
+RESET max_parallel_workers_per_gather;
+CREATE INDEX gapfill_plan_test_indx ON gapfill_plan_test(value, time);
+-- test sort optimization with ordering by multiple columns and time_bucket_gapfill not last,
+-- must not use index scan
+:EXPLAIN  SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 1,2;
+QUERY PLAN
+ Sort
+   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone)), _hyper_X_X_chunk.value
+   ->  Result
+         ->  Append
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+(8 rows)
+
+-- test sort optimization with ordering by multiple columns and time_bucket as last member,
+-- should use index scan
+:EXPLAIN SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 2,1;
+QUERY PLAN
+ Sort
+   Sort Key: _hyper_X_X_chunk.value, (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+   ->  Result
+         ->  Append
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+               ->  Seq Scan on _hyper_X_X_chunk
+(8 rows)
+
+\set METRICS metrics_int
+-- All test against table :METRICS first
+\set ON_ERROR_STOP 0
+-- inverse of previous test query to confirm an error is actually thrown
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM :METRICS m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
+FROM :METRICS m1
+WHERE time = 5
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+ERROR:  division by zero
+-- test window functions with multiple column references
+SELECT
+  time_bucket_gapfill(1,time,1,2),
+  first(min(time),min(time)) OVER ()
+FROM :METRICS
+GROUP BY 1;
+ERROR:  window functions with multiple column references not supported
+-- test with unsupported operator
+SELECT
+  time_bucket_gapfill(1,time)
+FROM :METRICS
+WHERE time =0 AND time < 2
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- test with 2 tables and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM :METRICS m, :METRICS m2
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- test inner join and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM :METRICS m1 INNER JOIN :METRICS m2 ON m1.time=m2.time
+WHERE m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- test outer join with constraints in join condition
+-- not usable as start/stop
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM :METRICS m1 LEFT OUTER JOIN :METRICS m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+\set ON_ERROR_STOP 1
+\ir include/gapfill_metrics_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test locf lookup query does not trigger when not needed
+-- 1/(SELECT 0) will throw an error in the lookup query but in order to not
+-- always trigger evaluation it needs to be correlated otherwise postgres will
+-- always run it once even if the value is never used
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM :METRICS m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
+FROM :METRICS m1
+WHERE time >= 0 AND time < 5
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+ time | device_id | sensor_id | locf3 
+------+-----------+-----------+-------
+    0 |         1 |         1 |     5
+    5 |         1 |         1 |     5
+   10 |         1 |         1 |     5
+(3 rows)
+
+-- test locf with correlated subquery
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  avg(value),
+  locf(min(value)) AS locf,
+  locf(min(value)::int,23) AS locf1,
+  locf(min(value)::int,(SELECT 42)) AS locf2,
+  locf(min(value),(SELECT value FROM :METRICS m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
+FROM :METRICS m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+ time | device_id | sensor_id | avg | locf | locf1 | locf2 | locf3 
+------+-----------+-----------+-----+------+-------+-------+-------
+    0 |         1 |         1 |   5 |    5 |     5 |     5 |     5
+    5 |         1 |         1 |     |    5 |     5 |     5 |     5
+   10 |         1 |         1 |     |    5 |     5 |     5 |     5
+    0 |         1 |         2 |     |      |    23 |    42 |  -100
+    5 |         1 |         2 |  10 |   10 |    10 |    10 |    10
+   10 |         1 |         2 |     |   10 |    10 |    10 |    10
+(6 rows)
+
+-- test locf with correlated subquery and "wrong order"
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  avg(value),
+  locf(min(value)) AS locf,
+  locf(min(value),23::float) AS locf1,
+  locf(min(value),(SELECT 42::float)) AS locf2,
+  locf(min(value),(SELECT value FROM :METRICS m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
+FROM :METRICS m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 1,2,3;
+ time | device_id | sensor_id | avg | locf | locf1 | locf2 | locf3 
+------+-----------+-----------+-----+------+-------+-------+-------
+    0 |         1 |         1 |   5 |    5 |     5 |     5 |     5
+    0 |         1 |         2 |     |      |    23 |    42 |  -100
+    5 |         1 |         1 |     |    5 |     5 |     5 |     5
+    5 |         1 |         2 |  10 |   10 |    10 |    10 |    10
+   10 |         1 |         1 |     |    5 |     5 |     5 |     5
+   10 |         1 |         2 |     |   10 |    10 |    10 |    10
+(6 rows)
+
+-- test locf with correlated subquery and window functions
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value),(SELECT value FROM :METRICS m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)),
+  sum(locf(min(value),(SELECT value FROM :METRICS m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1))) OVER (PARTITION BY device_id, sensor_id ROWS 1 PRECEDING)
+FROM :METRICS m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3;
+ time | device_id | sensor_id | locf | sum  
+------+-----------+-----------+------+------
+    0 |         1 |         1 |    5 |    5
+    5 |         1 |         1 |    5 |   10
+   10 |         1 |         1 |    5 |   10
+    0 |         1 |         2 | -100 | -100
+    5 |         1 |         2 |   10 |  -90
+   10 |         1 |         2 |   10 |   20
+(6 rows)
+
+-- test JOINs
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  device_id,
+  d.name,
+  sensor_id,
+  s.name,
+  avg(m.value)
+FROM :METRICS m
+INNER JOIN devices d USING(device_id)
+INNER JOIN sensors s USING(sensor_id)
+WHERE time BETWEEN 0 AND 5
+GROUP BY 1,2,3,4,5;
+ time | device_id |   name   | sensor_id |   name   | avg 
+------+-----------+----------+-----------+----------+-----
+    0 |         1 | Device 1 |         1 | Sensor 1 |   5
+    1 |         1 | Device 1 |         1 | Sensor 1 |    
+    2 |         1 | Device 1 |         1 | Sensor 1 |    
+    3 |         1 | Device 1 |         1 | Sensor 1 |    
+    4 |         1 | Device 1 |         1 | Sensor 1 |    
+    0 |         1 | Device 1 |         2 | Sensor 2 |    
+    1 |         1 | Device 1 |         2 | Sensor 2 |    
+    2 |         1 | Device 1 |         2 | Sensor 2 |    
+    3 |         1 | Device 1 |         2 | Sensor 2 |    
+    4 |         1 | Device 1 |         2 | Sensor 2 |    
+    5 |         1 | Device 1 |         2 | Sensor 2 |  10
+(11 rows)
+
+-- test interpolate with correlated subquery
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  avg(value),
+  interpolate(min(value)) AS ip,
+  interpolate(min(value),(-5,-5.0::float),(15,20.0::float)) AS ip1,
+  interpolate(min(value),(SELECT (-10,-10.0::float)),(SELECT (15,20.0::float))) AS ip2,
+  interpolate(
+    min(value),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  ) AS ip3
+FROM :METRICS m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+ time | device_id | sensor_id | avg | ip | ip1 |       ip2        |       ip3        
+------+-----------+-----------+-----+----+-----+------------------+------------------
+    0 |         1 |         1 |   5 |  5 |   5 |                5 |                5
+    5 |         1 |         1 |     |    |  10 |               10 |             4.75
+   10 |         1 |         1 |     |    |  15 |               15 |              4.5
+    0 |         1 |         2 |     |    | 2.5 | 3.33333333333333 | 4.76190476190476
+    5 |         1 |         2 |  10 | 10 |  10 |               10 |               10
+   10 |         1 |         2 |     |    |  15 |               15 | 4.21052631578947
+(6 rows)
+
+-- test interpolate with correlated subquery and window function
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  interpolate(
+    min(value),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  ),
+  sum(interpolate(
+    min(value),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  )) OVER (PARTITION BY device_id, sensor_id ROWS 1 PRECEDING)
+FROM :METRICS m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+ time | device_id | sensor_id |   interpolate    |       sum        
+------+-----------+-----------+------------------+------------------
+    0 |         1 |         1 |                5 |                5
+    5 |         1 |         1 |             4.75 |             9.75
+   10 |         1 |         1 |              4.5 |             9.25
+    0 |         1 |         2 | 4.76190476190476 | 4.76190476190476
+    5 |         1 |         2 |               10 | 14.7619047619048
+   10 |         1 |         2 | 4.21052631578947 | 14.2105263157895
+(6 rows)
+
+-- test subqueries
+-- subqueries will alter the shape of the plan and top-level constraints
+-- might not end up in top-level of jointree
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM :METRICS m1
+WHERE m1.time >=0 AND m1.time < 2 AND device_id IN (SELECT device_id FROM :METRICS)
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+(2 rows)
+
+-- test inner join with constraints in join condition
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM :METRICS m1 INNER JOIN :METRICS m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+(2 rows)
+
+-- test actual table
+SELECT
+  time_bucket_gapfill(1,time)
+FROM :METRICS
+WHERE time >=0 AND time < 2
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+(2 rows)
+
+-- test with table alias
+SELECT
+  time_bucket_gapfill(1,time)
+FROM :METRICS m
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+(2 rows)
+
+-- test with 2 tables
+SELECT
+  time_bucket_gapfill(1,m.time)
+FROM :METRICS m, :METRICS m2
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+(2 rows)
+
+-- test prepared statement with locf with lookup query
+PREPARE prep_gapfill AS
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM :METRICS m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1))
+FROM :METRICS m1
+WHERE time >= 0 AND time < 5
+GROUP BY 1,2,3;
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id | locf 
+------+-----------+-----------+------
+    0 |         1 |         1 |    5
+    5 |         1 |         1 |    5
+   10 |         1 |         1 |    5
+(3 rows)
+
+DEALLOCATE prep_gapfill;
+-- test prepared statement with interpolate with lookup query
+PREPARE prep_gapfill AS
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  interpolate(
+    min(value),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM :METRICS m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  )
+FROM :METRICS m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+EXECUTE prep_gapfill;
+ time | device_id | sensor_id |   interpolate    
+------+-----------+-----------+------------------
+    0 |         1 |         1 |                5
+    5 |         1 |         1 |             4.75
+   10 |         1 |         1 |              4.5
+    0 |         1 |         2 | 4.76190476190476
+    5 |         1 |         2 |               10
+   10 |         1 |         2 | 4.21052631578947
+(6 rows)
+
+DEALLOCATE prep_gapfill;
+-- test prepared statement with variable gapfill arguments
+PREPARE prep_gapfill(int,int,int) AS
+SELECT
+  time_bucket_gapfill($1,time,$2,$3) AS time,
+  device_id,
+  sensor_id,
+  min(value)
+FROM :METRICS m1
+WHERE time >= $2 AND time < $3 AND device_id=1 AND sensor_id=1
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill(5,0,10);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+    0 |         1 |         1 |   5
+    5 |         1 |         1 |    
+(2 rows)
+
+EXECUTE prep_gapfill(4,100,110);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+  100 |         1 |         1 |   0
+  104 |         1 |         1 |    
+  108 |         1 |         1 |    
+(3 rows)
+
+EXECUTE prep_gapfill(5,0,10);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+    0 |         1 |         1 |   5
+    5 |         1 |         1 |    
+(2 rows)
+
+EXECUTE prep_gapfill(4,100,110);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+  100 |         1 |         1 |   0
+  104 |         1 |         1 |    
+  108 |         1 |         1 |    
+(3 rows)
+
+EXECUTE prep_gapfill(5,0,10);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+    0 |         1 |         1 |   5
+    5 |         1 |         1 |    
+(2 rows)
+
+EXECUTE prep_gapfill(4,100,110);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+  100 |         1 |         1 |   0
+  104 |         1 |         1 |    
+  108 |         1 |         1 |    
+(3 rows)
+
+EXECUTE prep_gapfill(5,0,10);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+    0 |         1 |         1 |   5
+    5 |         1 |         1 |    
+(2 rows)
+
+EXECUTE prep_gapfill(4,100,110);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+  100 |         1 |         1 |   0
+  104 |         1 |         1 |    
+  108 |         1 |         1 |    
+(3 rows)
+
+EXECUTE prep_gapfill(5,0,10);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+    0 |         1 |         1 |   5
+    5 |         1 |         1 |    
+(2 rows)
+
+EXECUTE prep_gapfill(4,100,110);
+ time | device_id | sensor_id | min 
+------+-----------+-----------+-----
+  100 |         1 |         1 |   0
+  104 |         1 |         1 |    
+  108 |         1 |         1 |    
+(3 rows)
+
+DEALLOCATE prep_gapfill;
+-- Tests without tables
+-- test locf and interpolate call without gapfill
+SELECT locf(1);
+ locf 
+    1
+(1 row)
+
+SELECT interpolate(1);
+ interpolate 
+           1
+(1 row)
+
+-- test locf and interpolate call with NULL input
+SELECT locf(NULL::int);
+ locf 
+     
+(1 row)
+
+SELECT interpolate(NULL);
+ interpolate 
+            
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- test time_bucket_gapfill not top level function call
+SELECT
+  1 + time_bucket_gapfill(1,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  no top level time_bucket_gapfill in group by clause
+-- test locf with treat_null_as_missing not BOOL
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(min(time),treat_null_as_missing:=1)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  function locf(integer, treat_null_as_missing => integer) does not exist
+LINE 3:   locf(min(time),treat_null_as_missing:=1)
+          ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-- test locf with treat_null_as_missing not literal
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(min(time),treat_null_as_missing:=random()>0)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid locf argument: treat_null_as_missing must be a BOOL literal
+-- test interpolate lookup query with 1 element in record
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),next=>(SELECT ROW(10)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  interpolate RECORD arguments must have 2 elements
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),prev=>(SELECT ROW(10)))
+FROM (VALUES (2),(3)) v(time)
+GROUP BY 1;
+ERROR:  interpolate RECORD arguments must have 2 elements
+-- test interpolate lookup query with 3 elements in record
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),next=>(SELECT (10,10,10)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  interpolate RECORD arguments must have 2 elements
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),prev=>(SELECT (10,10,10)))
+FROM (VALUES (2),(3)) v(time)
+GROUP BY 1;
+ERROR:  interpolate RECORD arguments must have 2 elements
+-- test interpolate lookup query with mismatching time datatype
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),next=>(SELECT (10::float,10)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  first argument of interpolate returned record must match used timestamp datatype
+DETAIL:  Returned type double precision does not match expected type integer.
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),prev=>(SELECT (10::float,10)))
+FROM (VALUES (2),(3)) v(time)
+GROUP BY 1;
+ERROR:  first argument of interpolate returned record must match used timestamp datatype
+DETAIL:  Returned type double precision does not match expected type integer.
+-- test interpolate lookup query with mismatching value datatype
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),next=>(SELECT (10,10::float)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  second argument of interpolate returned record must match used interpolate datatype
+DETAIL:  Returned type double precision does not match expected type integer.
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(min(time),prev=>(SELECT (10,10::float)))
+FROM (VALUES (2),(3)) v(time)
+GROUP BY 1;
+ERROR:  second argument of interpolate returned record must match used interpolate datatype
+DETAIL:  Returned type double precision does not match expected type integer.
+-- test interpolate with unsupported datatype
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(text 'text')
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  function interpolate(text) does not exist
+LINE 3:   interpolate(text 'text')
+          ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(interval '1d')
+FROM (VALUES (2),(3)) v(time)
+GROUP BY 1;
+ERROR:  function interpolate(interval) does not exist
+LINE 3:   interpolate(interval '1d')
+          ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-- test multiple time_bucket_gapfill calls
+SELECT
+  time_bucket_gapfill(1,time,1,11),time_bucket_gapfill(1,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  multiple time_bucket_gapfill calls not allowed
+-- test nested time_bucket_gapfill calls
+SELECT
+  time_bucket_gapfill(1,time_bucket_gapfill(1,time,1,11),1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  multiple time_bucket_gapfill calls not allowed
+-- test nested locf calls
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(locf(min(time)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  multiple interpolate/locf function calls per resultset column not supported
+-- test nested interpolate calls
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(interpolate(min(time)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  multiple interpolate/locf function calls per resultset column not supported
+-- test mixed locf/interpolate calls
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(interpolate(min(time)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  multiple interpolate/locf function calls per resultset column not supported
+-- test window function inside locf
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(avg(min(time)) OVER ())
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  window functions must not be below locf
+-- test nested window functions
+-- prevented by postgres
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  avg(avg(min(time)) OVER ()) OVER ()
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  window function calls cannot be nested
+LINE 3:   avg(avg(min(time)) OVER ()) OVER ()
+              ^
+-- test multiple window functions in single column
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  avg(min(time)) OVER () + avg(min(time)) OVER ()
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  multiple window function calls per column not supported
+-- test locf not toplevel
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  1 + locf(min(time))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  locf must be toplevel function call
+-- test locf inside aggregate
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  min(min(locf(time))) OVER ()
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  aggregate functions must be below locf
+-- test NULL args
+SELECT
+  time_bucket_gapfill(NULL,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width cannot be NULL
+SELECT
+  time_bucket_gapfill(1,NULL,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: ts cannot be NULL
+SELECT
+  time_bucket_gapfill(1,time,NULL,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+SELECT
+  time_bucket_gapfill(1,time,1,NULL)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+SELECT
+  time_bucket_gapfill(NULL,time,'Europe/Berlin','2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width cannot be NULL
+SELECT
+  time_bucket_gapfill('1day',NULL,'Europe/Berlin','2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: ts cannot be NULL
+SELECT
+  time_bucket_gapfill('1day',time,NULL,'2000-06-01','2001-06-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2001-01-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: timezone cannot be NULL
+-- test 0 bucket_width
+SELECT
+  time_bucket_gapfill(0,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
+SELECT
+  time_bucket_gapfill('0d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::date),('2000-02-01'::date)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
+SELECT
+  time_bucket_gapfill('0d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2000-02-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
+-- test negative bucket_width
+SELECT
+  time_bucket_gapfill(-1,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
+SELECT
+  time_bucket_gapfill('-1d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::date),('2000-02-01'::date)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
+SELECT
+  time_bucket_gapfill('-1d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2000-02-01'::timestamptz)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
+-- test subqueries as interval, start and stop (not supported atm)
+SELECT
+  time_bucket_gapfill((SELECT 1),time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be a simple expression
+SELECT
+  time_bucket_gapfill(1,time,(SELECT 1),11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: start must be a simple expression
+SELECT
+  time_bucket_gapfill(1,time,1,(SELECT 11))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: finish must be a simple expression
+\set ON_ERROR_STOP 1
+-- test time_bucket_gapfill without aggregation
+-- this will not trigger gapfilling
+SELECT
+  time_bucket_gapfill(1,time,1,11)
+FROM (VALUES (1),(2)) v(time);
+ time_bucket_gapfill 
+                   1
+                   2
+(2 rows)
+
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  avg(time) OVER ()
+FROM (VALUES (1),(2)) v(time);
+ time_bucket_gapfill |        avg         
+---------------------+--------------------
+                   1 | 1.5000000000000000
+                   2 | 1.5000000000000000
+(2 rows)
+
+-- test int int2/4/8
+SELECT
+  time_bucket_gapfill(1::int2,time::int2,0::int2,6::int2)
+FROM (VALUES (1),(4)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+                   2
+                   3
+                   4
+                   5
+(6 rows)
+
+SELECT
+  time_bucket_gapfill(1::int4,time::int4,0::int4,6::int4)
+FROM (VALUES (1),(4)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+                   2
+                   3
+                   4
+                   5
+(6 rows)
+
+SELECT
+  time_bucket_gapfill(1::int8,time::int8,0::int8,6::int8)
+FROM (VALUES (1),(4)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+                   2
+                   3
+                   4
+                   5
+(6 rows)
+
+-- test non-aligned bucket start
+SELECT
+  time_bucket_gapfill(10,time,5,40)
+FROM (VALUES (11),(22)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                  10
+                  20
+                  30
+(4 rows)
+
+-- simple gapfill query
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  min(value) AS value
+FROM (values (-10,1),(10,2),(11,3),(12,4),(22,5),(30,6),(66,7)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+  -10 |     1
+    0 |      
+   10 |     2
+   20 |     5
+   30 |     6
+   40 |      
+   60 |     7
+(7 rows)
+
+-- test references to different columns
+SELECT
+  time_bucket_gapfill(1,t,0,5) as t,
+  min(t),max(t),min(v),max(v)
+FROM(VALUES (1,3),(2,5)) tb(t,v)
+GROUP BY 1 ORDER BY 1;
+ t | min | max | min | max 
+---+-----+-----+-----+-----
+ 0 |     |     |     |    
+ 1 |   1 |   1 |   3 |   3
+ 2 |   2 |   2 |   5 |   5
+ 3 |     |     |     |    
+ 4 |     |     |     |    
+(5 rows)
+
+-- test passing of values outside boundaries
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time)
+FROM (VALUES (-1),(1),(3),(6)) v(time)
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill | min 
+---------------------+-----
+                  -1 |  -1
+                   0 |    
+                   1 |   1
+                   2 |    
+                   3 |   3
+                   4 |    
+                   6 |   6
+(7 rows)
+
+-- test gap fill before first row and after last row
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time)
+FROM (VALUES (1),(2),(3)) v(time)
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill | min 
+---------------------+-----
+                   0 |    
+                   1 |   1
+                   2 |   2
+                   3 |   3
+                   4 |    
+(5 rows)
+
+-- test gap fill without rows in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time)
+FROM (VALUES (1),(2),(3)) v(time)
+WHERE false
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill | min 
+---------------------+-----
+                   0 |    
+                   1 |    
+                   2 |    
+                   3 |    
+                   4 |    
+(5 rows)
+
+-- test coalesce
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  coalesce(min(time),0),
+  coalesce(min(value),0),
+  coalesce(min(value),7)
+FROM (VALUES (1,1),(2,2),(3,3)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill | coalesce | coalesce | coalesce 
+---------------------+----------+----------+----------
+                   0 |        0 |        0 |        7
+                   1 |        1 |        1 |        1
+                   2 |        2 |        2 |        2
+                   3 |        3 |        3 |        3
+                   4 |        0 |        0 |        7
+(5 rows)
+
+-- test case
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time),
+  CASE WHEN min(time) IS NOT NULL THEN min(time) ELSE -1 END,
+  CASE WHEN min(time) IS NOT NULL THEN min(time) + 7 ELSE 0 END,
+  CASE WHEN 1 = 1 THEN 1 ELSE 0 END
+FROM (VALUES (1,1),(2,2),(3,3)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill | min | case | case | case 
+---------------------+-----+------+------+------
+                   0 |     |   -1 |    0 |    1
+                   1 |   1 |    1 |    8 |    1
+                   2 |   2 |    2 |    9 |    1
+                   3 |   3 |    3 |   10 |    1
+                   4 |     |   -1 |    0 |    1
+(5 rows)
+
+-- test constants
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time), min(time), 4 as c
+FROM (VALUES (1),(2),(3)) v(time)
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill | min | min | c 
+---------------------+-----+-----+---
+                   0 |     |     | 4
+                   1 |   1 |   1 | 4
+                   2 |   2 |   2 | 4
+                   3 |   3 |   3 | 4
+                   4 |     |     | 4
+(5 rows)
+
+-- test column reordering
+SELECT
+  1 as c1, '2' as c2,
+  time_bucket_gapfill(1,time,0,5),
+  3.0 as c3,
+  min(time), min(time), 4 as c4
+FROM (VALUES (1),(2),(3)) v(time)
+GROUP BY 3 ORDER BY 3;
+ c1 | c2 | time_bucket_gapfill | c3  | min | min | c4 
+----+----+---------------------+-----+-----+-----+----
+  1 | 2  |                   0 | 3.0 |     |     |  4
+  1 | 2  |                   1 | 3.0 |   1 |   1 |  4
+  1 | 2  |                   2 | 3.0 |   2 |   2 |  4
+  1 | 2  |                   3 | 3.0 |   3 |   3 |  4
+  1 | 2  |                   4 | 3.0 |     |     |  4
+(5 rows)
+
+-- test timestamptz
+SELECT
+  time_bucket_gapfill(INTERVAL '6h',time,TIMESTAMPTZ '2000-01-01',TIMESTAMPTZ '2000-01-02'),
+  min(time)
+FROM (VALUES (TIMESTAMPTZ '2000-01-01 9:00:00'),(TIMESTAMPTZ '2000-01-01 18:00:00')) v(time)
+GROUP BY 1 ORDER BY 1;
+     time_bucket_gapfill      |             min              
+------------------------------+------------------------------
+ Fri Dec 31 22:00:00 1999 PST | 
+ Sat Jan 01 04:00:00 2000 PST | Sat Jan 01 09:00:00 2000 PST
+ Sat Jan 01 10:00:00 2000 PST | 
+ Sat Jan 01 16:00:00 2000 PST | Sat Jan 01 18:00:00 2000 PST
+ Sat Jan 01 22:00:00 2000 PST | 
+(5 rows)
+
+-- test timestamp
+SELECT
+  time_bucket_gapfill(INTERVAL '6h',time,TIMESTAMP '2000-01-01',TIMESTAMP '2000-01-02'),
+  min(time)
+FROM (VALUES (TIMESTAMP '2000-01-01 9:00:00'),(TIMESTAMP '2000-01-01 18:00:00')) v(time)
+GROUP BY 1 ORDER BY 1;
+   time_bucket_gapfill    |           min            
+--------------------------+--------------------------
+ Sat Jan 01 00:00:00 2000 | 
+ Sat Jan 01 06:00:00 2000 | Sat Jan 01 09:00:00 2000
+ Sat Jan 01 12:00:00 2000 | 
+ Sat Jan 01 18:00:00 2000 | Sat Jan 01 18:00:00 2000
+(4 rows)
+
+-- test date
+SELECT
+  time_bucket_gapfill(INTERVAL '1w',time,DATE '2000-01-01',DATE '2000-02-10'),
+  min(time)
+FROM (VALUES (DATE '2000-01-08'),(DATE '2000-01-22')) v(time)
+GROUP BY 1 ORDER BY 1;
+ time_bucket_gapfill |    min     
+---------------------+------------
+ 12-27-1999          | 
+ 01-03-2000          | 01-08-2000
+ 01-10-2000          | 
+ 01-17-2000          | 01-22-2000
+ 01-24-2000          | 
+ 01-31-2000          | 
+ 02-07-2000          | 
+(7 rows)
+
+-- test grouping by non-time columns
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  id,
+  min(value) as m
+FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+GROUP BY 1,id ORDER BY 2,1;
+ time | id | m 
+------+----+---
+    0 |  1 |  
+    1 |  1 | 1
+    2 |  1 |  
+    3 |  1 |  
+    4 |  1 |  
+    0 |  2 |  
+    1 |  2 |  
+    2 |  2 | 2
+    3 |  2 |  
+    4 |  2 |  
+(10 rows)
+
+-- test grouping by non-time columns with no rows in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  id,
+  min(value) as m
+FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+WHERE false
+GROUP BY 1,id ORDER BY 2,1;
+ time | id | m 
+------+----+---
+(0 rows)
+
+-- test duplicate columns in GROUP BY
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  id,
+  id,
+  min(value) as m
+FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+GROUP BY 1,2,3 ORDER BY 2,1;
+ time | id | id | m 
+------+----+----+---
+    0 |  1 |  1 |  
+    1 |  1 |  1 | 1
+    2 |  1 |  1 |  
+    3 |  1 |  1 |  
+    4 |  1 |  1 |  
+    0 |  2 |  2 |  
+    1 |  2 |  2 |  
+    2 |  2 |  2 | 2
+    3 |  2 |  2 |  
+    4 |  2 |  2 |  
+(10 rows)
+
+-- test grouping by columns not in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  min(value) as m
+FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+GROUP BY 1,id ORDER BY id,1;
+ time | m 
+------+---
+    0 |  
+    1 | 1
+    2 |  
+    3 |  
+    4 |  
+    0 |  
+    1 |  
+    2 | 2
+    3 |  
+    4 |  
+(10 rows)
+
+-- test grouping by non-time columns with text columns
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  min(value) as m
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color ORDER BY 2,1;
+ time | color | m 
+------+-------+---
+    0 | blue  |  
+    1 | blue  | 1
+    2 | blue  |  
+    3 | blue  |  
+    4 | blue  |  
+    0 | red   |  
+    1 | red   |  
+    2 | red   | 2
+    3 | red   |  
+    4 | red   |  
+(10 rows)
+
+-- test grouping by non-time columns with text columns with no rows in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  min(value) as m
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+WHERE false
+GROUP BY 1,color ORDER BY 2,1;
+ time | color | m 
+------+-------+---
+(0 rows)
+
+-- test insert into SELECT
+SELECT * FROM insert_test;
+ id 
+  1
+  2
+  3
+  4
+(4 rows)
+
+-- test join
+SELECT t1.*,t2.m FROM
+(
+  SELECT
+    time_bucket_gapfill(1,time,0,5) as time, color, min(value) as m
+  FROM
+    (VALUES (1,'red',1),(2,'blue',2)) v(time,color,value)
+  GROUP BY 1,color ORDER BY 2,1
+) t1 INNER JOIN
+(
+  SELECT
+    time_bucket_gapfill(1,time,0,5) as time, color, min(value) as m
+  FROM
+    (VALUES (3,'red',1),(4,'blue',2)) v(time,color,value)
+  GROUP BY 1,color ORDER BY 2,1
+) t2 ON t1.time = t2.time AND t1.color=t2.color;
+ time | color | m | m 
+------+-------+---+---
+    0 | blue  |   |  
+    1 | blue  |   |  
+    2 | blue  | 2 |  
+    3 | blue  |   |  
+    4 | blue  |   | 2
+    0 | red   |   |  
+    1 | red   | 1 |  
+    2 | red   |   |  
+    3 | red   |   | 1
+    4 | red   |   |  
+(10 rows)
+
+-- test join with locf
+SELECT t1.*,t2.m FROM
+(
+  SELECT
+    time_bucket_gapfill(1,time,0,5) as time,
+    color,
+    locf(min(value)) as locf
+  FROM
+    (VALUES (0,'red',1),(0,'blue',2)) v(time,color,value)
+  GROUP BY 1,color ORDER BY 2,1
+) t1 INNER JOIN
+(
+  SELECT
+    time_bucket_gapfill(1,time,0,5) as time,
+    color,
+    locf(min(value)) as m
+  FROM
+    (VALUES (3,'red',1),(4,'blue',2)) v(time,color,value)
+  GROUP BY 1,color ORDER BY 2,1
+) t2 ON t1.time = t2.time AND t1.color=t2.color;
+ time | color | locf | m 
+------+-------+------+---
+    0 | blue  |    2 |  
+    1 | blue  |    2 |  
+    2 | blue  |    2 |  
+    3 | blue  |    2 |  
+    4 | blue  |    2 | 2
+    0 | red   |    1 |  
+    1 | red   |    1 |  
+    2 | red   |    1 |  
+    3 | red   |    1 | 1
+    4 | red   |    1 | 1
+(10 rows)
+
+-- test locf
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value)) AS value
+FROM (values (10,9),(20,3),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |      
+   10 |     9
+   20 |     3
+   30 |     3
+   40 |     3
+   50 |     6
+(6 rows)
+
+-- test locf with NULLs in resultset
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value)) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |      
+   10 |     9
+   20 |     3
+   30 |      
+   40 |      
+   50 |     6
+(6 rows)
+
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=false) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |      
+   10 |     9
+   20 |     3
+   30 |      
+   40 |      
+   50 |     6
+(6 rows)
+
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=NULL) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |      
+   10 |     9
+   20 |     3
+   30 |      
+   40 |      
+   50 |     6
+(6 rows)
+
+-- test locf with NULLs in resultset and treat_null_as_missing
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=true) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |      
+   10 |     9
+   20 |     3
+   30 |     3
+   40 |     3
+   50 |     6
+(6 rows)
+
+-- test locf with NULLs in first row of resultset and treat_null_as_missing with lookup query
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=false, prev := (SELECT 100)) AS v1,
+  locf(min(value),treat_null_as_missing:=true, prev := (SELECT 100)) AS v2
+FROM (values (0,NULL),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | v1 | v2  
+------+----+-----
+    0 |    | 100
+   10 |    | 100
+   20 |    | 100
+   30 |    | 100
+   40 |    | 100
+   50 |  6 |   6
+(6 rows)
+
+-- test locf with NULLs in resultset and treat_null_as_missing with resort
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=true) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1 DESC;
+ time | value 
+------+-------
+   50 |     6
+   40 |     3
+   30 |     3
+   20 |     3
+   10 |     9
+    0 |      
+(6 rows)
+
+-- test locf with constants
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  2,
+  locf(min(value))
+FROM (VALUES (0,1,3),(4,2,3)) v(time,value)
+GROUP BY 1;
+ time_bucket_gapfill | ?column? | locf 
+---------------------+----------+------
+                   0 |        2 |    1
+                   1 |        2 |    1
+                   2 |        2 |    1
+                   3 |        2 |    1
+                   4 |        2 |    2
+(5 rows)
+
+-- test expressions inside locf
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  locf(min(value)),
+  locf(4),
+  locf(4 + min(value))
+FROM (VALUES (0,1,3),(4,2,3)) v(time,value)
+GROUP BY 1;
+ time_bucket_gapfill | locf | locf | locf 
+---------------------+------+------+------
+                   0 |    1 |    4 |    5
+                   1 |    1 |    4 |    5
+                   2 |    1 |    4 |    5
+                   3 |    1 |    4 |    5
+                   4 |    2 |    4 |    6
+(5 rows)
+
+-- test locf with out of boundary lookup
+SELECT
+  time_bucket_gapfill(10,time,0,70) AS time,
+  locf(min(value),(SELECT 100)) AS value
+FROM (values (20,9),(40,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |   100
+   10 |   100
+   20 |     9
+   30 |     9
+   40 |     6
+   50 |     6
+   60 |     6
+(7 rows)
+
+-- test locf with different datatypes
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  locf(min(v1)) AS text,
+  locf(min(v2)) AS "int[]",
+  locf(min(v3)) AS "text 4/8k"
+FROM (VALUES
+  (1,'foo',ARRAY[1,2,3],repeat('4k',2048)),
+  (3,'bar',ARRAY[3,4,5],repeat('8k',4096))
+) v(time,v1,v2,v3)
+GROUP BY 1;
+ time | text |  int[]  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            text 4/8k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+------+------+---------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0 |      |         | 
+    1 | foo  | {1,2,3} | 4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k
+    2 | foo  | {1,2,3} | 4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k
+    3 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
+    4 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
+(5 rows)
+
+-- test locf with different datatypes and treat_null_as_missing
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  locf(min(v1),treat_null_as_missing:=true) AS text,
+  locf(min(v2),treat_null_as_missing:=true) AS "int[]",
+  locf(min(v3),treat_null_as_missing:=true) AS "text 4/8k"
+FROM (VALUES
+  (1,'foo',ARRAY[1,2,3],repeat('4k',2048)),
+  (2,NULL,NULL,NULL),
+  (3,'bar',ARRAY[3,4,5],repeat('8k',4096))
+) v(time,v1,v2,v3)
+GROUP BY 1;
+ time | text |  int[]  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            text 4/8k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+------+------+---------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0 |      |         | 
+    1 | foo  | {1,2,3} | 4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k
+    2 | foo  | {1,2,3} | 4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k
+    3 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
+    4 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
+(5 rows)
+
+-- test interpolate
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  interpolate(min(value)) AS value
+FROM (values (0,1),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | value 
+------+-------
+    0 |     1
+   10 |     2
+   20 |     3
+   30 |     4
+   40 |     5
+   50 |     6
+(6 rows)
+
+-- test interpolate with NULL values
+SELECT
+  time_bucket_gapfill(1,time,0,5) AS time,
+  interpolate(avg(temp)) AS temp
+FROM (VALUES (0,0),(2,NULL),(5,5)) v(time,temp)
+GROUP BY 1;
+ time | temp 
+------+------
+    0 |    0
+    1 |     
+    2 |     
+    3 |     
+    4 |     
+    5 |    5
+(6 rows)
+
+-- test interpolate datatypes
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  interpolate(min(v1)) AS "smallint",
+  interpolate(min(v2)) AS "int",
+  interpolate(min(v3)) AS "bigint",
+  interpolate(min(v4)) AS "float4",
+  interpolate(min(v5)) AS "float8"
+FROM (values (0,-3::smallint,-3::int,-3::bigint,-3::float4,-3::float8),(50,3::smallint,3::int,3::bigint,3::float4,3::float8)) v(time,v1,v2,v3,v4,v5)
+GROUP BY 1 ORDER BY 1;
+ time | smallint | int | bigint | float4 | float8 
+------+----------+-----+--------+--------+--------
+    0 |       -3 |  -3 |     -3 |     -3 |     -3
+   10 |       -2 |  -2 |     -2 |   -1.8 |   -1.8
+   20 |       -1 |  -1 |     -1 |   -0.6 |   -0.6
+   30 |        1 |   1 |      1 |    0.6 |    0.6
+   40 |        2 |   2 |      2 |    1.8 |    1.8
+   50 |        3 |   3 |      3 |      3 |      3
+(6 rows)
+
+-- test interpolate datatypes with negative time
+SELECT
+  time_bucket_gapfill(10,time,-40,30) AS time,
+  interpolate(min(v1)) AS "smallint",
+  interpolate(min(v2)) AS "int",
+  interpolate(min(v3)) AS "bigint",
+  interpolate(min(v4)) AS "float4",
+  interpolate(min(v5)) AS "float8"
+FROM (values (-40,-3::smallint,-3::int,-3::bigint,-3::float4,-3::float8),(20,3::smallint,3::int,3::bigint,3::float4,3::float8)) v(time,v1,v2,v3,v4,v5)
+GROUP BY 1 ORDER BY 1;
+ time | smallint | int | bigint | float4 | float8 
+------+----------+-----+--------+--------+--------
+  -40 |       -3 |  -3 |     -3 |     -3 |     -3
+  -30 |       -2 |  -2 |     -2 |     -2 |     -2
+  -20 |       -1 |  -1 |     -1 |     -1 |     -1
+  -10 |        0 |   0 |      0 |      0 |      0
+    0 |        1 |   1 |      1 |      1 |      1
+   10 |        2 |   2 |      2 |      2 |      2
+   20 |        3 |   3 |      3 |      3 |      3
+(7 rows)
+
+-- test interpolate with multiple groupings
+SELECT
+  time_bucket_gapfill(5,time,0,11),
+  device,
+  interpolate(min(v1),(SELECT (-10,-10)),(SELECT (20,10)))
+FROM (VALUES (5,1,0),(5,2,0)) as v(time,device,v1)
+GROUP BY 1,2 ORDER BY 2,1;
+ time_bucket_gapfill | device | interpolate 
+---------------------+--------+-------------
+                   0 |      1 |          -3
+                   5 |      1 |           0
+                  10 |      1 |           3
+                   0 |      2 |          -3
+                   5 |      2 |           0
+                  10 |      2 |           3
+(6 rows)
+
+-- test cte with gap filling in outer query
+WITH data AS (
+  SELECT * FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+)
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  id,
+  min(value) as m
+FROM data
+GROUP BY 1,id;
+ time | id | m 
+------+----+---
+    0 |  1 |  
+    1 |  1 | 1
+    2 |  1 |  
+    3 |  1 |  
+    4 |  1 |  
+    0 |  2 |  
+    1 |  2 |  
+    2 |  2 | 2
+    3 |  2 |  
+    4 |  2 |  
+(10 rows)
+
+-- test cte with gap filling in inner query
+WITH gapfill AS (
+  SELECT
+    time_bucket_gapfill(1,time,0,5) as time,
+    id,
+    min(value) as m
+  FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+  GROUP BY 1,id
+)
+SELECT * FROM gapfill;
+ time | id | m 
+------+----+---
+    0 |  1 |  
+    1 |  1 | 1
+    2 |  1 |  
+    3 |  1 |  
+    4 |  1 |  
+    0 |  2 |  
+    1 |  2 |  
+    2 |  2 | 2
+    3 |  2 |  
+    4 |  2 |  
+(10 rows)
+
+-- test window functions
+SELECT
+  time_bucket_gapfill(10,time,0,60),
+  interpolate(min(time)),
+  lag(min(time)) OVER ()
+FROM (VALUES (0),(50)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | interpolate | lag 
+---------------------+-------------+-----
+                   0 |           0 |    
+                  10 |          10 |   0
+                  20 |          20 |    
+                  30 |          30 |    
+                  40 |          40 |    
+                  50 |          50 |    
+(6 rows)
+
+-- test window functions with multiple windows
+SELECT
+  time_bucket_gapfill(1,time,0,10),
+  interpolate(min(time)),
+  row_number() OVER (),
+  locf(min(time)),
+  sum(interpolate(min(time))) OVER (ROWS 1 PRECEDING),
+  sum(interpolate(min(time))) OVER (ROWS 2 PRECEDING),
+  sum(interpolate(min(time))) OVER (ROWS 3 PRECEDING),
+  sum(interpolate(min(time))) OVER (ROWS 4 PRECEDING)
+FROM (VALUES (0),(9)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | interpolate | row_number | locf | sum | sum | sum | sum 
+---------------------+-------------+------------+------+-----+-----+-----+-----
+                   0 |           0 |          1 |    0 |   0 |   0 |   0 |   0
+                   1 |           1 |          2 |    0 |   1 |   1 |   1 |   1
+                   2 |           2 |          3 |    0 |   3 |   3 |   3 |   3
+                   3 |           3 |          4 |    0 |   5 |   6 |   6 |   6
+                   4 |           4 |          5 |    0 |   7 |   9 |  10 |  10
+                   5 |           5 |          6 |    0 |   9 |  12 |  14 |  15
+                   6 |           6 |          7 |    0 |  11 |  15 |  18 |  20
+                   7 |           7 |          8 |    0 |  13 |  18 |  22 |  25
+                   8 |           8 |          9 |    0 |  15 |  21 |  26 |  30
+                   9 |           9 |         10 |    9 |  17 |  24 |  30 |  35
+(10 rows)
+
+-- test window functions with constants
+SELECT
+	time_bucket_gapfill(1,time,0,5),
+  min(time),
+  4 as c,
+  lag(min(time)) OVER ()
+FROM (VALUES (1),(2),(3)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | min | c | lag 
+---------------------+-----+---+-----
+                   0 |     | 4 |    
+                   1 |   1 | 4 |    
+                   2 |   2 | 4 |   1
+                   3 |   3 | 4 |   2
+                   4 |     | 4 |   3
+(5 rows)
+
+--test window functions with locf
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time) AS "min",
+  lag(min(time)) over () AS lag_min,
+  lead(min(time)) over () AS lead_min,
+  locf(min(time)) AS locf,
+  lag(locf(min(time))) over () AS lag_locf,
+  lead(locf(min(time))) over () AS lead_locf
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | min | lag_min | lead_min | locf | lag_locf | lead_locf 
+---------------------+-----+---------+----------+------+----------+-----------
+                   0 |     |         |        1 |      |          |         1
+                   1 |   1 |         |        2 |    1 |          |         2
+                   2 |   2 |       1 |          |    2 |        1 |         2
+                   3 |     |       2 |          |    2 |        2 |         2
+                   4 |     |         |          |    2 |        2 |          
+(5 rows)
+
+--test window functions with interpolate
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time) AS "min",
+  lag(min(time)) over () AS lag_min,
+  lead(min(time)) over () AS lead_min,
+  interpolate(min(time)) AS interpolate,
+  lag(interpolate(min(time))) over () AS lag_interpolate,
+  lead(interpolate(min(time))) over () AS lead_interpolate
+FROM (VALUES (1),(3)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | min | lag_min | lead_min | interpolate | lag_interpolate | lead_interpolate 
+---------------------+-----+---------+----------+-------------+-----------------+------------------
+                   0 |     |         |        1 |             |                 |                1
+                   1 |   1 |         |          |           1 |                 |                2
+                   2 |     |       1 |        3 |           2 |               1 |                3
+                   3 |   3 |         |          |           3 |               2 |                 
+                   4 |     |       3 |          |             |               3 |                 
+(5 rows)
+
+--test window functions with expressions
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time) AS "min",
+  lag(min(time)) over () AS lag_min,
+  1 + lag(min(time)) over () AS lag_min,
+  interpolate(min(time)) AS interpolate,
+  lag(interpolate(min(time))) over () AS lag_interpolate,
+  1 + lag(interpolate(min(time))) over () AS lag_interpolate
+FROM (VALUES (1),(3)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | min | lag_min | lag_min | interpolate | lag_interpolate | lag_interpolate 
+---------------------+-----+---------+---------+-------------+-----------------+-----------------
+                   0 |     |         |         |             |                 |                
+                   1 |   1 |         |         |           1 |                 |                
+                   2 |     |       1 |       2 |           2 |               1 |               2
+                   3 |   3 |         |         |           3 |               2 |               3
+                   4 |     |       3 |       4 |             |               3 |               4
+(5 rows)
+
+--test row_number/rank/percent_rank/... window functions with gapfill reference
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  ntile(2) OVER () AS ntile_2,
+  ntile(3) OVER () AS ntile_3,
+  ntile(5) OVER () AS ntile_5,
+  row_number() OVER (),
+  cume_dist() OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  rank() OVER (),
+  rank() OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  percent_rank() OVER (ORDER BY time_bucket_gapfill(1,time,0,5))
+FROM (VALUES (1),(3)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | ntile_2 | ntile_3 | ntile_5 | row_number | cume_dist | rank | rank | percent_rank 
+---------------------+---------+---------+---------+------------+-----------+------+------+--------------
+                   0 |       1 |       1 |       1 |          1 |       0.2 |    1 |    1 |            0
+                   1 |       1 |       1 |       2 |          2 |       0.4 |    1 |    2 |         0.25
+                   2 |       1 |       2 |       3 |          3 |       0.6 |    1 |    3 |          0.5
+                   3 |       2 |       2 |       4 |          4 |       0.8 |    1 |    4 |         0.75
+                   4 |       2 |       3 |       5 |          5 |         1 |    1 |    5 |            1
+(5 rows)
+
+-- test first_value/last_value/nth_value
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(time)) OVER (),
+  nth_value(min(time),3) OVER (),
+  last_value(min(time)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | first_value | nth_value | last_value 
+---------------------+-------------+-----------+------------
+                   0 |           0 |         2 |          5
+                   1 |           0 |         2 |          5
+                   2 |           0 |         2 |          5
+                   3 |           0 |         2 |          5
+                   4 |           0 |         2 |          5
+                   5 |           0 |         2 |          5
+(6 rows)
+
+-- test window functions with PARTITION BY
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER (),
+  row_number() OVER (PARTITION BY color)
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color ORDER BY 2,1;
+ time | color | row_number | row_number 
+------+-------+------------+------------
+    0 | blue  |          1 |          1
+    1 | blue  |          2 |          2
+    2 | blue  |          3 |          3
+    3 | blue  |          4 |          4
+    4 | blue  |          5 |          5
+    0 | red   |          6 |          1
+    1 | red   |          7 |          2
+    2 | red   |          8 |          3
+    3 | red   |          9 |          4
+    4 | red   |         10 |          5
+(10 rows)
+
+-- test multiple windows
+\set ON_ERROR_STOP 0
+SELECT
+  time_bucket_gapfill(1,time,0,11),
+  first_value(interpolate(min(time))) OVER (ROWS 1 PRECEDING),
+  interpolate(min(time)),
+  last_value(interpolate(min(time))) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+FROM (VALUES (0),(10)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | first_value | interpolate | last_value 
+---------------------+-------------+-------------+------------
+                   0 |           0 |           0 |          1
+                   1 |           0 |           1 |          2
+                   2 |           1 |           2 |          3
+                   3 |           2 |           3 |          4
+                   4 |           3 |           4 |          5
+                   5 |           4 |           5 |          6
+                   6 |           5 |           6 |          7
+                   7 |           6 |           7 |          8
+                   8 |           7 |           8 |          9
+                   9 |           8 |           9 |         10
+                  10 |           9 |          10 |         10
+(11 rows)
+
+-- test reorder
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  id,
+  min(value) as m
+FROM
+  (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+GROUP BY 1,id ORDER BY 1,id;
+ time | id | m 
+------+----+---
+    0 |  1 |  
+    0 |  2 |  
+    1 |  1 | 1
+    1 |  2 |  
+    2 |  1 |  
+    2 |  2 | 2
+    3 |  1 |  
+    3 |  2 |  
+    4 |  1 |  
+    4 |  2 |  
+(10 rows)
+
+-- test order by locf
+SELECT
+  time_bucket_gapfill(1,time,1,6),
+  locf(min(time))
+FROM
+  (VALUES (2),(3)) v(time)
+GROUP BY 1 ORDER BY 1,2;
+ time_bucket_gapfill | locf 
+---------------------+------
+                   1 |     
+                   2 |    2
+                   3 |    3
+                   4 |    3
+                   5 |    3
+(5 rows)
+
+SELECT
+  time_bucket_gapfill(1,time,1,6),
+  locf(min(time))
+FROM
+  (VALUES (2),(3)) v(time)
+GROUP BY 1 ORDER BY 2 NULLS FIRST,1;
+ time_bucket_gapfill | locf 
+---------------------+------
+                   1 |     
+                   2 |    2
+                   3 |    3
+                   4 |    3
+                   5 |    3
+(5 rows)
+
+SELECT
+  time_bucket_gapfill(1,time,1,6),
+  locf(min(time))
+FROM
+  (VALUES (2),(3)) v(time)
+GROUP BY 1 ORDER BY 2 NULLS LAST,1;
+ time_bucket_gapfill | locf 
+---------------------+------
+                   2 |    2
+                   3 |    3
+                   4 |    3
+                   5 |    3
+                   1 |     
+(5 rows)
+
+-- test order by interpolate
+SELECT
+  time_bucket_gapfill(1,time,1,6),
+  interpolate(min(time),prev:=(0,0)::record)
+FROM
+  (VALUES (2),(3)) v(time)
+GROUP BY 1 ORDER BY 1,2;
+ time_bucket_gapfill | interpolate 
+---------------------+-------------
+                   1 |           1
+                   2 |           2
+                   3 |           3
+                   4 |            
+                   5 |            
+(5 rows)
+
+SELECT
+  time_bucket_gapfill(1,time,1,6),
+  interpolate(min(time),prev:=(0,0)::record)
+FROM
+  (VALUES (2),(3)) v(time)
+GROUP BY 1 ORDER BY 2 NULLS FIRST,1;
+ time_bucket_gapfill | interpolate 
+---------------------+-------------
+                   4 |            
+                   5 |            
+                   1 |           1
+                   2 |           2
+                   3 |           3
+(5 rows)
+
+SELECT
+  time_bucket_gapfill(1,time,1,6),
+  interpolate(min(time),prev:=(0,0)::record)
+FROM
+  (VALUES (2),(3)) v(time)
+GROUP BY 1 ORDER BY 2 NULLS LAST,1;
+ time_bucket_gapfill | interpolate 
+---------------------+-------------
+                   1 |           1
+                   2 |           2
+                   3 |           3
+                   4 |            
+                   5 |            
+(5 rows)
+
+-- test queries on hypertable
+-- test locf and interpolate together
+SELECT
+  time_bucket_gapfill(interval '1h',time,timestamptz '2018-01-01 05:00:00-8', timestamptz '2018-01-01 07:00:00-8'),
+  device_id,
+  locf(avg(v1)) AS locf_v1,
+  locf(min(v2)) AS locf_v2,
+  interpolate(avg(v1)) AS interpolate_v1,
+  interpolate(avg(v2)) AS interpolate_v2
+FROM metrics_tstz
+GROUP BY 1,2
+ORDER BY 1,2;
+     time_bucket_gapfill      | device_id | locf_v1 | locf_v2 | interpolate_v1 | interpolate_v2 
+------------------------------+-----------+---------+---------+----------------+----------------
+ Mon Jan 01 05:00:00 2018 PST |         1 |     0.5 |      10 |            0.5 |             10
+ Mon Jan 01 05:00:00 2018 PST |         2 |     0.7 |      20 |            0.7 |             20
+ Mon Jan 01 05:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
+ Mon Jan 01 06:00:00 2018 PST |         1 |     0.5 |      10 |           0.25 |              5
+ Mon Jan 01 06:00:00 2018 PST |         2 |     0.7 |      20 |           1.05 |             30
+ Mon Jan 01 06:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
+ Mon Jan 01 07:00:00 2018 PST |         1 |       0 |       0 |              0 |              0
+ Mon Jan 01 07:00:00 2018 PST |         2 |     1.4 |      40 |            1.4 |             40
+ Mon Jan 01 07:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
+(9 rows)
+
+SELECT
+  time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
+  interpolate(
+    avg(v1),
+    (SELECT ('2017-01-01'::timestamptz,1::float)),
+    (SELECT ('2017-01-02'::timestamptz,2::float))
+  )
+FROM metrics_tstz WHERE time < '2017-01-01' GROUP BY 1;
+     time_bucket_gapfill      |    interpolate    
+------------------------------+-------------------
+ Sat Dec 31 16:00:00 2016 PST | 0.666666666666667
+ Sun Jan 01 04:00:00 2017 PST |  1.16666666666667
+ Sun Jan 01 16:00:00 2017 PST |  1.66666666666667
+(3 rows)
+
+SELECT
+  time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
+  interpolate(
+    avg(v1),
+    (SELECT ('2017-01-01'::timestamptz,1::float)),
+    (SELECT ('2017-01-02'::timestamptz,2::float))
+  )
+FROM metrics_tstz WHERE time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz) < '2017-01-01' GROUP BY 1;
+     time_bucket_gapfill      |    interpolate    
+------------------------------+-------------------
+ Sat Dec 31 16:00:00 2016 PST | 0.666666666666667
+ Sun Jan 01 04:00:00 2017 PST |  1.16666666666667
+ Sun Jan 01 16:00:00 2017 PST |  1.66666666666667
+(3 rows)
+
+-- interpolation with correlated subquery lookup before interval
+SELECT
+  time_bucket_gapfill('1h'::interval,time,'2018-01-01 3:00 PST'::timestamptz, '2018-01-01 8:00 PST'::timestamptz),
+  device_id,
+  interpolate(
+    avg(v1),
+    (SELECT (time,0.5::float) FROM metrics_tstz m2 WHERE m1.device_id=m2.device_id ORDER BY time DESC LIMIT 1)
+  ),
+  avg(v1)
+FROM metrics_tstz m1
+WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
+     time_bucket_gapfill      | device_id | interpolate | avg 
+------------------------------+-----------+-------------+-----
+ Mon Jan 01 03:00:00 2018 PST |         1 |         0.5 |    
+ Mon Jan 01 04:00:00 2018 PST |         1 |         0.5 |    
+ Mon Jan 01 05:00:00 2018 PST |         1 |         0.5 | 0.5
+ Mon Jan 01 06:00:00 2018 PST |         1 |        0.25 |    
+ Mon Jan 01 07:00:00 2018 PST |         1 |           0 |   0
+(5 rows)
+
+-- interpolation with correlated subquery lookup after interval
+SELECT
+  time_bucket_gapfill('1h'::interval,time,'2018-01-01 5:00 PST'::timestamptz, '2018-01-01 9:00 PST'::timestamptz),
+  device_id,
+  interpolate(
+    avg(v1),
+    next=>(SELECT (time,v2::float) FROM metrics_tstz m2 WHERE m1.device_id=m2.device_id ORDER BY time LIMIT 1)
+  ),avg(v1)
+FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
+     time_bucket_gapfill      | device_id | interpolate | avg 
+------------------------------+-----------+-------------+-----
+ Mon Jan 01 05:00:00 2018 PST |         1 |         0.5 | 0.5
+ Mon Jan 01 06:00:00 2018 PST |         1 |        0.25 |    
+ Mon Jan 01 07:00:00 2018 PST |         1 |           0 |   0
+ Mon Jan 01 08:00:00 2018 PST |         1 |          -5 |    
+(4 rows)
+
+\set ON_ERROR_STOP 0
+-- bucket_width non simple expression
+SELECT
+  time_bucket_gapfill(t,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: bucket_width must be a simple expression
+-- no start/finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- NULL start/finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,NULL,NULL)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- no start and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,finish:=1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- NULL start expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: start cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- unsupported start expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,t,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: start must be a simple expression
+-- NULL start and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,NULL,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- NULL finish expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: finish cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- unsupported finish expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: finish must be a simple expression
+-- no finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- NULL finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1,NULL)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- expression with column reference on right side
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE t > t AND t < 2
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- expression with cast
+SELECT
+  time_bucket_gapfill(1,t1::int8)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 >= 1 AND t1 <= 2
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- expression with multiple column references
+SELECT
+  time_bucket_gapfill(1,t1+t2)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 1 AND t1 < 2
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- expression with NULL start in WHERE clause, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > CASE WHEN length(version()) > 0 THEN NULL::int ELSE NULL::int END AND t1 < 4
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: start cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- expression with NULL finish in WHERE clause, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 0 AND t1 < CASE WHEN length(version()) > 0 THEN NULL::int ELSE NULL::int END
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: finish cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- non-Const NULL as start argument, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 0 AND t1 < 2
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: start cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- non-Const NULL as finish argument, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1,NULL,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 0 AND t1 < 2
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: finish cannot be NULL
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+-- time_bucket_gapfill with constraints ORed
+SELECT
+ time_bucket_gapfill(1::int8,t::int8)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+ t >= -1 OR t < 3
+GROUP BY 1;
+ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+\set ON_ERROR_STOP 1
+-- int32 time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= -1 AND t < 3
+GROUP BY 1;
+ time_bucket_gapfill 
+                  -1
+                   0
+                   1
+                   2
+(4 rows)
+
+-- same query with less or equal as finish
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= -1 AND t <= 3
+GROUP BY 1;
+ time_bucket_gapfill 
+                  -1
+                   0
+                   1
+                   2
+                   3
+(5 rows)
+
+-- int32 time_bucket_gapfill with start column and value switched
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  -1 < t AND t < 3
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+                   2
+(3 rows)
+
+-- int32 time_bucket_gapfill with finish column and value switched
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= 0 AND 3 >= t
+GROUP BY 1;
+ time_bucket_gapfill 
+                   0
+                   1
+                   2
+                   3
+(4 rows)
+
+-- int16 time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill(1::int2,t)
+FROM (VALUES (1::int2),(2::int2)) v(t)
+WHERE
+  t >= -1 AND t < 3
+GROUP BY 1;
+ time_bucket_gapfill 
+                  -1
+                   0
+                   1
+                   2
+(4 rows)
+
+-- int64 time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill(1::int8,t)
+FROM (VALUES (1::int8),(2::int8)) v(t)
+WHERE
+  t >= -1 AND t < 3
+GROUP BY 1;
+ time_bucket_gapfill 
+                  -1
+                   0
+                   1
+                   2
+(4 rows)
+
+-- date time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill('1d'::interval,t)
+FROM (VALUES ('1999-12-30'::date),('2000-01-01'::date)) v(t)
+WHERE
+  t >= '1999-12-29' AND t < '2000-01-03'
+GROUP BY 1;
+ time_bucket_gapfill 
+ 12-29-1999
+ 12-30-1999
+ 12-31-1999
+ 01-01-2000
+ 01-02-2000
+(5 rows)
+
+-- timestamp time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamp),('2000-01-01'::timestamp)) v(t)
+WHERE
+  t >= '1999-12-29' AND t < '2000-01-03'
+GROUP BY 1;
+   time_bucket_gapfill    
+ Wed Dec 29 00:00:00 1999
+ Wed Dec 29 12:00:00 1999
+ Thu Dec 30 00:00:00 1999
+ Thu Dec 30 12:00:00 1999
+ Fri Dec 31 00:00:00 1999
+ Fri Dec 31 12:00:00 1999
+ Sat Jan 01 00:00:00 2000
+ Sat Jan 01 12:00:00 2000
+ Sun Jan 02 00:00:00 2000
+ Sun Jan 02 12:00:00 2000
+(10 rows)
+
+-- timestamptz time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamptz),('2000-01-01'::timestamptz)) v(t)
+WHERE
+  t >= '1999-12-29' AND t < '2000-01-03'
+GROUP BY 1;
+     time_bucket_gapfill      
+ Tue Dec 28 16:00:00 1999 PST
+ Wed Dec 29 04:00:00 1999 PST
+ Wed Dec 29 16:00:00 1999 PST
+ Thu Dec 30 04:00:00 1999 PST
+ Thu Dec 30 16:00:00 1999 PST
+ Fri Dec 31 04:00:00 1999 PST
+ Fri Dec 31 16:00:00 1999 PST
+ Sat Jan 01 04:00:00 2000 PST
+ Sat Jan 01 16:00:00 2000 PST
+ Sun Jan 02 04:00:00 2000 PST
+ Sun Jan 02 16:00:00 2000 PST
+(11 rows)
+
+-- timestamptz time_bucket_gapfill with more complex expression
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamptz),('2000-01-01'::timestamptz)) v(t)
+WHERE
+  t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'
+GROUP BY 1;
+     time_bucket_gapfill      
+ Wed Dec 29 16:00:00 1999 PST
+ Thu Dec 30 04:00:00 1999 PST
+ Thu Dec 30 16:00:00 1999 PST
+ Fri Dec 31 04:00:00 1999 PST
+ Fri Dec 31 16:00:00 1999 PST
+ Sat Jan 01 04:00:00 2000 PST
+ Sat Jan 01 16:00:00 2000 PST
+ Sun Jan 02 04:00:00 2000 PST
+ Sun Jan 02 16:00:00 2000 PST
+(9 rows)
+
+-- timestamptz time_bucket_gapfill with different datatype in finish constraint
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamptz),('2000-01-01'::timestamptz)) v(t)
+WHERE
+  t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'::date
+GROUP BY 1;
+     time_bucket_gapfill      
+ Wed Dec 29 16:00:00 1999 PST
+ Thu Dec 30 04:00:00 1999 PST
+ Thu Dec 30 16:00:00 1999 PST
+ Fri Dec 31 04:00:00 1999 PST
+ Fri Dec 31 16:00:00 1999 PST
+ Sat Jan 01 04:00:00 2000 PST
+ Sat Jan 01 16:00:00 2000 PST
+ Sun Jan 02 04:00:00 2000 PST
+ Sun Jan 02 16:00:00 2000 PST
+(9 rows)
+
+-- time_bucket_gapfill with now() as start
+SELECT
+ time_bucket_gapfill('1h'::interval,t)
+FROM (VALUES (now()),(now())) v(t)
+WHERE
+ t >= now() AND t < now() - '1h'::interval
+GROUP BY 1;
+ time_bucket_gapfill 
+(0 rows)
+
+-- time_bucket_gapfill with multiple constraints
+SELECT
+ time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+ t >= -1 AND t < 3 and t>1 AND t <=4 AND length(version()) > 0
+GROUP BY 1;
+ time_bucket_gapfill 
+                   2
+(1 row)
+
+-- int32 time_bucket_gapfill with greater for start
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t > -2 AND t < 3
+GROUP BY 1;
+ time_bucket_gapfill 
+                  -1
+                   0
+                   1
+                   2
+(4 rows)
+
+-- test DISTINCT
+SELECT DISTINCT ON (color)
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  min(value) as m
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color ORDER BY 2,1;
+ time | color | m 
+------+-------+---
+    0 | blue  |  
+    0 | red   |  
+(2 rows)
+
+-- test DISTINCT with window functions
+SELECT DISTINCT ON (row_number() OVER ())
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER ()
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color;
+ time | color | row_number 
+------+-------+------------
+    0 | blue  |          1
+    1 | blue  |          2
+    2 | blue  |          3
+    3 | blue  |          4
+    4 | blue  |          5
+    0 | red   |          6
+    1 | red   |          7
+    2 | red   |          8
+    3 | red   |          9
+    4 | red   |         10
+(10 rows)
+
+-- test DISTINCT with window functions and PARTITION BY
+SELECT DISTINCT ON (color,row_number() OVER (PARTITION BY color))
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER (PARTITION BY color)
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color;
+ time | color | row_number 
+------+-------+------------
+    0 | blue  |          1
+    1 | blue  |          2
+    2 | blue  |          3
+    3 | blue  |          4
+    4 | blue  |          5
+    0 | red   |          1
+    1 | red   |          2
+    2 | red   |          3
+    3 | red   |          4
+    4 | red   |          5
+(10 rows)
+
+-- test DISTINCT with window functions not in targetlist
+SELECT DISTINCT ON (row_number() OVER ())
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER (PARTITION BY color)
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color;
+ time | color | row_number 
+------+-------+------------
+    0 | blue  |          1
+    1 | blue  |          2
+    2 | blue  |          3
+    3 | blue  |          4
+    4 | blue  |          5
+    0 | red   |          1
+    1 | red   |          2
+    2 | red   |          3
+    3 | red   |          4
+    4 | red   |          5
+(10 rows)
+
+-- test column references
+SELECT
+  row_number() OVER (PARTITION BY color),
+  locf(min(time)),
+  color,
+  time_bucket_gapfill(1,time,0,5) as time
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 3,4;
+ row_number | locf | color | time 
+------------+------+-------+------
+          1 |      | blue  |    0
+          2 |    1 | blue  |    1
+          3 |    1 | blue  |    2
+          4 |    1 | blue  |    3
+          5 |    1 | blue  |    4
+          1 |      | red   |    0
+          2 |      | red   |    1
+          3 |    2 | red   |    2
+          4 |    2 | red   |    3
+          5 |    2 | red   |    4
+(10 rows)
+
+-- test with Nested Loop
+SELECT l.id, bucket, data_value FROM
+    (VALUES (1), (2), (3), (4)) a(id)
+    INNER JOIN LATERAL (
+        SELECT b.id id, time_bucket_gapfill('1'::int, time, start=>'1'::int, finish=> '5'::int) bucket, locf(last(data, time)) data_value
+        FROM (VALUES (1, 1, 1), (1, 4, 4), (2, 1, -1), (2, 4, -4)) b(id, time, data)
+        WHERE a.id = b.id
+        GROUP BY b.id, bucket
+    ) as l on (true);
+ id | bucket | data_value 
+----+--------+------------
+  1 |      1 |          1
+  1 |      2 |          1
+  1 |      3 |          1
+  1 |      4 |          4
+  2 |      1 |         -1
+  2 |      2 |         -1
+  2 |      3 |         -1
+  2 |      4 |         -4
+(8 rows)
+
+-- test prepared statement
+PREPARE prep_gapfill AS
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  locf(min(value))
+FROM (VALUES (1,1),(2,2)) v(time,value)
+GROUP BY 1;
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+EXECUTE prep_gapfill;
+ time | locf 
+------+------
+    0 |     
+    1 |    1
+    2 |    2
+    3 |    2
+    4 |    2
+(5 rows)
+
+DEALLOCATE prep_gapfill;
+-- test column references with TIME_COLUMN last
+SELECT
+  row_number() OVER (PARTITION BY color),
+  locf(min(time)),
+  color,
+  time_bucket_gapfill(1,time,0,5) as time
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 3,4;
+ row_number | locf | color | time 
+------------+------+-------+------
+          1 |      | blue  |    0
+          2 |    1 | blue  |    1
+          3 |    1 | blue  |    2
+          4 |    1 | blue  |    3
+          5 |    1 | blue  |    4
+          1 |      | red   |    0
+          2 |      | red   |    1
+          3 |    2 | red   |    2
+          4 |    2 | red   |    3
+          5 |    2 | red   |    4
+(10 rows)
+
+-- test expressions on GROUP BY columns
+SELECT
+  row_number() OVER (PARTITION BY color),
+  locf(min(time)),
+  color,
+  length(color),
+  time_bucket_gapfill(1,time,0,5) as time
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 3,5;
+ row_number | locf | color | length | time 
+------------+------+-------+--------+------
+          1 |      | blue  |      4 |    0
+          2 |    1 | blue  |      4 |    1
+          3 |    1 | blue  |      4 |    2
+          4 |    1 | blue  |      4 |    3
+          5 |    1 | blue  |      4 |    4
+          1 |      | red   |      3 |    0
+          2 |      | red   |      3 |    1
+          3 |    2 | red   |      3 |    2
+          4 |    2 | red   |      3 |    3
+          5 |    2 | red   |      3 |    4
+(10 rows)
+
+-- test columns derived from GROUP BY columns with cast
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  device_id::text
+FROM (VALUES (1,1),(2,2)) v(time,device_id)
+GROUP BY 1,device_id;
+ time | device_id 
+------+-----------
+    0 | 1
+    1 | 1
+    2 | 1
+    3 | 1
+    4 | 1
+    0 | 2
+    1 | 2
+    2 | 2
+    3 | 2
+    4 | 2
+(10 rows)
+
+-- test columns derived from GROUP BY columns with expression
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  'Device ' || device_id::text
+FROM (VALUES (1,1),(2,2)) v(time,device_id)
+GROUP BY 1,device_id;
+ time | ?column? 
+------+----------
+    0 | Device 1
+    1 | Device 1
+    2 | Device 1
+    3 | Device 1
+    4 | Device 1
+    0 | Device 2
+    1 | Device 2
+    2 | Device 2
+    3 | Device 2
+    4 | Device 2
+(10 rows)
+
+--test interpolation with big differences in values (test overflows in calculations)
+--we use the biggest possible difference in time(x) and the value(y).
+--For bigints we also test values of smaller than bigintmax/min to avoid
+--the symmetry where x=y (which catches more errors)
+SELECT  9223372036854775807 as big_int_max \gset
+SELECT -9223372036854775808	 as big_int_min \gset
+SELECT
+  time_bucket_gapfill(1,time,0,1) AS time,
+  interpolate(min(s)) AS "smallint",
+  interpolate(min(i)) AS "int",
+  interpolate(min(b)) AS "bigint",
+  interpolate(min(b2)) AS "bigint2",
+  interpolate(min(d)) AS "double"
+FROM (values (:big_int_min,(-32768)::smallint,(-2147483648)::int,:big_int_min,-2147483648::bigint, '-Infinity'::double precision),
+             (:big_int_max, 32767::smallint, 2147483647::int,:big_int_max, 2147483647::bigint, 'Infinity'::double precision)) v(time,s,i,b,b2,d)
+GROUP BY 1 ORDER BY 1;
+         time         | smallint |     int     |        bigint        |   bigint2   |  double   
+----------------------+----------+-------------+----------------------+-------------+-----------
+ -9223372036854775808 |   -32768 | -2147483648 | -9223372036854775808 | -2147483648 | -Infinity
+                    0 |        0 |           0 |                    0 |           0 |  Infinity
+  9223372036854775807 |    32767 |  2147483647 |  9223372036854775807 |  2147483647 |  Infinity
+(3 rows)
+
+-- issue #2232: This query used to trigger error "could not find
+-- pathkey item to sort" due to a corrupt query plan
+SELECT time_bucket_gapfill('1 h', time) AS time,
+       locf(sum(v1)) AS v1_sum,
+	   interpolate(sum(v2)) AS v2_sum
+FROM metrics_tstz
+WHERE time >= '2018-01-01 04:00' AND time < '2018-01-01 08:00'
+GROUP BY 1
+ORDER BY 1 DESC;
+             time             | v1_sum | v2_sum 
+------------------------------+--------+--------
+ Mon Jan 01 07:00:00 2018 PST |    2.3 |     70
+ Mon Jan 01 06:00:00 2018 PST |    2.1 |     65
+ Mon Jan 01 05:00:00 2018 PST |    2.1 |     60
+ Mon Jan 01 04:00:00 2018 PST |        |       
+(4 rows)
+
+-- query without gapfill:
+SELECT time_bucket('1 h', time) AS time,
+       sum(v1) AS v1_sum,
+	   sum(v2) AS v1_sum
+FROM metrics_tstz
+WHERE time >= '2018-01-01 04:00' AND time < '2018-01-01 08:00'
+GROUP BY 1
+ORDER BY 1 DESC;
+             time             | v1_sum | v1_sum 
+------------------------------+--------+--------
+ Mon Jan 01 07:00:00 2018 PST |    2.3 |     70
+ Mon Jan 01 05:00:00 2018 PST |    2.1 |     60
+(2 rows)
+
+-- query to show original data
+SELECT * FROM metrics_tstz
+WHERE time >= '2018-01-01 04:00' AND time < '2018-01-01 08:00'
+ORDER BY 1 DESC, 2;
+             time             | device_id | v1  | v2 
+------------------------------+-----------+-----+----
+ Mon Jan 01 07:00:00 2018 PST |         1 |   0 |  0
+ Mon Jan 01 07:00:00 2018 PST |         2 | 1.4 | 40
+ Mon Jan 01 07:00:00 2018 PST |         3 | 0.9 | 30
+ Mon Jan 01 05:00:00 2018 PST |         1 | 0.5 | 10
+ Mon Jan 01 05:00:00 2018 PST |         2 | 0.7 | 20
+ Mon Jan 01 05:00:00 2018 PST |         3 | 0.9 | 30
+(6 rows)
+
+-- issue #3048
+-- test gapfill/hashagg planner interaction
+-- this used to produce a plan without gapfill node
+EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, start:='2000-01-01', finish:='2000-01-10') AS time,
+       sum(v1) AS v1_sum
+FROM metrics
+GROUP BY 1;
+QUERY PLAN
+ Custom Scan (GapFill)
+   ->  Sort
+         Sort Key: (time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  HashAggregate
+               Group Key: time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk
+(10 rows)
+
+-- issue #3834
+-- test projection handling in gapfill
+CREATE TABLE i3834(time timestamptz NOT NULL, ship_id int, value float);
+SELECT table_name FROM create_hypertable('i3834','time');
+ table_name 
+ i3834
+(1 row)
+
+INSERT INTO i3834 VALUES ('2020-12-01 14:05:00+01',1,3.123), ('2020-12-01 14:05:00+01',2,4.123), ('2020-12-01 14:05:00+01',3,5.123);
+SELECT
+  time_bucket_gapfill('30000 ms'::interval, time) AS time,
+  ship_id,
+  interpolate (avg(value)),
+  'speedlog' AS source
+FROM
+  i3834
+WHERE
+  ship_id IN (1, 2)
+  AND time >= '2020-12-01 14:05:00+01'
+  AND time < '2020-12-01 14:10:00+01'
+GROUP BY 1,2;
+             time             | ship_id | interpolate |  source  
+------------------------------+---------+-------------+----------
+ Tue Dec 01 05:05:00 2020 PST |       1 |       3.123 | speedlog
+ Tue Dec 01 05:05:30 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:06:00 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:06:30 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:07:00 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:07:30 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:08:00 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:08:30 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:09:00 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:09:30 2020 PST |       1 |             | speedlog
+ Tue Dec 01 05:05:00 2020 PST |       2 |       4.123 | speedlog
+ Tue Dec 01 05:05:30 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:06:00 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:06:30 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:07:00 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:07:30 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:08:00 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:08:30 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:09:00 2020 PST |       2 |             | speedlog
+ Tue Dec 01 05:09:30 2020 PST |       2 |             | speedlog
+(20 rows)
+
+DROP TABLE i3834;
+-- issue #1528
+-- test float rounding for certain float values when start and end are identical
+SELECT
+  time_bucket_gapfill('1min'::interval, ts::timestamptz, start:='2019-11-05 2:20', finish:='2019-11-05 2:30'),
+  interpolate(avg(20266.959547::float4)) AS float4,
+  interpolate(avg(20266.959547::float8)) AS float8
+FROM (VALUES ('2019-11-05 2:20'), ('2019-11-05 2:30')) v (ts)
+GROUP BY 1;
+     time_bucket_gapfill      |     float4      |    float8    
+------------------------------+-----------------+--------------
+ Tue Nov 05 02:20:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:21:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:22:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:23:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:24:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:25:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:26:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:27:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:28:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:29:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:30:00 2019 PST | 20266.958984375 | 20266.959547
+(11 rows)
+
+-- check gapfill group change detection with TOASTed values
+CREATE TABLE gapfill_group_toast(time timestamptz NOT NULL, device text, value float);
+SELECT table_name FROM create_hypertable('gapfill_group_toast', 'time');
+     table_name      
+ gapfill_group_toast
+(1 row)
+
+INSERT INTO gapfill_group_toast
+SELECT
+  generate_series('2022-06-01'::timestamptz, '2022-06-03'::timestamptz, '1min'::interval),
+  '4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43',
+  random();
+ALTER TABLE gapfill_group_toast SET(timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('gapfill_group_toast') c;
+ count 
+     2
+(1 row)
+
+SELECT
+  time_bucket_gapfill('1 day', time), device
+FROM gapfill_group_toast
+WHERE time >= '2022-06-01' AND time <= '2022-06-02'
+GROUP BY 1,2;
+     time_bucket_gapfill      |                              device                              
+------------------------------+------------------------------------------------------------------
+ Tue May 31 17:00:00 2022 PDT | 4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43
+ Wed Jun 01 17:00:00 2022 PDT | 4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43
+(2 rows)
+
+DROP TABLE gapfill_group_toast;
+-- test bucketing by month
+SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01'::timestamptz,'2001-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Tue Feb 29 16:00:00 2000 PST
+ Sun Apr 30 17:00:00 2000 PDT
+ Fri Jun 30 17:00:00 2000 PDT
+ Thu Aug 31 17:00:00 2000 PDT
+ Tue Oct 31 16:00:00 2000 PST
+ Sun Dec 31 16:00:00 2000 PST
+(7 rows)
+
+SELECT time_bucket_gapfill('1 year'::interval, ts, '2000-01-01'::timestamptz,'2003-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Sun Dec 31 16:00:00 2000 PST
+ Mon Dec 31 16:00:00 2001 PST
+ Tue Dec 31 16:00:00 2002 PST
+(4 rows)
+
+SELECT time_bucket_gapfill('1 century'::interval, ts, '1900-01-01'::timestamptz,'2103-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Sun Dec 31 16:00:00 1899 PST
+ Fri Dec 31 16:00:00 1999 PST
+ Thu Dec 31 16:00:00 2099 PST
+(3 rows)
+
+-- test bucketing with timezone
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 15:00:00 1999 PST
+ Tue Feb 29 15:00:00 2000 PST
+ Sat Apr 29 15:00:00 2000 PDT
+ Thu Jun 29 15:00:00 2000 PDT
+ Tue Aug 29 15:00:00 2000 PDT
+ Sun Oct 29 15:00:00 2000 PST
+ Fri Dec 29 15:00:00 2000 PST
+(7 rows)
+
+SELECT time_bucket_gapfill('2 month'::interval, ts, current_setting('timezone'), '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Sat Jan 01 00:00:00 2000 PST
+ Wed Mar 01 00:00:00 2000 PST
+ Mon May 01 00:00:00 2000 PDT
+ Sat Jul 01 00:00:00 2000 PDT
+ Fri Sep 01 00:00:00 2000 PDT
+ Wed Nov 01 00:00:00 2000 PST
+(6 rows)
+
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+     time_bucket_gapfill      
+ Fri Dec 31 16:00:00 1999 PST
+ Tue Feb 29 16:00:00 2000 PST
+ Sat Apr 29 16:00:00 2000 PDT
+ Thu Jun 29 16:00:00 2000 PDT
+ Tue Aug 29 16:00:00 2000 PDT
+ Sun Oct 29 16:00:00 2000 PST
+ Fri Dec 29 16:00:00 2000 PST
+(7 rows)
+
+SET timezone TO 'Europe/Berlin';
+SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
+      time_bucket_gapfill      
+ Sat Jan 01 00:00:00 2000 CET
+ Wed Mar 01 00:00:00 2000 CET
+ Mon May 01 00:00:00 2000 CEST
+ Sat Jul 01 00:00:00 2000 CEST
+ Fri Sep 01 00:00:00 2000 CEST
+ Wed Nov 01 00:00:00 2000 CET
+(6 rows)
+
+RESET timezone;
+DROP INDEX gapfill_plan_test_indx;

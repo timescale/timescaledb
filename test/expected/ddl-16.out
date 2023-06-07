@@ -1,0 +1,594 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\ir include/ddl_ops_1.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE PUBLIC."Hypertable_1" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1,
+  humidity numeric NULL DEFAULT 0,
+  sensor_1 NUMERIC NULL DEFAULT 1,
+  sensor_2 NUMERIC NOT NULL DEFAULT 1,
+  sensor_3 NUMERIC NOT NULL DEFAULT 1,
+  sensor_4 NUMERIC NOT NULL DEFAULT 1
+);
+CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
+CREATE TABLE "customSchema"."Hypertable_1" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1,
+  humidity numeric NULL DEFAULT 0,
+  sensor_1 NUMERIC NULL DEFAULT 1,
+  sensor_2 NUMERIC NOT NULL DEFAULT 1,
+  sensor_3 NUMERIC NOT NULL DEFAULT 1,
+  sensor_4 NUMERIC NOT NULL DEFAULT 1
+);
+CREATE INDEX ON "customSchema"."Hypertable_1" (time, "Device_id");
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             1 | public      | Hypertable_1 | t
+(1 row)
+
+SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name  |  table_name  | created 
+---------------+--------------+--------------+---------
+             2 | customSchema | Hypertable_1 | t
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name  |  table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
+----+--------------+--------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
+  1 | public       | Hypertable_1 | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  2 | customSchema | Hypertable_1 | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+(2 rows)
+
+CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
+CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
+CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
+INSERT INTO PUBLIC."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+CREATE UNIQUE INDEX "Unique1" ON PUBLIC."Hypertable_1" (time, "Device_id");
+CREATE UNIQUE INDEX "Unique1" ON "customSchema"."Hypertable_1" (time);
+INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id, hypertable_index_name, chunk_id;
+ chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
+----------+--------------------------------------------------+---------------+---------------------------------
+        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_temp_c_idx    |             1 | Hypertable_1_time_temp_c_idx
+        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
+        1 | _hyper_1_1_chunk_ind_humidity                    |             1 | ind_humidity
+        1 | _hyper_1_1_chunk_ind_sensor_1                    |             1 | ind_sensor_1
+        2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
+        2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
+        2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
+(10 rows)
+
+--expect error cases
+\set ON_ERROR_STOP 0
+INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
+psql:include/ddl_ops_1.sql:56: ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_Unique1"
+CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
+psql:include/ddl_ops_1.sql:57: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
+psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
+CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
+psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
+DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
+\set ON_ERROR_STOP 1
+CREATE TABLE my_ht (time BIGINT, val integer);
+SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+psql:include/ddl_ops_1.sql:66: NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | my_ht      | t
+(1 row)
+
+ALTER TABLE my_ht ADD COLUMN val2 integer;
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | NotNull 
+--------+---------+---------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+(3 rows)
+
+-- Should error when adding again
+\set ON_ERROR_STOP 0
+ALTER TABLE my_ht ADD COLUMN val2 integer;
+psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already exists
+\set ON_ERROR_STOP 1
+-- Should create
+ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | NotNull 
+--------+---------+---------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+ val3   | integer | f
+(4 rows)
+
+-- Should skip and not error
+ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
+psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | NotNull 
+--------+---------+---------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+ val3   | integer | f
+(4 rows)
+
+-- Should drop
+ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | NotNull 
+--------+---------+---------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+(3 rows)
+
+-- Should skip and not error
+ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
+psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | NotNull 
+--------+---------+---------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+(3 rows)
+
+--Test default index creation on create_hypertable().
+--Make sure that we do not duplicate indexes that already exists
+--
+--No existing indexes: both time and space-time indexes created
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name |               table_name                | created 
+---------------+-------------+-----------------------------------------+---------
+             4 | public      | Hypertable_1_with_default_index_enabled | t
+(1 row)
+
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                            Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
+(2 rows)
+
+ROLLBACK;
+--Space index exists: only time index created
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Device_id", "Time" DESC);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name |               table_name                | created 
+---------------+-------------+-----------------------------------------+---------
+             5 | public      | Hypertable_1_with_default_index_enabled | t
+(1 row)
+
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                            Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
+(2 rows)
+
+ROLLBACK;
+--Time index exists, only partition index created
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Time" DESC);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name |               table_name                | created 
+---------------+-------------+-----------------------------------------+---------
+             6 | public      | Hypertable_1_with_default_index_enabled | t
+(1 row)
+
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                            Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
+(2 rows)
+
+ROLLBACK;
+--No space partitioning, only time index created
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name |               table_name                | created 
+---------------+-------------+-----------------------------------------+---------
+             7 | public      | Hypertable_1_with_default_index_enabled | t
+(1 row)
+
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                       Index                        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------------------+---------+------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Time_idx" | {Time}  |      | f      | f       | f         | 
+(1 row)
+
+ROLLBACK;
+--Disable index creation: no default indexes created
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, create_default_indexes=>FALSE, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ hypertable_id | schema_name |               table_name                | created 
+---------------+-------------+-----------------------------------------+---------
+             8 | public      | Hypertable_1_with_default_index_enabled | t
+(1 row)
+
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+ Index | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+-------+---------+------+--------+---------+-----------+------------
+(0 rows)
+
+ROLLBACK;
+SELECT * FROM PUBLIC."Hypertable_1";
+        time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
+---------------------+-----------+--------+----------+----------+----------+----------+----------
+ 1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
+(1 row)
+
+SELECT * FROM ONLY PUBLIC."Hypertable_1";
+ time | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
+------+-----------+--------+----------+----------+----------+----------+----------
+(0 rows)
+
+EXPLAIN (costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
+         QUERY PLAN         
+----------------------------
+ Seq Scan on "Hypertable_1"
+(1 row)
+
+SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
+  Column   |  Type   | NotNull 
+-----------+---------+---------
+ time      | bigint  | t
+ Device_id | text    | t
+ temp_c    | integer | t
+ humidity  | numeric | f
+ sensor_1  | numeric | f
+ sensor_2  | numeric | t
+ sensor_3  | numeric | t
+ sensor_4  | numeric | t
+(8 rows)
+
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
+  Column   |  Type   | NotNull 
+-----------+---------+---------
+ time      | bigint  | t
+ Device_id | text    | t
+ temp_c    | integer | t
+ humidity  | numeric | f
+ sensor_1  | numeric | f
+ sensor_2  | numeric | t
+ sensor_3  | numeric | t
+ sensor_4  | numeric | t
+(8 rows)
+
+\ir include/ddl_ops_2.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
+ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
+ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN humidity SET DEFAULT 100;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_1 DROP DEFAULT;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 SET DEFAULT NULL;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_1 SET NOT NULL;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 DROP NOT NULL;
+ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_2 TO sensor_2_renamed;
+ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
+DROP INDEX "ind_sensor_1";
+CREATE OR REPLACE FUNCTION empty_trigger_func()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+END
+$BODY$;
+CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
+FOR EACH STATEMENT EXECUTE FUNCTION empty_trigger_func();
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
+ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
+-- Change should be reflected here
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
+----------+--------------------------------------------------+---------------+---------------------------------
+        1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
+        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
+        2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
+        2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
+        2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
+        1 | _hyper_1_1_chunk_ind_humdity2                    |             1 | ind_humdity2
+(8 rows)
+
+--create column with same name as previously renamed one
+ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
+--create column with same name as previously dropped one
+ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
+SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
+      Column      |  Type   | NotNull 
+------------------+---------+---------
+ time             | bigint  | t
+ Device_id        | text    | t
+ humidity         | numeric | f
+ sensor_1         | numeric | t
+ sensor_2_renamed | integer | f
+ sensor_3_renamed | numeric | t
+ temp_f           | integer | t
+ sensor_3         | bigint  | t
+ sensor_4         | bigint  | t
+(9 rows)
+
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
+      Column      |  Type   | NotNull 
+------------------+---------+---------
+ time             | bigint  | t
+ Device_id        | text    | t
+ humidity         | numeric | f
+ sensor_1         | numeric | t
+ sensor_2_renamed | integer | f
+ sensor_3_renamed | numeric | t
+ temp_f           | integer | t
+ sensor_3         | bigint  | t
+ sensor_4         | bigint  | t
+(9 rows)
+
+SELECT * FROM PUBLIC."Hypertable_1";
+        time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 
+---------------------+-----------+----------+----------+------------------+------------------+--------+----------+----------
+ 1257894000000000000 | dev1      |       70 |        1 |                2 |                3 |     31 |      131 |      131
+(1 row)
+
+-- alter column tests
+CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
+-- create hypertable with two chunks
+SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);
+WARNING:  column type "character varying" used for "color" does not follow best practices
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (9,public,alter_test,t)
+(1 row)
+
+INSERT INTO alter_test VALUES ('2017-01-20T09:00:01', 17.5, 'blue'),
+                              ('2017-01-21T09:00:01', 19.1, 'yellow'),
+                              ('2017-04-20T09:00:01', 89.5, 'green'),
+                              ('2017-04-21T09:00:01', 17.1, 'black');
+SELECT * FROM test.show_columns('alter_test');
+ Column |           Type           | NotNull 
+--------+--------------------------+---------
+ time   | timestamp with time zone | t
+ temp   | double precision         | f
+ color  | character varying        | f
+(3 rows)
+
+SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
+                Relation                | Kind | Column |       Column type        | NotNull 
+----------------------------------------+------+--------+--------------------------+---------
+ _timescaledb_internal._hyper_9_3_chunk | r    | time   | timestamp with time zone | t
+ _timescaledb_internal._hyper_9_3_chunk | r    | temp   | double precision         | f
+ _timescaledb_internal._hyper_9_3_chunk | r    | color  | character varying        | f
+ _timescaledb_internal._hyper_9_4_chunk | r    | time   | timestamp with time zone | t
+ _timescaledb_internal._hyper_9_4_chunk | r    | temp   | double precision         | f
+ _timescaledb_internal._hyper_9_4_chunk | r    | color  | character varying        | f
+ _timescaledb_internal._hyper_9_5_chunk | r    | time   | timestamp with time zone | t
+ _timescaledb_internal._hyper_9_5_chunk | r    | temp   | double precision         | f
+ _timescaledb_internal._hyper_9_5_chunk | r    | color  | character varying        | f
+(9 rows)
+
+-- show the column name and type of the partitioning dimension in the
+-- metadata table
+SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+ 15 |             9 | color       | character varying        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+ 14 |             9 | time        | timestamp with time zone | t       |            |                          |                    |   2628000000000 |                          |                         | 
+(2 rows)
+
+EXPLAIN (costs off)
+SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_9_4_chunk_alter_test_time_idx on _hyper_9_4_chunk
+         Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+   ->  Index Scan using _hyper_9_5_chunk_alter_test_time_idx on _hyper_9_5_chunk
+         Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+(5 rows)
+
+-- rename column and change its type
+ALTER TABLE alter_test RENAME COLUMN time TO time_us;
+--converting timestamptz->timestamp should happen under UTC
+SET timezone = 'UTC';
+ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamp;
+RESET timezone;
+ALTER TABLE alter_test RENAME COLUMN color TO colorname;
+\set ON_ERROR_STOP 0
+-- Changing types on hash-partitioned columns is not safe for some
+-- types and is therefore blocked.
+ALTER TABLE alter_test ALTER COLUMN colorname TYPE text;
+ERROR:  cannot change the type of a hash-partitioned column
+\set ON_ERROR_STOP 1
+SELECT * FROM test.show_columns('alter_test');
+  Column   |            Type             | NotNull 
+-----------+-----------------------------+---------
+ time_us   | timestamp without time zone | t
+ temp      | double precision            | f
+ colorname | character varying           | f
+(3 rows)
+
+SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
+                Relation                | Kind |  Column   |         Column type         | NotNull 
+----------------------------------------+------+-----------+-----------------------------+---------
+ _timescaledb_internal._hyper_9_3_chunk | r    | time_us   | timestamp without time zone | t
+ _timescaledb_internal._hyper_9_3_chunk | r    | temp      | double precision            | f
+ _timescaledb_internal._hyper_9_3_chunk | r    | colorname | character varying           | f
+ _timescaledb_internal._hyper_9_4_chunk | r    | time_us   | timestamp without time zone | t
+ _timescaledb_internal._hyper_9_4_chunk | r    | temp      | double precision            | f
+ _timescaledb_internal._hyper_9_4_chunk | r    | colorname | character varying           | f
+ _timescaledb_internal._hyper_9_5_chunk | r    | time_us   | timestamp without time zone | t
+ _timescaledb_internal._hyper_9_5_chunk | r    | temp      | double precision            | f
+ _timescaledb_internal._hyper_9_5_chunk | r    | colorname | character varying           | f
+(9 rows)
+
+-- show that the metadata has been updated
+SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+ 15 |             9 | colorname   | character varying           | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+ 14 |             9 | time_us     | timestamp without time zone | t       |            |                          |                    |   2628000000000 |                          |                         | 
+(2 rows)
+
+-- constraint exclusion should still work with updated column
+EXPLAIN (costs off)
+SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on _hyper_9_4_chunk
+         Filter: (time_us > 'Sat May 20 10:00:01 2017'::timestamp without time zone)
+   ->  Seq Scan on _hyper_9_5_chunk
+         Filter: (time_us > 'Sat May 20 10:00:01 2017'::timestamp without time zone)
+(5 rows)
+
+\set ON_ERROR_STOP 0
+-- verify that we cannot change the column type to something incompatible
+ALTER TABLE alter_test ALTER COLUMN colorname TYPE varchar(3);
+ERROR:  cannot change the type of a hash-partitioned column
+-- conversion that messes up partitioning fails
+ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamptz USING time_us::timestamptz+INTERVAL '1 year';
+ERROR:  check constraint "constraint_4" of relation "_hyper_9_3_chunk" is violated by some row
+-- dropping column that messes up partiitoning fails
+ALTER TABLE alter_test DROP COLUMN colorname;
+ERROR:  cannot drop column named in partition key
+--ONLY blocked
+ALTER TABLE ONLY alter_test RENAME COLUMN colorname TO colorname2;
+ERROR:  inherited column "colorname" must be renamed in child tables too
+ALTER TABLE ONLY alter_test ALTER COLUMN colorname TYPE varchar(10);
+ERROR:  ONLY option not supported on hypertable operations
+\set ON_ERROR_STOP 1
+CREATE TABLE alter_test_bigint(time bigint, temp float);
+SELECT create_hypertable('alter_test_bigint', 'time', chunk_time_interval => 2628000000000);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (10,public,alter_test_bigint,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Changing type of time dimension to a non-supported type
+-- shall not be allowed
+ALTER TABLE alter_test_bigint
+ALTER COLUMN time TYPE TEXT;
+ERROR:  cannot change data type of hypertable column "time" from bigint to text
+-- dropping open time dimension shall not be allowed.
+ALTER TABLE alter_test_bigint
+DROP COLUMN time;
+ERROR:  cannot drop column named in partition key
+\set ON_ERROR_STOP 1
+-- test expression index creation where physical layout of chunks differs from hypertable
+CREATE TABLE i2504(time timestamp NOT NULL, a int, b int, c int, d int);
+select create_hypertable('i2504', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+  create_hypertable  
+---------------------
+ (11,public,i2504,t)
+(1 row)
+
+INSERT INTO i2504 VALUES (now(), 1, 2, 3, 4);
+ALTER TABLE i2504 DROP COLUMN b;
+INSERT INTO i2504(time, a, c, d) VALUES
+(now() - interval '1 year', 1, 2, 3),
+(now() - interval '2 years', 1, 2, 3);
+CREATE INDEX idx2 ON i2504(a,d) WHERE c IS NOT NULL;
+DROP INDEX idx2;
+CREATE INDEX idx2 ON i2504(a,d) WITH (timescaledb.transaction_per_chunk) WHERE c IS NOT NULL;
+-- Make sure custom composite types are supported as dimensions
+CREATE TYPE TUPLE as (val1 int4, val2 int4);
+CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
+\set ON_ERROR_STOP 0
+-- should fail on PG < 14 because no partitioning function supplied and the given custom type
+-- has no default hash function
+-- on PG14 custom types are hashable
+SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
+NOTICE:  adding not-null constraint to column "time"
+       create_hypertable       
+-------------------------------
+ (12,public,part_custom_dim,t)
+(1 row)
+
+\set ON_ERROR_STOP 1
+-- immutable functions with sub-transaction (issue #4489)
+CREATE FUNCTION i4489(value TEXT DEFAULT '') RETURNS INTEGER
+AS
+$$
+BEGIN
+  RETURN value::INTEGER;
+EXCEPTION WHEN invalid_text_representation THEN
+  RETURN 0;
+END;
+$$
+LANGUAGE PLPGSQL IMMUTABLE;
+-- should return 1 (one) in both cases
+SELECT i4489('1'), i4489('1');
+ i4489 | i4489 
+-------+-------
+     1 |     1
+(1 row)
+
+-- should return 0 (zero) in all cases handled by the exception
+SELECT i4489(), i4489();
+ i4489 | i4489 
+-------+-------
+     0 |     0
+(1 row)
+
+SELECT i4489('a'), i4489('a');
+ i4489 | i4489 
+-------+-------
+     0 |     0
+(1 row)
+

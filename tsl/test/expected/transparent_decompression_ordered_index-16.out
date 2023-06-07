@@ -1,0 +1,1170 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set TEST_BASE_NAME transparent_decompression_ordered_index
+SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('%s/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNCOMPRESSED",
+    format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_COMPRESSED" \gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') AS "DIFF_CMD" \gset
+-- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+ enable_memoize 
+----------------
+ off
+(1 row)
+
+-- Testing Index Scan backwards ----
+-- We want more than 1 segment in atleast 1 of the chunks
+CREATE TABLE metrics_ordered_idx (
+    time timestamptz NOT NULL,
+    device_id int,
+    device_id_peer int,
+    v0 int
+);
+SELECT create_hypertable ('metrics_ordered_idx', 'time', chunk_time_interval => '2days'::interval);
+        create_hypertable         
+----------------------------------
+ (1,public,metrics_ordered_idx,t)
+(1 row)
+
+ALTER TABLE metrics_ordered_idx SET (timescaledb.compress, timescaledb.compress_orderby = 'time ASC', timescaledb.compress_segmentby = 'device_id,device_id_peer');
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT time,
+    device_id,
+    0,
+    device_id
+FROM generate_series('2000-01-13 0:00:00+0'::timestamptz, '2000-01-15 23:55:00+0', '15m') gtime (time),
+    generate_series(1, 5, 1) gdevice (device_id);
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz, '2000-01-20 11:55:00+0', '15m'),
+    3,
+    3,
+    generate_series(1, 5, 1);
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT generate_series('2018-01-20 0:00:00+0'::timestamptz, '2018-01-20 11:55:00+0', '15m'),
+    4,
+    5,
+    generate_series(1, 5, 1);
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT '2020-01-01 0:00:00+0',
+    generate_series(4, 7, 1),
+    5,
+    generate_series(1, 5, 1);
+-- misisng values device_id = 7
+CREATE TABLE device_tbl (
+    device_id int,
+    descr text
+);
+INSERT INTO device_tbl
+SELECT generate_series(1, 6, 1),
+    'devicex';
+INSERT INTO device_tbl
+SELECT 8,
+    'device8';
+ANALYZE device_tbl;
+-- table for joins ---
+CREATE TABLE nodetime (
+    node int,
+    start_time timestamp,
+    stop_time timestamp
+);
+INSERT INTO nodetime
+    VALUES (4, '2018-01-06 00:00'::timestamp, '2018-12-02 12:00'::timestamp);
+-- run queries on uncompressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+--compress all chunks for metrics_ordered_idx table --
+SELECT compress_chunk (c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_ordered_idx'
+ORDER BY c.id;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+(5 rows)
+
+-- run queries on compressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+-- diff compressed and uncompressed results
+:DIFF_CMD
+-- This is to illustrate that we have some null device_id values. This fact
+-- might influence the runtime chunk exclusion when doing joins on device_id.
+select count(*) from metrics_ordered_idx
+where extract(minute from time) = 0 and device_id is null
+;
+ count 
+-------
+     1
+(1 row)
+
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+-- we disable parallelism here otherwise EXPLAIN ANALYZE output
+-- will be not stable and differ depending on worker assignment
+SET max_parallel_workers_per_gather TO 0;
+SET enable_seqscan = FALSE;
+-- get explain for queries on hypertable with compression
+\ir include/transparent_decompression_ordered_indexplan.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- tests for explain plan only --
+---check index backward scans instead of seq scans ------------
+CREATE TABLE metrics_ordered_idx2(time timestamptz NOT NULL, device_id int, device_id_peer int, v0 int, v1 int);
+SELECT create_hypertable('metrics_ordered_idx2','time', chunk_time_interval=>'2days'::interval);
+         create_hypertable         
+-----------------------------------
+ (3,public,metrics_ordered_idx2,t)
+(1 row)
+
+ALTER TABLE metrics_ordered_idx2 SET (timescaledb.compress, timescaledb.compress_orderby='time ASC, v0 desc',timescaledb.compress_segmentby='device_id,device_id_peer');
+INSERT INTO metrics_ordered_idx2(time,device_id,device_id_peer,v0, v1) SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz,'2000-01-20 11:55:00+0','10s') , 3, 3, generate_series(1,5,1) , generate_series(555,559,1);
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'metrics_ordered_idx2'
+ORDER BY c.id;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_11_chunk
+(1 row)
+
+--all queries have only prefix of compress_orderby in ORDER BY clause
+-- should have ordered DecompressChunk path because segmentby columns have equality constraints
+:PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: compress_hyper_4_12_chunk._ts_meta_sequence_num DESC
+               Sort Method: quicksort 
+               ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+(7 rows)
+
+:PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 asc LIMIT 10;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=10 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: compress_hyper_4_12_chunk._ts_meta_sequence_num DESC
+               Sort Method: quicksort 
+               ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+(7 rows)
+
+:PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 desc LIMIT 10;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Sort (actual rows=10 loops=1)
+         Sort Key: _hyper_3_11_chunk."time" DESC, _hyper_3_11_chunk.v0 DESC
+         Sort Method: top-N heapsort 
+         ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk (actual rows=4291 loops=1)
+               ->  Index Scan using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+(7 rows)
+
+:PREFIX SELECT d.device_id, m.time,  m.time
+ FROM metrics_ordered_idx2 d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx2 m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON m.device_id_peer = d.device_id_peer;
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=4291 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk d (actual rows=4291 loops=1)
+         ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+   ->  Subquery Scan on m (actual rows=1 loops=4291)
+         Filter: (d.device_id_peer = m.device_id_peer)
+         ->  Limit (actual rows=1 loops=4291)
+               ->  Result (actual rows=1 loops=4291)
+                     ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 m_1 (actual rows=1 loops=4291)
+                           Order: m_1."time" DESC
+                           Hypertables excluded during runtime: 0
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk m_2 (actual rows=1 loops=4291)
+                                 ->  Index Scan Backward using compress_hyper_4_12_chunk__compressed_hypertable_4_device_id_de on compress_hyper_4_12_chunk compress_hyper_4_12_chunk_1 (actual rows=1 loops=4291)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+(13 rows)
+
+SET enable_seqscan = FALSE;
+\ir include/transparent_decompression_ordered_index.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET work_mem TO '50MB';
+---Lets test for index backward scans instead of seq scans ------------
+-- for ordered append tests on compressed chunks we need a hypertable with time as compress_orderby column
+-- should not have ordered DecompressChunk path because segmentby columns are not part of pathkeys
+:PREFIX
+SELECT *
+FROM (
+    SELECT *
+    FROM metrics_ordered_idx
+    ORDER BY time DESC
+    LIMIT 10) AS q
+ORDER BY 1,
+    2,
+    3,
+    4;
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=10 loops=1)
+   Sort Key: metrics_ordered_idx."time", metrics_ordered_idx.device_id, metrics_ordered_idx.device_id_peer, metrics_ordered_idx.v0
+   Sort Method: quicksort 
+   ->  Limit (actual rows=10 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_ordered_idx (actual rows=10 loops=1)
+               Order: metrics_ordered_idx."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk (actual rows=5 loops=1)
+                     ->  Sort (actual rows=5 loops=1)
+                           Sort Key: compress_hyper_2_10_chunk._ts_meta_max_1 DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=5 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: compress_hyper_2_9_chunk._ts_meta_max_1 DESC
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_2_8_chunk._ts_meta_max_1 DESC
+                           ->  Seq Scan on compress_hyper_2_8_chunk (never executed)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_2_7_chunk._ts_meta_max_1 DESC
+                           ->  Seq Scan on compress_hyper_2_7_chunk (never executed)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_2_6_chunk._ts_meta_max_1 DESC
+                           ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
+(28 rows)
+
+-- should have ordered DecompressChunk path because segmentby columns have equality constraints
+:PREFIX
+SELECT *
+FROM (
+    SELECT *
+    FROM metrics_ordered_idx
+    WHERE device_id = 3
+        AND device_id_peer = 3
+    ORDER BY time DESC
+    LIMIT 10) AS q
+ORDER BY 1,
+    2,
+    3,
+    4;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=10 loops=1)
+   Sort Key: metrics_ordered_idx."time", metrics_ordered_idx.device_id, metrics_ordered_idx.device_id_peer, metrics_ordered_idx.v0
+   Sort Method: quicksort 
+   ->  Limit (actual rows=10 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_ordered_idx (actual rows=10 loops=1)
+               Order: metrics_ordered_idx."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk (actual rows=0 loops=1)
+                     ->  Sort (actual rows=0 loops=1)
+                           Sort Key: compress_hyper_2_10_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk (actual rows=0 loops=1)
+                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=0 loops=1)
+                     ->  Sort (actual rows=0 loops=1)
+                           Sort Key: compress_hyper_2_9_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=0 loops=1)
+                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: compress_hyper_2_8_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_2_7_chunk._ts_meta_sequence_num DESC
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk (never executed)
+                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_2_6_chunk._ts_meta_sequence_num DESC
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk (never executed)
+                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+(34 rows)
+
+:PREFIX SELECT DISTINCT ON (d.device_id)
+    *
+FROM metrics_ordered_idx d
+    INNER JOIN LATERAL (
+        SELECT *
+        FROM metrics_ordered_idx m
+        WHERE m.device_id = d.device_id
+            AND m.device_id_peer = 3
+        ORDER BY time DESC
+        LIMIT 1) m ON m.device_id_peer = d.device_id_peer
+WHERE extract(minute FROM d.time) = 0;
+                                                                                                    QUERY PLAN                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=1 loops=1)
+   ->  Nested Loop (actual rows=12 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=389 loops=1)
+               Hypertable: metrics_ordered_idx
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=389 loops=1)
+                     Sort Key: d_1.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=120 loops=1)
+                           Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+                           Rows Removed by Filter: 360
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=240 loops=1)
+                           Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+                           Rows Removed by Filter: 720
+                           ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=12 loops=1)
+                           Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+                           Rows Removed by Filter: 36
+                           ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk d_4 (actual rows=12 loops=1)
+                           Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+                           Rows Removed by Filter: 36
+                           ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk d_5 (actual rows=5 loops=1)
+                           Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+                           ->  Index Scan using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+         ->  Subquery Scan on m (actual rows=0 loops=389)
+               Filter: (d.device_id_peer = m.device_id_peer)
+               Rows Removed by Filter: 0
+               ->  Limit (actual rows=0 loops=389)
+                     ->  Custom Scan (ChunkAppend) on metrics_ordered_idx m_1 (actual rows=0 loops=389)
+                           Order: m_1."time" DESC
+                           Hypertables excluded during runtime: 0
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_2 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=0 loops=388)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_3 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=0 loops=388)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_4 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=0 loops=388)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_5 (actual rows=0 loops=304)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=0 loops=304)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_6 (actual rows=0 loops=304)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=0 loops=304)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+(48 rows)
+
+:PREFIX
+SELECT d.device_id,
+    m.time,
+    m.time
+FROM metrics_ordered_idx d
+    INNER JOIN LATERAL (
+        SELECT *
+        FROM metrics_ordered_idx m
+        WHERE m.device_id = d.device_id
+            AND m.device_id_peer = 3
+        ORDER BY time DESC
+        LIMIT 1) m ON m.device_id_peer = d.device_id_peer
+WHERE extract(minute FROM d.time) = 0;
+                                                                                                    QUERY PLAN                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=12 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx d (actual rows=389 loops=1)
+         Chunks excluded during startup: 0
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=120 loops=1)
+               Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+               Rows Removed by Filter: 360
+               ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=240 loops=1)
+               Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+               Rows Removed by Filter: 720
+               ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=12 loops=1)
+               Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+               Rows Removed by Filter: 36
+               ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk d_4 (actual rows=12 loops=1)
+               Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+               Rows Removed by Filter: 36
+               ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk d_5 (actual rows=5 loops=1)
+               Filter: (EXTRACT(minute FROM "time") = '0'::numeric)
+               ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+   ->  Subquery Scan on m (actual rows=0 loops=389)
+         Filter: (d.device_id_peer = m.device_id_peer)
+         Rows Removed by Filter: 0
+         ->  Limit (actual rows=0 loops=389)
+               ->  Result (actual rows=0 loops=389)
+                     ->  Custom Scan (ChunkAppend) on metrics_ordered_idx m_1 (actual rows=0 loops=389)
+                           Order: m_1."time" DESC
+                           Hypertables excluded during runtime: 0
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_2 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=0 loops=388)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_3 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=0 loops=388)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_4 (actual rows=0 loops=388)
+                                 ->  Index Scan Backward using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=0 loops=388)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_5 (actual rows=0 loops=304)
+                                 ->  Index Scan Backward using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=0 loops=304)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_6 (actual rows=0 loops=304)
+                                 ->  Index Scan Backward using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=0 loops=304)
+                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+(45 rows)
+
+--github issue 1558
+SET enable_seqscan = FALSE;
+SET enable_bitmapscan = FALSE;
+SET max_parallel_workers_per_gather = 0;
+SET enable_hashjoin = FALSE;
+SET enable_mergejoin = FALSE;
+:PREFIX
+SELECT device_id,
+    count(*)
+FROM (
+    SELECT *
+    FROM metrics_ordered_idx mt,
+        nodetime nd
+    WHERE mt.time > nd.start_time
+        AND mt.device_id = nd.node
+        AND mt.time < nd.stop_time) AS subq
+GROUP BY device_id;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
+   Group Key: mt_1.device_id
+   ->  Nested Loop (actual rows=48 loops=1)
+         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time) AND (mt_1.device_id = nd.node))
+         Rows Removed by Join Filter: 1493
+         ->  Merge Append (actual rows=1541 loops=1)
+               Sort Key: mt_1.device_id
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
+                     ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+         ->  Materialize (actual rows=1 loops=1541)
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+(19 rows)
+
+:PREFIX
+SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY time;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=48 loops=1)
+   Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+   Rows Removed by Join Filter: 1493
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1541 loops=1)
+         Order: mt."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
+               ->  Sort (actual rows=5 loops=1)
+                     Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
+               ->  Sort (actual rows=5 loops=1)
+                     Sort Key: compress_hyper_2_7_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: compress_hyper_2_8_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: compress_hyper_2_9_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
+               ->  Sort (actual rows=5 loops=1)
+                     Sort Key: compress_hyper_2_10_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Index Scan using compress_hyper_2_10_chunk__compressed_hypertable_2_device_id_de on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+   ->  Materialize (actual rows=1 loops=1541)
+         ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+(32 rows)
+
+SET enable_seqscan = TRUE;
+SET enable_bitmapscan = TRUE;
+SET enable_seqscan = TRUE;
+SET enable_bitmapscan = TRUE;
+SET max_parallel_workers_per_gather = 0;
+SET enable_mergejoin = TRUE;
+SET enable_hashjoin = FALSE;
+:PREFIX
+SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Sort (actual rows=48 loops=1)
+   Sort Key: mt."time"
+   Sort Method: quicksort 
+   ->  Merge Join (actual rows=48 loops=1)
+         Merge Cond: (nd.node = mt.device_id)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
+         Rows Removed by Join Filter: 289
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: nd.node
+               Sort Method: quicksort 
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+         ->  Sort (actual rows=1250 loops=1)
+               Sort Key: mt.device_id
+               Sort Method: quicksort 
+               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1541 loops=1)
+                     Order: mt."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
+                           ->  Sort (actual rows=5 loops=1)
+                                 Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
+                           ->  Sort (actual rows=5 loops=1)
+                                 Sort Key: compress_hyper_2_7_chunk._ts_meta_min_1
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
+                           ->  Sort (actual rows=1 loops=1)
+                                 Sort Key: compress_hyper_2_8_chunk._ts_meta_min_1
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
+                           ->  Sort (actual rows=1 loops=1)
+                                 Sort Key: compress_hyper_2_9_chunk._ts_meta_min_1
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
+                           ->  Sort (actual rows=5 loops=1)
+                                 Sort Key: compress_hyper_2_10_chunk._ts_meta_min_1
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+(41 rows)
+
+SET enable_mergejoin = FALSE;
+SET enable_hashjoin = TRUE;
+:PREFIX
+SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY time;
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Sort (actual rows=48 loops=1)
+   Sort Key: mt_1."time"
+   Sort Method: quicksort 
+   ->  Hash Join (actual rows=48 loops=1)
+         Hash Cond: (mt_1.device_id = nd.node)
+         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time))
+         Rows Removed by Join Filter: 289
+         ->  Append (actual rows=1541 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
+                     ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
+                     ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
+                     ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
+                     ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+         ->  Hash (actual rows=1 loops=1)
+               Buckets: 2048  Batches: 1 
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+(21 rows)
+
+--enable all joins after the tests
+SET enable_mergejoin = TRUE;
+SET enable_hashjoin = TRUE;
+--end github issue 1558
+-- github issue 2673
+-- nested loop join with parameterized path
+-- join condition has a segment by column and another column.
+SET enable_hashjoin = false;
+SET enable_mergejoin=false;
+SET enable_material = false;
+SET enable_seqscan = false;
+-- restrict so that we select only 1 chunk.
+:PREFIX
+WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
+SELECT met.*, lookup.*
+FROM metrics_ordered_idx met join lookup
+ON met.device_id = lookup.did and met.v0 = lookup.version
+WHERE met.time > '2000-01-19 19:00:00-05'
+      and met.time < '2000-01-20 20:00:00-05';
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=2 loops=1)
+   Join Filter: ((met.device_id = "*VALUES*".column1) AND (met.v0 = "*VALUES*".column2))
+   Rows Removed by Join Filter: 92
+   ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk met (actual rows=47 loops=2)
+         Filter: (("time" > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
+         Rows Removed by Filter: 1
+         ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=2)
+               Filter: ((_ts_meta_max_1 > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
+(9 rows)
+
+--add filter to segment by (device_id) and compressed attr column (v0)
+:PREFIX
+WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
+SELECT met.*, lookup.*
+FROM metrics_ordered_idx met join lookup
+ON met.device_id = lookup.did and met.v0 = lookup.version
+WHERE met.time > '2000-01-19 19:00:00-05'
+      and met.time < '2000-01-20 20:00:00-05'
+      and met.device_id = 3 and met.v0 = 5;
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=1 loops=1)
+   ->  Values Scan on "*VALUES*" (actual rows=1 loops=1)
+         Filter: ((column1 = 3) AND (column2 = 5))
+         Rows Removed by Filter: 1
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk met (actual rows=1 loops=1)
+         Filter: (("time" > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone) AND (v0 = 5))
+         Rows Removed by Filter: 47
+         ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+               Index Cond: (device_id = 3)
+               Filter: ((_ts_meta_max_1 > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
+(10 rows)
+
+:PREFIX
+WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
+SELECT met.*, lookup.*
+FROM metrics_ordered_idx met join lookup
+ON met.device_id = lookup.did and met.v0 = lookup.version
+WHERE met.time = '2000-01-19 19:00:00-05'
+      and met.device_id = 3
+      and met.device_id_peer = 3 and met.v0 = 5;
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=0 loops=1)
+   ->  Values Scan on "*VALUES*" (actual rows=1 loops=1)
+         Filter: ((column1 = 3) AND (column2 = 5))
+         Rows Removed by Filter: 1
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk met (actual rows=0 loops=1)
+         Filter: ((v0 = 5) AND ("time" = 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone))
+         Rows Removed by Filter: 48
+         ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+               Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+               Filter: ((_ts_meta_min_1 <= 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone))
+(10 rows)
+
+-- lateral subquery
+:PREFIX
+WITH f1 as ( SELECT * from (values( 7, 5, 4) , (4, 5, 5) ) as lu( device_id, device_id_peer, v0) )
+SELECT * FROM  metrics_ordered_idx met
+JOIN LATERAL
+  ( SELECT node, f1.* from nodetime , f1
+    WHERE  node = f1.device_id) q
+ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
+   and met.v0 = q.v0 and met.v0 > 2 and time = '2018-01-19 20:00:00-05';
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=1 loops=1)
+   Join Filter: (("*VALUES*".column2 = met.device_id_peer) AND ("*VALUES*".column3 = met.v0))
+   ->  Nested Loop (actual rows=1 loops=1)
+         Join Filter: (nodetime.node = "*VALUES*".column1)
+         Rows Removed by Join Filter: 1
+         ->  Seq Scan on nodetime (actual rows=1 loops=1)
+         ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk met (actual rows=1 loops=1)
+         Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (nodetime.node = device_id))
+         Rows Removed by Filter: 47
+         ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+               Index Cond: (device_id = nodetime.node)
+               Filter: ((_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+(13 rows)
+
+-- filter on compressed attr (v0) with seqscan enabled and indexscan
+-- disabled. filters on compressed attr should be above the seq scan.
+SET enable_seqscan = true;
+SET enable_indexscan = false;
+:PREFIX
+WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
+SELECT met.*, lookup.*
+FROM metrics_ordered_idx met join lookup
+ON met.device_id = lookup.did and met.v0 = lookup.version
+   and met.device_id = 3
+WHERE met.time > '2000-01-19 19:00:00-05'
+      and met.time < '2000-01-20 20:00:00-05'
+      and met.device_id = 3
+      and met.device_id_peer = 3 and met.v0 = 5;
+                                                                                                            QUERY PLAN                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=1 loops=1)
+   ->  Values Scan on "*VALUES*" (actual rows=1 loops=1)
+         Filter: ((column1 = 3) AND (column2 = 5))
+         Rows Removed by Filter: 1
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk met (actual rows=1 loops=1)
+         Filter: (("time" > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone) AND (v0 = 5))
+         Rows Removed by Filter: 47
+         ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+               Filter: ((_ts_meta_max_1 > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone) AND (device_id = 3) AND (device_id_peer = 3))
+(9 rows)
+
+RESET enable_hashjoin  ;
+RESET enable_mergejoin;
+RESET enable_material ;
+RESET enable_indexscan ;
+--end github issue 2673
+SET enable_seqscan = TRUE;
+\ir include/transparent_decompression_constraintaware.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--- TEST for constraint aware append  ------------
+--should select only newly added chunk --
+SET timescaledb.enable_chunk_append TO FALSE;
+:PREFIX
+SELECT *
+FROM (
+    SELECT *
+    FROM metrics_ordered_idx
+    WHERE time > '2002-01-01'
+        AND time < now()
+    ORDER BY time DESC
+    LIMIT 10) AS q
+ORDER BY 1,
+    2,
+    3,
+    4;
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=10 loops=1)
+   Sort Key: metrics_ordered_idx."time", metrics_ordered_idx.device_id, metrics_ordered_idx.device_id_peer, metrics_ordered_idx.v0
+   Sort Method: quicksort 
+   ->  Limit (actual rows=10 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=10 loops=1)
+               Hypertable: metrics_ordered_idx
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=10 loops=1)
+                     Sort Key: _hyper_1_4_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=5 loops=1)
+                           Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
+                           ->  Sort (actual rows=1 loops=1)
+                                 Sort Key: compress_hyper_2_9_chunk._ts_meta_max_1 DESC
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+                                       Filter: (_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk (actual rows=5 loops=1)
+                           Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
+                           ->  Sort (actual rows=5 loops=1)
+                                 Sort Key: compress_hyper_2_10_chunk._ts_meta_max_1 DESC
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+                                       Filter: (_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone)
+(23 rows)
+
+-- DecompressChunk path because segmentby columns have equality constraints
+:PREFIX
+SELECT *
+FROM (
+    SELECT *
+    FROM metrics_ordered_idx
+    WHERE device_id = 4
+        AND device_id_peer = 5
+        AND time > '2002-01-01'
+        AND time < now()
+    ORDER BY time DESC
+    LIMIT 10) AS q
+ORDER BY 1,
+    2,
+    3,
+    4;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=10 loops=1)
+   Sort Key: metrics_ordered_idx."time", metrics_ordered_idx.device_id, metrics_ordered_idx.device_id_peer, metrics_ordered_idx.v0
+   Sort Method: quicksort 
+   ->  Limit (actual rows=10 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=10 loops=1)
+               Hypertable: metrics_ordered_idx
+               Chunks excluded during startup: 0
+               ->  Merge Append (actual rows=10 loops=1)
+                     Sort Key: _hyper_1_4_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=9 loops=1)
+                           Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
+                           ->  Sort (actual rows=1 loops=1)
+                                 Sort Key: compress_hyper_2_9_chunk._ts_meta_sequence_num DESC
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+                                       Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND (device_id = 4) AND (device_id_peer = 5))
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk (actual rows=1 loops=1)
+                           Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
+                           ->  Sort (actual rows=1 loops=1)
+                                 Sort Key: compress_hyper_2_10_chunk._ts_meta_sequence_num DESC
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1 loops=1)
+                                       Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND (device_id = 4) AND (device_id_peer = 5))
+                                       Rows Removed by Filter: 4
+(24 rows)
+
+:PREFIX
+SELECT m.device_id,
+    d.v0,
+    count(*)
+FROM metrics_ordered_idx d,
+    metrics_ordered_idx m
+WHERE m.device_id = d.device_id
+    AND m.device_id_peer = 5
+    AND m.time = d.time
+    AND m.time > '2002-01-01'
+    AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
+    AND m.device_id_peer = d.device_id_peer
+GROUP BY m.device_id,
+    d.v0
+ORDER BY 1,
+    2,
+    3;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Sort (actual rows=0 loops=1)
+   Sort Key: m.device_id, d.v0, (count(*))
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=0 loops=1)
+         Group Key: m.device_id, d.v0
+         Batches: 1 
+         ->  Hash Join (actual rows=0 loops=1)
+               Hash Cond: ((d.device_id = m.device_id) AND (d."time" = m."time"))
+               ->  Custom Scan (ConstraintAwareAppend) (actual rows=0 loops=1)
+                     Hypertable: metrics_ordered_idx
+                     Chunks excluded during startup: 2
+               ->  Hash (never executed)
+                     ->  Custom Scan (ConstraintAwareAppend) (never executed)
+                           Hypertable: metrics_ordered_idx
+                           Chunks excluded during startup: 2
+(15 rows)
+
+--query with no results --
+:PREFIX
+SELECT m.device_id,
+    d.v0,
+    count(*)
+FROM metrics_ordered_idx d,
+    metrics_ordered_idx m
+WHERE m.time = d.time
+    AND m.time > '2000-01-01 0:00:00+0'::text::timestamptz
+GROUP BY m.device_id,
+    d.v0
+ORDER BY 1,
+    2,
+    3;
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=42 loops=1)
+   Sort Key: m.device_id, d.v0, (count(*))
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=42 loops=1)
+         Group Key: m.device_id, d.v0
+         Batches: 1 
+         ->  Merge Join (actual rows=7321 loops=1)
+               Merge Cond: (d."time" = m."time")
+               ->  Sort (actual rows=1541 loops=1)
+                     Sort Key: d."time"
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ConstraintAwareAppend) (actual rows=1541 loops=1)
+                           Hypertable: metrics_ordered_idx
+                           Chunks excluded during startup: 0
+                           ->  Append (actual rows=1541 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=480 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=960 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=48 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk d_4 (actual rows=48 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk d_5 (actual rows=5 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+               ->  Sort (actual rows=7317 loops=1)
+                     Sort Key: m."time"
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ConstraintAwareAppend) (actual rows=1541 loops=1)
+                           Hypertable: metrics_ordered_idx
+                           Chunks excluded during startup: 0
+                           ->  Append (actual rows=1541 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=480 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=5 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_2 (actual rows=960 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=5 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_3 (actual rows=48 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=1 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_4 (actual rows=48 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=1 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_5 (actual rows=5 loops=1)
+                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       ->  Seq Scan on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=5 loops=1)
+                                             Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+(62 rows)
+
+--query with all chunks but 1 excluded at plan time --
+:PREFIX
+SELECT d.*,
+    m.*
+FROM device_tbl d,
+    metrics_ordered_idx m
+WHERE m.device_id = d.device_id
+    AND m.time > '2019-01-01'
+    AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
+ORDER BY m.v0;
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=0 loops=1)
+   Sort Key: m.v0
+   Sort Method: quicksort 
+   ->  Hash Join (actual rows=0 loops=1)
+         Hash Cond: (m.device_id = d.device_id)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m (actual rows=0 loops=1)
+               Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+               ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=0 loops=1)
+                     Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+                     Rows Removed by Filter: 5
+         ->  Hash (actual rows=7 loops=1)
+               Buckets: 1024  Batches: 1 
+               ->  Seq Scan on device_tbl d (actual rows=7 loops=1)
+(13 rows)
+
+-- no matches in metrics_ordered_idx but one row in device_tbl
+:PREFIX
+SELECT d.*,
+    m.*
+FROM device_tbl d
+    LEFT OUTER JOIN metrics_ordered_idx m ON m.device_id = d.device_id
+    AND m.time > '2019-01-01'
+    AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
+WHERE d.device_id = 8
+ORDER BY m.v0;
+                                                                                                    QUERY PLAN                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=1 loops=1)
+   Sort Key: m.v0
+   Sort Method: quicksort 
+   ->  Nested Loop Left Join (actual rows=1 loops=1)
+         Join Filter: (m.device_id = d.device_id)
+         ->  Seq Scan on device_tbl d (actual rows=1 loops=1)
+               Filter: (device_id = 8)
+               Rows Removed by Filter: 6
+         ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m (actual rows=0 loops=1)
+               Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+               ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=0 loops=1)
+                     Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (device_id = 8) AND (_ts_meta_min_1 < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+                     Rows Removed by Filter: 5
+(13 rows)
+
+-- no matches in device_tbl but 1 row in metrics_ordered_idx
+:PREFIX
+SELECT d.*,
+    m.*
+FROM device_tbl d
+    FULL OUTER JOIN metrics_ordered_idx m ON m.device_id = d.device_id
+    AND m.time > '2019-01-01'
+    AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
+WHERE m.device_id = 7
+ORDER BY m.v0;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=1 loops=1)
+   Sort Key: m_1.v0
+   Sort Method: quicksort 
+   ->  Hash Left Join (actual rows=1 loops=1)
+         Hash Cond: (m_1.device_id = d.device_id)
+         Join Filter: ((m_1."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m_1."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+         ->  Append (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=0 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = 7)
+                           Rows Removed by Filter: 5
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_2 (actual rows=0 loops=1)
+                     ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = 7)
+                           Rows Removed by Filter: 5
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_3 (actual rows=0 loops=1)
+                     ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = 7)
+                           Rows Removed by Filter: 1
+               ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_4 (actual rows=0 loops=1)
+                     ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = 7)
+                           Rows Removed by Filter: 1
+               ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_5 (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1 loops=1)
+                           Filter: (device_id = 7)
+                           Rows Removed by Filter: 4
+         ->  Hash (actual rows=0 loops=1)
+               Buckets: 1024  Batches: 1 
+               ->  Seq Scan on device_tbl d (actual rows=0 loops=1)
+                     Filter: (device_id = 7)
+                     Rows Removed by Filter: 7
+(32 rows)
+
+SET timescaledb.enable_chunk_append TO TRUE;
+-- github bug 2917 with UNION ALL that references compressed ht
+CREATE TABLE entity
+(
+  oid bigint PRIMARY KEY,
+  type text,
+  name text
+);
+INSERT INTO entity values(10, 'VMEM', 'cpu');
+CREATE TABLE entity_m2
+(
+ timec         timestamp with time zone  NOT NULL,
+ entity_oid    bigint                    ,
+ entity_hash   bigint                    ,
+ type          text               ,
+ current       double precision,
+ capacity      double precision,
+ utilization   double precision,
+ peak          double precision
+);
+SELECT create_hypertable('entity_m2', 'timec', chunk_time_interval=>'30 days'::interval);
+   create_hypertable    
+------------------------
+ (5,public,entity_m2,t)
+(1 row)
+
+INSERT INTO entity_m2 values (
+ '2020-12-21 15:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
+INSERT INTO entity_m2 values (
+ '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
+ALTER TABLE entity_m2 SET (timescaledb.compress,
+timescaledb.compress_segmentby = 'entity_oid',
+timescaledb.compress_orderby = 'type, timec');
+SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+(1 row)
+
+CREATE TABLE entity_m1
+(
+timec         timestamp with time zone  ,
+ entity_oid    bigint                    ,
+ entity_hash   bigint                    ,
+ type          text               ,
+ current       double precision,
+ capacity      double precision,
+ utilization   double precision
+);
+SELECT create_hypertable('entity_m1', 'timec', chunk_time_interval=>'30 days'::interval);
+NOTICE:  adding not-null constraint to column "timec"
+   create_hypertable    
+------------------------
+ (7,public,entity_m1,t)
+(1 row)
+
+INSERT INTO entity_m1 values (
+ '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  100 ,           0 );
+create view metric_view as
+ SELECT m2.timec,
+    m2.entity_oid,
+    m2.entity_hash,
+    m2.type,
+    m2.current,
+    m2.capacity,
+    m2.utilization,
+    m2.peak
+   FROM entity_m2 m2
+UNION ALL
+ SELECT m1.timec,
+    m1.entity_oid,
+    m1.entity_hash,
+    m1.type,
+    m1.current,
+    m1.capacity,
+    m1.utilization,
+    NULL::double precision AS peak
+   FROM entity_m1 m1;
+SET enable_bitmapscan = false;
+SET enable_hashjoin = false;
+SET enable_mergejoin = false;
+SELECT m.timec, avg(m.utilization) AS avg_util
+   FROM  metric_view m, entity e
+   WHERE m.type = 'VMEM'
+   AND m.timec BETWEEN '2020-12-21T00:00:00'::timestamptz - interval '7 day' AND date_trunc('day', '2020-12-22T00:00:00'::timestamptz)
+   AND m.entity_oid = e.oid
+   GROUP BY 1 ORDER BY 1;
+              timec               | avg_util 
+----------------------------------+----------
+ Mon Dec 21 12:47:58.778 2020 PST |        0
+ Mon Dec 21 13:47:58.778 2020 PST |        0
+(2 rows)
+
+--now compress the other table too and rerun the query --
+ALTER TABLE entity_m1 SET (timescaledb.compress,
+timescaledb.compress_segmentby = 'entity_oid',
+timescaledb.compress_orderby = 'type, timec');
+SELECT compress_chunk(c) FROM show_chunks('entity_m1') c;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_15_chunk
+(1 row)
+
+SELECT m.timec, avg(m.utilization) AS avg_util
+   FROM  metric_view m, entity e
+   WHERE m.type = 'VMEM'
+   AND m.timec BETWEEN '2020-12-21T00:00:00'::timestamptz - interval '7 day' AND date_trunc('day', '2020-12-22T00:00:00'::timestamptz)
+   AND m.entity_oid = e.oid
+   GROUP BY 1 ORDER BY 1;
+              timec               | avg_util 
+----------------------------------+----------
+ Mon Dec 21 12:47:58.778 2020 PST |        0
+ Mon Dec 21 13:47:58.778 2020 PST |        0
+(2 rows)
+
+RESET enable_bitmapscan ;
+RESET enable_hashjoin ;
+RESET enable_mergejoin;
+-- end github bug 2917

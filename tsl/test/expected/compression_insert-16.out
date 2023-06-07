@@ -1,0 +1,1012 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
+CREATE TABLE test1 (timec timestamptz , i integer ,
+      b bigint, t text);
+SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
+NOTICE:  adding not-null constraint to column "timec"
+ table_name 
+------------
+ test1
+(1 row)
+
+INSERT INTO test1 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
+ALTER TABLE test1 set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
+timescaledb.compress_orderby = 'timec DESC');
+SELECT compress_chunk(c)
+FROM show_chunks('test1') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT count(*) FROM  test1;
+ count 
+-------
+    25
+(1 row)
+
+--we have 1 compressed row --
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+-- single and multi row insert into the compressed chunk --
+INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 11, 16, 'new' ;
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, i +5, 'clay'
+FROM (Select generate_series(10, 20, 1) i ) q;
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) from test1;
+ count 
+-------
+    37
+(1 row)
+
+-- single row copy
+COPY test1 FROM STDIN DELIMITER ',';
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+-- multi row copy
+COPY test1 FROM STDIN DELIMITER ',';
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+--Verify that all the data went into the initial chunk
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM test1 WHERE b = 11 order by i, timec ;
+            timec             | i  | b  |   t   
+------------------------------+----+----+-------
+ Fri Jan 03 07:00:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:05:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:10:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:15:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:20:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:25:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:30:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:35:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:40:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:45:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:50:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:55:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:00:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:05:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:10:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:15:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:20:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:25:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:30:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:35:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:40:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:45:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:50:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:55:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 09:00:00 2020 PST | 10 | 11 | hello
+(25 rows)
+
+SELECT * FROM test1 WHERE i = 11 order by 1, 2, 3, 4;
+            timec             | i  | b  |     t     
+------------------------------+----+----+-----------
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | clay
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | copy
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | multicopy
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | new
+(4 rows)
+
+-- insert nulls except for timec
+INSERT INTO test1 SELECT '2020-01-02 11:46:00-05' , NULL, NULL, NULL;
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+-- copy NULL
+COPY test1 FROM STDIN DELIMITER ',' NULL 'NULL';
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * from test1 WHERE i is NULL;
+            timec             | i | b | t 
+------------------------------+---+---+---
+ Thu Jan 02 08:46:00 2020 PST |   |   | 
+ Thu Jan 02 08:46:00 2020 PST |   |   | 
+(2 rows)
+
+--TEST 2 now alter the table and add a new column to it
+ALTER TABLE test1 ADD COLUMN newtcol varchar(400);
+--add rows with segments that overlap some of the previous ones
+SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 100, 101, 'prev101', 'this is the newtcol101';
+INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, 16, 'prev16', 'this is the newtcol16'
+FROM (Select generate_series(11, 16, 1) i ) q;
+SELECT * FROM test1 WHERE b = 16 order by 1, 2, 3, 4, 5;
+            timec             | i  | b  |     t     |        newtcol        
+------------------------------+----+----+-----------+-----------------------
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | clay      | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | copy      | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | multicopy | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | new       | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 12 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 13 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 14 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 15 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 16 | 16 | prev16    | this is the newtcol16
+(10 rows)
+
+--number of rows in the chunk
+SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+COPY test1 FROM STDIN DELIMITER ',';
+COPY test1 FROM STDIN DELIMITER ',';
+--number of rows in the chunk
+SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM test1 WHERE newtcol IS NOT NULL ORDER BY 1,2,3;
+            timec             |  i  |  b  |    t    |        newtcol         
+------------------------------+-----+-----+---------+------------------------
+ Thu Jan 02 08:16:00 2020 PST |  11 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  11 |  16 | prev16  | newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  12 |  16 | prev16  | newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  12 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  13 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  13 |  16 | prev16  | newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  14 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  15 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  16 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 100 | 101 | prev101 | newtcol101
+ Thu Jan 02 08:16:00 2020 PST | 100 | 101 | prev101 | this is the newtcol101
+(11 rows)
+
+DROP TABLE test1;
+-- TEST 3 add tests with dropped columns on hypertable
+-- also tests defaults
+CREATE TABLE test2 ( itime integer, b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'itime', chunk_time_interval=> 10::integer);
+NOTICE:  adding not-null constraint to column "itime"
+ table_name 
+------------
+ test2
+(1 row)
+
+--create a chunk
+INSERT INTO test2 SELECT t, 10,  'first'::text FROM generate_series(1, 7) t;
+ALTER TABLE test2 DROP COLUMN b;
+ALTER TABLE test2 ADD COLUMN c INT DEFAULT -15;
+ALTER TABLE test2 ADD COLUMN d INT;
+--create a new chunk
+INSERT INTO test2 SELECT t, 'second'::text, 120, 1 FROM generate_series(11, 15) t;
+ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, itime DESC');
+SELECT count(*) from ( SELECT compress_chunk(c)
+FROM show_chunks('test2') c ) q;
+ count 
+-------
+     2
+(1 row)
+
+--write to both old chunks and new chunks
+INSERT INTO test2(itime ,t , d)  SELECT 9, '9', 90 ;
+INSERT INTO test2(itime ,t , d)  SELECT 17, '17', 1700 ;
+COPY test2(itime,t,d) FROM STDIN DELIMITER ',';
+SELECT count(*) FROM show_chunks('test2') q;
+ count 
+-------
+     2
+(1 row)
+
+SELECT * from test2 WHERE itime >= 9 and itime <= 17
+ORDER BY 1,2,3;
+ itime |   t    |  c  |  d   
+-------+--------+-----+------
+     9 | 9      | -15 |   90
+     9 | 9copy  | -15 |   90
+    11 | second | 120 |    1
+    12 | second | 120 |    1
+    13 | second | 120 |    1
+    14 | second | 120 |    1
+    15 | second | 120 |    1
+    17 | 17     | -15 | 1700
+    17 | 17copy | -15 | 1700
+(9 rows)
+
+-- now add a column to the compressed hypertable
+-- we have dropped columns and newly added columns now
+ALTER TABLE test2 ADD COLUMN charcol varchar(45);
+INSERT INTO test2(itime ,t , d, charcol)
+values (2, '2', 22, 'thisis22'), (17, '17', 1701, 'thisis1700') ;
+COPY test2(itime,t,d,charcol) FROM STDIN DELIMITER ',';
+SELECT * from test2 where itime = 2 or itime =17
+ORDER BY 1, 2, 3, 4, 5;
+ itime |   t    |  c  |  d   |  charcol   
+-------+--------+-----+------+------------
+     2 | 2      | -15 |   22 | thisis22
+     2 | 2copy  | -15 |   22 | 22copy
+     2 | first  | -15 |      | 
+    17 | 17     | -15 | 1700 | 
+    17 | 17     | -15 | 1701 | thisis1700
+    17 | 17copy | -15 | 1700 | 
+    17 | 17copy | -15 | 1701 | 1700copy
+(7 rows)
+
+DROP TABLE test2;
+--- TEST3 tables with defaults ---
+--  sequences, generated values, check constraints into compressed chunks
+CREATE TABLE test2 (timec timestamptz ,
+      i integer CHECK ( i > 10) ,
+      b bigint default 20 ,
+      t text NOT NULL,
+      CONSTRAINT rowconstr CHECK ( b > i )
+);
+SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
+NOTICE:  adding not-null constraint to column "timec"
+ table_name 
+------------
+ test2
+(1 row)
+
+ALTER TABLE test2 set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
+timescaledb.compress_orderby = 'timec DESC');
+INSERT INTO test2 values('2020-01-02 11:16:00-05' , 100, 105, 'first' );
+SELECT compress_chunk(c)
+FROM show_chunks('test2') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_7_chunk
+(1 row)
+
+-- test if default value for b is used
+INSERT INTO test2(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
+COPY test2(timec,i,t) FROM STDIN DELIMITER ',';
+SELECT b from test2 ORDER BY 1;
+  b  
+-----
+  20
+  20
+ 105
+(3 rows)
+
+\set ON_ERROR_STOP 0
+--null value for t, should fail
+INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 100, 200, NULL);
+ERROR:  null value in column "t" of relation "_hyper_5_7_chunk" violates not-null constraint
+COPY test2 FROM STDIN DELIMITER ',' NULL 'NULL';
+ERROR:  null value in column "t" of relation "_hyper_5_7_chunk" violates not-null constraint
+-- i=1, should fail
+INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 1, 10, 'null i');
+ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "test2_i_check"
+COPY test2 FROM STDIN DELIMITER ',';
+ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "test2_i_check"
+-- b < i, should fail
+INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 22, 1, 'null i');
+ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "rowconstr"
+COPY test2 FROM STDIN DELIMITER ',';
+ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "rowconstr"
+\set ON_ERROR_STOP 1
+--verify we are still INSERTing into the compressed chunk i.e did not
+--create a new chunk
+SELECT count(c)
+FROM show_chunks('test2') c;
+ count 
+-------
+     1
+(1 row)
+
+-- TEST4 with sequence .
+CREATE SEQUENCE vessel_id_seq
+    INCREMENT 1
+    START 1    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 1;
+CREATE TABLE vessels (timec timestamptz ,
+      id bigint NOT NULL DEFAULT nextval('vessel_id_seq'::regclass),
+      i integer CHECK ( i > 10) ,
+      b bigint default 20 ,
+      t text NOT NULL,
+      CONSTRAINT rowconstr CHECK ( b > i )
+);
+SELECT table_name from create_hypertable('vessels', 'timec', chunk_time_interval=> INTERVAL '7 days');
+NOTICE:  adding not-null constraint to column "timec"
+ table_name 
+------------
+ vessels
+(1 row)
+
+ALTER TABLE vessels set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
+timescaledb.compress_orderby = 'timec DESC');
+INSERT INTO vessels(timec, i, b, t) values('2020-01-02 11:16:00-05' , 100, 105, 'first' );
+SELECT compress_chunk(c)
+FROM show_chunks('vessels') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_9_chunk
+(1 row)
+
+-- test if default value for b and sequence value for id is used
+INSERT INTO vessels(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
+COPY vessels(timec,i,t )FROM STDIN DELIMITER ',';
+SELECT timec, id, b from vessels order by 2, 1;
+            timec             | id |  b  
+------------------------------+----+-----
+ Thu Jan 02 08:16:00 2020 PST |  1 | 105
+ Thu Jan 02 07:16:00 2020 PST |  2 |  20
+ Thu Jan 02 07:16:00 2020 PST |  3 |  20
+(3 rows)
+
+-- TEST5 generated values
+CREATE table test_gen (
+    id int generated by default AS IDENTITY ,
+    payload text
+);
+SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
+   create_hypertable   
+-----------------------
+ (9,public,test_gen,t)
+(1 row)
+
+ALTER TABLE test_gen set (timescaledb.compress);
+INSERT into test_gen (payload) SELECT generate_series(1,15) ;
+SELECT max(id) from test_gen;
+ max 
+-----
+  15
+(1 row)
+
+SELECT compress_chunk(c)
+FROM show_chunks('test_gen') c;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_11_chunk
+ _timescaledb_internal._hyper_9_12_chunk
+(2 rows)
+
+INSERT INTO test_gen (payload) values(17);
+SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
+ id | payload 
+----+---------
+ 16 | 17
+(1 row)
+
+COPY test_gen(payload) FROM STDIN DELIMITER ',';
+SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
+ id | payload 
+----+---------
+ 17 | 18
+(1 row)
+
+-- TEST triggers
+-- insert into compressed hypertables with triggers
+CREATE OR REPLACE FUNCTION row_trig_value_gt_0() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  IF NEW.value <= 0 THEN
+    RAISE NOTICE 'Skipping insert';
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION row_trig_value_mod() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  NEW.value = NEW.value + 100;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION stmt_trig_error() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NULL;
+END
+$$ LANGUAGE plpgsql;
+CREATE TABLE trigger_test(time timestamptz NOT NULL, device int, value int, dropcol1 int);
+SELECT create_hypertable('trigger_test','time');
+     create_hypertable      
+----------------------------
+ (11,public,trigger_test,t)
+(1 row)
+
+--create chunk and compress
+--the first chunk is created with dropcol1
+INSERT INTO trigger_test(time, device, value,dropcol1) SELECT '2000-01-01',1,1,1;
+-- drop the column before we compress
+ALTER TABLE trigger_test DROP COLUMN dropcol1;
+ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
+SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_15_chunk
+(1 row)
+
+-- BEFORE ROW trigger
+CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
+-- should be 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+-- try insert that gets skipped by trigger
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Skipping insert
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+NOTICE:  Skipping insert
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+-- try again without being skipped
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,1) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,1) <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t1 ON trigger_test;
+-- BEFORE ROW trigger that modifies tuple
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111
+ Fri Dec 31 22:00:00 1999 PST |      1 |   112
+(3 rows)
+
+ROLLBACK;
+DROP TRIGGER t1_mod ON trigger_test;
+-- BEFORE ROW conditional trigger
+CREATE TRIGGER t1_cond BEFORE INSERT ON trigger_test FOR EACH ROW WHEN (NEW.value > 10) EXECUTE FUNCTION row_trig_value_mod();
+-- test with condition being false
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+COPY trigger_test FROM STDIN DELIMITER ',';
+-- value for both new tuples should not be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Fri Dec 31 22:00:00 1999 PST |      1 |     2
+(3 rows)
+
+ROLLBACK;
+-- test with condition being true
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111
+ Fri Dec 31 22:00:00 1999 PST |      1 |   112
+(3 rows)
+
+ROLLBACK;
+DROP TRIGGER t1_cond ON trigger_test;
+-- BEFORE ROW error in trigger
+CREATE TRIGGER t1_error BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t1_error ON trigger_test;
+-- BEFORE STATEMENT trigger
+CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t2 BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t2 BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t2 ON trigger_test;
+-- BEFORE STATEMENT error in trigger
+CREATE TRIGGER t2_error BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t2_error BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t2_error BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t2_error ON trigger_test;
+-- AFTER STATEMENT trigger
+CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t3 AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t3 AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t3 ON trigger_test;
+-- AFTER STATEMENT error in trigger
+CREATE TRIGGER t3_error AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t3_error AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t3_error AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t3_error ON trigger_test;
+-- test unsupported features are blocked
+-- INSTEAD OF INSERT is only supported for VIEWs
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t4_instead INSTEAD OF INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+ERROR:  "trigger_test" is a table
+\set ON_ERROR_STOP 1
+-- AFTER INSERT ROW trigger not supported on compressed chunk
+CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2001-01-01',1,0;
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Mon Jan 01 00:00:00 2001 PST",1,0) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Sun Dec 31 22:00:00 2000 PST",1,0) <NULL>
+-- insert into new uncompressed chunk should not be blocked
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     5
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t4_ar ON trigger_test;
+-- CONSTRAINT trigger not supported on compressed chunk
+CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     5
+(1 row)
+
+DROP trigger t4_constraint ON trigger_test;
+-- test row triggers after adding/dropping columns
+-- now add a new column to the table and insert into a new chunk
+ALTER TABLE trigger_test ADD COLUMN addcolv varchar(10);
+ALTER TABLE trigger_test ADD COLUMN addcoli integer;
+INSERT INTO trigger_test(time, device, value, addcolv, addcoli)
+VALUES ( '2010-01-01', 10, 10, 'ten', 222);
+SELECT compress_chunk(c, true) FROM show_chunks('trigger_test') c;
+NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_15_chunk
+ _timescaledb_internal._hyper_11_18_chunk
+(2 rows)
+
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     6
+(1 row)
+
+BEGIN;
+INSERT INTO trigger_test VALUES
+                   ( '2000-01-01',1,11, 'eleven', 111),
+                   ( '2010-01-01',10,10, 'ten', 222);
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11,eleven,111) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_18_chunk: ("Fri Jan 01 00:00:00 2010 PST",10,10,ten,222) <NULL>
+SELECT * FROM trigger_test ORDER BY 1 ,2, 5;
+             time             | device | value | addcolv | addcoli 
+------------------------------+--------+-------+---------+---------
+ Fri Dec 31 22:00:00 1999 PST |      1 |     0 |         |        
+ Fri Dec 31 22:00:00 1999 PST |      1 |     0 |         |        
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111 | eleven  |     111
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1 |         |        
+ Sat Jan 01 00:00:00 2000 PST |      1 |     0 |         |        
+ Sat Jan 01 00:00:00 2000 PST |      1 |     0 |         |        
+ Fri Jan 01 00:00:00 2010 PST |     10 |    10 | ten     |     222
+ Fri Jan 01 00:00:00 2010 PST |     10 |   110 | ten     |     222
+(8 rows)
+
+ROLLBACK;
+DROP TABLE trigger_test;
+-- test interaction between newly inserted batches and pathkeys/ordered append
+--
+-- The following test operates on a small relation. By using the
+-- timescaledb.enable_decompression_sorted_merge optimization, we are pushing a sort node
+-- below the DecompressChunk node, which operates on the batches. This could lead to flaky
+-- tests because the input data is small and PostgreSQL switches from IndexScans to
+-- SequentialScans. Disable the optimization for the following test to ensure we have
+-- stable query plans in all CI environments.
+SET timescaledb.enable_decompression_sorted_merge = 0;
+CREATE TABLE test_ordering(time int);
+SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
+NOTICE:  adding not-null constraint to column "time"
+  table_name   
+---------------
+ test_ordering
+(1 row)
+
+ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
+INSERT INTO test_ordering VALUES (5),(4),(3);
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
+(1 row)
+
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_13_20_chunk
+(1 row)
+
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+   ->  Sort
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+         ->  Seq Scan on compress_hyper_14_21_chunk
+(4 rows)
+
+INSERT INTO test_ordering SELECT 1;
+-- should not be ordered append
+-- regression introduced by #5599:
+-- for the case of a single chunk, there is an additional redundant sort node below decompress chunk
+-- this is due to pushing down the sort node below decompress chunk. In most cases that is beneficial,
+-- but here a more optimal plan would have been a mergeAppend.
+-- It was hard to include a path without pushed down sort for consideration, as `add_path` would reject
+-- the path with sort pushdown, which is desirable in most cases
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_13_20_chunk."time"
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Seq Scan on _hyper_13_20_chunk
+(8 rows)
+
+INSERT INTO test_ordering VALUES (105),(104),(103);
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_ordering
+   Order: test_ordering."time"
+   ->  Merge Append
+         Sort Key: _hyper_13_20_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Sort
+               Sort Key: _hyper_13_20_chunk."time"
+               ->  Seq Scan on _hyper_13_20_chunk
+   ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
+(12 rows)
+
+--insert into compressed + uncompressed chunk
+INSERT INTO test_ordering VALUES (21), (22),(113);
+SELECT count(*) FROM test_ordering;
+ count 
+-------
+    10
+(1 row)
+
+INSERT INTO test_ordering VALUES (106) RETURNING *;
+ time 
+------
+  106
+(1 row)
+
+-- insert into compressed chunk does support RETURNING
+INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING *;
+ time 
+------
+   23
+   24
+  115
+(3 rows)
+
+INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass, *;
+                 tableoid                 | time 
+------------------------------------------+------
+ _timescaledb_internal._hyper_13_20_chunk |   23
+ _timescaledb_internal._hyper_13_20_chunk |   24
+ _timescaledb_internal._hyper_13_22_chunk |  115
+(3 rows)
+
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_13_20_chunk
+ _timescaledb_internal._hyper_13_22_chunk
+(2 rows)
+
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_ordering
+   Order: test_ordering."time"
+   ->  Merge Append
+         Sort Key: _hyper_13_20_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Sort
+               Sort Key: _hyper_13_20_chunk."time"
+               ->  Seq Scan on _hyper_13_20_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
+         ->  Sort
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_23_chunk
+(15 rows)
+
+SET timescaledb.enable_decompression_sorted_merge = 1;
+-- TEST cagg triggers with insert into compressed chunk
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+SELECT table_name from create_hypertable( 'conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+INSERT INTO conditions
+SELECT generate_series('2010-01-01 09:00:00-08'::timestamptz, '2010-01-03 09:00:00-08'::timestamptz, '1 day'), 55 , 45;
+CREATE MATERIALIZED VIEW cagg_conditions WITH (timescaledb.continuous,
+   timescaledb.materialized_only = true)
+AS
+SELECT time_bucket( '7 days', timec) bkt, count(*) cnt, sum(temperature) sumb
+FROM conditions
+GROUP BY time_bucket('7 days', timec);
+NOTICE:  refreshing continuous aggregate "cagg_conditions"
+SELECT * FROM cagg_conditions ORDER BY 1;
+             bkt              | cnt | sumb 
+------------------------------+-----+------
+ Sun Dec 27 16:00:00 2009 PST |   3 |  165
+(1 row)
+
+ALTER TABLE conditions SET (timescaledb.compress);
+SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_15_24_chunk
+(1 row)
+
+SELECT chunk_name, range_start, range_end, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions';
+     chunk_name     |         range_start          |          range_end           | is_compressed 
+--------------------+------------------------------+------------------------------+---------------
+ _hyper_15_24_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
+(1 row)
+
+--now insert into compressed chunk
+INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
+INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
+--refresh cagg, should have updated info
+CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
+SELECT * FROM cagg_conditions ORDER BY 1;
+             bkt              | cnt | sumb 
+------------------------------+-----+------
+ Sun Dec 27 16:00:00 2009 PST |   5 |  185
+(1 row)
+
+-- TEST cagg triggers with copy into compressed chunk
+COPY conditions FROM STDIN DELIMITER ',';
+--refresh cagg, should have updated info
+CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
+SELECT * FROM cagg_conditions ORDER BY 1;
+             bkt              | cnt | sumb 
+------------------------------+-----+------
+ Sun Dec 27 16:00:00 2009 PST |   8 |  485
+(1 row)
+
+-- TEST direct insert into internal compressed hypertable should be blocked
+CREATE TABLE direct_insert(time timestamptz not null);
+SELECT table_name FROM create_hypertable('direct_insert','time');
+  table_name   
+---------------
+ direct_insert
+(1 row)
+
+ALTER TABLE direct_insert SET(timescaledb.compress);
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'direct_insert') \gset
+\set ON_ERROR_STOP 0
+INSERT INTO :TABLENAME SELECT;
+ERROR:  direct insert into internal compressed hypertable is not supported
+\set ON_ERROR_STOP 1
+-- Test that inserting into a compressed table works even when the
+-- column has been dropped.
+CREATE TABLE test4 (
+    timestamp timestamp without time zone not null,
+    ident text not null,
+    one double precision,
+    two double precision
+);
+SELECT * FROM create_hypertable('test4', 'timestamp');
+WARNING:  column type "timestamp without time zone" used for "timestamp" does not follow best practices
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            20 | public      | test4      | t
+(1 row)
+
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-10-14 17:50:16.207', '2' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-11-14 17:50:16.207', '1' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-12-14 17:50:16.207', '3' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-01-14 17:50:16.207', '4' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-02-14 17:50:16.207', '5' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-03-14 17:50:16.207', '6' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-04-14 17:50:16.207', '7' );
+ALTER TABLE test4 SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'timestamp',
+    timescaledb.compress_segmentby = 'ident'
+);
+select count(compress_chunk(ch)) FROM show_chunks('test4') ch;
+ count 
+-------
+     7
+(1 row)
+
+ALTER TABLE test4 DROP COLUMN two;
+INSERT INTO test4 VALUES ('2021-10-14 17:50:16.207', '7', NULL);
+INSERT INTO test4 (timestamp, ident) VALUES ('2021-10-14 17:50:16.207', '7');
