@@ -58,7 +58,7 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
 };
 
-/* this is copied from the job_stat/get_next_scheduled_execution_slot */
+/* this is copied from the job_stat/ts_get_next_scheduled_execution_slot */
 extern Datum
 ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 {

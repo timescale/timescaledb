@@ -1418,9 +1418,9 @@ SELECT wait_for_timer_to_run(0);
 SELECT insert_job('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
 -- call alter_job to trigger cache invalidation
 SELECT alter_job(:job_id,scheduled:=true);
-                            alter_job                            
------------------------------------------------------------------
- (1024,"@ 0.1 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,)
+                              alter_job                              
+---------------------------------------------------------------------
+ (1024,"@ 0.1 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,,f,,)
 (1 row)
 
 SELECT ts_bgw_params_reset_time(50000, true);
@@ -1534,9 +1534,9 @@ SELECT wait_for_timer_to_run(400000);
 SELECT insert_job('new_job', 'bgw_test_job_1', INTERVAL '10ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
 -- call alter_job to trigger cache invalidation
 SELECT alter_job(:job_id,scheduled:=true);
-                            alter_job                             
-------------------------------------------------------------------
- (1025,"@ 0.01 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,)
+                              alter_job                               
+----------------------------------------------------------------------
+ (1025,"@ 0.01 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,,f,,)
 (1 row)
 
 SELECT ts_bgw_params_reset_time(450000, true);

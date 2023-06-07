@@ -265,6 +265,8 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 		job->fd.initial_start =
 			DatumGetTimestampTz(values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)]);
 	}
+	else
+		job->fd.initial_start = DT_NOBEGIN;
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)])
 		job->fd.timezone =
@@ -878,6 +880,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		BoolGetDatum(updated_job->fd.scheduled);
 	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
 
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] =
+		BoolGetDatum(updated_job->fd.fixed_schedule);
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)] = true;
+
 	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] =
@@ -911,6 +917,22 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	}
 	else
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+
+	if (TIMESTAMP_NOT_FINITE(updated_job->fd.initial_start))
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] =
+			TimestampTzGetDatum(updated_job->fd.initial_start);
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
+
+	if (updated_job->fd.timezone)
+	{
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] =
+			PointerGetDatum(updated_job->fd.timezone);
+	}
+	else
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = true;
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = true;
 
 	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, doReplace);
 

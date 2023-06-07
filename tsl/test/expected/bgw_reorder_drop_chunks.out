@@ -409,9 +409,9 @@ SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescale
 (1 row)
 
 SELECT alter_job(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
-                                                                         alter_job                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 2}",-infinity,_timescaledb_internal.policy_retention_check)
+                                                                           alter_job                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 2}",-infinity,_timescaledb_internal.policy_retention_check,f,,)
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
@@ -622,16 +622,16 @@ SELECT add_retention_policy('test_drop_chunks_table_tsntz', INTERVAL '4 months')
 -- Test that retention policy is being logged
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_date_job_id;
-                                                                                    alter_job                                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1002,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 3}",-infinity,_timescaledb_internal.policy_retention_check)
+                                                                                      alter_job                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1002,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 3}",-infinity,_timescaledb_internal.policy_retention_check,f,,)
 (1 row)
 
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_tsntz_job_id;
-                                                                                    alter_job                                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1003,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 4}",-infinity,_timescaledb_internal.policy_retention_check)
+                                                                                      alter_job                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1003,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 4}",-infinity,_timescaledb_internal.policy_retention_check,f,,)
 (1 row)
 
 CALL run_job(:drop_chunks_date_job_id);

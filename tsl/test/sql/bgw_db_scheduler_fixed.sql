@@ -759,4 +759,57 @@ SELECT
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
 
+-- test ability to switch from one type of schedule to another
+CREATE OR REPLACE PROCEDURE job_test(jobid int, config jsonb) language plpgsql as $$
+BEGIN
+PERFORM pg_sleep(10);
+END
+$$;
 
+SELECT add_job('job_test', '8 min', fixed_schedule => false) AS jobid_drifting_1 \gset
+SELECT add_job('job_test', '8 min', fixed_schedule => false) AS jobid_drifting_2 \gset
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT last_finish AS finish_time_drifting_1 FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :jobid_drifting_1 \gset
+-- job is on fixed schedule, so changing the timezone and initial start, has no effect on its next start,
+-- which should be 8 min after the finish time
+SELECT next_start AS next_start_drifting_1 FROM alter_job(:jobid_drifting_1, schedule_interval => interval '10 min', timezone => 'Europe/Athens') \gset
+SELECT :'next_start_drifting_1'::timestamptz - :'finish_time_drifting_1'::timestamptz as diff_interval;
+
+-- this will print a notice about using the current time as initial start
+-- suppress the notice though as it will lead to flaky tests
+set client_min_messages = 'warning';
+SELECT next_start, initial_start FROM alter_job(:jobid_drifting_1, schedule_interval => interval '10 min', fixed_schedule => true, initial_start => '-infinity') \gset
+-- should be 10 min
+SELECT :'next_start'::timestamptz - :'initial_start'::timestamptz;
+
+-- if job is not on fixed schedule, and we change it to fixed schedule, then user should also provide initial_start.
+-- if they don't, a notice is printed that we're using current time as initial start
+SELECT next_start, initial_start FROM alter_job(:jobid_drifting_2, schedule_interval => interval '10 min', fixed_schedule => true) \gset
+SELECT :'next_start'::timestamptz - :'initial_start'::timestamptz;
+
+reset client_min_messages;
+
+-- jobs starting with fixed schedules
+SELECT add_job('job_test', '1 month', initial_start => '2000-01-01 00:03') as jobid_fixed_1 \gset
+-- wait for the job to run, then check its next_start: (3 minutes = 180mil microseconds)
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(180000005);
+SELECT last_finish, next_start from _timescaledb_internal.bgw_job_stat where job_id = :jobid_fixed_1;
+SELECT date_part('hour',next_start)::integer, date_part('minute',next_start)::integer, date_part('second',next_start)::integer FROM alter_job(:jobid_fixed_1, initial_start => '2020-01-01 04:00');
+SELECT date_part('hour',next_start)::integer, date_part('minute',next_start)::integer, date_part('second',next_start)::integer FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :jobid_fixed_1;
+-- go from fixed_schedule to drifting schedule
+SELECT ts_bgw_params_destroy();
+SELECT ts_bgw_params_create();
+SELECT add_job('job_test', '30 sec', initial_start => '2000-01-01 00:00:23') as jobid_fixed_2 \gset
+-- wait for the job to run, check the next_start, once it's finished, switch to drifting schedule and
+-- check the next_start again
+-- wait for 30 seconds to pass
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(30000025);
+
+select * from _timescaledb_internal.bgw_job_stat WHERE job_id = :jobid_fixed_2;
+UPDATE _timescaledb_internal.bgw_job_stat
+SET last_finish = last_finish + interval '10 sec', last_successful_finish = last_successful_finish + interval '10 sec'
+WHERE job_id = :jobid_fixed_2;
+-- next_start is unchanged
+SELECT * FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :jobid_fixed_2;
+-- next start is now updated
+SELECT alter_job(:jobid_fixed_2, fixed_schedule => false);
