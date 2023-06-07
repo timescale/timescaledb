@@ -154,7 +154,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  add_reorder_policy(regclass,name,boolean,timestamp with time zone,text)
  add_retention_policy(regclass,"any",boolean,interval,timestamp with time zone,text)
  alter_data_node(name,text,name,integer,boolean)
- alter_job(integer,interval,interval,integer,interval,boolean,jsonb,timestamp with time zone,boolean,regproc)
+ alter_job(integer,interval,interval,integer,interval,boolean,jsonb,timestamp with time zone,boolean,regproc,boolean,timestamp with time zone,text)
  approximate_row_count(regclass)
  attach_data_node(name,regclass,boolean,boolean)
  attach_tablespace(name,regclass,boolean)

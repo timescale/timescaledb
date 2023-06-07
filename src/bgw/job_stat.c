@@ -181,8 +181,8 @@ typedef struct
  * In those cases, we only have month components. So we compute the difference in
  * months between the initial_start's timebucket and the finish time's bucket.
  */
-static TimestampTz
-get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
+TimestampTz
+ts_get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 {
 	Assert(job->fd.fixed_schedule == true);
 	Datum schedint_datum = IntervalPGetDatum(&job->fd.schedule_interval);
@@ -278,7 +278,7 @@ calculate_next_start_on_success_fixed(TimestampTz finish_time, BgwJob *job)
 {
 	TimestampTz next_slot;
 
-	next_slot = get_next_scheduled_execution_slot(job, finish_time);
+	next_slot = ts_get_next_scheduled_execution_slot(job, finish_time);
 
 	return next_slot;
 }
@@ -431,7 +431,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	 * of the next scheduled slot, so we don't get off track */
 	if (job->fd.fixed_schedule)
 	{
-		TimestampTz next_slot = get_next_scheduled_execution_slot(job, finish_time);
+		TimestampTz next_slot = ts_get_next_scheduled_execution_slot(job, finish_time);
 		if (res > next_slot)
 			res = next_slot;
 	}

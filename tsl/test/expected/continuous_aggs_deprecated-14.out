@@ -869,9 +869,9 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
-                                                                                                alter_job                                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1001,"@ 1 hour","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check)
+                                                                                                  alter_job                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1001,"@ 1 hour","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check,f,,)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -881,9 +881,9 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-                                                                                                 alter_job                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1001,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check)
+                                                                                                   alter_job                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1001,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check,f,,)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -967,9 +967,9 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-                                                                                            alter_job                                                                                            
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1002,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": 500, ""start_offset"": null, ""mat_hypertable_id"": 23}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check)
+                                                                                              alter_job                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1002,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": 500, ""start_offset"": null, ""mat_hypertable_id"": 23}",-infinity,_timescaledb_internal.policy_refresh_continuous_aggregate_check,f,,)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;

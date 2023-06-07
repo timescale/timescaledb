@@ -917,9 +917,9 @@ ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby 
 SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
 -- set recompress to true
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                                         alter_job                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1014,"@ 3 days 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_internal.policy_compression_check)
+                                                                                           alter_job                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1014,"@ 3 days 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_internal.policy_compression_check,f,,)
 (1 row)
 
 -- create new chunks
