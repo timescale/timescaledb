@@ -260,10 +260,8 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	}
 
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
-														   "DecompressChunk batch",
-														   /* minContextSize = */ 0,
-														   /* initBlockSize = */ 64 * 1024,
-														   /* maxBlockSize = */ 64 * 1024);
+														   "DecompressChunk per_batch",
+														   ALLOCSET_DEFAULT_SIZES);
 	/* Initialized on demand to save memory. */
 	batch_state->arrow_context = NULL;
 
