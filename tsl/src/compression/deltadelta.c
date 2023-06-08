@@ -570,20 +570,19 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 								 iter->element_type);
 }
 
-#define ELEMENT_TYPE uint64
-#include "simple8b_rle_decompress_all.h"
-#undef ELEMENT_TYPE
-
 /* Functions for bulk decompression. */
 #define ELEMENT_TYPE uint16
+#include "simple8b_rle_decompress_all.h"
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
 #define ELEMENT_TYPE uint32
+#include "simple8b_rle_decompress_all.h"
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
 #define ELEMENT_TYPE uint64
+#include "simple8b_rle_decompress_all.h"
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
