@@ -333,7 +333,6 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 void *
 delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 {
-	// fprintf(stderr, "------------finish\n");
 	Simple8bRleSerialized *deltas = simple8brle_compressor_finish(&compressor->delta_delta);
 	Simple8bRleSerialized *nulls = simple8brle_compressor_finish(&compressor->nulls);
 	DeltaDeltaCompressed *compressed;
