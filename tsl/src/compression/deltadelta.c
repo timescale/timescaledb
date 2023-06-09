@@ -333,6 +333,7 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 void *
 delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 {
+	// fprintf(stderr, "------------finish\n");
 	Simple8bRleSerialized *deltas = simple8brle_compressor_finish(&compressor->delta_delta);
 	Simple8bRleSerialized *nulls = simple8brle_compressor_finish(&compressor->nulls);
 	DeltaDeltaCompressed *compressed;
@@ -570,19 +571,20 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 								 iter->element_type);
 }
 
+#define ELEMENT_TYPE uint64
+#include "simple8b_rle_decompress_all.h"
+#undef ELEMENT_TYPE
+
 /* Functions for bulk decompression. */
 #define ELEMENT_TYPE uint16
-#include "simple8b_rle_decompress_all.h"
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
 #define ELEMENT_TYPE uint32
-#include "simple8b_rle_decompress_all.h"
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
 #define ELEMENT_TYPE uint64
-#include "simple8b_rle_decompress_all.h"
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 

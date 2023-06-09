@@ -592,6 +592,42 @@ test_delta3(bool have_nulls, bool have_random)
 	TestAssertTrue(r.is_done);
 }
 
+static int32 test_delta4_case1[] = { -603979776, 1462059044 };
+
+static int32 test_delta4_case2[] = {
+	0x7979fd07, 0x79797979, 0x79797979, 0x79797979, 0x79797979, 0x79797979, 0x79797979,
+	0x79797979, 0x79797979, 0x79797979, 0x79797979, 0x79797979, 0x79797979, 0x79797979,
+	0x79797979, 0x50505050, 0xc4c4c4c4, 0xc4c4c4c4, 0x50505050, 0x50505050, 0xc4c4c4c4,
+};
+
+static void
+test_delta4(const int32 *values, int n)
+{
+	Compressor *compressor = delta_delta_compressor_for_type(INT4OID);
+	for (int i = 0; i < n; i++)
+	{
+		compressor->append_val(compressor, Int32GetDatum(values[i]));
+	}
+	Datum compressed = (Datum) compressor->finish(compressor);
+
+	ArrowArray *arrow = delta_delta_decompress_all(compressed, INT4OID);
+	DecompressionIterator *iter =
+		delta_delta_decompression_iterator_from_datum_forward(compressed, INT4OID);
+	int i = 0;
+	for (DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter); !r.is_done;
+		 r = delta_delta_decompression_iterator_try_next_forward(iter))
+	{
+		TestAssertTrue(!r.is_null);
+		TestAssertTrue(i < arrow->length);
+		TestAssertTrue(((int32 *) arrow->buffers[1])[i] == DatumGetInt32(r.val));
+		TestAssertTrue(arrow_row_is_valid(arrow->buffers[0], i));
+		TestAssertTrue(values[i] == DatumGetInt32(r.val));
+		i++;
+	}
+	TestAssertTrue(i == arrow->length);
+	TestAssertTrue(i == n);
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
@@ -611,6 +647,11 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_delta3(/* have_nulls = */ false, /* have_random = */ true);
 	test_delta3(/* have_nulls = */ true, /* have_random = */ false);
 	test_delta3(/* have_nulls = */ true, /* have_random = */ true);
+
+	/* Some tests for zig-zag encoding overflowing the original element width. */
+	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));
+	test_delta4(test_delta4_case2, sizeof(test_delta4_case2) / sizeof(*test_delta4_case2));
+
 	PG_RETURN_VOID();
 }
 

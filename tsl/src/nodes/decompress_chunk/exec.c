@@ -439,7 +439,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
  * Convert Arrow array to an array of Postgres Datum's.
  */
 static void
-convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow)
+convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, bool reverse)
 {
 	const int n = arrow->length;
 	Assert(n > 0);
@@ -454,54 +454,74 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow)
 	/* Convert Arrow to Data/nulls arrays. */
 	const uint64 *restrict validity_bitmap = arrow->buffers[0];
 	const void *restrict arrow_values = arrow->buffers[1];
-	Datum *restrict datums = palloc(sizeof(Datum) * n_padded);
-	bool *restrict nulls = palloc(sizeof(bool) * n_nulls_padded);
+
+	/*
+	 * Note that we need padding both in front and in the back, to allow us to
+	 * use fixed-size loops for both forward and reverse directions. This means
+	 * these pointers can't be passed to pfree.
+	 */
+	Datum *restrict datums =
+		(Datum *) palloc(sizeof(Datum) * (n_padded + INNER_LOOP_SIZE)) + INNER_LOOP_SIZE;
+	bool *restrict nulls = (bool *) palloc(sizeof(bool) * (n_nulls_padded + 64)) + 64;
 
 /*
- * Specialize the conversion loop for the particular Arrow and Postgres type, to
- * generate more efficient code.
+ * Specialize the conversion loop for the particular direction, Arrow and
+ * Postgres type, to generate more efficient code.
  */
-#define CONVERSION_LOOP(OID, CTYPE, CONVERSION)                                                    \
+#define CONVERSION_LOOP(REVERSE, OID, CTYPE, CONVERSION)                                           \
 	case OID:                                                                                      \
 		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
 		{                                                                                          \
 			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
 			{                                                                                      \
-				const int row = outer + inner;                                                     \
-				datums[row] = CONVERSION(((CTYPE *) arrow_values)[row]);                           \
-				Assert(row >= 0);                                                                  \
-				Assert(row < n_padded);                                                            \
+				const int input_row = outer + inner;                                               \
+				const int output_row = (REVERSE) ? n - (outer + inner + 1) : outer + inner;        \
+				datums[output_row] = CONVERSION(((CTYPE *) arrow_values)[input_row]);              \
+				Assert(input_row >= 0);                                                            \
+				Assert(input_row < n_padded);                                                      \
 			}                                                                                      \
 		}                                                                                          \
 		break
 
-	switch (column->typid)
-	{
-		CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);
-		CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);
-		CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);
-		CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);
-		CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);
-		CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);
-		CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);
-		CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);
-		default:
-			Assert(false);
+#define CONVERSION_SWITCH(REVERSE)                                                                 \
+	switch (column->typid)                                                                         \
+	{                                                                                              \
+		CONVERSION_LOOP(REVERSE, INT2OID, int16, Int16GetDatum);                                   \
+		CONVERSION_LOOP(REVERSE, INT4OID, int32, Int32GetDatum);                                   \
+		CONVERSION_LOOP(REVERSE, INT8OID, int64, Int64GetDatum);                                   \
+		CONVERSION_LOOP(REVERSE, FLOAT4OID, float4, Float4GetDatum);                               \
+		CONVERSION_LOOP(REVERSE, FLOAT8OID, float8, Float8GetDatum);                               \
+		CONVERSION_LOOP(REVERSE, DATEOID, int32, DateADTGetDatum);                                 \
+		CONVERSION_LOOP(REVERSE, TIMESTAMPOID, int64, TimestampGetDatum);                          \
+		CONVERSION_LOOP(REVERSE, TIMESTAMPTZOID, int64, TimestampTzGetDatum);                      \
+		default:                                                                                   \
+			Assert(false);                                                                         \
+	}                                                                                              \
+	/* Fill the null bitmap. */                                                                    \
+	for (int outer = 0; outer < arrow_bitmap_elements; outer++)                                    \
+	{                                                                                              \
+		const uint64 element = validity_bitmap[outer];                                             \
+		for (int inner = 0; inner < 64; inner++)                                                   \
+		{                                                                                          \
+			const int input_row = outer * 64 + inner;                                              \
+			const int output_row = (REVERSE) ? n - (input_row + 1) : input_row;                    \
+			nulls[output_row] = ((element >> inner) & 1) ? false : true;                           \
+		}                                                                                          \
 	}
+
+	if (reverse)
+	{
+		CONVERSION_SWITCH(true);
+	}
+	else
+	{
+		CONVERSION_SWITCH(false);
+	}
+
+#undef CONVERSION_SWITCH
 #undef CONVERSION_LOOP
 #undef INNER_LOOP_SIZE
 
-	for (int outer = 0; outer < arrow_bitmap_elements; outer++)
-	{
-		const uint64 element = validity_bitmap[outer];
-		for (int inner = 0; inner < 64; inner++)
-		{
-			const int row = outer * 64 + inner;
-			nulls[row] = ((element >> inner) & 1) ? false : true;
-			Assert(row >= 0);
-			Assert(row < n_nulls_padded);
-		}
-	}
 	column->compressed.iterator = NULL;
 	column->compressed.datums = datums;
 	column->compressed.nulls = nulls;
@@ -613,8 +633,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 
 				ArrowArray *arrow = NULL;
-				if (!chunk_state->reverse && !chunk_state->sorted_merge_append &&
-					ts_guc_enable_bulk_decompression)
+				if (!chunk_state->sorted_merge_append && ts_guc_enable_bulk_decompression)
 				{
 					/*
 					 * In principle, we could do this for reverse decompression
@@ -664,7 +683,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
 
-					convert_arrow_to_data(column, arrow);
+					convert_arrow_to_data(column, arrow, chunk_state->reverse);
 
 					MemoryContextReset(batch_state->arrow_context);
 

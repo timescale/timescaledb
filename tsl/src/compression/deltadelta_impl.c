@@ -23,10 +23,16 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 
-	/* Can't use element type here because of zig-zag encoding. */
+	/*
+	 * Can't use element type here because of zig-zag encoding. The deltas are
+	 * computed in uint64, so we can get a delta that is actually larger than
+	 * the element type. We can't just truncate the delta either, because it
+	 * will lead to broken decompression results. The test case is in
+	 * test_delta4().
+	 */
 	int16 num_deltas;
-	const ELEMENT_TYPE *restrict deltas_zigzag =
-		FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(deltas_compressed, &num_deltas);
+	const uint64 *restrict deltas_zigzag =
+		simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
 
 	Simple8bRleBitmap nulls = { 0 };
 	if (has_nulls)

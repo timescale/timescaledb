@@ -150,7 +150,7 @@ arrow_set_row_validity(uint64 *bitmap, int row_number, bool value)
 	const int bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
 
-	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | (((uint64) !!value) << bit_index);
+	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | ((-(uint64) !!value) & mask);
 
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
