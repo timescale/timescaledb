@@ -625,11 +625,3 @@ SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name ;
-
--- create table asd(a integer);
--- SELECT drop_chunks('asd', older_than => 2);
-
-SELECT show_chunks('drop_chunk_test1');
-SELECT * FROM show_chunks('drop_chunk_test2');
-
-
