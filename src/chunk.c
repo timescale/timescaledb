@@ -147,8 +147,8 @@ static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, 
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
-static bool chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc);
-static bool chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs);
+static bool chunk_cleanup_orphaned_slice(FormData_chunk *form, ChunkConstraint *cc);
+static bool chunk_cleanup_orphaned_slices(FormData_chunk *form, ChunkConstraints *ccs);
 static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 
 static void
@@ -2873,7 +2873,7 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
  * Deletes the dimension slice if there are no remaining constraints referencing it.
  */
 static bool
-chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc)
+chunk_cleanup_orphaned_slice(FormData_chunk *form, ChunkConstraint *cc)
 {
 	if (!is_dimension_constraint(cc))
 		return true;
@@ -2932,14 +2932,14 @@ chunk_cleanup_ophaned_slice(FormData_chunk *form, ChunkConstraint *cc)
  * Returns true if all matching slices were removed.
  */
 static bool
-chunk_cleanup_ophaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
+chunk_cleanup_orphaned_slices(FormData_chunk *form, ChunkConstraints *ccs)
 {
 	bool all_slices_removed = true;
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (int i = 0; i < ccs->num_constraints; i++)
 	{
 		ChunkConstraint *cc = &ccs->constraints[i];
-		all_slices_removed &= chunk_cleanup_ophaned_slice(form, cc);
+		all_slices_removed &= chunk_cleanup_orphaned_slice(form, cc);
 	}
 	return all_slices_removed;
 }
@@ -3000,7 +3000,7 @@ chunk_tuple_delete(TupleInfo *ti, DropOptions drop_options)
 	{
 		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
 
-		bool all_slices_removed = chunk_cleanup_ophaned_slices(&form, ccs);
+		bool all_slices_removed = chunk_cleanup_orphaned_slices(&form, ccs);
 		if(drop_options.full_catalog_removal && !all_slices_removed) {
 			elog(ERROR, "not-all slices can be removed!");
 		}
