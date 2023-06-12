@@ -800,6 +800,26 @@ do_load(TsExtension *const ext)
 	strlcpy(ext->soversion, version, MAX_VERSION_LEN);
 	snprintf(soname, MAX_SO_NAME_LEN, "%s%s-%s", TS_LIBDIR, ext->name, version);
 
+	// For OSM, skip everything except the above work to make extension_is_loaded return true.
+	//
+	// Surprisingly, this "loader" doesn't seem to be a loader, but more of a
+	// Manager.  What I understood from converstaion with Mat, the comments in
+	// this file, and function names such as `do_load` all suggest that the
+	// `load_external_function` function call below is in some way responsible
+	// for loading the .so, but it IS NOT.  Postgres loads the .so specified
+	// in the extension .sql file before we even get here.
+	//
+	// What this is responsible for:
+	// - setting up shared memory (timescaledb only)
+	// - starting and stopping workers (both)
+	//
+	// What this is NOT responsible for:
+	// - LOADing the .so
+	// - Calling _PG_init (postgresql does that regardless)
+	if (strcmp(ext->name, "timescaledb") != 0) {
+		return;
+	}
+
 	/*
 	 * In a parallel worker, we're not responsible for loading libraries, it's
 	 * handled by the parallel worker infrastructure which restores the
