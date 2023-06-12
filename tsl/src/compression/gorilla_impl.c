@@ -139,10 +139,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		Assert(current_element <= i);
 		decompressed_values[i] = decompressed_values[current_element];
 
-		if (simple8brle_bitmap_get_at(&tag0s, i))
-		{
-			current_element--;
-		}
+		current_element -= simple8brle_bitmap_get_at(&tag0s, i);
 	}
 	Assert(current_element == -1);
 
