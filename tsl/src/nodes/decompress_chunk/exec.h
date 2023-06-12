@@ -101,6 +101,18 @@ typedef struct DecompressChunkState
 	struct binaryheap *merge_heap; /* Binary heap of slot indices */
 	int n_sortkeys;				   /* Number of sort keys for heap compare function */
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
+
+	/*
+	 * Make non-refcounted copies of the tupdesc for reuse across all batch states
+	 * and avoid spending CPU in ResourceOwner when creating a big number of table
+	 * slots. This happens because each new slot pins its tuple descriptor using
+	 * PinTupleDesc, and for reference-counting tuples this involves adding a new
+	 * reference to ResourceOwner, which is not very efficient for a large number of
+	 * references.
+	 */
+	TupleDesc decompressed_slot_projected_tdesc;
+	TupleDesc decompressed_slot_scan_tdesc;
+	TupleDesc compressed_slot_tdesc;
 } DecompressChunkState;
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);

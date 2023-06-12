@@ -405,6 +405,21 @@ CALL order_test('SELECT * FROM test1 ORDER BY time DESC');
 CALL order_test('SELECT * FROM test1 ORDER BY time ASC NULLS LAST');
 
 ------
+-- Test window functions
+------
+CREATE TABLE insert_test(id INT);
+INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
+
+SELECT * FROM insert_test AS ref_0
+WHERE EXISTS (
+    SELECT
+        sum(ref_0.id) OVER (partition by ref_0.id ORDER BY ref_0.id,ref_0.id,sample_0.time)
+    FROM
+        sensor_data AS sample_0
+    WHERE (1 > sample_0.temperature)
+);
+
+------
 -- Test enabling and disabling the optimization based on costs
 ------
 
