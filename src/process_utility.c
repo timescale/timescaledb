@@ -185,7 +185,7 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 {
 	ListCell *lc;
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-	if ((status & HypertableIsMaterialization) == 0)
+	if (!status.isMaterialization)
 		return;
 
 	/* only allow if all commands are allowed */
@@ -1043,7 +1043,7 @@ process_truncate(ProcessUtilityArgs *args)
 						ContinuousAggHypertableStatus agg_status;
 
 						agg_status = ts_continuous_agg_hypertable_status(mat_ht->fd.id);
-						if (agg_status & HypertableIsRawTable)
+						if (agg_status.isRawTable)
 							ts_cm_functions->continuous_agg_invalidate_raw_ht(mat_ht,
 																			  TS_TIME_NOBEGIN,
 																			  TS_TIME_NOEND);
@@ -1069,14 +1069,14 @@ process_truncate(ProcessUtilityArgs *args)
 
 						agg_status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-						if ((agg_status & HypertableIsMaterialization) != 0)
+						if (agg_status.isMaterialization)
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 									 errmsg("cannot TRUNCATE a hypertable underlying a continuous "
 											"aggregate"),
 									 errhint("TRUNCATE the continuous aggregate instead.")));
 
-						if (agg_status == HypertableIsRawTable)
+						if (agg_status.isRawTable)
 						{
 							/* The truncation invalidates all associated continuous aggregates */
 							ts_cm_functions->continuous_agg_invalidate_raw_ht(ht,
@@ -1118,7 +1118,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 						/* If the hypertable has continuous aggregates, then invalidate
 						 * the truncated region. */
-						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+						if (ts_continuous_agg_hypertable_status(ht->fd.id).isRawTable)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
 						/* Truncate the compressed chunk too. */
 						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
@@ -1259,7 +1259,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			/* If the hypertable has continuous aggregates, then invalidate
 			 * the dropped region. */
-			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+			if (ts_continuous_agg_hypertable_status(ht->fd.id).isRawTable)
 				ts_continuous_agg_invalidate_chunk(ht, chunk);
 		}
 	}
@@ -1991,7 +1991,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		/* Block renaming columns on the materialization table of a continuous
 		 * agg, but only if this was an explicit request for rename on a
 		 * materialization table. */
-		if ((ts_continuous_agg_hypertable_status(ht->fd.id) & HypertableIsMaterialization) != 0)
+		if (ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("renaming columns on materialization tables is not supported"),

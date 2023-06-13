@@ -3856,12 +3856,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	 * well. Do not unlock - let the transaction semantics take care of it. */
 	lock_referenced_tables(ht->main_table_relid);
 
-
-
-ContinuousAggHypertableStatus status=ts_continuous_agg_hypertable_status(hypertable_id);
-
-	bool is_materialization_hypertable = !!(status & HypertableIsMaterialization);
-	bool has_continuous_aggs = !!(status & HypertableIsRawTable);
+	const ContinuousAggHypertableStatus cagg_status= ts_continuous_agg_hypertable_status(hypertable_id);
 
 	PG_TRY();
 	{
@@ -3891,7 +3886,7 @@ ContinuousAggHypertableStatus status=ts_continuous_agg_hypertable_status(hyperta
 
 	DEBUG_WAITPOINT("drop_chunks_chunks_found");
 
-	if (has_continuous_aggs)
+	if (cagg_status.isRawTable)
 	{
 		/* Exclusively lock all chunks, and invalidate the continuous
 		 * aggregates in the regions covered by the chunks. We do this in two
@@ -3949,7 +3944,7 @@ ContinuousAggHypertableStatus status=ts_continuous_agg_hypertable_status(hyperta
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		if (has_continuous_aggs)
+		if (cagg_status.isRawTable)
 			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
 		else
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
@@ -3964,7 +3959,7 @@ ContinuousAggHypertableStatus status=ts_continuous_agg_hypertable_status(hyperta
 	}
 
 	/* When dropping chunks for a given CAgg then force set the watermark */
-	if (is_materialization_hypertable)
+	if (cagg_status.isMaterialization)
 	{
 		bool isnull;
 		int64 watermark = ts_hypertable_get_open_dim_max_value(ht, 0, &isnull);
@@ -4047,15 +4042,15 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 
 	if (ht)
 	{
-		const ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-		if (!allow_matht && (status & HypertableIsMaterialization))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on materialized hypertable"),
-					 errhint("Try the operation on the continuous aggregate instead."),
-					 errdetail("Hypertable \"%s\" is a materialized hypertable.", rel_name)));
-		}
+				if (!allow_matht && ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("operation not supported on materialized hypertable"),
+							 errhint("Try the operation on the continuous aggregate instead."),
+							 errdetail("Hypertable \"%s\" is a materialized hypertable.",
+									   rel_name)));
+				}
 	}
 	else
 	{

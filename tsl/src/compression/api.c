@@ -261,21 +261,13 @@ static void
 get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 {
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-	if (status == HypertableIsNotContinuousAgg || status == HypertableIsRawTable)
-		namestrcpy(objname, NameStr(ht->fd.table_name));
-	else if (status == HypertableIsMaterialization)
+	if (status.isMaterialization)
 	{
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
 		namestrcpy(objname, NameStr(cagg->data.user_view_name));
 	}
 	else
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("unexpected hypertable status for %s %d",
-						NameStr(ht->fd.table_name),
-						status)));
-	}
+		namestrcpy(objname, NameStr(ht->fd.table_name));
 }
 
 static void

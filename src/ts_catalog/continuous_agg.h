@@ -135,12 +135,10 @@ ContinuousAggIsHierarchical(const ContinuousAgg *cagg)
 	return (cagg->data.parent_mat_hypertable_id != INVALID_HYPERTABLE_ID);
 }
 
-typedef enum ContinuousAggHypertableStatus
+typedef struct ContinuousAggHypertableStatus
 {
-	HypertableIsNotContinuousAgg = 0,
-	HypertableIsMaterialization = 1,
-	HypertableIsRawTable = 2,
-	HypertableHasNonFinalizedContinousAgg = 4,
+	uint32 isMaterialization:1;
+	uint32 isRawTable:1;
 } ContinuousAggHypertableStatus;
 
 typedef struct ContinuousAggMatOptions

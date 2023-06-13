@@ -340,7 +340,7 @@ hypertable_is_compressed_or_materialization(const Hypertable *ht)
 {
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 	return (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht) ||
-			status == HypertableIsMaterialization);
+			status.isMaterialization);
 }
 
 static ScanFilterResult

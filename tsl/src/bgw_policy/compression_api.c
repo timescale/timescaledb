@@ -468,7 +468,7 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 static Hypertable *
 validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg)
 {
-	
+	ContinuousAggHypertableStatus status;
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, user_htoid, true /* missing_ok */);
 	*is_cagg = false;
 
@@ -482,8 +482,8 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 							get_rel_name(user_htoid)),
 					 errhint("Enable compression before adding a compression policy.")));
 		}
-		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-		if (status & HypertableIsMaterialization )
+		status = ts_continuous_agg_hypertable_status(ht->fd.id);
+		if (status.isMaterialization)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

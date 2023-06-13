@@ -792,7 +792,7 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ContinuousAggHypertableStatus status = HypertableIsNotContinuousAgg;
+	ContinuousAggHypertableStatus status = {false,false};
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -802,9 +802,9 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 		continuous_agg_formdata_fill(&data, ti);
 
 		if (data.raw_hypertable_id == hypertable_id)
-			status |= HypertableIsRawTable;
+			status.isRawTable=true;
 		if (data.mat_hypertable_id == hypertable_id)
-			status |= HypertableIsMaterialization;
+			status.isMaterialization=true;
 	}
 
 	return status;
