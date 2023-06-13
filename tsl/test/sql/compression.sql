@@ -758,7 +758,6 @@ SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY ti
 RESET timescaledb.enable_chunk_append;
 RESET enable_indexscan;
 
-
 -- Test the number of allocated parallel workers for decompression
 
 -- Test that a parallel plan is generated
@@ -845,3 +844,49 @@ SELECT sum(cpu) FROM f_sensor_data;
 
 :explain
 SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+
+-- test creating compressed hypertable using ALTER TABLE command
+CREATE TABLE relopt_test(a integer, b integer, c integer, d integer);
+
+ALTER TABLE relopt_test
+SET (timescaledb.hypertable,
+     timescaledb.time_column = 'a',
+     timescaledb.chunk_time_interval = '10',
+     timescaledb.compress,
+     timescaledb.compress_segmentby = 'a,b',
+     timescaledb.compress_orderby = 'c desc, d asc nulls last');
+
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id
+FROM
+  _timescaledb_catalog.hypertable
+WHERE
+  table_name = 'relopt_test';
+
+SELECT * FROM
+  timescaledb_information.compression_settings
+WHERE
+  hypertable_name = 'relopt_test';
+
+DROP TABLE relopt_test;
+
+-- test creating compressed hypertable using CREATE TABLE WITH command
+CREATE TABLE relopt_test_with(a integer, b integer, c integer, d integer)
+WITH (timescaledb.hypertable,
+      timescaledb.time_column = 'a',
+      timescaledb.chunk_time_interval = '10',
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'a,b',
+      timescaledb.compress_orderby = 'c desc, d asc nulls last');
+
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id
+FROM
+  _timescaledb_catalog.hypertable
+WHERE
+  table_name = 'relopt_test_with';
+
+SELECT * FROM
+  timescaledb_information.compression_settings
+WHERE
+  hypertable_name = 'relopt_test_with';
+
+DROP TABLE relopt_test_with;

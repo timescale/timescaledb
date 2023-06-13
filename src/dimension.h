@@ -121,6 +121,7 @@ extern TSDLLEXPORT Dimension *
 ts_hyperspace_get_mutable_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 extern DimensionVec *ts_dimension_get_slices(const Dimension *dim);
 extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
+extern Datum ts_dimension_set_interval_internal(PG_FUNCTION_ARGS, Datum interval, Oid interval_type);
 extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);

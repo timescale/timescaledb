@@ -1838,8 +1838,9 @@ TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
  * data nodes              NAME[] = NULL
  * distributed             BOOLEAN = NULL (not present for dist call)
  */
-static Datum
-ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
+Datum
+ts_hypertable_create_internal(PG_FUNCTION_ARGS, Datum interval, Oid interval_type,
+							  bool is_dist_call)
 {
 	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Name time_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
@@ -1855,10 +1856,9 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 									  /* column name */
 									  time_dim_name,
 									  /* interval */
-									  PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
+									  interval,
 									  /* interval type */
-									  PG_ARGISNULL(6) ? InvalidOid :
-														get_fn_expr_argtype(fcinfo->flinfo, 6),
+									  interval_type,
 									  /* partitioning func */
 									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
 	DimensionInfo *space_dim_info = NULL;
@@ -2008,13 +2008,29 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
 {
-	return ts_hypertable_create_internal(fcinfo, false);
+	Datum interval = Int64GetDatum(-1);
+	Oid interval_type = InvalidOid;
+
+	if (!PG_ARGISNULL(6))
+	{
+		interval = PG_GETARG_DATUM(6);
+		interval_type = get_fn_expr_argtype(fcinfo->flinfo, 6);
+	}
+	return ts_hypertable_create_internal(fcinfo, interval, interval_type, false);
 }
 
 Datum
 ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
 {
-	return ts_hypertable_create_internal(fcinfo, true);
+	Datum interval = Int64GetDatum(-1);
+	Oid interval_type = InvalidOid;
+
+	if (!PG_ARGISNULL(6))
+	{
+		interval = PG_GETARG_DATUM(6);
+		interval_type = get_fn_expr_argtype(fcinfo->flinfo, 6);
+	}
+	return ts_hypertable_create_internal(fcinfo, interval, interval_type, true);
 }
 
 /* Go through columns of parent table and check for column data types. */

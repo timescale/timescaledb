@@ -226,13 +226,7 @@ cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_de
 		}
 	}
 
-	AlterTableCmd alter_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_SetRelOptions,
-		.def = (Node *) compress_defelems,
-	};
-
-	tsl_process_compress_table(&alter_cmd, mat_ht, with_clause_options);
+	tsl_process_compress_table(mat_ht, with_clause_options);
 }
 
 void

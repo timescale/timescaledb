@@ -28,5 +28,6 @@ extern void ts_chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info);
 extern TSDLLEXPORT ChunkSizingInfo *ts_chunk_sizing_info_get_default_disabled(Oid table_relid);
 
 extern TSDLLEXPORT int64 ts_chunk_calculate_initial_chunk_target_size(void);
+extern TSDLLEXPORT Datum ts_calculate_chunk_interval(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_CHUNK_ADAPTIVE_H */

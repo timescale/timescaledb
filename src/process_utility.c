@@ -70,6 +70,7 @@
 #include "cross_module_fn.h"
 #include "ts_catalog/continuous_agg.h"
 #include "compression_with_clause.h"
+#include "hypertable_with_clause.h"
 #include "partitioning.h"
 #include "debug_point.h"
 #include "debug_assert.h"
@@ -86,7 +87,10 @@ void _process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
-static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
+static DDLResult process_altertable_set_ht_options(AlterTableStmt *stmt, AlterTableCmd *cmd,
+												   Hypertable *ht);
+static DDLResult process_altertable_set_table_options(AlterTableStmt *stmt, AlterTableCmd *cmd,
+													  Oid relid);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
@@ -3421,7 +3425,11 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 										"clauses")));
 					}
 					EventTriggerAlterTableStart(args->parsetree);
-					result = process_altertable_set_options(cmd, ht);
+					result = process_altertable_set_ht_options(stmt, cmd, ht);
+				}
+				else
+				{
+					result = process_altertable_set_table_options(stmt, cmd, relid);
 				}
 				break;
 			}
@@ -3961,38 +3969,65 @@ process_create_rule_start(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
-/* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
 static DDLResult
-process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
+process_altertable_set_ht_options(AlterTableStmt *stmt, AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
-	WithClauseResult *parse_results = NULL;
-	List *inpdef = NIL;
-	/* is this a compress table stmt */
+	List *inpdef = (List *) cmd->def;
+	List *pg_options = NIL;
+	List *ts_options = NIL;
+
 	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
-	if (compress_options)
-	{
-		parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
-		/* We allow updating compress chunk time interval independently of other compression
-		 * options. */
-		if (parse_results[CompressEnabled].is_default &&
-			parse_results[CompressChunkTimeInterval].is_default)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("the option timescaledb.compress must be set to true to enable "
-							"compression")));
-	}
-	else
+	ts_with_clause_filter(inpdef, &ts_options, &pg_options);
+	if (ts_options == NULL)
 		return DDL_CONTINUE;
 
 	if (pg_options != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
+				 errmsg("only timescaledb parameters allowed when specifying "
 						"parameters for hypertable")));
-	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
+
+	if (list_length(stmt->cmds) != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only single ALTER SET command supported when specifying "
+						"parameters for hypertable")));
+	}
+
+	/* alter hypertable using supplied options as arguments */
+	ts_hypertable_alter_using_set_clause(ht, ts_options);
+	return DDL_DONE;
+}
+
+static DDLResult
+process_altertable_set_table_options(AlterTableStmt *stmt, AlterTableCmd *cmd, Oid relid)
+{
+	List *inpdef = (List *) cmd->def;
+	List *pg_options = NIL;
+	List *ts_options = NIL;
+
+	Assert(IsA(cmd->def, List));
+	ts_with_clause_filter(inpdef, &ts_options, &pg_options);
+	if (ts_options == NULL)
+		return DDL_CONTINUE;
+
+	if (pg_options != NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only timescaledb parameters allowed when specifying "
+						"parameters for hypertable")));
+
+	if (list_length(stmt->cmds) != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("ALTER TABLE SET (timescaledb.hypertable) does not support multiple "
+						"SET clauses")));
+	}
+
+	/* create hypertable using supplied options as arguments */
+	ts_hypertable_create_using_set_clause(relid, ts_options);
 	return DDL_DONE;
 }
 
@@ -4029,6 +4064,33 @@ process_viewstmt(ProcessUtilityArgs *args)
 				(errmsg("cannot create continuous aggregate with CREATE VIEW"),
 				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate.")));
 	return DDL_CONTINUE;
+}
+
+static DDLResult
+process_create_table(ProcessUtilityArgs *args)
+{
+	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
+	List *pg_options = NIL;
+	List *ts_options = NIL;
+
+	ts_with_clause_filter(stmt->options, &ts_options, &pg_options);
+	if (ts_options == NULL)
+		return DDL_CONTINUE;
+
+	if (pg_options != NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only timescaledb parameters allowed when specifying "
+						"parameters for hypertable")));
+
+	/* execute create table stmt without storage parameters */
+	stmt->options = NIL;
+	prev_ProcessUtility(args);
+
+	/* create hypertable and apply storage options */
+	Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	ts_hypertable_create_using_set_clause(relid, ts_options);
+	return DDL_DONE;
 }
 
 static DDLResult
@@ -4197,6 +4259,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_RefreshMatViewStmt:
 			handler = process_refresh_mat_view_start;
+			break;
+		case T_CreateStmt:
+			handler = process_create_table;
 			break;
 		case T_CreateTableAsStmt:
 			handler = process_create_table_as;

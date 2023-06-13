@@ -18,8 +18,7 @@
 #define COMPRESSION_COLUMN_METADATA_MIN_COLUMN_NAME "min"
 #define COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME "max"
 
-bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
-								WithClauseResult *with_clause_options);
+bool tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options);
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);

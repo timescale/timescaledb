@@ -1877,3 +1877,68 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
                Index Cond: (_hyper_37_71_chunk.sensor_id > 100)
 (13 rows)
 
+-- test creating compressed hypertable using ALTER TABLE command
+CREATE TABLE relopt_test(a integer, b integer, c integer, d integer);
+ALTER TABLE relopt_test
+SET (timescaledb.hypertable,
+     timescaledb.time_column = 'a',
+     timescaledb.chunk_time_interval = '10',
+     timescaledb.compress,
+     timescaledb.compress_segmentby = 'a,b',
+     timescaledb.compress_orderby = 'c desc, d asc nulls last');
+NOTICE:  adding not-null constraint to column "a"
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id
+FROM
+  _timescaledb_catalog.hypertable
+WHERE
+  table_name = 'relopt_test';
+ id | schema_name | table_name  | compressed | compressed_hypertable_id 
+----+-------------+-------------+------------+--------------------------
+ 39 | public      | relopt_test |          1 |                       40
+(1 row)
+
+SELECT * FROM
+  timescaledb_information.compression_settings
+WHERE
+  hypertable_name = 'relopt_test';
+ hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
+ public            | relopt_test     | a       |                      1 |                      |             | 
+ public            | relopt_test     | b       |                      2 |                      |             | 
+ public            | relopt_test     | c       |                        |                    1 | f           | t
+ public            | relopt_test     | d       |                        |                    2 | t           | f
+(4 rows)
+
+DROP TABLE relopt_test;
+-- test creating compressed hypertable using CREATE TABLE WITH command
+CREATE TABLE relopt_test_with(a integer, b integer, c integer, d integer)
+WITH (timescaledb.hypertable,
+      timescaledb.time_column = 'a',
+      timescaledb.chunk_time_interval = '10',
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'a,b',
+      timescaledb.compress_orderby = 'c desc, d asc nulls last');
+NOTICE:  adding not-null constraint to column "a"
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id
+FROM
+  _timescaledb_catalog.hypertable
+WHERE
+  table_name = 'relopt_test_with';
+ id | schema_name |    table_name    | compressed | compressed_hypertable_id 
+----+-------------+------------------+------------+--------------------------
+ 41 | public      | relopt_test_with |          1 |                       42
+(1 row)
+
+SELECT * FROM
+  timescaledb_information.compression_settings
+WHERE
+  hypertable_name = 'relopt_test_with';
+ hypertable_schema | hypertable_name  | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------------+------------------+---------+------------------------+----------------------+-------------+--------------------
+ public            | relopt_test_with | a       |                      1 |                      |             | 
+ public            | relopt_test_with | b       |                      2 |                      |             | 
+ public            | relopt_test_with | c       |                        |                    1 | f           | t
+ public            | relopt_test_with | d       |                        |                    2 | t           | f
+(4 rows)
+
+DROP TABLE relopt_test_with;

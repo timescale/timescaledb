@@ -27,6 +27,7 @@ set(SOURCES
     hypertable.c
     hypertable_cache.c
     hypertable_restrict_info.c
+    hypertable_with_clause.c
     indexing.c
     init.c
     jsonb_utils.c

@@ -94,6 +94,8 @@ typedef enum HypertableType
 	HYPERTABLE_DISTRIBUTED
 } HypertableType;
 
+extern TSDLLEXPORT Datum ts_hypertable_create_internal(PG_FUNCTION_ARGS, Datum interval,
+													   Oid interval_type, bool is_dist_call);
 extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
 	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,

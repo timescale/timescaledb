@@ -1086,8 +1086,7 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
  * 4. Copy constraints to internal compression table
  */
 bool
-tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
-						   WithClauseResult *with_clause_options)
+tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
 	struct CompressColInfo compress_cols;

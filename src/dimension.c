@@ -1250,11 +1250,9 @@ TS_FUNCTION_INFO_V1(ts_dimension_set_interval);
  * dimension_name - The name of the dimension
  */
 Datum
-ts_dimension_set_interval(PG_FUNCTION_ARGS)
+ts_dimension_set_interval_internal(PG_FUNCTION_ARGS, Datum interval, Oid interval_type)
 {
 	Oid table_relid = PG_GETARG_OID(0);
-	Datum interval = PG_GETARG_DATUM(1);
-	Oid intervaltype = InvalidOid;
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
@@ -1268,17 +1266,25 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 	ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_NONE);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
-	if (PG_ARGISNULL(1))
+	if (interval_type == InvalidOid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid interval: an explicit interval must be specified")));
 
-	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &interval, &intervaltype, NULL, NULL);
+	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &interval, &interval_type, NULL, NULL);
 	ts_hypertable_func_call_on_data_nodes(ht, fcinfo);
 	ts_cache_release(hcache);
 
 	PG_RETURN_VOID();
+}
+
+Datum
+ts_dimension_set_interval(PG_FUNCTION_ARGS)
+{
+	Datum interval = PG_GETARG_DATUM(1);
+	Oid interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+
+	return ts_dimension_set_interval_internal(fcinfo, interval, interval_type);
 }
 
 DimensionInfo *
