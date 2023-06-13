@@ -4116,6 +4116,8 @@ ts_chunk_detach(PG_FUNCTION_ARGS)
 	const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
 
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DETACH, true /*throw_error */);
+	
+	
 
 	// FIXME: in case of old-caggs this might be a bad move!
 	// https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
@@ -4451,6 +4453,16 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 									get_rel_name(chunk_relid))));
 				return false;
 			}
+			case CHUNK_DETACH:
+					if(ts_continuous_agg_hypertable_status(chunk->fd.hypertable_id)!=HypertableIsNotContinuousAgg) {
+					ereport((throw_error ? ERROR : NOTICE),
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("can't detach chunk from hypertable which has continous aggregates",
+									get_rel_name(chunk_relid))));
+				return false;
+						
+					}
+					
 			default:
 				break;
 		}
