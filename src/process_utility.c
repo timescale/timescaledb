@@ -1118,7 +1118,9 @@ process_truncate(ProcessUtilityArgs *args)
 
 						/* If the hypertable has continuous aggregates, then invalidate
 						 * the truncated region. */
-						if (ts_continuous_agg_hypertable_status(ht->fd.id).isRawTable && /*FIXME:old?*/ !ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
+						if (ts_continuous_agg_hypertable_status(ht->fd.id).isRawTable &&
+							/*FIXME:old?*/ !ts_continuous_agg_hypertable_status(ht->fd.id)
+								.isMaterialization)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
 						/* Truncate the compressed chunk too. */
 						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
@@ -1259,7 +1261,8 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			/* If the hypertable has continuous aggregates, then invalidate
 			 * the dropped region. */
-			if (ts_continuous_agg_hypertable_status(ht->fd.id).isRawTable && /*FIXME:old?*/ !ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
+			if (ts_continuous_agg_hypertable_status(ht->fd.id).isRawTable &&
+				/*FIXME:old?*/ !ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
 				ts_continuous_agg_invalidate_chunk(ht, chunk);
 		}
 	}

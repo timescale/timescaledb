@@ -137,8 +137,8 @@ ContinuousAggIsHierarchical(const ContinuousAgg *cagg)
 
 typedef struct ContinuousAggHypertableStatus
 {
-	uint32 isMaterialization:1;
-	uint32 isRawTable:1;
+	uint32 isMaterialization : 1;
+	uint32 isRawTable : 1;
 } ContinuousAggHypertableStatus;
 
 typedef struct ContinuousAggMatOptions

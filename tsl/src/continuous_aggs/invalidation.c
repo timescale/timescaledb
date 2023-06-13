@@ -272,19 +272,17 @@ tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS)
 #define INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME "invalidation_hyper_log_add_entry"
 
 void
-remote_invalidation_log_add_entry(const Hypertable *raw_ht,
-								  bool materialization, int32 entry_id,
+remote_invalidation_log_add_entry(const Hypertable *raw_ht, bool materialization, int32 entry_id,
 								  int64 start, int64 end)
 {
 	Oid func_oid;
 	LOCAL_FCINFO(fcinfo, INVALIDATION_CAGG_ADD_ENTRY_NARGS);
 	FmgrInfo flinfo;
 
-
 	static const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(materialization ?
-												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
+	List *const fqn =
+		list_make2(makeString(INTERNAL_SCHEMA_NAME),
+				   makeString(materialization ? INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
 												INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME));
 
 	if (!hypertable_is_distributed(raw_ht))
@@ -383,11 +381,7 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 
 	if (hypertable_is_distributed(raw_ht))
 	{
-		remote_invalidation_log_add_entry(raw_ht,
-										  true,
-										  mat_ht->fd.id,
-										  start,
-										  end);
+		remote_invalidation_log_add_entry(raw_ht, true, mat_ht->fd.id, start, end);
 	}
 	else
 	{
@@ -1539,9 +1533,9 @@ remote_invalidation_log_delete(int32 raw_hypertable_id, bool materialization)
 	FmgrInfo flinfo;
 
 	static const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(materialization ?
-												MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
+	List *const fqn =
+		list_make2(makeString(INTERNAL_SCHEMA_NAME),
+				   makeString(materialization ? MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
 												HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));
 
 	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);

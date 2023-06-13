@@ -3856,7 +3856,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	 * well. Do not unlock - let the transaction semantics take care of it. */
 	lock_referenced_tables(ht->main_table_relid);
 
-	const ContinuousAggHypertableStatus cagg_status= ts_continuous_agg_hypertable_status(hypertable_id);
+	const ContinuousAggHypertableStatus cagg_status =
+		ts_continuous_agg_hypertable_status(hypertable_id);
 
 	PG_TRY();
 	{
@@ -4042,15 +4043,14 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 
 	if (ht)
 	{
-				if (!allow_matht && ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("operation not supported on materialized hypertable"),
-							 errhint("Try the operation on the continuous aggregate instead."),
-							 errdetail("Hypertable \"%s\" is a materialized hypertable.",
-									   rel_name)));
-				}
+		if (!allow_matht && ts_continuous_agg_hypertable_status(ht->fd.id).isMaterialization)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on materialized hypertable"),
+					 errhint("Try the operation on the continuous aggregate instead."),
+					 errdetail("Hypertable \"%s\" is a materialized hypertable.", rel_name)));
+		}
 	}
 	else
 	{

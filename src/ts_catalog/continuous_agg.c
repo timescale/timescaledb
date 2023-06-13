@@ -792,7 +792,7 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ContinuousAggHypertableStatus status = {false,false};
+	ContinuousAggHypertableStatus status = { false, false };
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -802,9 +802,9 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 		continuous_agg_formdata_fill(&data, ti);
 
 		if (data.raw_hypertable_id == hypertable_id)
-			status.isRawTable=true;
+			status.isRawTable = true;
 		if (data.mat_hypertable_id == hypertable_id)
-			status.isMaterialization=true;
+			status.isMaterialization = true;
 	}
 
 	return status;
@@ -1146,14 +1146,12 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		{
 			hypertable_invalidation_log_delete(form.raw_hypertable_id);
 			if (ts_cm_functions->remote_invalidation_log_delete)
-				ts_cm_functions->remote_invalidation_log_delete(form.raw_hypertable_id,
-																false);
+				ts_cm_functions->remote_invalidation_log_delete(form.raw_hypertable_id, false);
 		}
 
 		ts_materialization_invalidation_log_delete_inner(form.mat_hypertable_id);
 		if (ts_cm_functions->remote_invalidation_log_delete)
-			ts_cm_functions->remote_invalidation_log_delete(form.mat_hypertable_id,
-															true);
+			ts_cm_functions->remote_invalidation_log_delete(form.mat_hypertable_id, true);
 
 		if (!raw_hypertable_has_other_caggs)
 		{
