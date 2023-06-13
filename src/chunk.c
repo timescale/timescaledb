@@ -3951,8 +3951,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		ASSERT_IS_VALID_CHUNK(&chunks[i]);
 
 		/* frozen chunks are skipped. Not dropped. */
-		if (!ts_chunk_validate_chunk_status_for_operation(chunks[i].table_id,
-														  chunks[i].fd.status,
+		if (!ts_chunk_validate_chunk_status_for_operation(&chunks[i],
 														  CHUNK_DROP,
 														  false /*throw_error */))
 			continue;
@@ -4120,10 +4119,7 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   CurrentMemoryContext,
 															   true);
 	Assert(ch != NULL);
-	ts_chunk_validate_chunk_status_for_operation(chunk_relid,
-												 ch->fd.status,
-												 CHUNK_DROP,
-												 true /*throw_error */);
+	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);
@@ -4372,9 +4368,12 @@ get_chunk_operation_str(ChunkOperation cmd)
 }
 
 bool
-ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status,
-											 ChunkOperation cmd, bool throw_error)
+ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation cmd,
+											 bool throw_error)
 {
+	Oid chunk_relid = chunk->table_id;
+	int32 chunk_status = chunk->fd.status;
+
 	/* Handle frozen chunks */
 	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))
 	{

@@ -592,10 +592,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 				 errmsg("hypertables do not support row-level security")));
 	Assert(chunk->relkind == RELKIND_RELATION || chunk->relkind == RELKIND_FOREIGN_TABLE);
 
-	ts_chunk_validate_chunk_status_for_operation(chunk->table_id,
-												 chunk->fd.status,
-												 CHUNK_INSERT,
-												 true);
+	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
 
