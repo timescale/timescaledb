@@ -4062,23 +4062,13 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 	if (ht)
 	{
 		const ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-		switch (status)
+		if (!allow_matht && (status & HypertableIsMaterialization))
 		{
-			case HypertableIsMaterialization:
-			case HypertableIsMaterializationAndRaw:
-				if (!allow_matht)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("operation not supported on materialized hypertable"),
-							 errhint("Try the operation on the continuous aggregate instead."),
-							 errdetail("Hypertable \"%s\" is a materialized hypertable.",
-									   rel_name)));
-				}
-				break;
-
-			default:
-				break;
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on materialized hypertable"),
+					 errhint("Try the operation on the continuous aggregate instead."),
+					 errdetail("Hypertable \"%s\" is a materialized hypertable.", rel_name)));
 		}
 	}
 	else

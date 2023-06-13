@@ -140,8 +140,7 @@ typedef enum ContinuousAggHypertableStatus
 	HypertableIsNotContinuousAgg = 0,
 	HypertableIsMaterialization = 1,
 	HypertableIsRawTable = 2,
-//	HypertableHasNonFinalizedContinousAgg = 4,
-	HypertableIsMaterializationAndRaw = HypertableIsMaterialization | HypertableIsRawTable,
+	HypertableHasNonFinalizedContinousAgg = 4,
 } ContinuousAggHypertableStatus;
 
 typedef struct ContinuousAggMatOptions
