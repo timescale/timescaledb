@@ -854,8 +854,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
 			/* Prevent create a CAGG over an existing materialization hypertable. */
-			if (status == HypertableIsMaterialization ||
-				status == HypertableIsMaterializationAndRaw)
+			if (status & HypertableIsMaterialization)
 			{
 				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
 				Assert(cagg != NULL);

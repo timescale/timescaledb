@@ -116,8 +116,8 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 					 errhint("Please add the policy to the corresponding uncompressed hypertable "
 							 "instead.")));
 		}
-		status = ts_continuous_agg_hypertable_status(ht->fd.id);
-		if ((status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw))
+		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+		if (status & HypertableIsMaterialization )
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

@@ -3837,7 +3837,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	Chunk *chunks;
 	const char *schema_name, *table_name;
 	const int32 hypertable_id = ht->fd.id;
-	bool has_continuous_aggs, is_materialization_hypertable;
 	const MemoryContext oldcontext = CurrentMemoryContext;
 	ScanTupLock tuplock = {
 		.waitpolicy = LockWaitBlock,
@@ -3857,25 +3856,12 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	 * well. Do not unlock - let the transaction semantics take care of it. */
 	lock_referenced_tables(ht->main_table_relid);
 
-	is_materialization_hypertable = false;
 
-	switch (ts_continuous_agg_hypertable_status(hypertable_id))
-	{
-		case HypertableIsMaterialization:
-			has_continuous_aggs = false;
-			is_materialization_hypertable = true;
-			break;
-		case HypertableIsMaterializationAndRaw:
-			has_continuous_aggs = true;
-			is_materialization_hypertable = true;
-			break;
-		case HypertableIsRawTable:
-			has_continuous_aggs = true;
-			break;
-		default:
-			has_continuous_aggs = false;
-			break;
-	}
+
+ContinuousAggHypertableStatus status=ts_continuous_agg_hypertable_status(hypertable_id);
+
+	bool is_materialization_hypertable = !!(status & HypertableIsMaterialization);
+	bool has_continuous_aggs = !!(status & HypertableIsRawTable);
 
 	PG_TRY();
 	{

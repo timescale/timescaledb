@@ -805,12 +805,6 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 			status |= HypertableIsRawTable;
 		if (data.mat_hypertable_id == hypertable_id)
 			status |= HypertableIsMaterialization;
-
-		if (status == HypertableIsMaterializationAndRaw)
-		{
-			ts_scan_iterator_close(&iterator);
-			return status;
-		}
 	}
 
 	return status;
