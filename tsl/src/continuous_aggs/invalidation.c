@@ -273,18 +273,17 @@ tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS)
 
 void
 remote_invalidation_log_add_entry(const Hypertable *raw_ht,
-								  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+								  bool materialization, int32 entry_id,
 								  int64 start, int64 end)
 {
 	Oid func_oid;
 	LOCAL_FCINFO(fcinfo, INVALIDATION_CAGG_ADD_ENTRY_NARGS);
 	FmgrInfo flinfo;
 
-	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
 
 	static const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString((caggstatus == HypertableIsMaterialization) ?
+								 makeString(materialization ?
 												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
 												INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME));
 
@@ -368,7 +367,7 @@ continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 en
 
 	if (hypertable_is_distributed(raw_ht))
 	{
-		remote_invalidation_log_add_entry(raw_ht, HypertableIsRawTable, raw_ht->fd.id, start, end);
+		remote_invalidation_log_add_entry(raw_ht, false, raw_ht->fd.id, start, end);
 	}
 	else
 	{
@@ -385,7 +384,7 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 	if (hypertable_is_distributed(raw_ht))
 	{
 		remote_invalidation_log_add_entry(raw_ht,
-										  HypertableIsMaterialization,
+										  true,
 										  mat_ht->fd.id,
 										  start,
 										  end);
@@ -1528,7 +1527,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 #define MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME "materialization_invalidation_log_delete"
 
 void
-remote_invalidation_log_delete(int32 raw_hypertable_id, ContinuousAggHypertableStatus caggstatus)
+remote_invalidation_log_delete(int32 raw_hypertable_id, bool materialization)
 {
 	/* Execute on all data nodes if there are any */
 	List *data_nodes = data_node_get_node_name_list();
@@ -1539,11 +1538,9 @@ remote_invalidation_log_delete(int32 raw_hypertable_id, ContinuousAggHypertableS
 	LOCAL_FCINFO(fcinfo, INVALIDATION_LOG_DELETE_NARGS);
 	FmgrInfo flinfo;
 
-	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
-
 	static const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString((caggstatus == HypertableIsMaterialization) ?
+								 makeString(materialization ?
 												MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
 												HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));
 

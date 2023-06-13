@@ -46,7 +46,7 @@ extern void continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hyp
 extern Datum tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS);
 extern Datum tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS);
 void remote_invalidation_log_add_entry(const Hypertable *raw_ht,
-									   ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+									   bool materialization, int32 entry_id,
 									   int64 start, int64 end);
 
 extern void invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
@@ -68,7 +68,7 @@ extern void remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 
 												 InternalTimeRange *ret_merged_refresh_window);
 
 extern void remote_invalidation_log_delete(int32 raw_hypertable_id,
-										   ContinuousAggHypertableStatus caggstatus);
+										   bool materialization);
 extern Datum tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS);
 extern void remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id);
 

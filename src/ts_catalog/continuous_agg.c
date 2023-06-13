@@ -1147,13 +1147,13 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 			hypertable_invalidation_log_delete(form.raw_hypertable_id);
 			if (ts_cm_functions->remote_invalidation_log_delete)
 				ts_cm_functions->remote_invalidation_log_delete(form.raw_hypertable_id,
-																HypertableIsRawTable);
+																false);
 		}
 
 		ts_materialization_invalidation_log_delete_inner(form.mat_hypertable_id);
 		if (ts_cm_functions->remote_invalidation_log_delete)
 			ts_cm_functions->remote_invalidation_log_delete(form.mat_hypertable_id,
-															HypertableIsMaterialization);
+															true);
 
 		if (!raw_hypertable_has_other_caggs)
 		{
