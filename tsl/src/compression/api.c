@@ -310,9 +310,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing hyperspace for hypertable")));
 	/* refetch the srcchunk with all attributes filled in */
 	srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
-	ts_chunk_validate_chunk_status_for_operation(srcchunk,
-												 CHUNK_COMPRESS,
-												 true);
+	ts_chunk_validate_chunk_status_for_operation(srcchunk, CHUNK_COMPRESS, true);
 	cxt->srcht = srcht;
 	cxt->compress_ht = compress_ht;
 	cxt->srcht_chunk = srcchunk;
@@ -470,9 +468,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(chunk_relid, true);
 
 	/* Throw error if chunk has invalid status for operation */
-	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock,
-												 CHUNK_COMPRESS,
-												 true);
+	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_COMPRESS, true);
 
 	/* get compression properties for hypertable */
 	htcols_list = ts_hypertable_compression_get(cxt.srcht->fd.id);
@@ -596,9 +592,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 		return false;
 	}
 
-	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk,
-												 CHUNK_DECOMPRESS,
-												 true);
+	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
 	/* acquire locks on src and compress hypertable and src chunk */
@@ -639,9 +633,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
 
 	/* Throw error if chunk has invalid status for operation */
-	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock,
-												 CHUNK_DECOMPRESS,
-												 true);
+	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_DECOMPRESS, true);
 
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
 

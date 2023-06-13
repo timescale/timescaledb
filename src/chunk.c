@@ -4119,10 +4119,7 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   CurrentMemoryContext,
 															   true);
 	Assert(ch != NULL);
-	ts_chunk_validate_chunk_status_for_operation(
-												 ch,
-												 CHUNK_DROP,
-												 true /*throw_error */);
+	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);
@@ -4371,8 +4368,8 @@ get_chunk_operation_str(ChunkOperation cmd)
 }
 
 bool
-ts_chunk_validate_chunk_status_for_operation(const Chunk*chunk,
-											 ChunkOperation cmd, bool throw_error)
+ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation cmd,
+											 bool throw_error)
 {
 	Oid chunk_relid = chunk->table_id;
 	int32 chunk_status = chunk->fd.status;
