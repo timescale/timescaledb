@@ -42,8 +42,8 @@ jobs:
           # Add this label after 'days-before-issue-stale' days to mark it as stale
           stale-issue-label: 'no-activity'
 
-          # Process only issues that contain the label 'need-more-info'
-          only-labels: 'need-more-info'
+          # Process only issues that contain the label 'waiting-for-author'
+          only-labels: 'waiting-for-author'
 
           # Stale only issues with one of these labels
           any-of-issue-labels: 'bug,enhancement'

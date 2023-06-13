@@ -74,6 +74,19 @@ SELECT DISTINCT attname, attstattarget
     AND attnum > 0
   ORDER BY attname;
 
+
+-- Test that the GUC to disable bulk decompression works.
+explain (analyze, verbose, timing off, costs off, summary off)
+select * from _timescaledb_internal._hyper_1_10_chunk;
+
+set timescaledb.enable_bulk_decompression to false;
+
+explain (analyze, verbose, timing off, costs off, summary off)
+select * from _timescaledb_internal._hyper_1_10_chunk;
+
+reset timescaledb.enable_bulk_decompression;
+
+
 TRUNCATE test1;
 /* should be no data in table */
 SELECT * FROM test1;
@@ -254,3 +267,33 @@ INSERT INTO test7
 \ir include/compression_test_hypertable_segment_meta.sql
 
 DROP TABLE test7;
+
+-- helper function: float -> pseudorandom float [0..1].
+create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
+
+-- test gorilla for float4 and deltadelta for int32 and other types
+create table test8(ts date, id int, value float4, valueint2 int2, valuebool bool);
+
+select create_hypertable('test8', 'ts');
+
+alter table test8 set (timescaledb.compress,
+    timescaledb.compress_segmentby = 'id',
+    timescaledb.compress_orderby = 'ts desc')
+;
+
+insert into test8
+    select '2022-02-02 02:02:02+03'::timestamptz + interval '1 month' * mix(x),
+        mix(x + 1.) * 20,
+        mix(x + 2.) * 50,
+        mix(x + 3.) * 100,
+        mix(x + 4.) > 0.1
+    from generate_series(1, 10000) x(x)
+;
+
+select compress_chunk(x) from show_chunks('test8') x;
+
+select distinct on (id) * from test8
+order by id, ts desc, value
+;
+
+drop table test8;

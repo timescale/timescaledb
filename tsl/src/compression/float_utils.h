@@ -18,7 +18,7 @@ float_get_bits(float in)
 	return out;
 }
 
-static inline float
+static pg_attribute_always_inline float
 bits_get_float(uint32 bits)
 {
 	float out;
@@ -38,7 +38,7 @@ double_get_bits(double in)
 	return out;
 }
 
-static inline double
+static pg_attribute_always_inline double
 bits_get_double(uint64 bits)
 {
 	double out;

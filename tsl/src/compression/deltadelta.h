@@ -42,6 +42,9 @@ delta_delta_decompression_iterator_from_datum_reverse(Datum deltadelta_compresse
 													  Oid element_type);
 extern DecompressResult
 delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter);
+
+extern ArrowArray *delta_delta_decompress_all(Datum compressed_data, Oid element_type);
+
 extern DecompressResult
 delta_delta_decompression_iterator_try_next_reverse(DecompressionIterator *iter);
 
@@ -55,6 +58,7 @@ extern Datum tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS);
 	{                                                                                              \
 		.iterator_init_forward = delta_delta_decompression_iterator_from_datum_forward,            \
 		.iterator_init_reverse = delta_delta_decompression_iterator_from_datum_reverse,            \
+		.decompress_all = delta_delta_decompress_all,                                              \
 		.compressed_data_send = deltadelta_compressed_send,                                        \
 		.compressed_data_recv = deltadelta_compressed_recv,                                        \
 		.compressor_for_type = delta_delta_compressor_for_type,                                    \

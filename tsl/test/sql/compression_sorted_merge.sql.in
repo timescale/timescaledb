@@ -313,22 +313,25 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 ------
--- Tests based on chunk state
+-- Tests based on compressed chunk state
 ------
 
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
 BEGIN TRANSACTION;
+
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10, 20, 30, 40, 50);
 
--- Should not be optimized because of the partially compressed chunk
+-- Should be optimized using a merge append path between the compressed and uncompressed part of the chunk
 :PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- The inserted value should be visible
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
 
 ROLLBACK;
-
--- Should be optimized again
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
-
 
 ------
 -- Tests on a larger relation
@@ -405,6 +408,21 @@ CALL order_test('SELECT * FROM test1 ORDER BY time DESC');
 CALL order_test('SELECT * FROM test1 ORDER BY time ASC NULLS LAST');
 
 ------
+-- Test window functions
+------
+CREATE TABLE insert_test(id INT);
+INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
+
+SELECT * FROM insert_test AS ref_0
+WHERE EXISTS (
+    SELECT
+        sum(ref_0.id) OVER (partition by ref_0.id ORDER BY ref_0.id,ref_0.id,sample_0.time)
+    FROM
+        sensor_data AS sample_0
+    WHERE (1 > sample_0.temperature)
+);
+
+------
 -- Test enabling and disabling the optimization based on costs
 ------
 
@@ -464,3 +482,34 @@ SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
 -- Test query plan with predicate (query should be optimized due to ~100 segments)
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
+
+-- Target list creation - Issue 5738
+CREATE TABLE bugtab(
+ time timestamp without time zone,
+ hin   character varying(128) NOT NULL,
+ model character varying(128) NOT NULL,
+ block character varying(128) NOT NULL,
+ message_name character varying(128) NOT NULL,
+ signal_name  character varying(128) NOT NULL,
+ signal_numeric_value double precision,
+ signal_string_value character varying(128)
+);
+
+SELECT create_hypertable('bugtab', 'time');
+
+INSERT INTO bugtab values('2020-01-01 10:00', 'hin1111', 'model111', 'blok111', 'message_here', 'signal1', 12.34, '12.34');
+
+ALTER TABLE bugtab SET (timescaledb.compress, timescaledb.compress_segmentby = 'hin, signal_name', timescaledb.compress_orderby = 'time');
+
+SELECT chunk_schema || '.' || chunk_name AS "chunk_table_bugtab"
+       FROM timescaledb_information.chunks
+       WHERE hypertable_name = 'bugtab' ORDER BY range_start LIMIT 1 \gset
+
+SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
+
+:PREFIX
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
+
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
+
+SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM bugtab ORDER BY "time" DESC;

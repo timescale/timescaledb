@@ -960,32 +960,17 @@ SELECT 1 FROM pg_table_size('nondisttable');
         1
 (1 row)
 
+-- hypertable_size requires SELECT privilege on table
+\set ON_ERROR_STOP 0
 SELECT * FROM hypertable_size('disttable');
- hypertable_size 
------------------
-          131072
-(1 row)
-
+ERROR:  permission denied for table disttable
 SELECT * FROM hypertable_size('nondisttable');
- hypertable_size 
------------------
-          114688
-(1 row)
-
+ERROR:  permission denied for table nondisttable
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
- table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
--------------+-------------+-------------+-------------+-------------
-       16384 |       49152 |        8192 |       73728 | data_node_1
-        8192 |       32768 |        8192 |       49152 | data_node_2
-           0 |        8192 |           0 |        8192 | 
-(3 rows)
-
+ERROR:  permission denied for table disttable
 SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
- table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
--------------+-------------+-------------+-------------+-----------
-       24576 |       73728 |       16384 |      114688 | 
-(1 row)
-
+ERROR:  permission denied for table nondisttable
+\set ON_ERROR_STOP 1
 SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
      chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
 -----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
@@ -1045,12 +1030,40 @@ SELECT * FROM hypertable_index_size('nondisttable_pkey');
 
 RESET ROLE;
 GRANT SELECT ON disttable TO :ROLE_1;
+GRANT SELECT ON nondisttable TO :ROLE_1;
 SET ROLE :ROLE_1;
 -- Querying should now work
 SELECT count(*) FROM disttable;
  count 
 -------
      5
+(1 row)
+
+-- hypertable_size should work now with SELECT privilege on tables
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+          131072
+(1 row)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+          114688
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+       16384 |       49152 |        8192 |       73728 | data_node_1
+        8192 |       32768 |        8192 |       49152 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+       24576 |       73728 |       16384 |      114688 | 
 (1 row)
 
 -- Make sure timescaledb.ssl_dir and passfile gucs can be read by a non-superuser

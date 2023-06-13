@@ -112,12 +112,21 @@ bit_array_recv(const StringInfo buffer)
 			.num_elements = num_elements,
 			.max_elements = num_elements,
 			.ctx = CurrentMemoryContext,
-			.data = palloc(num_elements * sizeof(uint64)),
+			/* Add one-element padding so that we can relax the checks for incorrect data. */
+			.data = palloc((num_elements + 1) * sizeof(uint64)),
 		},
 	};
 
 	for (i = 0; i < num_elements; i++)
 		array.buckets.data[i] = pq_getmsgint64(buffer);
+
+	/* Zero out the padding for more predictable behavior under fuzzing. */
+	array.buckets.data[num_elements] = 0;
+	if (num_elements > 0)
+	{
+		CheckCompressedData(bits_used_in_last_bucket > 0);
+		array.buckets.data[num_elements - 1] &= -1ULL >> (64 - bits_used_in_last_bucket);
+	}
 
 	return array;
 }

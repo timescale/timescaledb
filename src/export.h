@@ -12,24 +12,21 @@
 
 /* Definitions for symbol exports */
 
-#define TS_CAT(x, y) x##y
-
-#define TS_EMPTY(x) (TS_CAT(x, 87628) == 87628)
-
 #if defined(_WIN32) && !defined(WIN32)
 #define WIN32
 #endif
 
-#if !defined(WIN32) && !defined(__CYGWIN__)
+/*
+ * PGDLLEXPORT is defined as en empty macro until PG15.
+ * Since PG16, a macro HAVE_VISIBILITY_ATTRIBUTE is defined if the compiler has
+ * support for visibility attribute and the PGDLLEXPORT macro is defined as the
+ * same. So, skip redefining PGDLLEXPORT if HAVE_VISIBILITY_ATTRIBUTE is defined.
+ * If not, undef the empty PGDLLEXPORT macro and redefine it properly.
+ */
+#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(HAVE_VISIBILITY_ATTRIBUTE)
 #if __GNUC__ >= 4
-#if defined(PGDLLEXPORT)
-#if TS_EMPTY(PGDLLEXPORT)
-/* PGDLLEXPORT is defined but empty. We can safely undef it. */
+/* PGDLLEXPORT is defined but will be empty. Redefine it. */
 #undef PGDLLEXPORT
-#else
-#error "PGDLLEXPORT is already defined"
-#endif
-#endif /* defined(PGDLLEXPORT) */
 #define PGDLLEXPORT __attribute__((visibility("default")))
 #else
 #error "Unsupported GNUC version"

@@ -1498,7 +1498,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 			 copy_table_to_chunk_error_callback,
 			 scandesc);
 	copy_chunk_state_destroy(ccstate);
-	heap_endscan(scandesc);
+	table_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
 	table_close(rel, lockmode);
 

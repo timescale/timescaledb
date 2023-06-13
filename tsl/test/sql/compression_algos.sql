@@ -377,14 +377,14 @@ DROP TABLE base_texts;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 create or replace function ts_read_compressed_data_directory(cstring, regtype, cstring)
-returns table(path text, ret int, sqlstate text, location text)
+returns table(path text, bytes int, rows int, sqlstate text, location text)
 as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_directory' language c;
 
-select count(*), coalesce((ret >= 0)::text, sqlstate) result
+select count(*), coalesce((rows >= 0)::text, sqlstate) result
 from ts_read_compressed_data_directory('gorilla', 'float8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla-float8')::cstring)
 group by 2 order by 1 desc;
 
-select count(*), coalesce((ret >= 0)::text, sqlstate) result
+select count(*), coalesce((rows >= 0)::text, sqlstate) result
 from ts_read_compressed_data_directory('deltadelta', 'int8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/deltadelta-int8')::cstring)
 group by 2 order by 1 desc;
 

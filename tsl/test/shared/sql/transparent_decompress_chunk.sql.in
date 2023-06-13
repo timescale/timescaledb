@@ -188,6 +188,7 @@ CREATE OR REPLACE VIEW compressed_view AS SELECT time, device_id, v1, v2 FROM :T
 DROP VIEW compressed_view;
 
 SET parallel_leader_participation TO off;
+SET min_parallel_table_scan_size TO '0';
 -- test INNER JOIN
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -208,6 +209,7 @@ FROM :TEST_TABLE m1
     ORDER BY m1.time,
         m1.device_id
     LIMIT 10;
+RESET min_parallel_table_scan_size;
 
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -234,6 +236,7 @@ FROM metrics m1
     LIMIT 100;
 
 -- test OUTER JOIN
+SET min_parallel_table_scan_size TO '0';
 :PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
@@ -242,6 +245,7 @@ FROM :TEST_TABLE m1
 ORDER BY m1.time,
     m1.device_id
 LIMIT 10;
+RESET min_parallel_table_scan_size;
 
 :PREFIX_NO_VERBOSE
 SELECT *
