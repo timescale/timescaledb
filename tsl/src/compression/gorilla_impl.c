@@ -83,7 +83,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 	for (int i = 0; i < n_different; i++)
 	{
-		if (simple8brle_bitmap_get_at(&tag1s, i) != 0)
+		if (simple8brle_bitmap_get_at(&tag1s, i))
 		{
 			/* Checked above that it's true on the first iteration. */
 			bit_widths_index++;
