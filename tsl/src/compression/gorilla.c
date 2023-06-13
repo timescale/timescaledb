@@ -884,34 +884,6 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 	return n_outputs;
 }
 
-typedef struct MyBitIter
-{
-	const uint64 *restrict words;
-	const int num_words;
-	int starting_bit_index;
-} MyBitIter;
-
-static uint64
-next_bits(MyBitIter *iter, int n_bits)
-{
-	/* Just don't segfault on the corrupted input. */
-	n_bits &= 63;
-	const int start_in_word = iter->starting_bit_index % 64;
-	const int first_word_index = iter->starting_bit_index / 64;
-	/* Have 1 word of padding. */
-	CheckCompressedData(first_word_index <= iter->num_words - 1);
-	const unsigned PG_INT128_TYPE two_words =
-		((unsigned PG_INT128_TYPE) iter->words[first_word_index]) |
-		((unsigned PG_INT128_TYPE) iter->words[first_word_index + 1]) << 64;
-	const unsigned PG_INT128_TYPE n_ones_mask = (((unsigned PG_INT128_TYPE) 1) << n_bits) - 1;
-	const unsigned PG_INT128_TYPE two_word_mask = n_ones_mask << start_in_word;
-	const uint64 result = (two_words & two_word_mask) >> start_in_word;
-
-	iter->starting_bit_index += n_bits;
-
-	return result;
-}
-
 /* Bulk gorilla decompression, specialized for supported data types. */
 
 #define ELEMENT_TYPE uint8
