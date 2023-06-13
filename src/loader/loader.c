@@ -3,6 +3,9 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+
+#include <unistd.h>
+
 #include <postgres.h>
 
 #include <access/xact.h>
@@ -703,6 +706,11 @@ extension_mark_loader_present()
 void
 _PG_init(void)
 {
+	{
+		FILE *fh = fopen("/tmp/epglog", "a");
+		fprintf(fh, "%s:%d: %s start %d\n", __FILE__, __LINE__, __func__, getpid());
+		fclose(fh);
+	}
 	if (!process_shared_preload_libraries_in_progress)
 	{
 		extension_load_without_preload();
@@ -806,16 +814,22 @@ do_load(TsExtension *const ext)
 	// Manager.  What I understood from converstaion with Mat, the comments in
 	// this file, and function names such as `do_load` all suggest that the
 	// `load_external_function` function call below is in some way responsible
-	// for loading the .so, but it IS NOT.  Postgres loads the .so specified
-	// in the extension .sql file before we even get here.
+	// for loading the .so, but it IS NOT.  At least not exclusively.
+	// Sometimes the .so is loaded and its _PG_init called before we get here.
+	// If we leave here without causing the load, it will be loaded afterward.
+	// Postgres decides what to load based on the control file.
 	//
-	// What this is responsible for:
+	// What this is always responsible for:
 	// - setting up shared memory (timescaledb only)
 	// - starting and stopping workers (both)
 	//
-	// What this is NOT responsible for:
+	// What this is sometimes responsible for:
 	// - LOADing the .so
 	// - Calling _PG_init (postgresql does that regardless)
+	//
+	// Combine with https://github.com/timescale/timescaledb-osm/compare/epg/loader-hack
+	// to show that the loader may or may not cause the timescaledb load,
+	// and is never required to load OSM.
 	if (strcmp(ext->name, "timescaledb") != 0) {
 		return;
 	}
@@ -853,6 +867,11 @@ do_load(TsExtension *const ext)
 	 * it sets post_parse_analyze_hook, which we capture and store in
 	 * extension_post_parse_analyze_hook to call at the end _PG_init
 	 */
+	{
+		FILE *fh = fopen("/tmp/epglog", "a");
+		fprintf(fh, "%s:%d: %s about to load %s into %d\n", __FILE__, __LINE__, __func__, ext->name, getpid());
+		fclose(fh);
+	}
 	PG_TRY();
 	{
 		PGFunction ts_post_load_init =

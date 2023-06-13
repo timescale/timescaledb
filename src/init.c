@@ -3,6 +3,9 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+
+#include <unistd.h>
+
 #include <postgres.h>
 
 #include <access/xact.h>
@@ -91,6 +94,11 @@ cleanup_on_pg_proc_exit(int code, Datum arg)
 void
 _PG_init(void)
 {
+	{
+		FILE *fh = fopen("/tmp/epglog", "a");
+		fprintf(fh, "%s:%d: %s start in %d\n", __FILE__, __LINE__, __func__, getpid());
+		fclose(fh);
+	}
 	/*
 	 * Check extension_is loaded to catch certain errors such as calls to
 	 * functions defined on the wrong extension version
