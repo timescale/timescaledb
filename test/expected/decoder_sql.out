@@ -1,6 +1,11 @@
 --
 -- Basic tests
 --
+-- The initial code has been picked up from the following PostgreSQL
+-- licensed github repository:
+-- https://github.com/michaelpq/pg_plugins/tree/main/decoder_raw
+-- Need superuser to use replication slots
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- Create a replication slot
 SELECT slot_name FROM pg_create_logical_replication_slot('custom_slot', 'decoder_sql');
   slot_name  

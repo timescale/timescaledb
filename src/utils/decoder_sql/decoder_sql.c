@@ -6,13 +6,19 @@
  *
  * Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
- * IDENTIFICATION
- *		  decoder_sql/decoder_sql.c
+ * The initial code has been picked up from the following PostgreSQL
+ * licensed github repository:
+ *
+ * https://github.com/michaelpq/pg_plugins/tree/main/decoder_raw
  *
  *-------------------------------------------------------------------------
  */
 
-#include "postgres.h"
+#include <postgres.h>
+#include <access/relation.h>
+#include <catalog/namespace.h>
+#include <utils/regproc.h>
+#include <utils/varlena.h>
 
 #include "access/genam.h"
 #include "access/sysattr.h"
@@ -29,12 +35,13 @@
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
+#include "export.h"
 
 PG_MODULE_MAGIC;
 
 /* These must be available to pg_dlsym() */
-extern void _PG_init(void);
-extern void _PG_output_plugin_init(OutputPluginCallbacks *cb);
+extern void TSDLLEXPORT _PG_init(void);
+extern void TSDLLEXPORT _PG_output_plugin_init(OutputPluginCallbacks *cb);
 
 /*
  * Structure storing the plugin specifications and options.
@@ -43,6 +50,7 @@ typedef struct
 {
 	MemoryContext context;
 	bool		include_transaction;
+	List	   *include_relations; /* List of relation oids */
 }			DecoderRawData;
 
 static void decoder_sql_startup(LogicalDecodingContext *ctx,
@@ -91,6 +99,7 @@ decoder_sql_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt,
 										  "Raw decoder context",
 										  ALLOCSET_DEFAULT_SIZES);
 	data->include_transaction = false;
+	data->include_relations = NIL;
 
 	ctx->output_plugin_private = data;
 
@@ -135,6 +144,51 @@ decoder_sql_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("Incorrect value \"%s\" for parameter \"%s\"",
 								format, elem->defname)));
+		}
+		else if (strcmp(elem->defname, "include_relations") == 0)
+		{
+			char	   *relargs = NULL;
+			List *namelist = NIL;
+			RangeVar   *relvar;
+			Relation	rel;
+			List	   *relname_list;
+			ListCell   *l;
+			MemoryContext old = MemoryContextSwitchTo(ctx->context);
+
+			if (elem->arg == NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("No value specified for parameter \"%s\"",
+								elem->defname)));
+
+			/* Need a modifiable copy of string */
+			relargs = pstrdup(strVal(elem->arg));
+
+			/* Parse string into list of identifiers */
+			if (!SplitIdentifierString(relargs, ',', &namelist) || namelist == NIL)
+			{
+				/* issues in name list */
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("Invalid value \"%s\" specified for parameter \"%s\"",
+								strVal(elem->arg), elem->defname)));
+			}
+
+			foreach(l, namelist)
+			{
+				char	   *relname = (char *) lfirst(l);
+
+				/* Open relation. It might be in schemaname.relname format */
+				relname_list = stringToQualifiedNameList(relname);
+				relvar = makeRangeVarFromNameList(relname_list);
+				rel = relation_openrv(relvar, AccessShareLock);
+				data->include_relations = lappend_oid(data->include_relations, RelationGetRelid(rel));
+				relation_close(rel, AccessShareLock);
+			}
+
+			pfree(relargs);
+			list_free(namelist);
+			MemoryContextSwitchTo(old);
 		}
 		else
 		{
@@ -566,8 +620,16 @@ decoder_sql_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 	MemoryContext old;
 	char		replident = relation->rd_rel->relreplident;
 	bool		is_rel_non_selective;
+	Oid reloid = RelationGetRelid(relation);
 
 	data = ctx->output_plugin_private;
+
+	/* check if we are interested in this change record, skip otherwise */
+	if (data->include_relations && !list_member_oid(data->include_relations, reloid))
+	{
+		elog(DEBUG3, "skipping change record for relation with oid %u", reloid);
+		return;
+	}
 
 	/* Avoid leaking memory by using and resetting our own context */
 	old = MemoryContextSwitchTo(data->context);

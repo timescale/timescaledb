@@ -12,6 +12,7 @@ set(TEST_FILES
     create_hypertable.sql
     create_table.sql
     ddl_errors.sql
+    decoder_sql.sql
     drop_extension.sql
     drop_hypertable.sql
     drop_owned.sql
