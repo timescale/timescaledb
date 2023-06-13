@@ -35,13 +35,15 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	BitArrayIterator leading_zeros_iterator;
 	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
 
-	uint8 all_leading_zeros[MAX_NUM_LEADING_ZEROS_PADDED];
+	uint8 all_leading_zeros[MAX_NUM_LEADING_ZEROS_PADDED_N64];
 	const int16 leading_zeros_padded =
 		unpack_leading_zeros_array(&gorilla_data->leading_zeros, all_leading_zeros);
 
-	int16 num_bit_widths;
-	const uint8 *restrict bit_widths =
-		simple8brle_decompress_all_uint8(gorilla_data->num_bits_used_per_xor, &num_bit_widths);
+	uint8 bit_widths[MAX_NUM_LEADING_ZEROS_PADDED_N64];
+	const int num_bit_widths =
+		simple8brle_decompress_all_buf_uint8(gorilla_data->num_bits_used_per_xor,
+											 bit_widths,
+											 MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
 	BitArray xors_bitarray = gorilla_data->xors;
 	BitArrayIterator xors_iterator;
@@ -58,6 +60,14 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) == num_bit_widths);
 	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) <= leading_zeros_padded);
 
+	//	int total_bits = 0;
+	//	for (int i = 0; i < num_bit_widths; i++)
+	//	{
+	//		total_bits += bit_widths[i];
+	//	}
+	//
+	//	CheckCompressedData(total_bits / 64 <= (int) leading_zeros_bitarray.buckets.num_elements);
+
 	/*
 	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
 	 * widths.
@@ -70,6 +80,10 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	const int n_different = tag1s.num_elements;
 	CheckCompressedData(n_different <= n_notnull);
 
+	MyBitIter iter2 = { .words = xors_bitarray.buckets.data,
+						.num_words = xors_bitarray.buckets.num_elements,
+						.starting_bit_index = 0 };
+
 	/*
 	 * 1d) Unpack.
 	 *
@@ -77,42 +91,45 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * having a fast path for stretches of tag1 == 0.
 	 */
 	ELEMENT_TYPE prev = 0;
-	int next_bit_widths_index = 0;
-	int16 next_leading_zeros_index = 0;
-	uint8 current_leading_zeros = 0;
-	uint8 current_xor_bits = 0;
+	int bit_widths_index = -1;
+	//	int16 next_leading_zeros_index = 0;
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 	for (int i = 0; i < n_different; i++)
 	{
 		if (simple8brle_bitmap_get_at(&tag1s, i) != 0)
 		{
-			/* Load new bit widths. */
-			Assert(next_bit_widths_index < num_bit_widths);
-			current_xor_bits = bit_widths[next_bit_widths_index++];
-
-			Assert(next_leading_zeros_index < MAX_NUM_LEADING_ZEROS_PADDED);
-			current_leading_zeros = all_leading_zeros[next_leading_zeros_index++];
-
-			/*
-			 * More than 64 significant bits don't make sense. Exactly 64 we get for
-			 * the first encoded number.
-			 */
-			CheckCompressedData(current_leading_zeros + current_xor_bits <= 64);
-
-			/*
-			 * Theoretically, leading zeros + xor bits == 0 would mean that the
-			 * number is the same as the previous one, and it should have been
-			 * encoded as tag0s == 0. Howewer, we can encounter it in the corrupt
-			 * data. Shifting by 64 bytes left would be undefined behavior.
-			 */
-			CheckCompressedData(current_leading_zeros + current_xor_bits > 0);
+			/* Checked above that it's true on the first iteration. */
+			bit_widths_index++;
+			Assert(bit_widths_index < num_bit_widths);
+			Assert(bit_widths_index < MAX_NUM_LEADING_ZEROS_PADDED_N64);
 		}
+		const uint8 current_xor_bits = bit_widths[bit_widths_index];
+		const uint8 current_leading_zeros = all_leading_zeros[bit_widths_index];
+		const uint8 shift = (64 - (current_xor_bits + current_leading_zeros)) & 63;
+
+		//			/*
+		//			 * More than 64 significant bits don't make sense. Exactly 64 we get for
+		//			 * the first encoded number.
+		//			 */
+		//			CheckCompressedData(current_leading_zeros + current_xor_bits <= 64);
+		//
+		//			/*
+		//			 * Theoretically, leading zeros + xor bits == 0 would mean that the
+		//			 * number is the same as the previous one, and it should have been
+		//			 * encoded as tag0s == 0. Howewer, we can encounter it in the corrupt
+		//			 * data. Shifting by 64 bytes left would be undefined behavior.
+		//			 */
+		//			CheckCompressedData(current_leading_zeros + current_xor_bits > 0);
+		//		}
 
 		const uint64 current_xor = bit_array_iter_next(&xors_iterator, current_xor_bits);
-		prev ^= current_xor << (64 - (current_leading_zeros + current_xor_bits));
+		const uint64 current_xor_2 = next_bits(&iter2, current_xor_bits);
+		Assert(current_xor == current_xor_2);
+
+		prev ^= current_xor << shift;
 		decompressed_values[i] = prev;
 	}
-	Assert(next_bit_widths_index == num_bit_widths);
+	Assert(bit_widths_index == num_bit_widths - 1);
 
 	/*
 	 * 2) Fill out the stretches of repeated elements, encoded with tag0 = 0.
@@ -130,16 +147,100 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	CheckCompressedData(simple8brle_bitmap_get_at(&tag0s, 0) == 1);
 
 	/*
-	 * 2b) Fill the repeated elements.
+	 * 2b) Fill the repeated elements. We use either branched or branchless way
+	 * to do this, depending on whether the branch is predictable.
 	 */
 	int current_element = n_different - 1;
-	for (int i = n_notnull - 1; i >= 0; i--)
+	//	fprintf(stderr, "min %d, max %d, condition %d\n",
+	//		Min(n_different, n_notnull - n_different),
+	//		Max(n_different, n_notnull - n_different),
+	//		Min(n_different, n_notnull - n_different) * 5 >= Max(n_different, n_notnull -
+	// n_different));
+	const int n_same = n_notnull - n_different;
+	//#define INNER_LOOP_SIZE 8
+	//	if (true)
+	//	{
+	//		int ce[INNER_LOOP_SIZE] = { -1, 0 };
+	//		uint8 cc[INNER_LOOP_SIZE] = { 0 };
+	//		for (int outer = n_total_padded - INNER_LOOP_SIZE; outer >= 0; outer--)
+	//		{
+	//			for (int inner = 0; i < INNER_LOOP_SIZE - 1; inner++)
+	//			{
+	//				cc[inner] = simple8brle_bitmap_get_at(&tag0s, outer + inner);
+	//			}
+	//
+	//			for (int inner = 1; i < INNER_LOOP_SIZE - 1; inner++)
+	//			{
+	//				cc[inner] += cc[inner - 1];
+	//			}
+	//
+	//			for (int inner = INNER_LOOP_SIZE - 1; inner >= 0; inner--)
+	//			{
+	//
+	//			}
+	//
+	//			current_element =
+	//		}
+	//	}
+	//	else
+	//#undef INNER_LOOP_SIZE
+	if (n_same * 10 < n_different)
 	{
-		Assert(current_element >= 0);
-		Assert(current_element <= i);
-		decompressed_values[i] = decompressed_values[current_element];
+		/*
+		 * Branch probability significantly skewed, use the branched version.
+		 * Mostly different.
+		 */
+		for (int i = n_notnull - 1; i >= 0; i--)
+		{
+			Assert(current_element >= 0);
+			Assert(current_element <= i);
+			decompressed_values[i] = decompressed_values[current_element];
 
-		current_element -= simple8brle_bitmap_get_at(&tag0s, i);
+			if (likely(simple8brle_bitmap_get_at(&tag0s, i)))
+			{
+				current_element--;
+			}
+		}
+	}
+	else if (n_different * 10 < n_same)
+	{
+		/*
+		 * Branch probability significantly skewed, use the branched version.
+		 * Mostly same.
+		 */
+		for (int i = n_notnull - 1; i >= 0; i--)
+		{
+			Assert(current_element >= 0);
+			Assert(current_element <= i);
+			decompressed_values[i] = decompressed_values[current_element];
+
+			if (unlikely(simple8brle_bitmap_get_at(&tag0s, i)))
+			{
+				current_element--;
+			}
+		}
+	}
+	else
+	{
+		/*
+		 * Branch probability likely to be close to uniform, use branchless
+		 * version.
+		 */
+		for (int i = n_notnull - 1; i >= 0; i--)
+		{
+			Assert(current_element >= 0);
+			Assert(current_element <= i);
+			decompressed_values[i] = decompressed_values[current_element];
+
+			current_element -= simple8brle_bitmap_get_at(&tag0s, i);
+		}
+	}
+
+	if (Min(n_different, n_notnull - n_different) * 5 >= Max(n_different, n_notnull - n_different))
+	{
+	}
+	else
+	{
 	}
 	Assert(current_element == -1);
 

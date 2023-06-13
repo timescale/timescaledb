@@ -401,7 +401,12 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 
-	data = palloc0(compressed_size);
+	/*
+	 * Add padding for simple decompression of the xors bitarray that comes the
+	 * last in the serialized structure. This padding is also added by the recv
+	 * function, but for the tests we use the serialized struct directly.
+	 */
+	data = palloc0(compressed_size + sizeof(uint64));
 	compressed = (GorillaCompressed *) data;
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
 
@@ -826,7 +831,7 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 								 iter_base->element_type);
 }
 
-#define MAX_NUM_LEADING_ZEROS_PADDED (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
+#define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
 
 /*
  * Decompress packed 6bit values in lanes that contain a round number of both
@@ -851,7 +856,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 	const int16 n_bytes_packed = bitarray->buckets.num_elements * sizeof(uint64);
 	const int16 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
 	const int16 n_outputs = n_lanes * LANE_OUTPUTS;
-	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED);
+	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
 	for (int lane = 0; lane < n_lanes; lane++)
 	{
@@ -877,6 +882,34 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 #undef LANE_OUTPUTS
 
 	return n_outputs;
+}
+
+typedef struct MyBitIter
+{
+	const uint64 *restrict words;
+	const int num_words;
+	int starting_bit_index;
+} MyBitIter;
+
+static uint64
+next_bits(MyBitIter *iter, int n_bits)
+{
+	/* Just don't segfault on the corrupted input. */
+	n_bits &= 63;
+	const int start_in_word = iter->starting_bit_index % 64;
+	const int first_word_index = iter->starting_bit_index / 64;
+	/* Have 1 word of padding. */
+	CheckCompressedData(first_word_index <= iter->num_words - 1);
+	const unsigned PG_INT128_TYPE two_words =
+		((unsigned PG_INT128_TYPE) iter->words[first_word_index]) |
+		((unsigned PG_INT128_TYPE) iter->words[first_word_index + 1]) << 64;
+	const unsigned PG_INT128_TYPE n_ones_mask = (((unsigned PG_INT128_TYPE) 1) << n_bits) - 1;
+	const unsigned PG_INT128_TYPE two_word_mask = n_ones_mask << start_in_word;
+	const uint64 result = (two_words & two_word_mask) >> start_in_word;
+
+	iter->starting_bit_index += n_bits;
+
+	return result;
 }
 
 /* Bulk gorilla decompression, specialized for supported data types. */

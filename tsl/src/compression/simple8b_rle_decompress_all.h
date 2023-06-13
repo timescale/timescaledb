@@ -11,21 +11,16 @@
  * Specialization of bulk simple8brle decompression for a data type specified by
  * ELEMENT_TYPE macro.
  */
-static ELEMENT_TYPE *
-FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
-														int16 *n_)
+static int
+FUNCTION_NAME(simple8brle_decompress_all_buf,
+			  ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
+							ELEMENT_TYPE *restrict decompressed_values, int n_buffer_elements)
 {
+	const uint16 n_total_values = compressed->num_elements;
+
 	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
-
-	const uint16 n_total_values = compressed->num_elements;
-	Assert(n_total_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-
 	const uint16 num_blocks = compressed->num_blocks;
-	const uint16 n_padded_values = ((n_total_values + 63) / 64 + 1) * 64;
-
-	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_padded_values);
-	uint32 decompressed_index = 0;
 
 	/*
 	 * Unpack the selector slots to get the selector values. Best done separately,
@@ -48,6 +43,7 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 	/*
 	 * Now decompress the individual blocks.
 	 */
+	int decompressed_index = 0;
 	const uint64 *restrict blocks = compressed->slots + num_selector_slots;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
@@ -58,7 +54,7 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 		if (unlikely(simple8brle_selector_is_rle(selector_value)))
 		{
 			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
-			CheckCompressedData(decompressed_index + n_block_values <= n_total_values);
+			CheckCompressedData(decompressed_index + n_block_values <= n_buffer_elements);
 
 			const ELEMENT_TYPE repeated_value = simple8brle_rledata_value(block_data);
 			for (int i = 0; i < n_block_values; i++)
@@ -90,7 +86,7 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 		 * might be incorrect.                                                                     \
 		 */                                                                                        \
 		const uint16 n_block_values = SIMPLE8B_NUM_ELEMENTS[X];                                    \
-		CheckCompressedData(decompressed_index + n_block_values < n_padded_values);                \
+		CheckCompressedData(decompressed_index + n_block_values < n_buffer_elements);              \
                                                                                                    \
 		const uint64 bitmask = simple8brle_selector_get_bitmask(X);                                \
                                                                                                    \
@@ -133,11 +129,41 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 
 	/*
 	 * We can decompress more than expected because we work in full blocks,
-	 * but if we decompressed less, this means broken data.
+	 * but if we decompressed less, this means broken data. Better to report it
+	 * not to have an uninitialized tail.
 	 */
 	CheckCompressedData(decompressed_index >= n_total_values);
-	Assert(decompressed_index <= n_padded_values);
+	Assert(decompressed_index <= n_buffer_elements);
 
-	*n_ = n_total_values;
+	return n_total_values;
+}
+
+/*
+ * The same function as above, but does palloc instead of taking the buffer as
+ * an input. We mark it as possibly unused because it is used not for every
+ * element type we have.
+ */
+static ELEMENT_TYPE *FUNCTION_NAME(simple8brle_decompress_all,
+								   ELEMENT_TYPE)(Simple8bRleSerialized *compressed, int16 *n_)
+	__attribute__((unused));
+
+static ELEMENT_TYPE *
+FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
+														int16 *n_)
+{
+	const int n_total_values = compressed->num_elements;
+	Assert(n_total_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+
+	/*
+	 * We need a significant padding of 64 elements, not bytes, here, because we
+	 * work in Simple8B blocks which can contain up to 64 elements.
+	 */
+	const int n_buffer_elements = ((n_total_values + 63) / 64 + 1) * 64;
+
+	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_buffer_elements);
+
+	*n_ = FUNCTION_NAME(simple8brle_decompress_all_buf,
+						ELEMENT_TYPE)(compressed, decompressed_values, n_buffer_elements);
+
 	return decompressed_values;
 }

@@ -369,7 +369,7 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 #endif
 
 #define CheckCompressedData(X)                                                                     \
-	if (!(X))                                                                                      \
+	if (unlikely(!(X)))                                                                            \
 	ereport(ERROR, CORRUPT_DATA_MESSAGE)
 
 inline static void *

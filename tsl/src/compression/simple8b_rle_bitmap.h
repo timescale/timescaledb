@@ -15,7 +15,7 @@
 
 typedef struct Simple8bRleBitmap
 {
-	char *bitmap_bools_;
+	bool *bitmap_bools_;
 	int16 num_elements;
 	int16 num_ones;
 } Simple8bRleBitmap;
@@ -61,7 +61,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	const int16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
 	const int16 num_blocks = compressed->num_blocks;
 
-	char *restrict bitmap_bools_ = palloc(num_elements_padded);
+	bool *restrict bitmap_bools_ = palloc(num_elements_padded);
 	int16 decompressed_index = 0;
 	for (int16 block_index = 0; block_index < num_blocks; block_index++)
 	{
@@ -83,7 +83,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			const int32 n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-			const uint8 repeated_value = simple8brle_rledata_value(block_data);
+			const bool repeated_value = simple8brle_rledata_value(block_data);
 			CheckCompressedData(repeated_value <= 1);
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
