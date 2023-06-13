@@ -12,10 +12,6 @@ ALTER TABLE main_table SET (
     timescaledb.compress_segmentby = 'device_id',
     timescaledb.compress_orderby = '');
 INSERT INTO main_table SELECT t, 'dev1'  FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-05 3:00', '1 hour') t;
--- INSERT INTO main_table VALUES
---     ('2011-11-11 11:11:11', 'foo');
--- INSERT INTO main_table VALUES
---     ('2011-11-11 11:11:11', 'foo');
 select show_chunks('main_table');
               show_chunks               
 ----------------------------------------
@@ -41,6 +37,13 @@ ORDER BY slices;
         6 |             1 | _timescaledb_internal | _hyper_1_6_chunk | r       | {"time": [1520164800000000, 1520208000000000]}
         7 |             1 | _timescaledb_internal | _hyper_1_7_chunk | r       | {"time": [1520208000000000, 1520251200000000]}
 (7 rows)
+
+with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
+select (select ch from t limit 1 offset 2), (select ch from t limit 1 offset 3);
+                   ch                   |                   ch                   
+----------------------------------------+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_4_chunk
+(1 row)
 
 select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
 select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
