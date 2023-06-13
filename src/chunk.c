@@ -4371,7 +4371,7 @@ get_chunk_operation_str(ChunkOperation cmd)
 }
 
 bool
-ts_chunk_validate_chunk_status_for_operation(Chunk*chunk,
+ts_chunk_validate_chunk_status_for_operation(const Chunk*chunk,
 											 ChunkOperation cmd, bool throw_error)
 {
 	Oid chunk_relid = chunk->table_id;
