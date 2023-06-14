@@ -4430,17 +4430,19 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 				return false;
 			}
 			case CHUNK_DETACH:
-	// FIXME: in case of old-caggs this might be problematic; filter it for now!
-	// https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
-					if(ts_continuous_agg_hypertable_status(chunk->fd.hypertable_id)!=HypertableIsNotContinuousAgg) {
+				// FIXME: in case of old-caggs this might be problematic; filter it for now!
+				// https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
+				if (ts_continuous_agg_hypertable_status(chunk->fd.hypertable_id) !=
+					HypertableIsNotContinuousAgg)
+				{
 					ereport((throw_error ? ERROR : NOTICE),
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("can't detach chunk (%s) from hypertable which has continous aggregates",
+							 errmsg("can't detach chunk (%s) from hypertable which has continous "
+									"aggregates",
 									get_rel_name(chunk_relid))));
-				return false;
-						
-					}
-					
+					return false;
+				}
+
 			default:
 				break;
 		}

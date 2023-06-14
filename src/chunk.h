@@ -182,7 +182,8 @@ extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int3
 extern TSDLLEXPORT void ts_chunk_drop_fks(const Chunk *const chunk);
 extern TSDLLEXPORT void ts_chunk_create_fks(const Hypertable *ht, const Chunk *const chunk);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
-extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
+extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *table,
+											   DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
@@ -199,7 +200,7 @@ extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);
-/*FIXME*/extern TSDLLEXPORT void chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht);
+/*FIXME*/ extern TSDLLEXPORT void chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, List **affected_data_nodes);
 extern TSDLLEXPORT Chunk *

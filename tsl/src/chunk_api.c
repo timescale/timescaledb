@@ -1825,7 +1825,6 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	ts_chunk_data_node_delete_by_chunk_id_and_node_name(chunk->fd.id, node_name);
 }
 
-
 Datum
 chunk_api_detach(PG_FUNCTION_ARGS)
 {
@@ -1838,7 +1837,7 @@ chunk_api_detach(PG_FUNCTION_ARGS)
 	// table_open(chunk_relid, AccessExclusiveLock);
 
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DETACH, true /*throw_error */);
-	
+
 	/* do not drop any chunk dependencies */
 	// ts_chunk_drop_internal(ch, DROP_RESTRICT, LOG, false);
 
@@ -1847,7 +1846,9 @@ chunk_api_detach(PG_FUNCTION_ARGS)
 		ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
 	chunk_table_drop_inherit(ch, ht);
-	int num_removed = ts_chunk_delete_by_name(NameStr(ch->fd.schema_name), NameStr(ch->fd.table_name), DROP_RESTRICT);
+	int num_removed = ts_chunk_delete_by_name(NameStr(ch->fd.schema_name),
+											  NameStr(ch->fd.table_name),
+											  DROP_RESTRICT);
 	Ensure(num_removed == 1, "num_removed is expected to be exactly one at this point");
 	// ts_chunk_delete_by_relid(ch->table_id, DROP_RESTRICT, preserve_chunk_catalog_row);
 
