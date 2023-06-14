@@ -4369,8 +4369,12 @@ get_chunk_operation_str(ChunkOperation cmd)
 			return "decompress_chunk";
 		case CHUNK_DROP:
 			return "drop_chunk";
+		case CHUNK_ATTACH:
+			return "chunk_attach";
+		case CHUNK_DETACH:
+			return "chunk_detach";
 		default:
-			return "Unsupported";
+			elog(ERROR, "Unknown chunk operation: %d", cmd);
 	}
 }
 
@@ -4430,6 +4434,14 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 				return false;
 			}
 			case CHUNK_DETACH:
+				if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_COMPRESSED))
+				{
+					ereport((throw_error ? ERROR : NOTICE),
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("can't detach chunk \"%s\" because its compressed",
+									get_rel_name(chunk_relid))));
+					return false;
+				}
 				// FIXME: in case of old-caggs this might be problematic; filter it for now!
 				// https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
 				if (ts_continuous_agg_hypertable_status(chunk->fd.hypertable_id) !=
@@ -4437,7 +4449,7 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 				{
 					ereport((throw_error ? ERROR : NOTICE),
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("can't detach chunk (%s) from hypertable which has continous "
+							 errmsg("can't detach chunk \"%s\" from hypertable which has continous "
 									"aggregates",
 									get_rel_name(chunk_relid))));
 					return false;
