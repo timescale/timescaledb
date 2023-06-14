@@ -66,7 +66,7 @@ select * from :chunk union all select * from :chunk2;
 
 INSERT INTO main_table SELECT t, 'dev1'  FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-05 3:00', '1 hour') t;
 
---  select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520078400000000]}'::jsonb,null,null,:'chunk'::regclass);
+  select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520078400000000]}'::jsonb,null,null,:'chunk'::regclass);
 --select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
 --select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
 
