@@ -212,6 +212,7 @@ typedef struct CrossModuleFunctions
 									  RelOptInfo *innerrel, JoinType jointype,
 									  JoinPathExtraData *extra);
 	PGFunction chunk_detach;
+	PGFunction chunk_attach;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

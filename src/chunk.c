@@ -81,6 +81,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
 TS_FUNCTION_INFO_V1(ts_chunk_detach);
+TS_FUNCTION_INFO_V1(ts_chunk_attach);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
@@ -4112,6 +4113,12 @@ Datum
 ts_chunk_detach(PG_FUNCTION_ARGS)
 {
 	return ts_cm_functions->chunk_detach(fcinfo);
+}
+
+Datum
+ts_chunk_attach(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->chunk_attach(fcinfo);
 }
 
 Datum
