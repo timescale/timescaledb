@@ -1057,7 +1057,7 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 }
 
 void
-chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
+ts_chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
 {
 	AlterTableCmd drop_inh_cmd = {
 		.type = T_AlterTableCmd,
@@ -1109,7 +1109,7 @@ ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_n
 											   table_name,
 											   NULL,
 											   INVALID_CHUNK_ID);
-	chunk_table_drop_inherit(chunk, ht);
+	ts_chunk_table_drop_inherit(chunk, ht);
 
 	return chunk;
 }

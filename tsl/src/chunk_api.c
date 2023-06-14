@@ -1845,7 +1845,7 @@ chunk_api_detach(PG_FUNCTION_ARGS)
 	Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
-	chunk_table_drop_inherit(ch, ht);
+	ts_chunk_table_drop_inherit(ch, ht);
 	int num_removed = ts_chunk_delete_by_name(NameStr(ch->fd.schema_name),
 											  NameStr(ch->fd.table_name),
 											  DROP_RESTRICT);

@@ -200,7 +200,7 @@ extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);
-/*FIXME*/ extern TSDLLEXPORT void chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht);
+extern TSDLLEXPORT void ts_chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, List **affected_data_nodes);
 extern TSDLLEXPORT Chunk *
