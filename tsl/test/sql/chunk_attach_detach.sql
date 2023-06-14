@@ -1,3 +1,5 @@
+\ir ../../../test/sql/include/test_utils.sql
+
 CREATE TABLE main_table AS
 SELECT '2011-11-11 11:11:11'::timestamptz AS time, 'foo' AS device_id limit 0;
 
@@ -61,6 +63,8 @@ insert into n
 select * from :chunk union all select * from :chunk2;
 
 
-select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
+--select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
+select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
 
 select count(1) from main_table;
+select assert_equal(count(1),75::bigint) from main_table;
