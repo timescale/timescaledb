@@ -1056,7 +1056,7 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	return chunk;
 }
 
-static void
+void
 chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
 {
 	AlterTableCmd drop_inh_cmd = {
@@ -4111,31 +4111,33 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 Datum
 ts_chunk_detach(PG_FUNCTION_ARGS)
 {
-	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	return ts_cm_functions->chunk_detach(fcinfo);
 
-	const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
+	// Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 
-	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DETACH, true /*throw_error */);
+	// const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
+
+	// ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DETACH, true /*throw_error */);
 	
 	
 
-	// FIXME: in case of old-caggs this might be a bad move!
-	// https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
-	bool preserve_chunk_catalog_row = false;
-	/* do not drop any chunk dependencies */
-	// ts_chunk_drop_internal(ch, DROP_RESTRICT, LOG, false);
+	// // FIXME: in case of old-caggs this might be a bad move!
+	// // https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
+	// bool preserve_chunk_catalog_row = false;
+	// /* do not drop any chunk dependencies */
+	// // ts_chunk_drop_internal(ch, DROP_RESTRICT, LOG, false);
 
-	Cache *hcache;
-	Hypertable *ht =
-		ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+	// Cache *hcache;
+	// Hypertable *ht =
+	// 	ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
-	chunk_table_drop_inherit(ch, ht);
-	ts_chunk_delete_by_relid(ch->table_id, DROP_RESTRICT, preserve_chunk_catalog_row);
+	// chunk_table_drop_inherit(ch, ht);
+	// ts_chunk_delete_by_relid(ch->table_id, DROP_RESTRICT, preserve_chunk_catalog_row);
 
-	// FIXME: ensure that no slices are left behind
+	// // FIXME: ensure that no slices are left behind
 
-	ts_cache_release(hcache);
-	PG_RETURN_BOOL(true);
+	// ts_cache_release(hcache);
+	// PG_RETURN_BOOL(true);
 }
 
 Datum
@@ -4454,10 +4456,12 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 				return false;
 			}
 			case CHUNK_DETACH:
+	// FIXME: in case of old-caggs this might be problematic; filter it for now!
+	// https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
 					if(ts_continuous_agg_hypertable_status(chunk->fd.hypertable_id)!=HypertableIsNotContinuousAgg) {
 					ereport((throw_error ? ERROR : NOTICE),
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("can't detach chunk from hypertable which has continous aggregates",
+							 errmsg("can't detach chunk (%s) from hypertable which has continous aggregates",
 									get_rel_name(chunk_relid))));
 				return false;
 						

@@ -211,6 +211,7 @@ typedef struct CrossModuleFunctions
 	void (*mn_get_foreign_join_paths)(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
 									  RelOptInfo *innerrel, JoinType jointype,
 									  JoinPathExtraData *extra);
+	PGFunction chunk_detach;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

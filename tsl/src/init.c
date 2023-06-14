@@ -246,6 +246,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
+	.chunk_detach = chunk_api_detach,
 };
 
 static void

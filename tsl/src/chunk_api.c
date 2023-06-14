@@ -38,6 +38,7 @@
 #include "hypertable_cache.h"
 #include "utils.h"
 #include "deparse.h"
+#include "debug_assert.h"
 
 #include "remote/async.h"
 #include "remote/dist_txn.h"
@@ -1822,4 +1823,36 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
 	chunk_update_foreign_server_if_needed(chunk, serverid, false);
 	ts_chunk_data_node_delete_by_chunk_id_and_node_name(chunk->fd.id, node_name);
+}
+
+
+Datum
+chunk_api_detach(PG_FUNCTION_ARGS)
+{
+	// return ts_cm_functions->create_chunk(fcinfo);
+
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+
+	const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
+	/* exclusive lock relation */
+	// table_open(chunk_relid, AccessExclusiveLock);
+
+	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DETACH, true /*throw_error */);
+	
+	/* do not drop any chunk dependencies */
+	// ts_chunk_drop_internal(ch, DROP_RESTRICT, LOG, false);
+
+	Cache *hcache;
+	Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+
+	chunk_table_drop_inherit(ch, ht);
+	int num_removed = ts_chunk_delete_by_name(NameStr(ch->fd.schema_name), NameStr(ch->fd.table_name), DROP_RESTRICT);
+	Ensure(num_removed == 1, "num_removed is expected to be exactly one at this point");
+	// ts_chunk_delete_by_relid(ch->table_id, DROP_RESTRICT, preserve_chunk_catalog_row);
+
+	// FIXME: ensure that no slices are left behind
+
+	ts_cache_release(hcache);
+	PG_RETURN_BOOL(true);
 }
