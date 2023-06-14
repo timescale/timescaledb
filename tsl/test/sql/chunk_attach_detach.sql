@@ -30,6 +30,14 @@ select count(1) from :chunk;
 select count(1) from main_table;
 \d :chunk
 
+-- reject detach if compressed
+select compress_chunk(:'chunk'::regclass);
+\set ON_ERROR_STOP 0
+select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
+\set ON_ERROR_STOP 1
+select decompress_chunk(:'chunk'::regclass);
+
+
 select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
 
 select count(1) from :chunk;

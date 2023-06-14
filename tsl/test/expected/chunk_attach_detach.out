@@ -83,6 +83,23 @@ Check constraints:
     "constraint_3" CHECK ("time" >= 'Fri Mar 02 16:00:00 2018 PST'::timestamp with time zone AND "time" < 'Sat Mar 03 04:00:00 2018 PST'::timestamp with time zone)
 Inherits: main_table
 
+-- reject detach if compressed
+select compress_chunk(:'chunk'::regclass);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+(1 row)
+
+\set ON_ERROR_STOP 0
+select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
+ERROR:  can't detach chunk "_hyper_1_3_chunk" because its compressed
+\set ON_ERROR_STOP 1
+select decompress_chunk(:'chunk'::regclass);
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+(1 row)
+
 select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
  chunk_detach 
 --------------
@@ -128,7 +145,7 @@ select * from :chunk union all select * from :chunk2;
 select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
                                             create_chunk                                             
 -----------------------------------------------------------------------------------------------------
- (8,1,_timescaledb_internal,_hyper_1_8_chunk,r,"{""time"": [1520035200000000, 1520121600000000]}",t)
+ (9,1,_timescaledb_internal,_hyper_1_9_chunk,r,"{""time"": [1520035200000000, 1520121600000000]}",t)
 (1 row)
 
 select count(1) from main_table;
