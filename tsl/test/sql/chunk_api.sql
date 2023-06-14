@@ -487,7 +487,13 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_
 -- Add the missing CHECK constraint. Note that the name must be the
 -- same as on the parent table.
 ALTER TABLE newchunk ADD CONSTRAINT chunkapi_temp_check CHECK (temp > 0);
+CREATE TABLE newchunk2 as select * from newchunk;
+ALTER TABLE newchunk2 ADD CONSTRAINT chunkapi_temp_check CHECK (temp > 0);
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk');
+-- adding an existing table to an exiting range must fail
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk2');
+\set ON_ERROR_STOP 1
 
 -- Show the chunk and that names are what we'd expect
 SELECT

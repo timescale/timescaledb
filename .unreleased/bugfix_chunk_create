@@ -1,0 +1,1 @@
+Fixes: #5788 Chunk_create must add existing table or fail

@@ -1374,7 +1374,7 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 
 	/* We can only use an existing chunk if it has identical dimensional
 	 * constraints. Otherwise, throw an error */
-	if (!ts_hypercube_equal(stub->cube, hc))
+	if (OidIsValid(chunk_table_relid) || !ts_hypercube_equal(stub->cube, hc))
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_CHUNK_COLLISION),
 				 errmsg("chunk creation failed due to collision")));
