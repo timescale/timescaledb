@@ -37,6 +37,13 @@ select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
 \set ON_ERROR_STOP 1
 select decompress_chunk(:'chunk'::regclass);
 
+-- reject if cagg is present
+CREATE MATERIALIZED VIEW mat_m1(a, countb) WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
+as select time_bucket('1 hour', time),device_id, count(1) from main_table group by time_bucket('1 hour', time), device_id WITH NO DATA;
+\set ON_ERROR_STOP 0
+select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
+\set ON_ERROR_STOP 1
+DROP MATERIALIZED VIEW mat_m1;
 
 select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
 
