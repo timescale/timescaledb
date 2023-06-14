@@ -4112,32 +4112,6 @@ Datum
 ts_chunk_detach(PG_FUNCTION_ARGS)
 {
 	return ts_cm_functions->chunk_detach(fcinfo);
-
-	// Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-
-	// const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
-
-	// ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DETACH, true /*throw_error */);
-	
-	
-
-	// // FIXME: in case of old-caggs this might be a bad move!
-	// // https://iobeam.slack.com/archives/C0558Q4GM6G/p1686311146335909
-	// bool preserve_chunk_catalog_row = false;
-	// /* do not drop any chunk dependencies */
-	// // ts_chunk_drop_internal(ch, DROP_RESTRICT, LOG, false);
-
-	// Cache *hcache;
-	// Hypertable *ht =
-	// 	ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
-
-	// chunk_table_drop_inherit(ch, ht);
-	// ts_chunk_delete_by_relid(ch->table_id, DROP_RESTRICT, preserve_chunk_catalog_row);
-
-	// // FIXME: ensure that no slices are left behind
-
-	// ts_cache_release(hcache);
-	// PG_RETURN_BOOL(true);
 }
 
 Datum
