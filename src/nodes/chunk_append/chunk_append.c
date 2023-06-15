@@ -236,19 +236,12 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 			foreach (lc_oid, current_oids)
 			{
-				/* postgres may have pruned away some children already */
-				Path *child = (Path *) lfirst(flat);
-				Oid parent_relid = child->parent->relid;
-				bool is_not_pruned =
-					lfirst_oid(lc_oid) == root->simple_rte_array[parent_relid]->relid;
-
-				if (is_not_pruned)
-				{
-					merge_childs = lappend(merge_childs, child);
-					flat = lnext_compat(children, flat);
+				Assert(lfirst_oid(lc_oid) ==
+					   root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid);
+				merge_childs = lappend(merge_childs, lfirst(flat));
+				flat = lnext_compat(children, flat);
 					if (flat == NULL)
 						break;
-				}
 			}
 
 			if (list_length(merge_childs) > 1)
