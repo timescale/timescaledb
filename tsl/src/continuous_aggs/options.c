@@ -259,6 +259,8 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 
 		Assert(mat_ht != NULL);
 
+		warn_if_hierarchical_realtime_cagg(agg->data.parent_mat_hypertable_id, materialized_only);
+
 		cagg_flip_realtime_view_definition(agg, mat_ht);
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
@@ -282,5 +284,27 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 	if (!with_clause_options[ContinuousViewOptionFinalized].is_default)
 	{
 		elog(ERROR, "cannot alter finalized option for continuous aggregates");
+	}
+}
+
+void
+warn_if_hierarchical_realtime_cagg(int32 parent_mat_hypertable_id, bool materialized_only)
+{
+	if (materialized_only)
+		return;
+
+	ContinuousAgg *parent_cagg;
+
+	while ((parent_cagg = ts_continuous_agg_find_by_mat_hypertable_id(parent_mat_hypertable_id)) != NULL)
+	{
+		if (!parent_cagg->data.materialized_only)
+		{
+			ereport(WARNING,
+					(errmsg("Nested realtime continous aggregates may increase planning and "
+							"execution time significantly"),
+					 errhint("consider using materialized_only=true")));
+			return;
+		}
+		parent_mat_hypertable_id = parent_cagg->data.parent_mat_hypertable_id;
 	}
 }

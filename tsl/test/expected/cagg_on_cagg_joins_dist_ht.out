@@ -228,6 +228,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:84: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 --ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -318,8 +319,10 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:126: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:127: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature | device_id 
@@ -655,6 +658,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:84: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 --ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -745,8 +749,10 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:126: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:127: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
  bucket | temperature | device_id 
@@ -1050,6 +1056,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                        View "public.conditions_summary_2"
    Column    |  Type   | Collation | Nullable | Default | Storage | Description 
@@ -1336,6 +1344,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:84: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 --ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -1426,8 +1435,10 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:126: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:127: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
           bucket          | temperature | device_id 
@@ -1759,6 +1770,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:84: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 --ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -1849,8 +1861,10 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:126: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:127: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
           bucket          | temperature | device_id 
@@ -2230,6 +2244,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                  View "public.conditions_summary_2"
    Column    |            Type             | Collation | Nullable | Default | Storage | Description 
@@ -2512,6 +2528,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:84: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 --ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -2602,8 +2619,10 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:126: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:127: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
             bucket            | temperature | device_id 
@@ -2934,6 +2953,7 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:84: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 --ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
 -- Realtime data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -3024,8 +3044,10 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:126: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
+psql:include/cagg_on_cagg_common.sql:127: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
             bucket            | temperature | device_id 
@@ -3405,6 +3427,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -3576,6 +3600,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -3739,6 +3765,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -3830,6 +3858,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -3922,6 +3952,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4014,6 +4046,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4100,6 +4134,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4185,6 +4221,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4270,6 +4308,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4501,6 +4541,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4586,6 +4628,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4671,6 +4715,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 
@@ -4757,6 +4803,8 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
+psql:include/cagg_on_cagg_validations.sql:43: WARNING:  Nested realtime continous aggregates may increase planning and execution time significantly
+HINT:  consider using materialized_only=true
 \d+ :CAGG_NAME_2TH_LEVEL
                                View "public.conditions_summary_2"
    Column    |           Type           | Collation | Nullable | Default | Storage | Description 

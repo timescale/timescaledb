@@ -12,5 +12,6 @@
 
 extern void continuous_agg_update_options(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+void warn_if_hierarchical_realtime_cagg(int32 parent_mat_hypertable_id, bool materialized_only);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_OPTIONS_H */

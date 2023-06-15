@@ -717,6 +717,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	finalqinfo.finalized = finalized;
 
+	warn_if_hierarchical_realtime_cagg(bucket_info->parent_mat_hypertable_id, materialized_only);
+
 	/*
 	 * Assign the column_name aliases in CREATE VIEW to the query.
 	 * No other modifications to panquery.

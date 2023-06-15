@@ -123,8 +123,8 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
-ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=false);
 
 -- Realtime changes, just new region
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
