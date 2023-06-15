@@ -833,11 +833,14 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 
 #define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
 
+int16
+unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
+
 /*
  * Decompress packed 6bit values in lanes that contain a round number of both
  * packed and unpacked bytes -- 4 6-bit values are packed into 3 8-bit values.
  */
-pg_attribute_always_inline static int16
+int16
 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 {
 #define LANE_INPUTS 3
