@@ -124,3 +124,49 @@ ts_telemetry_metadata_add_values(JsonbParseState *state)
 		}
 	}
 }
+
+static HeapTuple
+ts_telemetry_event_make_tuple(TupleDesc desc, const char *tag, Jsonb *body)
+{
+	Datum values[Natts_telemetry_event_max];
+	bool nulls[Natts_telemetry_event_max] = { false };
+	memset(values, 0, sizeof(values));
+	values[AttrNumberGetAttrOffset(Anum_telemetry_event_created)] =
+		TimestampTzGetDatum(GetCurrentTimestamp());
+	values[AttrNumberGetAttrOffset(Anum_telemetry_event_tag)] = CStringGetDatum(tag);
+	values[AttrNumberGetAttrOffset(Anum_telemetry_event_body)] = JsonbPGetDatum(body);
+	return heap_form_tuple(desc, values, nulls);
+}
+
+static Jsonb *
+ts_telemetry_event_make_empty_body(void)
+{
+	JsonbParseState *parse_state = NULL;
+	JsonbValue *result;
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	return JsonbValueToJsonb(result);
+}
+
+#define TELEMETRY_EVENT_CREATE_HT_EXPERIMENTAL "create_ht_experimental"
+
+void
+ts_telemetry_event_on_create_ht_experimental(void)
+{
+	Catalog *catalog;
+	Relation rel;
+	CatalogSecurityContext sec_ctx;
+	HeapTuple new_tuple;
+
+	catalog = ts_catalog_get();
+	rel = table_open(catalog_get_table_id(catalog, TELEMETRY_EVENT), RowExclusiveLock);
+	new_tuple = ts_telemetry_event_make_tuple(RelationGetDescr(rel),
+											  TELEMETRY_EVENT_CREATE_HT_EXPERIMENTAL,
+											  ts_telemetry_event_make_empty_body());
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert(rel, new_tuple);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
+
+	table_close(rel, RowExclusiveLock);
+}

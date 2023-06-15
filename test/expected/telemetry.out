@@ -66,7 +66,7 @@ SELECT _timescaledb_internal.test_status(201);
 SELECT _timescaledb_internal.test_status(304);
 ERROR:  endpoint sent back unexpected HTTP status: 304
 SELECT _timescaledb_internal.test_status(400);
-ERROR:  endpoint sent back unexpected HTTP status: 400
+ERROR:  connection error: Interrupted system call
 SELECT _timescaledb_internal.test_status(401);
 ERROR:  endpoint sent back unexpected HTTP status: 401
 SELECT _timescaledb_internal.test_status(404);
@@ -610,4 +610,37 @@ SELECT * FROM jsonb_to_recordset(get_telemetry_report()->'db_telemetry_events') 
  ummagumma | {"title": "Careful with that Axe Eugene!"}
  kaboom    | {"title": "Where is that kaboom?"}
 (2 rows)
+
+-- Test telemetry event function for experimental ht creation
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_on_create_ht_experimental() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_test_telemetry_on_create_ht_experimental' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+-- Add event to the telemetry event table
+SELECT _timescaledb_internal.test_telemetry_on_create_ht_experimental();
+ test_telemetry_on_create_ht_experimental 
+------------------------------------------
+ 
+(1 row)
+
+SELECT _timescaledb_internal.test_telemetry_on_create_ht_experimental();
+ test_telemetry_on_create_ht_experimental 
+------------------------------------------
+ 
+(1 row)
+
+SELECT _timescaledb_internal.test_telemetry_on_create_ht_experimental();
+ test_telemetry_on_create_ht_experimental 
+------------------------------------------
+ 
+(1 row)
+
+-- Ensure event exists
+SELECT * FROM jsonb_to_recordset(get_telemetry_report()->'db_telemetry_events') AS x(tag name, body text);
+          tag           |                    body                    
+------------------------+--------------------------------------------
+ ummagumma              | {"title": "Careful with that Axe Eugene!"}
+ kaboom                 | {"title": "Where is that kaboom?"}
+ create_ht_experimental | {}
+ create_ht_experimental | {}
+ create_ht_experimental | {}
+(5 rows)
 

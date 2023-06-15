@@ -273,3 +273,15 @@ INSERT INTO _timescaledb_catalog.telemetry_event(tag, body) VALUES
 
 -- Check that it is present in the telemetry report
 SELECT * FROM jsonb_to_recordset(get_telemetry_report()->'db_telemetry_events') AS x(tag name, body text);
+
+-- Test telemetry event function for experimental ht creation
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_on_create_ht_experimental() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_test_telemetry_on_create_ht_experimental' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- Add event to the telemetry event table
+SELECT _timescaledb_internal.test_telemetry_on_create_ht_experimental();
+SELECT _timescaledb_internal.test_telemetry_on_create_ht_experimental();
+SELECT _timescaledb_internal.test_telemetry_on_create_ht_experimental();
+
+-- Ensure event exists
+SELECT * FROM jsonb_to_recordset(get_telemetry_report()->'db_telemetry_events') AS x(tag name, body text);

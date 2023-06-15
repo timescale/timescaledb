@@ -11,6 +11,7 @@
 #include <fmgr.h>
 
 #include "telemetry/telemetry.h"
+#include "telemetry/telemetry_metadata.h"
 #include "net/http.h"
 #include "config.h"
 #include "export.h"
@@ -29,6 +30,7 @@ TS_FUNCTION_INFO_V1(ts_test_status_mock);
 TS_FUNCTION_INFO_V1(ts_test_telemetry_main_conn);
 TS_FUNCTION_INFO_V1(ts_test_telemetry);
 TS_FUNCTION_INFO_V1(ts_test_check_version_response);
+TS_FUNCTION_INFO_V1(ts_test_telemetry_on_create_ht_experimental);
 
 #ifdef TS_DEBUG
 static char *test_string;
@@ -270,4 +272,11 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 	ts_http_response_state_destroy(rsp);
 
 	PG_RETURN_JSONB_P(json_body);
+}
+
+Datum
+ts_test_telemetry_on_create_ht_experimental(PG_FUNCTION_ARGS)
+{
+	ts_telemetry_event_on_create_ht_experimental();
+	PG_RETURN_VOID();
 }

@@ -14,5 +14,6 @@
 extern void ts_telemetry_metadata_add_values(JsonbParseState *state);
 extern void ts_telemetry_events_add(JsonbParseState *state);
 extern void ts_telemetry_event_truncate(void);
+extern TSDLLEXPORT void ts_telemetry_event_on_create_ht_experimental(void);
 
 #endif /* TIMESCALEDB_TELEMETRY_TELEMETRY_METADATA_H */
