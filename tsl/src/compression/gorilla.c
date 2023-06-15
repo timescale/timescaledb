@@ -831,6 +831,33 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 								 iter_base->element_type);
 }
 
+typedef struct MyBitIter
+{
+	const uint64 *restrict words;
+	const unsigned int num_words;
+	unsigned int starting_bit_index;
+} MyBitIter;
+
+static uint64
+next_bits(MyBitIter *iter, unsigned int n_bits)
+{
+	/* Just don't segfault on the corrupted input. */
+	n_bits &= 63;
+	const unsigned int start_in_word = iter->starting_bit_index % 64;
+	const unsigned int first_word_index = iter->starting_bit_index / 64;
+	/* Have 1 word of padding. */
+	CheckCompressedData(first_word_index <= iter->num_words - 1);
+	const unsigned PG_INT128_TYPE two_words =
+		((unsigned PG_INT128_TYPE) iter->words[first_word_index]) |
+		((unsigned PG_INT128_TYPE) iter->words[first_word_index + 1]) << 64;
+	const unsigned PG_INT128_TYPE n_ones_mask = (((unsigned PG_INT128_TYPE) 1) << n_bits) - 1;
+	const uint64 result = (two_words >> start_in_word) & n_ones_mask;
+
+	iter->starting_bit_index += n_bits;
+
+	return result;
+}
+
 #define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
 
 int16
