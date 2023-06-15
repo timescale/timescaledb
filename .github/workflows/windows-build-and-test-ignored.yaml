@@ -37,6 +37,7 @@ jobs:
           echo "build_type=['Debug','Release']" >>$GITHUB_OUTPUT
         fi
   build:
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
     runs-on: ubuntu-latest
     needs: config
     strategy:
