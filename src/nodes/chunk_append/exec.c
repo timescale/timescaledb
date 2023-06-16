@@ -32,6 +32,10 @@
 #define INVALID_SUBPLAN_INDEX (-1)
 #define NO_MATCHING_SUBPLANS (-2)
 
+#define FX() 	elog(NOTICE, "FX @ %p		%s %s:%d",node,__PRETTY_FUNCTION__,__FILE__,__LINE__)
+#define FXC() 	elog(NOTICE, "FX @ %p[%p]	%s %s:%d",node,coordinate,__PRETTY_FUNCTION__,__FILE__,__LINE__)
+
+
 typedef struct ParallelChunkAppendState
 {
 	int next_plan;
@@ -265,6 +269,7 @@ do_startup_exclusion(ChunkAppendState *state)
 static void
 chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 {
+	FX();
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	ListCell *lc;
@@ -626,6 +631,7 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 static void
 chunk_append_end(CustomScanState *node)
 {
+	FX();
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	int i;
 
@@ -641,6 +647,7 @@ chunk_append_end(CustomScanState *node)
 static void
 chunk_append_rescan(CustomScanState *node)
 {
+	FX();
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	int i;
 
@@ -676,6 +683,7 @@ chunk_append_rescan(CustomScanState *node)
 static Size
 chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
 {
+	FX();
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	return add_size(offsetof(ParallelChunkAppendState, finished),
 					sizeof(bool) * state->num_subplans);
@@ -692,6 +700,7 @@ chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
 static void
 chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
 {
+	FXC();
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
 
@@ -724,6 +733,7 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 static void
 chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
 {
+	FXC();
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
 
@@ -741,6 +751,7 @@ chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void
 static void
 chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordinate)
 {
+	FXC();
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
 
@@ -776,6 +787,7 @@ chunk_append_get_lock_pointer()
  *
  * ...WHERE time > '2017-06-02 11:26:43.935712+02'
  */
+#include "nodes/print.h"
 static List *
 constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 {
@@ -788,6 +800,8 @@ constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 		rinfo->clause = (Expr *) estimate_expression_value(root, (Node *) rinfo->clause);
 	}
 
+	elog(NOTICE, "constify");
+	elog_node_display(NOTICE,"constify",restrictinfos,true);
 	return restrictinfos;
 }
 

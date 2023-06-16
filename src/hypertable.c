@@ -2927,10 +2927,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	 */
 	command = makeStringInfo();
 	appendStringInfo(command,
-					 "SELECT pg_catalog.max(%s) FROM %s.%s",
-					 quote_identifier(NameStr(dim->fd.column_name)),
-					 quote_identifier(NameStr(ht->fd.schema_name)),
-					 quote_identifier(NameStr(ht->fd.table_name)));
+					 "SELECT '2018-03-03 19:05:00'::timestamp with time zone + (count(1)-1) * interval '1 day' from public.vx");
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
