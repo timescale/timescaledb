@@ -727,10 +727,11 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
  * in batch_state->decompressed_slot_projected. The slot will be empty if the batch
  * is entirely processed.
  */
-void
+bool
 decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 									 DecompressBatchState *batch_state)
 {
+	bool first_tuple_returned = true;
 	TupleTableSlot *decompressed_slot_scan = batch_state->decompressed_slot_scan;
 	TupleTableSlot *decompressed_slot_projected = batch_state->decompressed_slot_projected;
 
@@ -763,7 +764,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			/* Clear old slot state */
 			ExecClearTuple(decompressed_slot_projected);
 
-			return;
+			return first_tuple_returned;
 		}
 
 		Assert(batch_state->initialized);
@@ -821,8 +822,10 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 		if (is_valid_tuple)
 		{
 			Assert(!TTS_EMPTY(decompressed_slot_projected));
-			return;
+			return first_tuple_returned;
 		}
+
+		first_tuple_returned = false;
 
 		/* Otherwise fetch the next tuple in the next iteration */
 	}
