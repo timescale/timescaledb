@@ -131,7 +131,7 @@ extern DecompressSlotNumber decompress_get_free_batch_state_id(DecompressChunkSt
 extern void decompress_initialize_batch(DecompressChunkState *chunk_state,
 										DecompressBatchState *batch_state, TupleTableSlot *subslot);
 
-extern void decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
+extern bool decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 												 DecompressBatchState *batch_state);
 
 extern void decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batch_id);
