@@ -1,0 +1,1 @@
+Fixes: #5804 Mark cagg_watermark function as PARALLEL RESTRICTED
