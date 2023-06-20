@@ -83,8 +83,12 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			const int32 n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-			const bool repeated_value = simple8brle_rledata_value(block_data);
-			CheckCompressedData(repeated_value <= 1);
+			/*
+			 * We might get an incorrect value from the corrupt data. Explicitly
+			 * truncate it to 0/1 in case the bool is not a standard bool type
+			 * which would do it for us.
+			 */
+			const bool repeated_value = simple8brle_rledata_value(block_data) & 1;
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
