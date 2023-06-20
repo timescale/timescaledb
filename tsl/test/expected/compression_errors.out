@@ -602,13 +602,15 @@ SELECT 1 FROM test GROUP BY enum_col;
 (2 rows)
 
 EXPLAIN SELECT DISTINCT 1 FROM test;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Unique  (cost=0.51..21.02 rows=1 width=4)
-   ->  Result  (cost=0.51..21.02 rows=2000 width=4)
-         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
-               ->  Seq Scan on compress_hyper_32_20_chunk  (cost=0.00..1.02 rows=2 width=4)
-(4 rows)
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Unique  (cost=0.51..92.02 rows=1 width=4)
+   ->  Result  (cost=0.51..92.02 rows=4040 width=4)
+         ->  Append  (cost=0.51..51.62 rows=4040 width=0)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
+                     ->  Seq Scan on compress_hyper_32_20_chunk  (cost=0.00..1.02 rows=2 width=4)
+               ->  Seq Scan on _hyper_31_19_chunk  (cost=0.00..30.40 rows=2040 width=0)
+(6 rows)
 
 --github issue 4398
 SELECT format('CREATE TABLE data_table AS SELECT now() AS tm, %s', array_to_string(array_agg(format('125 AS c%s',a)), ', ')) FROM generate_series(1,550)a \gexec

@@ -783,13 +783,17 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-   ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-         ->  Seq Scan on compress_hyper_14_21_chunk
-(4 rows)
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_13_20_chunk."time"
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_21_chunk
+         ->  Seq Scan on _hyper_13_20_chunk
+(8 rows)
 
 INSERT INTO test_ordering SELECT 1;
 -- should not be ordered append
@@ -874,22 +878,20 @@ NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
-   ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
+ Sort
+   Sort Key: _hyper_13_20_chunk."time"
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
                      ->  Seq Scan on compress_hyper_14_21_chunk
-         ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
-         ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_14_23_chunk
-(15 rows)
+         ->  Seq Scan on _hyper_13_20_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_23_chunk
+         ->  Seq Scan on _hyper_13_22_chunk
+(13 rows)
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
 -- TEST cagg triggers with insert into compressed chunk

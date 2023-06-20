@@ -281,7 +281,7 @@ SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
     table_name    | status 
 ------------------+--------
- _hyper_2_3_chunk |      5
+ _hyper_2_3_chunk |     13
 (1 row)
 
 --now chunk is frozen, cannot decompress

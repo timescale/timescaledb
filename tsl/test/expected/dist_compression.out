@@ -294,8 +294,8 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_1]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
- 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1|f        
- 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  6|f      |     1|f        
+ 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     9|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  6|f      |     9|f        
  5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0|f        
  6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0|f        
 (4 rows)
@@ -306,8 +306,8 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_2]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
- 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1|f        
- 2|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  6|f      |     1|f        
+ 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     9|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  6|f      |     9|f        
  5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0|f        
  6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0|f        
 (4 rows)
@@ -318,8 +318,8 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_3]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
- 1|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  4|f      |     1|f        
- 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  3|f      |     1|f        
+ 1|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  4|f      |     9|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  3|f      |     9|f        
  3|            2|_timescaledb_internal|compress_hyper_2_3_chunk|                   |f      |     0|f        
  4|            2|_timescaledb_internal|compress_hyper_2_4_chunk|                   |f      |     0|f        
 (4 rows)
@@ -701,7 +701,7 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
  id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+-----------------------+---------------------+---------+--------+-----------
-  6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      1 | f
+  6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      9 | f
   7 |             2 | _timescaledb_internal | _dist_hyper_2_7_chunk |                     | f       |      0 | f
   8 |             2 | _timescaledb_internal | _dist_hyper_2_8_chunk |                     | f       |      0 | f
 (3 rows)
@@ -916,7 +916,7 @@ ORDER BY chunk;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            1
+ _dist_hyper_6_24_chunk |            9
 (1 row)
 
 -- insert into compressed chunks of test_recomp_int (using same value for val)--
@@ -944,7 +944,7 @@ CALL recompress_chunk(:'CHUNK_NAME'::regclass);
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            1
+ _dist_hyper_6_24_chunk |            9
 (1 row)
 
 SELECT count(*) from test_recomp_int;
@@ -984,7 +984,7 @@ RESET timescaledb.enable_per_data_node_queries;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            1
+ _dist_hyper_6_24_chunk |            9
 (1 row)
 
 ---run copy tests
@@ -1025,8 +1025,8 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
  _dist_hyper_6_24_chunk |            9
- _dist_hyper_6_25_chunk |            1
- _dist_hyper_6_26_chunk |            1
+ _dist_hyper_6_25_chunk |            9
+ _dist_hyper_6_26_chunk |            9
 (3 rows)
 
 --interleave copy into 3 different chunks and check status--
@@ -1067,8 +1067,8 @@ CALL recompress_all_chunks('test_recomp_int', 2, true);
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            1
- _dist_hyper_6_25_chunk |            1
+ _dist_hyper_6_24_chunk |            9
+ _dist_hyper_6_25_chunk |            9
  _dist_hyper_6_26_chunk |            9
 (3 rows)
 
@@ -1076,18 +1076,15 @@ CALL run_job(:compressjob_id);
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
- _dist_hyper_6_24_chunk |            1
- _dist_hyper_6_25_chunk |            1
- _dist_hyper_6_26_chunk |            1
+ _dist_hyper_6_24_chunk |            9
+ _dist_hyper_6_25_chunk |            9
+ _dist_hyper_6_26_chunk |            9
 (3 rows)
 
 --verify that there are no errors if the policy/recompress_chunk is executed again
 --on previously compressed chunks
 CALL run_job(:compressjob_id);
 CALL recompress_all_chunks('test_recomp_int', true);
-NOTICE:  nothing to recompress in chunk "_dist_hyper_6_24_chunk"
-NOTICE:  nothing to recompress in chunk "_dist_hyper_6_25_chunk"
-NOTICE:  nothing to recompress in chunk "_dist_hyper_6_26_chunk"
 --decompress and recompress chunk
 \set ON_ERROR_STOP 0
 SELECT decompress_chunk(chunk, true) FROM
@@ -1226,8 +1223,8 @@ WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' ORDER BY 1;
        chunk_name       | chunk_status | dropped | comp_id 
 ------------------------+--------------+---------+---------
  _dist_hyper_6_24_chunk |            9 | f       |        
- _dist_hyper_6_25_chunk |            1 | f       |        
- _dist_hyper_6_26_chunk |            1 | f       |        
+ _dist_hyper_6_25_chunk |            9 | f       |        
+ _dist_hyper_6_26_chunk |            9 | f       |        
  _dist_hyper_6_28_chunk |            0 | f       |        
 (4 rows)
 
@@ -1245,8 +1242,8 @@ WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' ORDER BY 1;
        chunk_name       | chunk_status | dropped | comp_id 
 ------------------------+--------------+---------+---------
  _dist_hyper_6_24_chunk |            0 | t       |        
- _dist_hyper_6_25_chunk |            1 | f       |        
- _dist_hyper_6_26_chunk |            1 | f       |        
+ _dist_hyper_6_25_chunk |            9 | f       |        
+ _dist_hyper_6_26_chunk |            9 | f       |        
  _dist_hyper_6_28_chunk |            0 | f       |        
 (4 rows)
 

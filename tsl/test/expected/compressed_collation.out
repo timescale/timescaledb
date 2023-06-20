@@ -43,11 +43,15 @@ create index on :CHUNK (name);
 set enable_seqscan to off;
 explain (costs off)
 select * from compressed_collation_ht order by name;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-   ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_name_idx on compress_hyper_2_2_chunk
-(2 rows)
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_1_1_chunk.name COLLATE "en_US.UTF-8"
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_name_idx on compress_hyper_2_2_chunk
+         ->  Seq Scan on _hyper_1_1_chunk
+(6 rows)
 
 select * from compressed_collation_ht order by name;
            time           | name | value 

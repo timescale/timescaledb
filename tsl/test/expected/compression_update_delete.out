@@ -74,8 +74,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+            9 | _hyper_1_1_chunk
+            9 | _hyper_1_2_chunk
 (2 rows)
 
 -- test rows visibility
@@ -134,8 +134,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+            9 | _hyper_1_1_chunk
+            9 | _hyper_1_2_chunk
 (2 rows)
 
 -- get count of affected rows
@@ -178,8 +178,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+            9 | _hyper_1_1_chunk
+            9 | _hyper_1_2_chunk
 (2 rows)
 
 -- test for IS NOT NULL checks
@@ -206,8 +206,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+            9 | _hyper_1_1_chunk
+            9 | _hyper_1_2_chunk
 (2 rows)
 
 -- report 0 rows
@@ -232,7 +232,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
             9 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+            9 | _hyper_1_2_chunk
 (2 rows)
 
 -- count should be same
@@ -485,15 +485,16 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE time = 1 AND val = 2;
 
 -- delete rows with time = 1 AND val = 2
 EXPLAIN (costs off, verbose) DELETE FROM sample_table WHERE time = 1 AND 2 = val;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableModify)
    ->  Delete on public.sample_table
          Delete on _timescaledb_internal._hyper_5_9_chunk sample_table_1
-         ->  Seq Scan on _timescaledb_internal._hyper_5_9_chunk sample_table_1
+         ->  Index Scan using _hyper_5_9_chunk_sample_table_time_idx on _timescaledb_internal._hyper_5_9_chunk sample_table_1
                Output: sample_table_1.tableoid, sample_table_1.ctid
-               Filter: ((sample_table_1."time" = 1) AND (2 = sample_table_1.val))
-(6 rows)
+               Index Cond: (sample_table_1."time" = 1)
+               Filter: (2 = sample_table_1.val)
+(7 rows)
 
 -- should delete rows from 1 of the compressed chunks
 DELETE FROM sample_table WHERE time = 1 AND 2 = val;
@@ -568,9 +569,9 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
-            1 | _hyper_7_13_chunk
-            1 | _hyper_7_14_chunk
-            1 | _hyper_7_15_chunk
+            9 | _hyper_7_13_chunk
+            9 | _hyper_7_14_chunk
+            9 | _hyper_7_15_chunk
 (3 rows)
 
 -- report 0 rows
@@ -595,8 +596,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
-            1 | _hyper_7_13_chunk
-            1 | _hyper_7_14_chunk
+            9 | _hyper_7_13_chunk
+            9 | _hyper_7_14_chunk
             9 | _hyper_7_15_chunk
 (3 rows)
 
@@ -768,7 +769,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_11_23_chunk
+            9 | _hyper_11_23_chunk
             9 | _hyper_11_24_chunk
 (2 rows)
 
@@ -945,7 +946,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
             9 | _hyper_13_27_chunk
-            1 | _hyper_13_28_chunk
+            9 | _hyper_13_28_chunk
 (2 rows)
 
 -- added tests for code coverage
@@ -990,8 +991,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_15_31_chunk
-            1 | _hyper_15_32_chunk
+            9 | _hyper_15_31_chunk
+            9 | _hyper_15_32_chunk
 (2 rows)
 
 -- get FIRST uncompressed chunk
@@ -1105,7 +1106,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_15_31_chunk
+            9 | _hyper_15_31_chunk
             9 | _hyper_15_32_chunk
 (2 rows)
 
@@ -1977,11 +1978,15 @@ EXPLAIN (costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
                      Recheck Cond: (device_id = 1)
                      ->  Bitmap Index Scan on _hyper_21_39_chunk_tab1_device_id_time_idx
                            Index Cond: (device_id = 1)
-               ->  Seq Scan on _hyper_21_40_chunk tab1_2
-                     Filter: (device_id = 1)
-               ->  Seq Scan on _hyper_21_41_chunk tab1_3
-                     Filter: (device_id = 1)
-(14 rows)
+               ->  Bitmap Heap Scan on _hyper_21_40_chunk tab1_2
+                     Recheck Cond: (device_id = 1)
+                     ->  Bitmap Index Scan on _hyper_21_40_chunk_tab1_device_id_time_idx
+                           Index Cond: (device_id = 1)
+               ->  Bitmap Heap Scan on _hyper_21_41_chunk tab1_3
+                     Recheck Cond: (device_id = 1)
+                     ->  Bitmap Index Scan on _hyper_21_41_chunk_tab1_device_id_time_idx
+                           Index Cond: (device_id = 1)
+(18 rows)
 
 DELETE FROM tab1 WHERE tab1.device_id = 1;
 SELECT count(*) FROM tab1 WHERE device_id = 1;
@@ -2065,10 +2070,10 @@ SELECT compress_chunk(show_chunks('join_test2'));
 SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
- join_test1 | _hyper_25_51_chunk |      1
- join_test1 | _hyper_25_52_chunk |      1
- join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_51_chunk |      9
+ join_test1 | _hyper_25_52_chunk |      9
+ join_test1 | _hyper_25_53_chunk |      9
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 BEGIN;
@@ -2080,7 +2085,7 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_51_chunk |      9
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2090,9 +2095,9 @@ DELETE FROM join_test2 USING join_test1;
 SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
- join_test1 | _hyper_25_51_chunk |      1
- join_test1 | _hyper_25_52_chunk |      1
- join_test1 | _hyper_25_53_chunk |      1
+ join_test1 | _hyper_25_51_chunk |      9
+ join_test1 | _hyper_25_52_chunk |      9
+ join_test1 | _hyper_25_53_chunk |      9
  join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
@@ -2104,9 +2109,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      1
- join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_52_chunk |      9
+ join_test1 | _hyper_25_53_chunk |      9
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2119,7 +2124,7 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_51_chunk |      9
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2132,7 +2137,7 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_51_chunk |      9
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2142,9 +2147,9 @@ UPDATE join_test2 t1 SET value = t1.value + 1 FROM join_test1 t2;
 SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
- join_test1 | _hyper_25_51_chunk |      1
- join_test1 | _hyper_25_52_chunk |      1
- join_test1 | _hyper_25_53_chunk |      1
+ join_test1 | _hyper_25_51_chunk |      9
+ join_test1 | _hyper_25_52_chunk |      9
+ join_test1 | _hyper_25_53_chunk |      9
  join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
@@ -2156,9 +2161,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      1
- join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_52_chunk |      9
+ join_test1 | _hyper_25_53_chunk |      9
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2171,7 +2176,7 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_51_chunk |      9
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test2 | _hyper_26_54_chunk |      9
 (4 rows)
 
 ROLLBACK;

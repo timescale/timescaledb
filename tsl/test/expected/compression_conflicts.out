@@ -439,9 +439,9 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
-            1 | _hyper_9_10_chunk
-            1 | _hyper_9_11_chunk
-            1 | _hyper_9_9_chunk
+            9 | _hyper_9_10_chunk
+            9 | _hyper_9_11_chunk
+            9 | _hyper_9_9_chunk
 (3 rows)
 
 -- should report 0 row
@@ -468,8 +468,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
-            1 | _hyper_9_10_chunk
-            1 | _hyper_9_11_chunk
+            9 | _hyper_9_10_chunk
+            9 | _hyper_9_11_chunk
             9 | _hyper_9_9_chunk
 (3 rows)
 
@@ -488,7 +488,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
-            1 | _hyper_9_10_chunk
+            9 | _hyper_9_10_chunk
             9 | _hyper_9_11_chunk
             9 | _hyper_9_9_chunk
 (3 rows)

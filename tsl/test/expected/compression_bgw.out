@@ -75,7 +75,7 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
  id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   4 | f       |      1 | f
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   4 | f       |      9 | f
   2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                     | f       |      0 | f
   3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |                     | f       |      0 | f
   4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
@@ -454,7 +454,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_14_62_chunk
+            9 | _hyper_14_62_chunk
 (1 row)
 
 --- insert into a compressed chunk again + a new chunk--
@@ -496,17 +496,15 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_14_62_chunk
-            1 | _hyper_14_64_chunk
+            9 | _hyper_14_62_chunk
+            9 | _hyper_14_64_chunk
 (2 rows)
 
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
 CALL recompress_chunk(:'CHUNK_NAME'::regclass, true);
-psql:include/recompress_basic.sql:110: NOTICE:  nothing to recompress in chunk "_hyper_14_62_chunk"
 -- This will succeed and compress the chunk for the test below.
 CALL recompress_chunk(:'CHUNK_NAME'::regclass, false);
-psql:include/recompress_basic.sql:113: ERROR:  nothing to recompress in chunk "_hyper_14_62_chunk"
 --now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
@@ -533,7 +531,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 -- do an INSERT so recompress has something to do
@@ -551,7 +549,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 -- disable recompress in compress job
@@ -567,7 +565,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 -- do an INSERT so recompress has something to do
@@ -601,7 +599,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 SELECT delete_job(:JOB_COMPRESS);
@@ -615,17 +613,16 @@ SELECT add_job('_timescaledb_internal.policy_recompression','1w',('{"hypertable_
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 ---- nothing to do yet
 CALL run_job(:JOB_RECOMPRESS);
-psql:include/recompress_basic.sql:189: NOTICE:  no chunks for hypertable "public.metrics" that satisfy recompress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
 --------------
-            1
+            9
 (1 row)
 
 -- create some work for recompress

@@ -343,11 +343,13 @@ EXECUTE p1;
 -- check plan again after recompression
 CALL recompress_chunk(:'chunk_to_compress_prep');
 EXPLAIN (COSTS OFF) EXECUTE p1;
-                     QUERY PLAN                     
-----------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_9_10_chunk
-   ->  Seq Scan on compress_hyper_10_11_chunk
-(2 rows)
+                        QUERY PLAN                        
+----------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
+         ->  Seq Scan on compress_hyper_10_11_chunk
+   ->  Seq Scan on _hyper_9_10_chunk
+(4 rows)
 
 EXECUTE p1;
              time             | a | b | c 
