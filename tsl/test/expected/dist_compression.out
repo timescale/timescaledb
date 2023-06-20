@@ -288,10 +288,10 @@ ORDER BY chunk_name, node_name;
 (6 rows)
 
 SELECT test.remote_exec(NULL, $$
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 $$);
 NOTICE:  [db_dist_compression_1]: 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_1]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
@@ -303,7 +303,7 @@ id|hypertable_id|schema_name          |table_name              |compressed_chunk
 
 
 NOTICE:  [db_dist_compression_2]: 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_2]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
@@ -315,7 +315,7 @@ id|hypertable_id|schema_name          |table_name              |compressed_chunk
 
 
 NOTICE:  [db_dist_compression_3]: 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_3]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
@@ -381,7 +381,20 @@ replication_factor  | 2
 data_nodes          | {db_dist_compression_1,db_dist_compression_2,db_dist_compression_3}
 tablespaces         | 
 
-SELECT * from timescaledb_information.chunks
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
 -[ RECORD 1 ]----------+----------------------------------------------
 hypertable_schema      | public
@@ -699,7 +712,7 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
  _dist_hyper_2_6_chunk | db_dist_compression_3 | 32 kB        | 32 kB
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
  id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+-----------------------+---------------------+---------+--------+-----------
   6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      1 | f
@@ -1425,7 +1438,20 @@ ORDER BY chunk;
 (7 rows)
 
 -- make sure we have chunks on all data nodes
-select * from timescaledb_information.chunks where hypertable_name like 'metric';
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks where hypertable_name like 'metric';
  hypertable_schema | hypertable_name |     chunk_schema      |       chunk_name        | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace |       data_nodes        
 -------------------+-----------------+-----------------------+-------------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+-------------------------
  public            | metric          | _timescaledb_internal | _dist_hyper_10_36_chunk | time              | timestamp with time zone | Wed Jun 30 17:00:00 2021 PDT | Wed Jul 07 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_2}

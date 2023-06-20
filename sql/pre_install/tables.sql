@@ -191,6 +191,7 @@ CREATE TABLE _timescaledb_catalog.chunk (
   dropped boolean NOT NULL DEFAULT FALSE,
   status integer NOT NULL DEFAULT 0,
   osm_chunk boolean NOT NULL DEFAULT FALSE,
+  creation_time timestamptz NOT NULL,
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),
@@ -206,6 +207,7 @@ CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compre
 --Another option would be to use the status field to identify a OSM chunk. However bit
 --operations only work on varbit datatype and not integer datatype.
 CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
+CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk(hypertable_id, creation_time);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');

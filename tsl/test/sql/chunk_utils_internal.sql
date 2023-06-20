@@ -519,7 +519,8 @@ SELECT ts_setup_osm_hook();
 BEGIN;
 SELECT drop_chunks('hyper_constr', 10::int);
 SELECT id, table_name FROM _timescaledb_catalog.chunk
-where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr');
+where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr')
+ORDER BY id;
 ROLLBACK;
 CALL run_job(:deljob_id);
 CALL run_job(:deljob_id);
@@ -640,7 +641,9 @@ ORDER BY 2,3;
 CREATE TABLE test_multicon(time timestamptz not null unique, a int);
 SELECT hypertable_id as htid FROM create_hypertable('test_multicon', 'time', chunk_time_interval => interval '1 day') \gset
 insert into test_multicon values ('2020-01-02 01:00'::timestamptz, 1);
-SELECT * FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.hypertable_id = :htid
+SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id, c.dropped, c.status, c.osm_chunk,
+cc.chunk_id, cc.dimension_slice_id, cc.constraint_name, cc.hypertable_constraint_name FROM
+_timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.hypertable_id = :htid
 AND c.id = cc.chunk_id;
 \c :TEST_DBNAME :ROLE_SUPERUSER ;
 UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :htid;
@@ -660,7 +663,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon');
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL::timestamptz, NULL);
 SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 
 -- test further with ordered append
 \c postgres_fdw_db :ROLE_4;
@@ -677,7 +680,7 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('test_chunkapp','test_chunk
 -- view range before update
 SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 -- attempt to update overlapping range, should fail
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-02 01:00'::timestamptz, '2020-01-04 01:00');
@@ -687,7 +690,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020
 -- view udpated range
 SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 -- ordered append should be possible as ranges do not overlap
 EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
@@ -704,7 +707,7 @@ EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 -- now set empty to true, should ordered append
 \c postgres_fdw_db :ROLE_4;
 DELETE FROM test_chunkapp_fdw;

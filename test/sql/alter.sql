@@ -90,15 +90,15 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
-SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
-SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Test that we cannot rename chunk columns
 \set ON_ERROR_STOP 0
@@ -375,7 +375,7 @@ ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 -- Make sure the schema name is changed in both catalog tables
 SELECT * from _timescaledb_catalog.hypertable;
-SELECT * from _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk from _timescaledb_catalog.chunk;
 
 DROP TABLE my_table;
 

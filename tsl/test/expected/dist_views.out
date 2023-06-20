@@ -64,7 +64,20 @@ WHERE hypertable_name = 'dist_table';
  public            | dist_table      | test_role_1 |              3 |          3 | t                   | t              |                  2 | {db_dist_views_1,db_dist_views_2,db_dist_views_3} | 
 (1 row)
 
-SELECT * from timescaledb_information.chunks
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace |            data_nodes             
 -------------------+-----------------+-----------------------+-----------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+-----------------------------------

@@ -415,6 +415,7 @@ enum Anum_chunk
 	Anum_chunk_dropped,
 	Anum_chunk_status,
 	Anum_chunk_osm_chunk,
+	Anum_chunk_creation_time,
 	_Anum_chunk_max,
 };
 
@@ -430,6 +431,7 @@ typedef struct FormData_chunk
 	bool dropped;
 	int32 status;
 	bool osm_chunk;
+	TimestampTz creation_time;
 } FormData_chunk;
 
 typedef FormData_chunk *Form_chunk;
@@ -441,6 +443,7 @@ enum
 	CHUNK_SCHEMA_NAME_INDEX,
 	CHUNK_COMPRESSED_CHUNK_ID_INDEX,
 	CHUNK_OSM_CHUNK_INDEX,
+	CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX,
 	_MAX_CHUNK_INDEX,
 };
 
@@ -469,6 +472,12 @@ enum Anum_chunk_osm_chunk_idx
 {
 	Anum_chunk_osm_chunk_idx_osm_chunk = 1,
 	Anum_chunk_osm_chunk_idx_hypertable_id,
+};
+
+enum Anum_chunk_hypertable_id_creation_time_idx
+{
+	Anum_chunk_hypertable_id_creation_time_idx_hypertable_id = 1,
+	Anum_chunk_hypertable_id_creation_time_idx_creation_time,
 };
 
 /************************************
@@ -1318,7 +1327,7 @@ typedef enum Anum_compression_chunk_size_pkey
  * The maximum number of indexes a catalog table can have.
  * This needs to be bumped in case of new catalog tables that have more indexes.
  */
-#define _MAX_TABLE_INDEXES 5
+#define _MAX_TABLE_INDEXES 6
 /************************************
  *
  * Remote txn table of 2pc commits

@@ -252,7 +252,7 @@ INSERT INTO disttable VALUES
        ('2019-07-23 10:45', 8, 7.6);
 
 SELECT * FROM test.show_subtables('disttable');
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
@@ -312,7 +312,7 @@ SELECT * FROM test.show_subtables('disttable');
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
@@ -329,7 +329,7 @@ SELECT * FROM delete_data_node('data_node_3', force => true);
 SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 -- Attach data node should now succeed
 SET client_min_messages TO NOTICE;
@@ -434,7 +434,7 @@ SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 \set ON_ERROR_STOP 0
 -- No data nodes remain, so should fail
@@ -473,7 +473,7 @@ INSERT INTO disttable VALUES
        ('2019-07-23 10:45', 8, 7.6);
 
 SELECT * FROM test.show_subtables('disttable');
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 SELECT * FROM hypertable_partitions;

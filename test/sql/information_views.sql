@@ -66,8 +66,36 @@ CREATE OR REPLACE function table_int_now() returns BIGINT LANGUAGE SQL IMMUTABLE
 SELECT set_integer_now_func('test_table_int', 'table_int_now');
 INSERT into test_table_int SELECT generate_series( 1, 20), 100;
 
- SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'ht1' ORDER BY chunk_name;
- SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORDER BY chunk_name;
+\d timescaledb_information.chunks
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ht1' ORDER BY chunk_name;
+
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORDER BY chunk_name;
 
 \x
 SELECT * FROM timescaledb_information.dimensions ORDER BY hypertable_name, dimension_number;

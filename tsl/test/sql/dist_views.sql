@@ -38,7 +38,20 @@ LIMIT 1;
 
 SELECT * FROM timescaledb_information.hypertables
 WHERE hypertable_name = 'dist_table';
-SELECT * from timescaledb_information.chunks
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
 SELECT * from timescaledb_information.dimensions
 ORDER BY hypertable_name, dimension_number;

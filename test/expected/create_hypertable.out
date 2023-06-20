@@ -18,6 +18,39 @@ ERROR:  hypertable "test_table" not found
  test_schema | test_table | table | default_perm_user
 (1 row)
 
+\d _timescaledb_catalog.chunk
+                                               Table "_timescaledb_catalog.chunk"
+       Column        |           Type           | Collation | Nullable |                        Default                         
+---------------------+--------------------------+-----------+----------+--------------------------------------------------------
+ id                  | integer                  |           | not null | nextval('_timescaledb_catalog.chunk_id_seq'::regclass)
+ hypertable_id       | integer                  |           | not null | 
+ schema_name         | name                     |           | not null | 
+ table_name          | name                     |           | not null | 
+ compressed_chunk_id | integer                  |           |          | 
+ dropped             | boolean                  |           | not null | false
+ status              | integer                  |           | not null | 0
+ osm_chunk           | boolean                  |           | not null | false
+ creation_time       | timestamp with time zone |           | not null | 
+Indexes:
+    "chunk_pkey" PRIMARY KEY, btree (id)
+    "chunk_compressed_chunk_id_idx" btree (compressed_chunk_id)
+    "chunk_hypertable_id_creation_time_idx" btree (hypertable_id, creation_time)
+    "chunk_hypertable_id_idx" btree (hypertable_id)
+    "chunk_osm_chunk_idx" btree (osm_chunk, hypertable_id)
+    "chunk_schema_name_table_name_key" UNIQUE CONSTRAINT, btree (schema_name, table_name)
+Foreign-key constraints:
+    "chunk_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    "chunk_hypertable_id_fkey" FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id)
+Referenced by:
+    TABLE "_timescaledb_internal.bgw_policy_chunk_stats" CONSTRAINT "bgw_policy_chunk_stats_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+    TABLE "_timescaledb_catalog.chunk" CONSTRAINT "chunk_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    TABLE "_timescaledb_catalog.chunk_constraint" CONSTRAINT "chunk_constraint_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    TABLE "_timescaledb_catalog.chunk_copy_operation" CONSTRAINT "chunk_copy_operation_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+    TABLE "_timescaledb_catalog.chunk_data_node" CONSTRAINT "chunk_data_node_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    TABLE "_timescaledb_catalog.chunk_index" CONSTRAINT "chunk_index_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+    TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+    TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+
 create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
 \set ON_ERROR_STOP 0
 -- Permission denied with unprivileged role
@@ -546,7 +579,7 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
  10 | test_schema | test_migrate | _timescaledb_internal  | _hyper_10               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                    |      0
 (1 row)
 
-select * from _timescaledb_catalog.chunk;
+select id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk from _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
   1 |             1 | _timescaledb_internal | _hyper_1_1_chunk   |                     | f       |      0 | f

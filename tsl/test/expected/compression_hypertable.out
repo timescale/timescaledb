@@ -171,8 +171,8 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_64_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_2_64_chunk."Time", compress_hyper_2_64_chunk.i, compress_hyper_2_64_chunk.b, compress_hyper_2_64_chunk.t, compress_hyper_2_64_chunk._ts_meta_count, compress_hyper_2_64_chunk._ts_meta_sequence_num, compress_hyper_2_64_chunk._ts_meta_min_1, compress_hyper_2_64_chunk._ts_meta_max_1
 (5 rows)
 
 set timescaledb.enable_bulk_decompression to false;
@@ -183,8 +183,8 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: false
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_64_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_2_64_chunk."Time", compress_hyper_2_64_chunk.i, compress_hyper_2_64_chunk.b, compress_hyper_2_64_chunk.t, compress_hyper_2_64_chunk._ts_meta_count, compress_hyper_2_64_chunk._ts_meta_sequence_num, compress_hyper_2_64_chunk._ts_meta_min_1, compress_hyper_2_64_chunk._ts_meta_max_1
 (5 rows)
 
 reset timescaledb.enable_bulk_decompression;
