@@ -262,6 +262,20 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
 and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
+CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
+AS $$
+DECLARE
+  hyper_id int;
+BEGIN
+  SELECT h.compressed_hypertable_id
+  INTO hyper_id
+  FROM _timescaledb_catalog.hypertable h
+  WHERE h.table_name = hypertable::name;
+  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
+    hyper_id);
+END $$ LANGUAGE plpgsql;
+-- reindexing compressed hypertable to update statistics
+CALL reindex_compressed_hypertable('test_collation');
 
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
@@ -791,6 +805,7 @@ ORDER BY
 ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
+CALL reindex_compressed_hypertable('f_sensor_data');
 
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;

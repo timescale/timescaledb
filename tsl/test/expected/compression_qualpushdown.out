@@ -195,6 +195,7 @@ SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
  _timescaledb_internal._hyper_5_6_chunk
 (1 row)
 
+ANALYZE pushdown_relabel;
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
                      QUERY PLAN                     
 ----------------------------------------------------

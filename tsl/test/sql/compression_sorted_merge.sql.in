@@ -22,6 +22,7 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2,
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
+ANALYZE test1;
 
 CREATE TABLE test2 (
 time timestamptz NOT NULL,
@@ -41,6 +42,7 @@ INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2,
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
 
 SELECT compress_chunk(i) FROM show_chunks('test2') i;
+ANALYZE test2;
 
 CREATE TABLE test_with_defined_null (
     time timestamptz NOT NULL,
@@ -58,6 +60,7 @@ INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01','1',1);
 INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01','1',2);
 
 SELECT compress_chunk(i) FROM show_chunks('test_with_defined_null') i;
+ANALYZE test_with_defined_null;
 
 -- test1 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time DESC, x3 ASC, x4 ASC'
 -- test2 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time ASC, x3 DESC, x4 DESC'
@@ -275,6 +278,7 @@ SELECT * FROM test1 ORDER BY time DESC;
 -- Recompress
 SELECT decompress_chunk(i) FROM show_chunks('test1') i;
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
+ANALYZE test1;
 
 -- Test with a changed physical layout
 -- build_physical_tlist() can not be used for the scan on the compressed chunk anymore
@@ -448,6 +452,7 @@ ORDER BY time;
 SELECT add_compression_policy('test_costs','1 minute'::INTERVAL);
 
 SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
+ANALYZE test_costs;
 
 -- Number of segments
 SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
@@ -471,6 +476,7 @@ ORDER BY time;
 
 -- Recompress chunk
 SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
+ANALYZE test_costs;
 
 -- Number of segments
 SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;

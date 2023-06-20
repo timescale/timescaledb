@@ -616,6 +616,20 @@ and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
  _timescaledb_internal._hyper_9_20_chunk
 (2 rows)
 
+CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
+AS $$
+DECLARE
+  hyper_id int;
+BEGIN
+  SELECT h.compressed_hypertable_id
+  INTO hyper_id
+  FROM _timescaledb_catalog.hypertable h
+  WHERE h.table_name = hypertable::name;
+  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
+    hyper_id);
+END $$ LANGUAGE plpgsql;
+-- reindexing compressed hypertable to update statistics
+CALL reindex_compressed_hypertable('test_collation');
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
                         QUERY PLAN                        
@@ -1755,6 +1769,7 @@ SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
  _timescaledb_internal._hyper_37_71_chunk
 (1 row)
 
+CALL reindex_compressed_hypertable('f_sensor_data');
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;

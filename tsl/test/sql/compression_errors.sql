@@ -353,6 +353,7 @@ EXPLAIN SELECT DISTINCT 1 FROM test;
 
 --compress chunks
 SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
+ANALYZE test;
 
 --below query should pass after chunks are compressed
 SELECT 1 FROM test GROUP BY enum_col;

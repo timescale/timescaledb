@@ -1065,7 +1065,7 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 						in_column_offsets,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
-						true /*segmentwise_recompress*/);
+						true /*reset_sequence*/);
 
 	/*
 	 * Keep the ExclusiveLock on the compressed chunk. This lock will be requested
@@ -1363,7 +1363,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 						in_column_offsets,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
-						true /*segmentwise_recompress*/);
+						true /*reset_sequence*/);
 
 	/* create an array of the segmentby column offsets in the compressed chunk */
 	int16 *segmentby_column_offsets_compressed =

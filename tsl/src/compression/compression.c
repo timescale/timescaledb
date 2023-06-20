@@ -26,6 +26,7 @@
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/execnodes.h>
 #include <nodes/pg_list.h>
 #include <nodes/print.h>
 #include <parser/parsetree.h>
@@ -358,7 +359,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 						in_column_offsets,
 						out_desc->natts,
 						true /*need_bistate*/,
-						false /*segmentwise_recompress*/);
+						false /*reset_sequence*/);
 
 	if (matched_index_rel != NULL)
 	{
@@ -401,16 +402,6 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	row_compressor_finish(&row_compressor);
 	truncate_relation(in_table);
-
-	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
-	 * so the strong locks taken by reindex_relation shouldn't matter. */
-#if PG14_LT
-	int options = 0;
-#else
-	ReindexParams params = { 0 };
-	ReindexParams *options = &params;
-#endif
-	reindex_relation(out_table, 0, options);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -592,38 +583,31 @@ run_analyze_on_chunk(Oid chunk_relid)
  * we are trying to roll up chunks while compressing
  */
 static Oid
-get_compressed_chunk_index(Relation compressed_chunk, int16 *uncompressed_col_to_compressed_col,
+get_compressed_chunk_index(ResultRelInfo *resultRelInfo, int16 *uncompressed_col_to_compressed_col,
 						   PerColumn *per_column, int n_input_columns)
 {
-	ListCell *lc;
-	int i;
-
-	List *index_oids = RelationGetIndexList(compressed_chunk);
-
-	foreach (lc, index_oids)
+	for (int i = 0; i < resultRelInfo->ri_NumIndices; i++)
 	{
-		Oid index_oid = lfirst_oid(lc);
 		bool matches = true;
 		int num_segmentby_columns = 0;
-		Relation index_rel = index_open(index_oid, AccessShareLock);
-		IndexInfo *index_info = BuildIndexInfo(index_rel);
+		IndexInfo *index_info = resultRelInfo->ri_IndexRelationInfo[i];
 
-		for (i = 0; i < n_input_columns; i++)
+		for (int j = 0; j < n_input_columns; j++)
 		{
-			if (per_column[i].segmentby_column_index < 1)
+			if (per_column[j].segmentby_column_index < 1)
 				continue;
 
 			/* Last member of the index must be the sequence number column. */
-			if (per_column[i].segmentby_column_index >= index_rel->rd_att->natts)
+			if (per_column[j].segmentby_column_index >= index_info->ii_NumIndexAttrs)
 			{
 				matches = false;
 				break;
 			}
 
-			int index_att_offset = AttrNumberGetAttrOffset(per_column[i].segmentby_column_index);
+			int index_att_offset = AttrNumberGetAttrOffset(per_column[j].segmentby_column_index);
 
 			if (index_info->ii_IndexAttrNumbers[index_att_offset] !=
-				AttrOffsetGetAttrNumber(uncompressed_col_to_compressed_col[i]))
+				AttrOffsetGetAttrNumber(uncompressed_col_to_compressed_col[j]))
 			{
 				matches = false;
 				break;
@@ -635,15 +619,15 @@ get_compressed_chunk_index(Relation compressed_chunk, int16 *uncompressed_col_to
 		/* Check that we have the correct number of index attributes
 		 * and that the last one is the sequence number
 		 */
-		if (num_segmentby_columns != index_rel->rd_att->natts - 1 ||
-			namestrcmp((Name) &index_rel->rd_att->attrs[num_segmentby_columns].attname,
+		if (num_segmentby_columns != index_info->ii_NumIndexAttrs - 1 ||
+			namestrcmp((Name) &resultRelInfo->ri_IndexRelationDescs[i]
+						   ->rd_att->attrs[num_segmentby_columns]
+						   .attname,
 					   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != 0)
 			matches = false;
 
-		index_close(index_rel, AccessShareLock);
-
 		if (matches)
-			return index_oid;
+			return resultRelInfo->ri_IndexRelationDescs[i]->rd_id;
 	}
 
 	return InvalidOid;
@@ -724,10 +708,6 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 									  PerColumn *per_column, int n_input_columns,
 									  int16 seq_num_column_num)
 {
-	/* No point scanning an empty relation. */
-	if (table_rel->rd_rel->relpages == 0)
-		return SEQUENCE_NUM_GAP;
-
 	/* If there is a suitable index, use index scan otherwise fallback to heap scan. */
 	bool is_index_scan = OidIsValid(index_oid);
 
@@ -816,8 +796,7 @@ void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_columns_in_compressed_table, bool need_bistate,
-					bool segmentwise_recompress)
+					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
@@ -848,6 +827,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 											 ALLOCSET_DEFAULT_SIZES),
 		.compressed_table = compressed_table,
 		.bistate = need_bistate ? GetBulkInsertState() : NULL,
+		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
 		.n_input_columns = uncompressed_tuple_desc->natts,
 		.per_column = palloc0(sizeof(PerColumn) * uncompressed_tuple_desc->natts),
 		.uncompressed_col_to_compressed_col =
@@ -861,7 +841,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
 		.sequence_num = SEQUENCE_NUM_GAP,
-		.segmentwise_recompress = segmentwise_recompress,
+		.reset_sequence = reset_sequence,
 		.first_iteration = true,
 	};
 
@@ -934,7 +914,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 	}
 
 	row_compressor->index_oid =
-		get_compressed_chunk_index(compressed_table,
+		get_compressed_chunk_index(row_compressor->resultRelInfo,
 								   row_compressor->uncompressed_col_to_compressed_col,
 								   row_compressor->per_column,
 								   row_compressor->n_input_columns);
@@ -1019,8 +999,8 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 
 		Assert(column->compressor == NULL);
 
-		/* Performance Improvment: We should just use array access here; everything is guaranteed to
-		   be fetched */
+		/* Performance Improvement: We should just use array access here; everything is guaranteed
+		   to be fetched */
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		segment_info_update(column->segment_info, val, is_null);
 	}
@@ -1033,7 +1013,9 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 	 * many segmentby columns.
 	 *
 	 */
-	if (!row_compressor->segmentwise_recompress)
+	if (row_compressor->reset_sequence)
+		row_compressor->sequence_num = SEQUENCE_NUM_GAP; /* Start sequence from beginning */
+	else
 		row_compressor->sequence_num =
 			get_sequence_number_for_current_group(row_compressor->compressed_table,
 												  row_compressor->index_oid,
@@ -1044,8 +1026,6 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 												  AttrOffsetGetAttrNumber(
 													  row_compressor
 														  ->sequence_num_metadata_column_offset));
-	else
-		row_compressor->sequence_num = SEQUENCE_NUM_GAP;
 }
 
 static bool
@@ -1196,6 +1176,10 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 				mycid,
 				0 /*=options*/,
 				row_compressor->bistate);
+	if (row_compressor->resultRelInfo->ri_NumIndices > 0)
+	{
+		ts_catalog_index_insert(row_compressor->resultRelInfo, compressed_tuple);
+	}
 
 	heap_freetuple(compressed_tuple);
 
@@ -1251,6 +1235,7 @@ row_compressor_finish(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
 		FreeBulkInsertState(row_compressor->bistate);
+	ts_catalog_close_indexes(row_compressor->resultRelInfo);
 }
 
 /******************

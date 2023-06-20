@@ -24,6 +24,7 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
+ANALYZE test1;
 CREATE TABLE test2 (
 time timestamptz NOT NULL,
     x1 integer,
@@ -46,6 +47,7 @@ SELECT compress_chunk(i) FROM show_chunks('test2') i;
  _timescaledb_internal._hyper_3_3_chunk
 (1 row)
 
+ANALYZE test2;
 CREATE TABLE test_with_defined_null (
     time timestamptz NOT NULL,
     x1 integer,
@@ -66,6 +68,7 @@ SELECT compress_chunk(i) FROM show_chunks('test_with_defined_null') i;
  _timescaledb_internal._hyper_5_5_chunk
 (1 row)
 
+ANALYZE test_with_defined_null;
 -- test1 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time DESC, x3 ASC, x4 ASC'
 -- test2 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time ASC, x3 DESC, x4 DESC'
 -- test_with_defined_null uses compress_segmentby='x1' and compress_orderby = 'x2 ASC NULLS FIRST'
@@ -888,6 +891,7 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
+ANALYZE test1;
 -- Test with a changed physical layout
 -- build_physical_tlist() can not be used for the scan on the compressed chunk anymore
 SELECT * FROM test1 ORDER BY time DESC;
@@ -1328,6 +1332,7 @@ SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
  _timescaledb_internal._hyper_9_20_chunk
 (1 row)
 
+ANALYZE test_costs;
 -- Number of segments
 SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
  count 
@@ -1375,6 +1380,7 @@ SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
  _timescaledb_internal._hyper_9_20_chunk
 (1 row)
 
+ANALYZE test_costs;
 -- Number of segments
 SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
  count 

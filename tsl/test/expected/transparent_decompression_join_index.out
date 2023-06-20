@@ -35,7 +35,7 @@ select compress_chunk(show_chunks('test'));
 set enable_seqscan = 'off';
 -- disable jit to avoid test flakiness
 set jit = off;
-explain with query_params as (
+explain (costs off) with query_params as (
 	select distinct a, b
 	from test_copy
 	where test_copy.a IN ('lat', 'lon')
@@ -55,17 +55,17 @@ where test.time between '2020-01-01 00:00' and '2020-01-01 00:02'
 order by test.time;
                                                                                                         QUERY PLAN                                                                                                         
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=10000000024.30..10000000024.30 rows=1 width=541)
+ Sort
    Sort Key: _hyper_1_1_chunk."time"
-   ->  Nested Loop  (cost=10000000014.27..10000000024.29 rows=1 width=541)
-         ->  Unique  (cost=10000000012.11..10000000012.12 rows=1 width=520)
-               ->  Sort  (cost=10000000012.11..10000000012.11 rows=1 width=520)
+   ->  Nested Loop
+         ->  Unique
+               ->  Sort
                      Sort Key: test_copy.a
-                     ->  Seq Scan on test_copy  (cost=10000000000.00..10000000012.10 rows=1 width=520)
+                     ->  Seq Scan on test_copy
                            Filter: (((a)::text = ANY ('{lat,lon}'::text[])) AND (b = 1))
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=2.15..2.15 rows=1000 width=20)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
                Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone) AND ((test_copy.a)::text = a) AND (test_copy.b = b))
-               ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_a_b__ts_meta_ on compress_hyper_2_2_chunk  (cost=0.13..2.15 rows=1 width=604)
+               ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_a_b__ts_meta_ on compress_hyper_2_2_chunk
                      Index Cond: ((a = (test_copy.a)::text) AND (b = test_copy.b))
                      Filter: ((_ts_meta_max_1 >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND (_ts_meta_min_1 <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
 (13 rows)

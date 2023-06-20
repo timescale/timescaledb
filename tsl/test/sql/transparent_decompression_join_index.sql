@@ -31,7 +31,7 @@ set enable_seqscan = 'off';
 -- disable jit to avoid test flakiness
 set jit = off;
 
-explain with query_params as (
+explain (costs off) with query_params as (
 	select distinct a, b
 	from test_copy
 	where test_copy.a IN ('lat', 'lon')
