@@ -104,7 +104,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
-			if (repeated_value == 0)
+			if (repeated_value)
 			{
 				for (int i = 0; i < n_block_values; i++)
 				{
@@ -234,36 +234,35 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			/*
 			 * We might get an incorrect value from the corrupt data. Explicitly
 			 * truncate it to 0/1 in case the bool is not a standard bool type
-			 * which would do it for us.
+			 * which would have done it for us.
 			 */
 			const bool repeated_value = simple8brle_rledata_value(block_data) & 1;
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
 			/*
-			 * If we see an RLE-encoded block in bitmap, this means we had more
-			 * than 64 consecutive bits, otherwise it would be inefficient to
-			 * use RLE. Work in batches of 64 values and then process the tail
-			 * separately. This affects performance on some synthetic data sets.
+			 * Write out the loop for both true and false, so that it becomes a
+			 * simple memset.
 			 */
-			const int16 full_qword_values = (n_block_values / 64) * 64;
-			for (int16 outer = 0; outer < full_qword_values; outer += 64)
+			if (repeated_value)
 			{
-				for (int16 inner = 0; inner < 64; inner++)
+				for (int i = 0; i < n_block_values; i++)
 				{
-					bitmap_bools_[decompressed_index + outer + inner] = repeated_value;
+					bitmap_bools_[decompressed_index + i] = true;
 				}
-			}
 
-			for (int16 i = 0; i < n_block_values - full_qword_values; i++)
+				num_ones += n_block_values;
+			}
+			else
 			{
-				bitmap_bools_[decompressed_index + full_qword_values + i] = repeated_value;
+				for (int i = 0; i < n_block_values; i++)
+				{
+					bitmap_bools_[decompressed_index + i] = false;
+				}
 			}
 
 			decompressed_index += n_block_values;
 			Assert(decompressed_index <= num_elements);
-
-			num_ones += repeated_value * n_block_values;
 		}
 		else
 		{
