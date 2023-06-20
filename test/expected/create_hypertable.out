@@ -546,7 +546,7 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
  10 | test_schema | test_migrate | _timescaledb_internal  | _hyper_10               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
-select * from _timescaledb_catalog.chunk;
+select id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk from _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
   1 |             1 | _timescaledb_internal | _hyper_1_1_chunk   |                     | f       |      0 | f

@@ -111,7 +111,7 @@ ORDER BY chunk;
 SELECT * from chunk_compression_stats('compressed')
 ORDER BY chunk_name, node_name;
 SELECT test.remote_exec(NULL, $$
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 $$);
 
 -- Decompress the chunks and replicas
@@ -132,7 +132,20 @@ LIMIT 1;
 \x
 SELECT * FROM timescaledb_information.hypertables
 WHERE hypertable_name = 'compressed';
-SELECT * from timescaledb_information.chunks
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
 SELECT * from timescaledb_information.dimensions
 ORDER BY hypertable_name, dimension_number;
@@ -253,7 +266,7 @@ CALL run_job(:compressjob_id);
 select chunk_name, node_name, pg_size_pretty(before_compression_total_bytes) before_total,
 pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 
 -- TEST 4 --
 --cannot set another policy
@@ -635,7 +648,20 @@ FROM show_chunks('metric') AS chunk
 ORDER BY chunk;
 
 -- make sure we have chunks on all data nodes
-select * from timescaledb_information.chunks where hypertable_name like 'metric';
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks where hypertable_name like 'metric';
 -- perform all combinations
 -- [IF NOT EXISTS] - []
 ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" varchar;

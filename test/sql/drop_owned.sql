@@ -18,18 +18,18 @@ SELECT create_hypertable('hypertable_schema.superuser', 'time', 'location', 2);
 INSERT INTO hypertable_schema.superuser VALUES ('2001-01-01 01:01:01', 23.3, 1);
 
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
 
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 DROP TABLE  hypertable_schema.superuser;
 
 --everything should be cleaned up
 SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
 SELECT * FROM _timescaledb_catalog.chunk_index;

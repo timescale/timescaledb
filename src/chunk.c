@@ -163,6 +163,7 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 	values[AttrNumberGetAttrOffset(Anum_chunk_dropped)] = BoolGetDatum(fd->dropped);
 	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(fd->status);
 	values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)] = BoolGetDatum(fd->osm_chunk);
+	values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)] = Int64GetDatum(fd->creation_time);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -185,6 +186,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_status)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_creation_time)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
@@ -204,6 +206,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	fd->dropped = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_status)]);
 	fd->osm_chunk = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
+	fd->creation_time = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)]);
 
 	if (should_free)
 		heap_freetuple(tuple);
@@ -973,6 +976,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 	chunk->cube = cube;
 	chunk->hypertable_relid = ht->main_table_relid;
 	namestrcpy(&chunk->fd.schema_name, schema_name);
+	chunk->fd.creation_time = GetCurrentTimestamp();
 
 	if (NULL == table_name || table_name[0] == '\0')
 	{
@@ -4870,4 +4874,10 @@ ts_chunk_get_osm_chunk_id(int hypertable_id)
 	}
 
 	return chunk_id;
+}
+
+TimestampTz
+ts_chunk_get_creation_time(Oid chunk_oid)
+{
+	return GetCurrentTimestamp();
 }

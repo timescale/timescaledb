@@ -87,7 +87,21 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 \x
 SELECT * FROM timescaledb_information.hypertables
 ORDER BY hypertable_schema, hypertable_name;
-SELECT * FROM timescaledb_information.chunks ORDER BY chunk_name;
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
+ORDER BY chunk_name;
 \x
 --
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;

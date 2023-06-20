@@ -275,7 +275,7 @@ select create_hypertable('test_schema.test_migrate', 'time', migrate_data => tru
 
 --there should be two new chunks
 select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
-select * from _timescaledb_catalog.chunk;
+select id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk from _timescaledb_catalog.chunk;
 select * from test_schema.test_migrate;
 --main table should now be empty
 select * from only test_schema.test_migrate;

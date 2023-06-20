@@ -413,6 +413,7 @@ enum Anum_chunk
 	Anum_chunk_dropped,
 	Anum_chunk_status,
 	Anum_chunk_osm_chunk,
+	Anum_chunk_creation_time,
 	_Anum_chunk_max,
 };
 
@@ -428,6 +429,7 @@ typedef struct FormData_chunk
 	bool dropped;
 	int32 status;
 	bool osm_chunk;
+	TimestampTz creation_time;
 } FormData_chunk;
 
 typedef FormData_chunk *Form_chunk;

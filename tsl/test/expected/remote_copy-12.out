@@ -131,7 +131,7 @@ SELECT * FROM "+ri(k33_')" ORDER BY 1;
  1203210 |     4.43244243242544 |                        |     0 | 
 (18 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY 1;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY 1;
  id | hypertable_id |      schema_name      |       table_name       | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+------------------------+---------------------+---------+--------+-----------
   1 |             1 | _timescaledb_internal | _dist_hyper_1_1_chunk  |                     | f       |      0 | f

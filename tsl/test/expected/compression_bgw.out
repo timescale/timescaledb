@@ -72,7 +72,7 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
  _hyper_1_1_chunk | 32 kB        | 32 kB
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
  id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
   1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   4 | f       |      1 | f

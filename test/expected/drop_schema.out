@@ -36,7 +36,7 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
   2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |  schema_name  |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+---------------+------------------+---------------------+---------+--------+-----------
   1 |             1 | chunk_schema1 | _hyper_1_1_chunk |                     | f       |      0 | f
@@ -59,7 +59,7 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
   2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |  schema_name  |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+---------------+------------------+---------------------+---------+--------+-----------
   2 |             2 | chunk_schema2 | _hyper_2_2_chunk |                     | f       |      0 | f
@@ -67,7 +67,7 @@ SELECT * FROM _timescaledb_catalog.chunk;
 
 --new chunk should be created in the internal associated schema
 INSERT INTO hypertable_schema.test1 VALUES ('2001-01-01 01:01:01', 23.3, 1);
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
   2 |             2 | chunk_schema2         | _hyper_2_2_chunk |                     | f       |      0 | f
@@ -90,7 +90,7 @@ SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------------------
 (0 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-------------+------------+---------------------+---------+--------+-----------
 (0 rows)

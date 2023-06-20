@@ -176,7 +176,8 @@ SELECT hypertable_schema,
   integer_range_end AS range_end_integer,
   is_compressed,
   chunk_table_space AS chunk_tablespace,
-  node_list AS data_nodes
+  node_list AS data_nodes,
+  creation_time AS chunk_creation_time
 FROM (
   SELECT ht.schema_name AS hypertable_schema,
     ht.table_name AS hypertable_name,
@@ -219,7 +220,8 @@ FROM (
     ELSE FALSE --remote chunk compression status uncertain
     END AS is_compressed,
     pgtab.spcname AS chunk_table_space,
-    chdn.node_list
+    chdn.node_list,
+	srcch.creation_time AS creation_time
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
     INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id

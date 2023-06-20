@@ -152,7 +152,21 @@ replication_factor  |
 data_nodes          | 
 tablespaces         | {tablespace1,tablespace2}
 
-SELECT * FROM timescaledb_information.chunks ORDER BY chunk_name;
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
+ORDER BY chunk_name;
 -[ RECORD 1 ]----------+-----------------------------
 hypertable_schema      | public
 hypertable_name        | tspace_2dim

@@ -46,13 +46,13 @@ SELECT count(*)
 SELECT unnest(extconfig)::regclass::text AS obj FROM pg_extension WHERE extname='timescaledb' ORDER BY 1;
 
 -- Show dropped chunks
-SELECT *
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk
 FROM  _timescaledb_catalog.chunk c
 WHERE c.dropped
 ORDER BY c.id, c.hypertable_id;
 
 -- Show chunks that are not dropped and include owner in the output
-SELECT c.*, cl.relowner::regrole
+SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id, c.dropped, c.status, c.osm_chunk, cl.relowner::regrole
 FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
 WHERE NOT c.dropped

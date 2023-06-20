@@ -190,6 +190,7 @@ CREATE TABLE _timescaledb_catalog.chunk (
   dropped boolean NOT NULL DEFAULT FALSE,
   status integer NOT NULL DEFAULT 0,
   osm_chunk boolean NOT NULL DEFAULT FALSE,
+  creation_time timestamptz NOT NULL,
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),

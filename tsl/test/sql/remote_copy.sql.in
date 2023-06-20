@@ -148,7 +148,7 @@ COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FOR
 \.
 
 SELECT * FROM "+ri(k33_')" ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY 1;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1, 3;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node ORDER BY 3;
 select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;

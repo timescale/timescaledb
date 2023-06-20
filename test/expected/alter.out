@@ -186,7 +186,7 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
  id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
   2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
@@ -194,7 +194,7 @@ SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
-SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
  id | hypertable_id |      schema_name      |   table_name   | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+----------------+---------------------+---------+--------+-----------
   2 |             2 | _timescaledb_internal | new_chunk_name |                     | f       |      0 | f
@@ -202,7 +202,7 @@ SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
-SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
  id | hypertable_id | schema_name |   table_name   | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-------------+----------------+---------------------+---------+--------+-----------
   2 |             2 | public      | new_chunk_name |                     | f       |      0 | f
@@ -680,7 +680,7 @@ SELECT * from _timescaledb_catalog.hypertable;
  12 | public      | my_table   | new_associated_schema  | _hyper_12               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
-SELECT * from _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk from _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
  24 |            12 | new_associated_schema | _hyper_12_24_chunk |                     | f       |      0 | f
