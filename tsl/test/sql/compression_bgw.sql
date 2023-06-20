@@ -51,7 +51,7 @@ CALL run_job(:compressjob_id);
 select chunk_name, pg_size_pretty(before_compression_total_bytes) before_total,
 pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 
 -- TEST 4 --
 --cannot set another policy

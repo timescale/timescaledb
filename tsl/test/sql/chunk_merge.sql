@@ -24,7 +24,7 @@ SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> 
 -- This creates chunks 7 - 9 on second hypertable.
 INSERT INTO test2 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 \set ON_ERROR_STOP 0
 

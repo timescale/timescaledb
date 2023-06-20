@@ -86,7 +86,7 @@ wait_for_pg() {
     for _ in {1..20}; do
         sleep 1
 
-        if docker_exec $1 "pg_isready -U postgres"; then
+        if docker_exec $1 "pg_isready -h localhost -U postgres"; then
             # this makes the test less flaky, although not
             # ideal. Apperently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
