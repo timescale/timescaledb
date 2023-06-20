@@ -45,15 +45,9 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 											 bit_widths,
 											 MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
-	BitArray xors_bitarray = gorilla_data->xors;
-	BitArrayIterator xors_iterator;
-	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
-
-	MyBitIter iter2 = { .words = xors_bitarray.buckets.data,
-						.num_words = xors_bitarray.buckets.num_elements,
-						.starting_bit_index = 0 };
-
-
+	SimpleBitIter xor_bits_iter = { .words = gorilla_data->xors.buckets.data,
+									.num_words = gorilla_data->xors.buckets.num_elements,
+									.starting_bit_index = 0 };
 
 	/*
 	 * Now decompress the non-null data.
@@ -70,7 +64,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
 	 * widths.
 	 */
-	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag1s, 0) == 0);
+	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag1s, 0) == 1);
 
 	/*
 	 * 1c) Sanity check: can't have more different elements than notnull elements.
@@ -85,34 +79,23 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * having a fast path for stretches of tag1 == 0.
 	 */
 	ELEMENT_TYPE prev = 0;
-//	int bit_widths_index = -1;
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 	for (int i = 0; i < n_different; i++)
 	{
-//		if (simple8brle_bitmap_get_at(&tag1s, i))
-//		{
-//			/* Checked above that it's true on the first iteration. */
-//			bit_widths_index++;
-//			Assert(bit_widths_index < num_bit_widths);
-//			Assert(bit_widths_index < MAX_NUM_LEADING_ZEROS_PADDED_N64);
-//		}
-
-		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i)];
-		const uint8 current_leading_zeros = all_leading_zeros[simple8brle_bitmap_prefix_sum(&tag1s, i)];
+		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
+		const uint8 current_leading_zeros =
+			all_leading_zeros[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
 
 		/*
 		 * Truncate the shift here not to cause UB on the corrupt data.
 		 */
 		const uint8 shift = (64 - (current_xor_bits + current_leading_zeros)) & 63;
 
-		const uint64 current_xor = next_bits(&iter2, current_xor_bits);
-		//const uint64 current_xor_2 = bit_array_iter_next(&xors_iterator, current_xor_bits);
-		//Assert(current_xor_2 == current_xor);
+		const uint64 current_xor = next_bits(&xor_bits_iter, current_xor_bits);
 
 		prev ^= current_xor << shift;
 		decompressed_values[i] = prev;
 	}
-	//Assert(bit_widths_index == num_bit_widths - 1);
 
 	/*
 	 * 2) Fill out the stretches of repeated elements, encoded with tag0 = 0.
@@ -127,14 +110,14 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * 2b) Sanity check: tag0s[0] == 1 -- the first element of the sequence is
 	 * always "different from the previous one".
 	 */
-	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag0s, 0) == 0);
+	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag0s, 0) == 1);
 
 	/*
 	 * 2b) Fill the repeated elements.
 	 */
 	for (int i = n_notnull - 1; i >= 0; i--)
 	{
-		decompressed_values[i] = decompressed_values[simple8brle_bitmap_prefix_sum(&tag0s, i)];
+		decompressed_values[i] = decompressed_values[simple8brle_bitmap_prefix_sum(&tag0s, i) - 1];
 	}
 
 	/*

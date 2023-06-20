@@ -831,22 +831,30 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 								 iter_base->element_type);
 }
 
-typedef struct MyBitIter
+/*
+ * Simplified bit iterator to extract variable-width packed xor values.
+ */
+typedef struct SimpleBitIter
 {
 	const uint64 *restrict words;
 	const unsigned int num_words;
 	unsigned int starting_bit_index;
-} MyBitIter;
+} SimpleBitIter;
 
 static uint64
-next_bits(MyBitIter *iter, unsigned int n_bits)
+next_bits(SimpleBitIter *iter, unsigned int n_bits)
 {
-	/* Just don't segfault on the corrupted input. */
+	/* We can produce garbage on corrupted input, but should avoid UB. */
 	n_bits &= 63;
+
 	const unsigned int start_in_word = iter->starting_bit_index % 64;
 	const unsigned int first_word_index = iter->starting_bit_index / 64;
-	/* Have 1 word of padding. */
+
+	/*
+	 * We have 1 word of padding so that we can always access the second word.
+	 */
 	CheckCompressedData(first_word_index <= iter->num_words - 1);
+
 	const unsigned PG_INT128_TYPE two_words =
 		((unsigned PG_INT128_TYPE) iter->words[first_word_index]) |
 		((unsigned PG_INT128_TYPE) iter->words[first_word_index + 1]) << 64;
@@ -860,8 +868,7 @@ next_bits(MyBitIter *iter, unsigned int n_bits)
 
 #define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
 
-int16
-unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
+int16 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
 
 /*
  * Decompress packed 6bit values in lanes that contain a round number of both

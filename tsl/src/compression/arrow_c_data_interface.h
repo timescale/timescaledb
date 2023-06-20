@@ -109,7 +109,7 @@ typedef struct ArrowArray
 
 /*
  * We don't use the schema but have to define it for completeness because we're
- * defining ARROW_C_DATA_INTERFACE macro.
+ * defining the ARROW_C_DATA_INTERFACE macro.
  */
 struct ArrowSchema
 {
