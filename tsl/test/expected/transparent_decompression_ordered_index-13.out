@@ -89,6 +89,20 @@ ORDER BY c.id;
  _timescaledb_internal._hyper_1_5_chunk
 (5 rows)
 
+-- reindexing compressed hypertable to update statistics
+DO
+$$
+DECLARE
+  hyper_id int;
+BEGIN
+  SELECT h.compressed_hypertable_id
+  INTO hyper_id
+  FROM _timescaledb_catalog.hypertable h
+  WHERE h.table_name = 'metrics_ordered_idx';
+  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
+    hyper_id);
+END;
+$$;
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''

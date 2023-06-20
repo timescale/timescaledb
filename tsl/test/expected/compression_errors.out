@@ -593,6 +593,7 @@ SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
  _timescaledb_internal._hyper_31_19_chunk
 (1 row)
 
+ANALYZE test;
 --below query should pass after chunks are compressed
 SELECT 1 FROM test GROUP BY enum_col;
  ?column? 
