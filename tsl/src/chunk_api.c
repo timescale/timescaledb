@@ -1888,7 +1888,7 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
 
 	hc = get_hypercube_from_slices(slices, ht);
-	Assert(NULL != hc);
+	
 	chunk = ts_chunk_find_or_create_without_cuts(ht, hc, NULL, NULL, chunk_table_relid, &created);
 
 	Assert(NULL != chunk);
