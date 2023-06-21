@@ -406,7 +406,7 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 	 * last in the serialized structure. This padding is also added by the recv
 	 * function, but for the tests we use the serialized struct directly.
 	 */
-	data = palloc0(compressed_size + sizeof(uint64));
+	data = palloc0(compressed_size + 2 * sizeof(uint64));
 	compressed = (GorillaCompressed *) data;
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
 
@@ -851,9 +851,10 @@ next_bits(SimpleBitIter *iter, unsigned int n_bits)
 	const unsigned int first_word_index = iter->starting_bit_index / 64;
 
 	/*
-	 * We have 1 word of padding so that we can always access the second word.
+	 * We have 2 words of padding, so that we can always access the first and
+	 * the second words, even if the bit array is empty.
 	 */
-	CheckCompressedData(first_word_index < iter->num_words);
+	CheckCompressedData(first_word_index <= iter->num_words);
 
 	const unsigned PG_INT128_TYPE two_words =
 		((unsigned PG_INT128_TYPE) iter->words[first_word_index]) |
