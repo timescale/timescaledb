@@ -1603,7 +1603,7 @@ ERROR:  cannot change configuration on already compressed chunks
 \set ON_ERROR_STOP 1
 SELECT decompress_chunk(schema_name || '.' || table_name)
 FROM _timescaledb_catalog.chunk
-WHERE hypertable_id = :'MAT_HTID' and status = 1;
+WHERE hypertable_id = :'MAT_HTID' and status = 9;
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_41_79_chunk
