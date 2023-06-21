@@ -853,7 +853,7 @@ next_bits(SimpleBitIter *iter, unsigned int n_bits)
 	/*
 	 * We have 1 word of padding so that we can always access the second word.
 	 */
-	CheckCompressedData(first_word_index <= iter->num_words - 1);
+	CheckCompressedData(first_word_index < iter->num_words);
 
 	const unsigned PG_INT128_TYPE two_words =
 		((unsigned PG_INT128_TYPE) iter->words[first_word_index]) |
