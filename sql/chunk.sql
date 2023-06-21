@@ -50,7 +50,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_detach(chunk REGCLASS) RE
 AS '@MODULE_PATHNAME@', 'ts_chunk_detach' LANGUAGE C VOLATILE;
 
 -- FIXME: more meaningfull return values!
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_attach(hypertable REGCLASS, slices JSONB, chunk_table REGCLASS) RETURNS BOOL
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_attach(hypertable REGCLASS, slices JSONB, chunk_table REGCLASS) RETURNS REGCLASS
 AS '@MODULE_PATHNAME@', 'ts_chunk_attach' LANGUAGE C VOLATILE;
 
 -- Create a chunk with the given dimensional constraints (slices) as

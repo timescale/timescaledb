@@ -1895,25 +1895,5 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 
 	ts_cache_release(hcache);
 
-	PG_RETURN_BOOL(true);
-
-	// const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
-	// /* acquire lock on hypertable entry */
-	// // ts_hypertable_lock_tuple(ch->hypertable_relid);
-
-	// ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_ATTACH, true /*throw_error */);
-
-	// Cache *hcache;
-	// Hypertable *ht =
-	// 	ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
-
-	// ts_chunk_table_drop_inherit(ch, ht);
-	// int num_removed = ts_chunk_delete_by_name(NameStr(ch->fd.schema_name),
-	// 										  NameStr(ch->fd.table_name),
-	// 										  DROP_RESTRICT);
-	// Ensure(num_removed == 1, "num_removed is expected to be exactly one at this point");
-
-	// // FIXME: ensure that no slices are left behind
-
-	// ts_cache_release(hcache);
+	PG_RETURN_OID(chunk->table_id);
 }
