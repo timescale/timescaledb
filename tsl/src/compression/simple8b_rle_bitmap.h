@@ -108,16 +108,16 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			{
 				for (int i = 0; i < n_block_values; i++)
 				{
-					prefix_sums[decompressed_index + i] = current_prefix_sum;
+					prefix_sums[decompressed_index + i] = current_prefix_sum + i + 1;
 				}
+				current_prefix_sum += n_block_values;
 			}
 			else
 			{
 				for (int i = 0; i < n_block_values; i++)
 				{
-					prefix_sums[decompressed_index + i] = current_prefix_sum + i + 1;
+					prefix_sums[decompressed_index + i] = current_prefix_sum;
 				}
-				current_prefix_sum += n_block_values;
 			}
 
 			decompressed_index += n_block_values;
