@@ -1873,20 +1873,12 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 
 	Hypercube *hc;
 	Chunk *chunk;
-	// TupleDesc tupdesc;
-	HeapTuple tuple;
 	bool created;
 
 	check_privileges_for_creating_chunk(hypertable_relid);
 
 	if (NULL == slices)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
-
-	// if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-	// 	ereport(ERROR,
-	// 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-	// 			 errmsg("function returning record called in context "
-	// 					"that cannot accept type record")));
 
 	hc = get_hypercube_from_slices(slices, ht);
 	Assert(NULL != hc);
@@ -1896,18 +1888,11 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 												 NULL,
 												 chunk_table_relid,
 												 &created);
-	// ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices3")));
-	Assert(NULL != chunk);
 
-	// tuple = chunk_form_tuple(chunk, ht, tupdesc, created);
+	Assert(NULL != chunk);
 
 	ts_cache_release(hcache);
 
-	// if (NULL == tuple)
-	// 	ereport(ERROR,
-	// 			(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
-
-	// PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 	PG_RETURN_BOOL(true);
 
 
