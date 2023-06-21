@@ -43,6 +43,7 @@
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
+#include <replication/message.h>
 
 #include "compat/compat.h"
 
@@ -68,6 +69,39 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_GORILLA] = GORILLA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
+
+#if PG14_GE
+/* The prefix of a logical replication message which is inserted into the
+ * replication stream right before decompression inserts are happening
+ */
+#define DECOMPRESSION_MARKER_START "::timescaledb-decompression-start"
+/* The prefix of a logical replication message which is inserted into the
+ * replication stream right after all decompression inserts have finished
+ */
+#define DECOMPRESSION_MARKER_END "::timescaledb-decompression-end"
+#endif
+
+static inline void
+write_logical_replication_msg_decompression_start()
+{
+#if PG14_GE
+	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
+	{
+		LogLogicalMessage(DECOMPRESSION_MARKER_START, "", 0, true);
+	}
+#endif
+}
+
+static inline void
+write_logical_replication_msg_decompression_end()
+{
+#if PG14_GE
+	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
+	{
+		LogLogicalMessage(DECOMPRESSION_MARKER_END, "", 0, true);
+	}
+#endif
+}
 
 static Compressor *
 compressor_for_algorithm_and_type(CompressionAlgorithms algorithm, Oid type)
@@ -2028,7 +2062,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
+		write_logical_replication_msg_decompression_start();
 		row_decompressor_decompress_row(&decompressor, NULL);
+		write_logical_replication_msg_decompression_end();
 
 		TM_FailureData tmfd;
 		TM_Result result pg_attribute_unused();
@@ -3156,6 +3192,7 @@ decompress_batches_for_update_delete(Chunk *chunk, List *predicates, EState *est
 	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
 	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
 
+	write_logical_replication_msg_decompression_start();
 	if (filters)
 	{
 		scankeys =
@@ -3194,6 +3231,8 @@ decompress_batches_for_update_delete(Chunk *chunk, List *predicates, EState *est
 						   is_null,
 						   &chunk_status_changed);
 	}
+	write_logical_replication_msg_decompression_end();
+
 	/*
 	 * tuples from compressed chunk has been decompressed and moved
 	 * to staging area, thus mark this chunk as partially compressed

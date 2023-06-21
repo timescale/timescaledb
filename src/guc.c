@@ -77,6 +77,7 @@ bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
+TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_parameterized_data_node_scan = true;
@@ -363,6 +364,19 @@ _guc_init(void)
 							 &ts_guc_enable_skip_scan,
 							 true,
 							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_decompression_logrep_markers",
+							 "Enable logical replication markers for decompression ops",
+							 "Enable the generation of logical replication markers in the "
+							 "WAL stream to mark the start and end of decompressions (for insert, "
+							 "update, and delete operations)",
+							 &ts_guc_enable_decompression_logrep_markers,
+							 false,
+							 PGC_SIGHUP,
 							 0,
 							 NULL,
 							 NULL,
