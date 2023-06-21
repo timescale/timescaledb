@@ -49,6 +49,7 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_show' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_detach(chunk REGCLASS) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_chunk_detach' LANGUAGE C VOLATILE;
 
+-- FIXME: more meaningfull return values!
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_attach(hypertable REGCLASS, slices JSONB, chunk_table REGCLASS) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_chunk_attach' LANGUAGE C VOLATILE;
 

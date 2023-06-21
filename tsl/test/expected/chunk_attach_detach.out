@@ -187,8 +187,12 @@ select _timescaledb_internal.chunk_attach('main_table','{"time": [15200352000000
 select count(1) from main_table;
  count 
 -------
-    51
+    75
 (1 row)
 
 select assert_equal(count(1),75::bigint) from main_table;
-ERROR:  Assert failed: 51 = 75
+ assert_equal 
+--------------
+ 
+(1 row)
+

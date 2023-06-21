@@ -1855,7 +1855,61 @@ chunk_api_detach(PG_FUNCTION_ARGS)
 Datum
 chunk_api_attach(PG_FUNCTION_ARGS)
 {
-	// Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	if(PG_ARGISNULL(0)) 
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("argument1: hypertable regclass may not be null")));
+	if(PG_ARGISNULL(1)) 
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("argument2: slices jsonb may not be null")));
+	if(PG_ARGISNULL(2)) 
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("argument3: chunk_table regclass may not be null")));
+	
+
+	Oid hypertable_relid = PG_GETARG_OID(0);
+	Jsonb *slices =  PG_GETARG_JSONB_P(1);
+	Oid chunk_table_relid =  PG_GETARG_OID(2);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
+	if(ht==NULL)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("supplied hypertable regclass is not a hypertable")));
+
+	Hypercube *hc;
+	Chunk *chunk;
+	// TupleDesc tupdesc;
+	HeapTuple tuple;
+	bool created;
+
+	check_privileges_for_creating_chunk(hypertable_relid);
+
+	if (NULL == slices)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
+
+	// if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	// 	ereport(ERROR,
+	// 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+	// 			 errmsg("function returning record called in context "
+	// 					"that cannot accept type record")));
+
+	hc = get_hypercube_from_slices(slices, ht);
+	Assert(NULL != hc);
+	chunk = ts_chunk_find_or_create_without_cuts(ht,
+												 hc,
+												 NULL,
+												 NULL,
+												 chunk_table_relid,
+												 &created);
+	// ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices3")));
+	Assert(NULL != chunk);
+
+	// tuple = chunk_form_tuple(chunk, ht, tupdesc, created);
+
+	ts_cache_release(hcache);
+
+	// if (NULL == tuple)
+	// 	ereport(ERROR,
+	// 			(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
+
+	// PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+	PG_RETURN_BOOL(true);
+
 
 	// const Chunk *ch = ts_chunk_get_by_relid(chunk_relid, true);
 	// /* acquire lock on hypertable entry */
@@ -1876,7 +1930,6 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 	// // FIXME: ensure that no slices are left behind
 
 	// ts_cache_release(hcache);
-	PG_RETURN_BOOL(true);
 }
 
 
