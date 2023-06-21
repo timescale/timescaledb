@@ -1347,6 +1347,8 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 			 * commit since we won't create those slices ourselves. */
 			ts_hypercube_find_existing_slices(hc, &tuplock);
 
+			ts_hypercube_lock_slice_tuples(hc);
+
 			if (OidIsValid(chunk_table_relid))
 				chunk = chunk_create_from_hypercube_and_table_after_lock(ht,
 																		 hc,
