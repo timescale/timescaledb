@@ -299,7 +299,7 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 	old_ctx = MemoryContextSwitchTo(ti->mctx);
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)])
-		job->fd.config = DatumGetJsonbP(values[AttrNumberGetAttrOffset(Anum_bgw_job_config)]);
+		job->fd.config = DatumGetJsonbPCopy(values[AttrNumberGetAttrOffset(Anum_bgw_job_config)]);
 
 	MemoryContextSwitchTo(old_ctx);
 	if (should_free)
