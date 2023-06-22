@@ -30,6 +30,9 @@ SKIPS=${SKIPS:-}
 PSQL=${PSQL:-psql}
 PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
 
+export PSQL
+export PSQL_DEBUG
+
 # check if test matches any of the patterns in a list
 # $1 list of patterns or test names
 # $2 test name
@@ -194,4 +197,6 @@ mkdir -p ${EXE_DIR}/sql/dump
 export PG_REGRESS_DIFF_OPTS
 
 PG_REGRESS_OPTS="${PG_REGRESS_OPTS}  --schedule=${SCHEDULE}"
-${PG_REGRESS} "$@" ${PG_REGRESS_OPTS}
+# redirect 9 to stderr to give access to the terminal for scripts running
+# under the test; psql-debug uses this to show messages
+${PG_REGRESS} "$@" ${PG_REGRESS_OPTS} 9>&2
