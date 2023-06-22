@@ -413,11 +413,11 @@ split_qual(List *qual, List **vectorized, List **nonvectorized)
 		*nonvectorized = lappend(*nonvectorized, e);
 	}
 
-//	fprintf(stderr, "vectorized:\n");
-//	my_print(*vectorized);
+	//	fprintf(stderr, "vectorized:\n");
+	//	my_print(*vectorized);
 
-//	fprintf(stderr, "nonvectorized:\n");
-//	my_print(*nonvectorized);
+	//	fprintf(stderr, "nonvectorized:\n");
+	//	my_print(*nonvectorized);
 }
 
 Plan *
