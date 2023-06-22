@@ -436,10 +436,24 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 }
 
+static inline Datum
+Float4GetDatumNoSignExtend(float4 X)
+{
+	union
+	{
+		float4 value;
+		uint32 retval;
+	} u = { .value = X };
+
+	return (Datum) u.retval;
+}
+
 /*
  * Convert Arrow array to an array of Postgres Datum's.
+ * Marked as noinline for the ease of debugging. Inlining it shouldn't be
+ * beneficial because it's a big loop.
  */
-static void
+static pg_noinline void
 convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, bool reverse)
 {
 	const int n = arrow->length;
@@ -447,9 +461,9 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, boo
 
 /* Unroll the conversion loop to generate more efficient code. */
 #define INNER_LOOP_SIZE 8
-	const int n_padded = ((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
+	const size_t n_padded = ((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
 
-	const int arrow_bitmap_elements = (n + 64 - 1) / 64;
+	const size_t arrow_bitmap_elements = (n + 64 - 1) / 64;
 	const int n_nulls_padded = arrow_bitmap_elements * 64;
 
 	/* Convert Arrow to Data/nulls arrays. */
@@ -471,14 +485,13 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, boo
  */
 #define CONVERSION_LOOP(REVERSE, OID, CTYPE, CONVERSION)                                           \
 	case OID:                                                                                      \
-		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
+		for (size_t outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                         \
 		{                                                                                          \
-			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
+			for (size_t inner = 0; inner < INNER_LOOP_SIZE; inner++)                               \
 			{                                                                                      \
-				const int input_row = outer + inner;                                               \
-				const int output_row = (REVERSE) ? n - (outer + inner + 1) : outer + inner;        \
+				const size_t input_row = outer + inner;                                            \
+				const size_t output_row = (REVERSE) ? n - 1 - input_row : input_row;               \
 				datums[output_row] = CONVERSION(((CTYPE *) arrow_values)[input_row]);              \
-				Assert(input_row >= 0);                                                            \
 				Assert(input_row < n_padded);                                                      \
 			}                                                                                      \
 		}                                                                                          \
@@ -487,38 +500,72 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, boo
 #define CONVERSION_SWITCH(REVERSE)                                                                 \
 	switch (column->typid)                                                                         \
 	{                                                                                              \
-		CONVERSION_LOOP(REVERSE, INT2OID, int16, Int16GetDatum);                                   \
-		CONVERSION_LOOP(REVERSE, INT4OID, int32, Int32GetDatum);                                   \
+		/*                                                                                         \
+		 * We don't really have to perform sign-extension when converting int16                    \
+		 * and int32 to Datum, they will convert back just fine without                            \
+		 * sign-extension. Unfortunately the Postgres function do it, which                        \
+		 * generates some pretty creative code.                                                    \
+		 */                                                                                        \
+		CONVERSION_LOOP(REVERSE, INT2OID, int16, (Datum) (uint16));                                \
+		CONVERSION_LOOP(REVERSE, INT4OID, int32, (Datum) (uint32));                                \
+		CONVERSION_LOOP(REVERSE, DATEOID, int32, (Datum) (uint32));                                \
+		CONVERSION_LOOP(REVERSE, FLOAT4OID, float4, Float4GetDatumNoSignExtend);                   \
+                                                                                                   \
 		CONVERSION_LOOP(REVERSE, INT8OID, int64, Int64GetDatum);                                   \
-		CONVERSION_LOOP(REVERSE, FLOAT4OID, float4, Float4GetDatum);                               \
 		CONVERSION_LOOP(REVERSE, FLOAT8OID, float8, Float8GetDatum);                               \
-		CONVERSION_LOOP(REVERSE, DATEOID, int32, DateADTGetDatum);                                 \
 		CONVERSION_LOOP(REVERSE, TIMESTAMPOID, int64, TimestampGetDatum);                          \
 		CONVERSION_LOOP(REVERSE, TIMESTAMPTZOID, int64, TimestampTzGetDatum);                      \
 		default:                                                                                   \
 			Assert(false);                                                                         \
-	}                                                                                              \
+	}
+
+	//#define CONVERSION_SWITCH(REVERSE)                                                                 \
+//	switch (column->typid)                                                                         \
+//	{                                                                                              \
+//		/*                                                                                         \
+//		 * We don't really have to perform sign-extension when converting int16                    \
+//		 * and int32 to Datum, they will convert back just fine without                            \
+//		 * sign-extension. Unfortunately the Postgres function do it, which                        \
+//		 * generates some pretty creative code.                                                    \
+//		 */                                                                                        \
+//		CONVERSION_LOOP(REVERSE, INT2OID, int16, DatumGetInt16);                                \
+//		CONVERSION_LOOP(REVERSE, INT4OID, int32, DatumGetInt32);                                \
+//		CONVERSION_LOOP(REVERSE, DATEOID, int32, DatumGetDateADT);                                \
+//		CONVERSION_LOOP(REVERSE, FLOAT4OID, float4, Float4GetDatum);                   \
+//																								   \
+//		CONVERSION_LOOP(REVERSE, INT8OID, int64, Int64GetDatum);                                   \
+//		CONVERSION_LOOP(REVERSE, FLOAT8OID, float8, Float8GetDatum);                               \
+//		CONVERSION_LOOP(REVERSE, TIMESTAMPOID, int64, TimestampGetDatum);                          \
+//		CONVERSION_LOOP(REVERSE, TIMESTAMPTZOID, int64, TimestampTzGetDatum);                      \
+//		default:                                                                                   \
+//			Assert(false);                                                                         \
+//	}
+
+#define FILL_NULLS(REVERSE)                                                                        \
 	/* Fill the null bitmap. */                                                                    \
-	for (int outer = 0; outer < arrow_bitmap_elements; outer++)                                    \
+	for (size_t outer = 0; outer < arrow_bitmap_elements; outer++)                                 \
 	{                                                                                              \
 		const uint64 element = validity_bitmap[outer];                                             \
-		for (int inner = 0; inner < 64; inner++)                                                   \
+		for (size_t inner = 0; inner < 64; inner++)                                                \
 		{                                                                                          \
-			const int input_row = outer * 64 + inner;                                              \
-			const int output_row = (REVERSE) ? n - (input_row + 1) : input_row;                    \
-			nulls[output_row] = ((element >> inner) & 1) ? false : true;                           \
+			const size_t input_row = outer * 64 + inner;                                           \
+			const size_t output_row = (REVERSE) ? n - (input_row + 1) : input_row;                 \
+			nulls[output_row] = !(element & (1ULL << inner));                                      \
 		}                                                                                          \
 	}
 
 	if (reverse)
 	{
 		CONVERSION_SWITCH(true);
+		FILL_NULLS(true);
 	}
 	else
 	{
 		CONVERSION_SWITCH(false);
+		FILL_NULLS(false);
 	}
 
+#undef FILL_NULLS
 #undef CONVERSION_SWITCH
 #undef CONVERSION_LOOP
 #undef INNER_LOOP_SIZE
@@ -528,29 +575,65 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, boo
 	column->compressed.nulls = nulls;
 }
 
+/* int8... functions. */
+#define VECTOR_CTYPE int64
+#define CONST_CTYPE int64
+#define CONST_CONVERSION(X) DatumGetInt64(X)
+
 #define PREDICATE_NAME ge
 #define PREDICATE(X, Y) ((X) >= (Y))
-#define VECTOR_TYPE int64
-#define CONST_TYPE int64
 #include "vector_const_predicate_impl.c"
 
 #define PREDICATE_NAME le
 #define PREDICATE(X, Y) ((X) <= (Y))
-#define VECTOR_TYPE int64
-#define CONST_TYPE int64
 #include "vector_const_predicate_impl.c"
 
 #define PREDICATE_NAME lt
 #define PREDICATE(X, Y) ((X) < (Y))
-#define VECTOR_TYPE int64
-#define CONST_TYPE int64
 #include "vector_const_predicate_impl.c"
 
 #define PREDICATE_NAME gt
 #define PREDICATE(X, Y) ((X) > (Y))
-#define VECTOR_TYPE int64
-#define CONST_TYPE int64
 #include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME eq
+#define PREDICATE(X, Y) ((X) == (Y))
+#include "vector_const_predicate_impl.c"
+
+#undef VECTOR_CTYPE
+#undef CONST_CTYPE
+#undef CONST_CONVERSION
+
+/* int24... functions. */
+#define VECTOR_CTYPE int16
+#define CONST_CTYPE int32
+#define CONST_CONVERSION(X) DatumGetInt32(X)
+
+#define PREDICATE_NAME ge
+#define PREDICATE(X, Y) ((X) >= (Y))
+#include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME le
+#define PREDICATE(X, Y) ((X) <= (Y))
+#include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME lt
+#define PREDICATE(X, Y) ((X) < (Y))
+#include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME gt
+#define PREDICATE(X, Y) ((X) > (Y))
+#include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME eq
+#define PREDICATE(X, Y) ((X) == (Y))
+#include "vector_const_predicate_impl.c"
+
+#undef PREDICATE_NAME
+#undef PREDICATE
+#undef VECTOR_CTYPE
+#undef CONST_CTYPE
+#undef CONST_CONVERSION
 
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
@@ -809,32 +892,67 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		ArrowArray *arrow = column->compressed.arrow;
 		Assert(arrow != NULL);
 
-		const size_t n = batch_state->total_batch_rows;
-		uint64 *restrict output = batch_state->proj_result;
-		const int64 *restrict input = (int64 *restrict) arrow->buffers[1];
-		const int64 constvalue = DatumGetInt64(constnode->constvalue);
-
 		switch (get_opcode(oe->opno))
 		{
+			case F_INT8EQ:
+			case F_TIMESTAMPTZ_EQ:
+			case F_TIMESTAMP_EQ:
+				predicate_eq_int64_vector_int64_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
+				break;
 			case F_INT8GE:
 			case F_TIMESTAMPTZ_GE:
 			case F_TIMESTAMP_GE:
-				predicate_ge_int64_vector_int64_const(input, n, constvalue, output);
+				predicate_ge_int64_vector_int64_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
 				break;
 			case F_INT8GT:
 			case F_TIMESTAMP_GT:
 			case F_TIMESTAMPTZ_GT:
-				predicate_gt_int64_vector_int64_const(input, n, constvalue, output);
+				predicate_gt_int64_vector_int64_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
 				break;
 			case F_INT8LE:
 			case F_TIMESTAMP_LE:
 			case F_TIMESTAMPTZ_LE:
-				predicate_le_int64_vector_int64_const(input, n, constvalue, output);
+				predicate_le_int64_vector_int64_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
 				break;
 			case F_INT8LT:
 			case F_TIMESTAMP_LT:
 			case F_TIMESTAMPTZ_LT:
-				predicate_lt_int64_vector_int64_const(input, n, constvalue, output);
+				predicate_lt_int64_vector_int64_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
+				break;
+			case F_INT24EQ:
+				predicate_eq_int16_vector_int32_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
+				break;
+			case F_INT24GE:
+				predicate_ge_int16_vector_int32_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
+				break;
+			case F_INT24GT:
+				predicate_gt_int16_vector_int32_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
+				break;
+			case F_INT24LE:
+				predicate_le_int16_vector_int32_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
+				break;
+			case F_INT24LT:
+				predicate_lt_int16_vector_int32_const(arrow,
+													  constnode->constvalue,
+													  batch_state->proj_result);
 				break;
 			default:
 				elog(ERROR, "unexpected opcode %s", get_func_name(get_opcode(oe->opno)));
