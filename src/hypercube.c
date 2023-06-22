@@ -273,7 +273,7 @@ ts_hypercube_lock_slice_tuples(const Hypercube *cube)
 	int num_locked = ts_hypercube_find_existing_slices(cube, &tuplock);
 	if (num_locked != cube->num_slices)
 	{
-		elog(ERROR, "Not all slices are present for hypercube");
+		elog(ERROR, "Not all slices are present for hypercube %d / %d",num_locked ,cube->num_slices);
 	}
 }
 

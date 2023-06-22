@@ -1338,15 +1338,6 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 
 		if (NULL == stub)
 		{
-			ScanTupLock tuplock = {
-				.lockmode = LockTupleKeyShare,
-				.waitpolicy = LockWaitBlock,
-			};
-
-			/* Lock all slices that already exist to ensure they remain when we
-			 * commit since we won't create those slices ourselves. */
-			ts_hypercube_find_existing_slices(hc, &tuplock);
-
 			ts_hypercube_lock_slice_tuples(hc);
 
 			if (OidIsValid(chunk_table_relid))
