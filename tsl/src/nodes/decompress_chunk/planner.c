@@ -654,10 +654,13 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	Assert(list_length(custom_plans) == 1);
 
 	List *vectorized_quals = NIL;
-	List *nonvectorized = NIL;
-	split_qual(decompress_plan->scan.plan.qual, &vectorized_quals, &nonvectorized);
+	if (!dcpath->sorted_merge_append && ts_guc_enable_bulk_decompression)
+	{
+		List *nonvectorized = NIL;
+		split_qual(decompress_plan->scan.plan.qual, &vectorized_quals, &nonvectorized);
 
-	decompress_plan->scan.plan.qual = nonvectorized;
+		decompress_plan->scan.plan.qual = nonvectorized;
+	}
 
 	settings = list_make4_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
