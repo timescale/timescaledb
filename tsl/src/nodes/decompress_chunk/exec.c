@@ -540,6 +540,18 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, boo
 #define CONST_TYPE int64
 #include "vector_const_predicate_impl.c"
 
+#define PREDICATE_NAME lt
+#define PREDICATE(X, Y) ((X) < (Y))
+#define VECTOR_TYPE int64
+#define CONST_TYPE int64
+#include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME gt
+#define PREDICATE(X, Y) ((X) > (Y))
+#define VECTOR_TYPE int64
+#define CONST_TYPE int64
+#include "vector_const_predicate_impl.c"
+
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
 							TupleTableSlot *subslot)
@@ -805,10 +817,24 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		switch (get_opcode(oe->opno))
 		{
 			case F_INT8GE:
+			case F_TIMESTAMPTZ_GE:
+			case F_TIMESTAMP_GE:
 				predicate_ge_int64_vector_int64_const(input, n, constvalue, output);
 				break;
+			case F_INT8GT:
+			case F_TIMESTAMP_GT:
+			case F_TIMESTAMPTZ_GT:
+				predicate_gt_int64_vector_int64_const(input, n, constvalue, output);
+				break;
 			case F_INT8LE:
+			case F_TIMESTAMP_LE:
+			case F_TIMESTAMPTZ_LE:
 				predicate_le_int64_vector_int64_const(input, n, constvalue, output);
+				break;
+			case F_INT8LT:
+			case F_TIMESTAMP_LT:
+			case F_TIMESTAMPTZ_LT:
+				predicate_lt_int64_vector_int64_const(input, n, constvalue, output);
 				break;
 			default:
 				elog(ERROR, "unexpected opcode %s", get_func_name(get_opcode(oe->opno)));

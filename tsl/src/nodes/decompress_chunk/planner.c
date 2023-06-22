@@ -368,8 +368,8 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 static void
 split_qual(List *qual, List **vectorized, List **nonvectorized)
 {
-	fprintf(stderr, "input:\n");
-	my_print(qual);
+//	fprintf(stderr, "input:\n");
+//	my_print(qual);
 
 	ListCell *lc;
 	foreach (lc, qual)
@@ -379,23 +379,37 @@ split_qual(List *qual, List **vectorized, List **nonvectorized)
 		{
 			OpExpr *o = castNode(OpExpr, e);
 			Oid opcode = get_opcode(o->opno);
-			switch (opcode)
+			if (list_length(o->args) == 2
+					&& IsA(linitial(o->args), Var) && IsA(lsecond(o->args), Const))
 			{
-				case F_INT8GE:
-				case F_INT8LE:
-					*vectorized = lappend(*vectorized, e);
-					continue;
+				switch (opcode)
+				{
+					case F_TIMESTAMPTZ_GE:
+					case F_TIMESTAMPTZ_LE:
+					case F_TIMESTAMPTZ_LT:
+					case F_TIMESTAMPTZ_GT:
+					case F_TIMESTAMP_GE:
+					case F_TIMESTAMP_LE:
+					case F_TIMESTAMP_LT:
+					case F_TIMESTAMP_GT:
+					case F_INT8GE:
+					case F_INT8LE:
+					case F_INT8LT:
+					case F_INT8GT:
+						*vectorized = lappend(*vectorized, e);
+						continue;
+				}
 			}
 		}
 
 		*nonvectorized = lappend(*nonvectorized, e);
 	}
 
-	fprintf(stderr, "vectorized:\n");
-	my_print(*vectorized);
+//	fprintf(stderr, "vectorized:\n");
+//	my_print(*vectorized);
 
-	fprintf(stderr, "nonvectorized:\n");
-	my_print(*nonvectorized);
+//	fprintf(stderr, "nonvectorized:\n");
+//	my_print(*nonvectorized);
 }
 
 Plan *
