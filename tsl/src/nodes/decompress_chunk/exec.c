@@ -123,6 +123,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->sorted_merge_append = lfourth_int(settings);
 	chunk_state->decompression_map = lsecond(cscan->custom_private);
 	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
+	chunk_state->vectorized_quals = lfifth(cscan->custom_private);
 
 	/* Extract sort info */
 	List *sortinfo = lfourth(cscan->custom_private);
@@ -527,6 +528,18 @@ convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, boo
 	column->compressed.nulls = nulls;
 }
 
+#define PREDICATE_NAME ge
+#define PREDICATE(X, Y) ((X) >= (Y))
+#define VECTOR_TYPE int64
+#define CONST_TYPE int64
+#include "vector_const_predicate_impl.c"
+
+#define PREDICATE_NAME le
+#define PREDICATE(X, Y) ((X) <= (Y))
+#define VECTOR_TYPE int64
+#define CONST_TYPE int64
+#include "vector_const_predicate_impl.c"
+
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
 							TupleTableSlot *subslot)
@@ -683,10 +696,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
 
-					convert_arrow_to_data(column, arrow, chunk_state->reverse);
-
-					MemoryContextReset(batch_state->arrow_context);
-
+					column->compressed.arrow = arrow;
 					/*
 					 * Note the fact that we are using bulk decompression, for
 					 * EXPLAIN ANALYZE.
@@ -754,7 +764,79 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		}
 	}
 	batch_state->initialized = true;
+
+	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
+	batch_state->proj_result = palloc(bitmap_bytes);
+	memset(batch_state->proj_result, 0xFF, bitmap_bytes);
+
+	ListCell *lc;
+	foreach (lc, chunk_state->vectorized_quals)
+	{
+		OpExpr *oe = castNode(OpExpr, lfirst(lc));
+		Var *var = castNode(Var, linitial(oe->args));
+		Const *constnode = castNode(Const, lsecond(oe->args));
+
+		// Assert(get_opcode(oe->opno) == F_INT8GE);
+
+		DecompressChunkColumnState *column;
+		for (int i = 0; i < chunk_state->num_columns; i++)
+		{
+			column = &batch_state->columns[i];
+			if (column->output_attno == var->varattno)
+			{
+				break;
+			}
+			else
+			{
+				column = NULL;
+			}
+		}
+
+		Assert(column != NULL);
+
+		ArrowArray *arrow = column->compressed.arrow;
+		Assert(arrow != NULL);
+
+		const size_t n = batch_state->total_batch_rows;
+		uint64 *restrict output = batch_state->proj_result;
+		const int64 *restrict input = (int64 *restrict) arrow->buffers[1];
+		const int64 constvalue = DatumGetInt64(constnode->constvalue);
+
+		switch (get_opcode(oe->opno))
+		{
+			case F_INT8GE:
+				predicate_ge_int64_vector_int64_const(input, n, constvalue, output);
+				break;
+			case F_INT8LE:
+				predicate_le_int64_vector_int64_const(input, n, constvalue, output);
+				break;
+			default:
+				elog(ERROR, "unexpected opcode %s", get_func_name(get_opcode(oe->opno)));
+				pg_unreachable();
+		}
+	}
+
+	for (int i = 0; i < chunk_state->num_columns; i++)
+	{
+		DecompressChunkColumnState *column = &batch_state->columns[i];
+
+		if (column->type != COMPRESSED_COLUMN || column->compressed.arrow == NULL)
+		{
+			continue;
+		}
+
+		convert_arrow_to_data(column, column->compressed.arrow, chunk_state->reverse);
+		column->compressed.arrow = NULL;
+	}
+
+	if (batch_state->arrow_context)
+	{
+		MemoryContextReset(batch_state->arrow_context);
+	}
+
 	MemoryContextSwitchTo(old_context);
+
+	///	MemoryContextSwitchTo(batch_state->per_batch_context);
 }
 
 /* Perform the projection and selection of the decompressed tuple */
@@ -954,6 +1036,14 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 		Assert(batch_state->total_batch_rows > 0);
 		Assert(batch_state->current_batch_row < batch_state->total_batch_rows);
 
+		const int this_row = batch_state->current_batch_row++;
+
+		if (!arrow_row_is_valid(batch_state->proj_result, this_row))
+		{
+			InstrCountFiltered1(&chunk_state->csstate, 1);
+			continue;
+		}
+
 		for (int i = 0; i < chunk_state->num_columns; i++)
 		{
 			DecompressChunkColumnState *column = &batch_state->columns[i];
@@ -979,14 +1069,10 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			}
 			else if (column->compressed.datums != NULL)
 			{
-				decompressed_slot_scan->tts_isnull[attr] =
-					column->compressed.nulls[batch_state->current_batch_row];
-				decompressed_slot_scan->tts_values[attr] =
-					column->compressed.datums[batch_state->current_batch_row];
+				decompressed_slot_scan->tts_isnull[attr] = column->compressed.nulls[this_row];
+				decompressed_slot_scan->tts_values[attr] = column->compressed.datums[this_row];
 			}
 		}
-
-		batch_state->current_batch_row++;
 
 		/*
 		 * It's a virtual tuple slot, so no point in clearing/storing it

@@ -365,6 +365,39 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 	pg_unreachable();
 }
 
+static void
+split_qual(List *qual, List **vectorized, List **nonvectorized)
+{
+	fprintf(stderr, "input:\n");
+	my_print(qual);
+
+	ListCell *lc;
+	foreach (lc, qual)
+	{
+		Expr *e = lfirst(lc);
+		if (IsA(e, OpExpr))
+		{
+			OpExpr *o = castNode(OpExpr, e);
+			Oid opcode = get_opcode(o->opno);
+			switch (opcode)
+			{
+				case F_INT8GE:
+				case F_INT8LE:
+					*vectorized = lappend(*vectorized, e);
+					continue;
+			}
+		}
+
+		*nonvectorized = lappend(*nonvectorized, e);
+	}
+
+	fprintf(stderr, "vectorized:\n");
+	my_print(*vectorized);
+
+	fprintf(stderr, "nonvectorized:\n");
+	my_print(*nonvectorized);
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							 List *decompressed_tlist, List *clauses, List *custom_plans)
@@ -438,6 +471,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	decompress_plan->scan.plan.qual =
 		(List *) replace_compressed_vars((Node *) decompress_plan->scan.plan.qual, dcpath->info);
+
+	//	fprintf(stderr, "qual:\n");
+	//	my_print(decompress_plan->scan.plan.qual);
 
 	/*
 	 * Try to use a physical tlist if possible. There's no reason to do the
@@ -603,13 +639,22 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
+	List *vectorized_quals = NIL;
+	List *nonvectorized = NIL;
+	split_qual(decompress_plan->scan.plan.qual, &vectorized_quals, &nonvectorized);
+
+	decompress_plan->scan.plan.qual = nonvectorized;
+
 	settings = list_make4_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
 							  dcpath->sorted_merge_append);
 
-	decompress_plan->custom_private =
-		list_make4(settings, dcpath->decompression_map, dcpath->is_segmentby_column, sort_options);
+	decompress_plan->custom_private = list_make5(settings,
+												 dcpath->decompression_map,
+												 dcpath->is_segmentby_column,
+												 sort_options,
+												 vectorized_quals);
 
 	return &decompress_plan->scan.plan;
 }

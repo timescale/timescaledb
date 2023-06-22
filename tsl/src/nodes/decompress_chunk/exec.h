@@ -67,6 +67,9 @@ typedef struct DecompressChunkColumnState
 			/* For entire batch decompression, mutually exclusive with the above. */
 			Datum *datums;
 			bool *nulls;
+
+			/* For vectorized filters! */
+			ArrowArray *arrow;
 		} compressed;
 	};
 } DecompressChunkColumnState;
@@ -85,6 +88,8 @@ typedef struct DecompressBatchState
 	int current_batch_row;
 	MemoryContext per_batch_context;
 	MemoryContext arrow_context;
+
+	uint64_t *proj_result;
 } DecompressBatchState;
 
 typedef struct DecompressChunkState
@@ -110,6 +115,8 @@ typedef struct DecompressChunkState
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
 
 	bool using_bulk_decompression; /* For EXPLAIN ANALYZE. */
+
+	List *vectorized_quals;
 } DecompressChunkState;
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);
