@@ -18,25 +18,22 @@ typedef struct Simple8bRleBitmap
 	/* Either the bools or prefix sums, depending on the decompression method. */
 	void *data;
 
-	int16 num_elements;
-	int16 num_ones;
+	uint16 num_elements;
+	uint16 num_ones;
 } Simple8bRleBitmap;
 
 pg_attribute_always_inline static bool
-simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, int i)
+simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, uint16 i)
 {
-	Assert(i >= 0);
-
 	/* We have some padding on the right but we shouldn't overrun it. */
 	Assert(i < ((bitmap->num_elements + 63) / 64 + 1) * 64);
 
 	return ((bool *restrict) bitmap->data)[i];
 }
 
-pg_attribute_always_inline static int16
-simple8brle_bitmap_prefix_sum(Simple8bRleBitmap *bitmap, int i)
+pg_attribute_always_inline static uint16
+simple8brle_bitmap_prefix_sum(Simple8bRleBitmap *bitmap, uint16 i)
 {
-	Assert(i >= 0);
 	Assert(i < ((bitmap->num_elements + 63) / 64 + 1) * 64);
 	return ((uint16 *restrict) bitmap->data)[i];
 }
@@ -61,9 +58,9 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 	CheckCompressedData(compressed->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	CheckCompressedData(compressed->num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	const int16 num_elements = compressed->num_elements;
+	const uint16 num_elements = compressed->num_elements;
 
-	const int16 num_selector_slots =
+	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
@@ -72,8 +69,8 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 	 * decompression loop and the get() function. Note that for get() we need at
 	 * least one byte of padding, hence the next multiple.
 	 */
-	const int16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
-	const int16 num_blocks = compressed->num_blocks;
+	const uint16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
+	const uint16 num_blocks = compressed->num_blocks;
 
 	uint16 *restrict prefix_sums = palloc(sizeof(uint16) * num_elements_padded);
 
@@ -81,8 +78,8 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 	uint16 decompressed_index = 0;
 	for (uint16 block_index = 0; block_index < num_blocks; block_index++)
 	{
-		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint16 selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint16 selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const uint64 slot_value = compressed->slots[selector_slot];
 		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
 		const uint64 selector_mask = 0xFULL << selector_shift;
@@ -96,7 +93,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			/*
 			 * RLE block.
 			 */
-			const int32 n_block_values = simple8brle_rledata_repeatcount(block_data);
+			const size_t n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 			const bool repeated_value = simple8brle_rledata_value(block_data);
@@ -106,7 +103,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 
 			if (repeated_value)
 			{
-				for (int i = 0; i < n_block_values; i++)
+				for (uint16 i = 0; i < n_block_values; i++)
 				{
 					prefix_sums[decompressed_index + i] = current_prefix_sum + i + 1;
 				}
@@ -114,7 +111,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			}
 			else
 			{
-				for (int i = 0; i < n_block_values; i++)
+				for (uint16 i = 0; i < n_block_values; i++)
 				{
 					prefix_sums[decompressed_index + i] = current_prefix_sum;
 				}
@@ -137,7 +134,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
 			/* Have to zero out the unused bits, so that the popcnt works properly. */
-			const int elements_this_block = Min(64, num_elements - decompressed_index);
+			const uint16 elements_this_block = Min(64U, num_elements - decompressed_index);
 			Assert(elements_this_block <= 64);
 
 			/*
@@ -194,10 +191,10 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	CheckCompressedData(compressed->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	CheckCompressedData(compressed->num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	const int16 num_elements = compressed->num_elements;
-	int16 num_ones = 0;
+	const uint16 num_elements = compressed->num_elements;
+	uint16 num_ones = 0;
 
-	const int16 num_selector_slots =
+	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
@@ -206,15 +203,15 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	 * decompression loop and the get() function. Note that for get() we need at
 	 * least one byte of padding, hence the next multiple.
 	 */
-	const int16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
-	const int16 num_blocks = compressed->num_blocks;
+	const uint16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
+	const uint16 num_blocks = compressed->num_blocks;
 
 	bool *restrict bitmap_bools_ = palloc(num_elements_padded);
-	int16 decompressed_index = 0;
-	for (int16 block_index = 0; block_index < num_blocks; block_index++)
+	uint16 decompressed_index = 0;
+	for (uint16 block_index = 0; block_index < num_blocks; block_index++)
 	{
-		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint16 selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint16 selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const uint64 slot_value = compressed->slots[selector_slot];
 		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
 		const uint64 selector_mask = 0xFULL << selector_shift;
@@ -228,7 +225,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			/*
 			 * RLE block.
 			 */
-			const int32 n_block_values = simple8brle_rledata_repeatcount(block_data);
+			const uint16 n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 			/*
@@ -246,7 +243,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			 */
 			if (repeated_value)
 			{
-				for (int i = 0; i < n_block_values; i++)
+				for (uint16 i = 0; i < n_block_values; i++)
 				{
 					bitmap_bools_[decompressed_index + i] = true;
 				}
@@ -255,7 +252,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			}
 			else
 			{
-				for (int i = 0; i < n_block_values; i++)
+				for (uint16 i = 0; i < n_block_values; i++)
 				{
 					bitmap_bools_[decompressed_index + i] = false;
 				}
@@ -278,7 +275,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
 			/* Have to zero out the unused bits, so that the popcnt works properly. */
-			const int elements_this_block = Min(64, num_elements - decompressed_index);
+			const uint16 elements_this_block = Min(64, num_elements - decompressed_index);
 			Assert(elements_this_block <= 64);
 			/*
 			 * We should require at least one element from the block. Previous
@@ -298,7 +295,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 #ifdef HAVE__BUILTIN_POPCOUNT
 			num_ones += __builtin_popcountll(block_data);
 #endif
-			for (int16 i = 0; i < 64; i++)
+			for (uint16 i = 0; i < 64; i++)
 			{
 				const uint64 value = (block_data >> i) & 1;
 				bitmap_bools_[decompressed_index + i] = value;

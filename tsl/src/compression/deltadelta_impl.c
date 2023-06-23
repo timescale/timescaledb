@@ -30,7 +30,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	 * will lead to broken decompression results. The test case is in
 	 * test_delta4().
 	 */
-	int16 num_deltas;
+	uint16 num_deltas;
 	const uint64 *restrict deltas_zigzag =
 		simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
 
@@ -41,11 +41,11 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 		nulls = simple8brle_bitmap_decompress(nulls_compressed);
 	}
 
-	const int n_total = has_nulls ? nulls.num_elements : num_deltas;
-	const int n_total_padded =
+	const uint16 n_total = has_nulls ? nulls.num_elements : num_deltas;
+	const uint16 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const int n_notnull = num_deltas;
-	const int n_notnull_padded =
+	const uint16 n_notnull = num_deltas;
+	const uint16 n_notnull_padded =
 		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
@@ -68,9 +68,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	 */
 #define INNER_LOOP_SIZE 8
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
-	for (int outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
+	for (uint16 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
 	{
-		for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)
+		for (uint16 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
 			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
 			current_element += current_delta;
@@ -113,13 +113,21 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	else
 	{
 		/*
-		 * The validity bitmap is padded at the end to a multiple of 64 bytes.
-		 * Fill the padding with zeros, because the elements corresponding to
-		 * the padding bits are not valid.
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
 		 */
-		for (int i = n_total; i < validity_bitmap_bytes * 8; i++)
+		if (n_total % 64)
 		{
-			arrow_set_row_validity(validity_bitmap, i, false);
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+
+#ifdef USE_ASSERT_CHECKING
+			for (int i = 0; i < 64; i++)
+			{
+				Assert(arrow_row_is_valid(validity_bitmap,
+					(n_total / 64) * 64 + i) == i < n_total % 64);
+			}
+#endif
 		}
 	}
 

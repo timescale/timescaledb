@@ -842,10 +842,18 @@ typedef struct SimpleBitIter
 } SimpleBitIter;
 
 static uint64
-next_bits(SimpleBitIter *iter, unsigned int n_bits)
+next_bits(SimpleBitIter *iter, uint8 n_bits)
 {
-	/* We can produce garbage on corrupted input, but should avoid UB. */
-	n_bits &= 63;
+	/*
+	 * We can produce garbage on corrupted input, but should avoid UB.
+	 * Note that 64 bits is a valid case for e.g. the first compressed number.
+	 * "unlikely" is because the numbers are usually compressible and take less
+	 * than 64 bits each.
+	 */
+	if (unlikely(n_bits >= 64))
+	{
+		n_bits = 64;
+	}
 
 	const unsigned int start_in_word = iter->starting_bit_index % 64;
 	const unsigned int first_word_index = iter->starting_bit_index / 64;

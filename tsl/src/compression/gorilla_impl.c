@@ -16,15 +16,15 @@ static ArrowArray *
 FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *gorilla_data)
 {
 	const bool has_nulls = gorilla_data->nulls != NULL;
-	const int n_total =
+	const uint16 n_total =
 		has_nulls ? gorilla_data->nulls->num_elements : gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	const int n_total_padded =
+	const uint16 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 
-	const int n_notnull = gorilla_data->tag0s->num_elements;
+	const uint16 n_notnull = gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total >= n_notnull);
 
 	/* Unpack the basic compressed data parts. */
@@ -36,11 +36,11 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
 
 	uint8 all_leading_zeros[MAX_NUM_LEADING_ZEROS_PADDED_N64];
-	const int16 leading_zeros_padded =
+	const uint16 leading_zeros_padded =
 		unpack_leading_zeros_array(&gorilla_data->leading_zeros, all_leading_zeros);
 
 	uint8 bit_widths[MAX_NUM_LEADING_ZEROS_PADDED_N64];
-	const int num_bit_widths =
+	const uint16 num_bit_widths =
 		simple8brle_decompress_all_buf_uint8(gorilla_data->num_bits_used_per_xor,
 											 bit_widths,
 											 MAX_NUM_LEADING_ZEROS_PADDED_N64);
@@ -69,7 +69,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	/*
 	 * 1c) Sanity check: can't have more different elements than notnull elements.
 	 */
-	const int n_different = tag1s.num_elements;
+	const uint16 n_different = tag1s.num_elements;
 	CheckCompressedData(n_different <= n_notnull);
 
 	/*
@@ -80,7 +80,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 */
 	ELEMENT_TYPE prev = 0;
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
-	for (int i = 0; i < n_different; i++)
+	for (uint16 i = 0; i < n_different; i++)
 	{
 		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
 		const uint8 current_leading_zeros =
@@ -164,13 +164,21 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	else
 	{
 		/*
-		 * The validity bitmap is padded at the end to a multiple of 64 bytes.
-		 * Fill the padding with zeros, because the elements corresponding to
-		 * the padding bits are not valid.
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
 		 */
-		for (int i = n_total; i < validity_bitmap_bytes * 8; i++)
+		if (n_total % 64)
 		{
-			arrow_set_row_validity(validity_bitmap, i, false);
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+
+#ifdef USE_ASSERT_CHECKING
+			for (int i = 0; i < 64; i++)
+			{
+				Assert(arrow_row_is_valid(validity_bitmap,
+					(n_total / 64) * 64 + i) == i < n_total % 64);
+			}
+#endif
 		}
 	}
 
