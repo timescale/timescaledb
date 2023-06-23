@@ -1626,7 +1626,7 @@ INSERT INTO test_table_scheduler values
 (now() - interval '4 years', 1, 1),
 (now() - interval '2 years', 1, 1),
 (now() - interval '1 years', 2, 2),
-(now() - interval '4 months', 3, 3),
+(now() - interval '6 months', 3, 3),
 (now() - interval '3 months', 4, 4);
 CREATE MATERIALIZED VIEW cagg_scheduler(time, avg_a)
 WITH (timescaledb.continuous) AS
