@@ -134,7 +134,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
 			/* Have to zero out the unused bits, so that the popcnt works properly. */
-			const uint16 elements_this_block = Min(64U, num_elements - decompressed_index);
+			const uint16 elements_this_block = Min(64U, (uint16) (num_elements - decompressed_index));
 			Assert(elements_this_block <= 64);
 
 			/*
@@ -275,7 +275,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
 			/* Have to zero out the unused bits, so that the popcnt works properly. */
-			const uint16 elements_this_block = Min(64, num_elements - decompressed_index);
+			const uint16 elements_this_block = Min(64U, (uint16) (num_elements - decompressed_index));
 			Assert(elements_this_block <= 64);
 			/*
 			 * We should require at least one element from the block. Previous
