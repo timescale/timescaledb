@@ -64,12 +64,19 @@ typedef struct DecompressChunkColumnState
 			/* For row-by-row decompression. */
 			DecompressionIterator *iterator;
 
-			/* For entire batch decompression, mutually exclusive with the above. */
-			Datum *datums;
-			bool *nulls;
-
-			/* For vectorized filters! */
+			/*
+			 * For bulk decompression and vectorized filters, mutually exclusive
+			 * with the above.
+			 */
 			ArrowArray *arrow;
+
+			/*
+			 * These are the arrow buffers cached here to reduce the amount of
+			 * indirections (we have about three there, so it matters).
+			 */
+			const void *arrow_values;
+			const void *arrow_validity;
+			int value_bytes;
 		} compressed;
 	};
 } DecompressChunkColumnState;

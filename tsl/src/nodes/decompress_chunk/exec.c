@@ -436,145 +436,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 }
 
-static inline Datum
-Float4GetDatumNoSignExtend(float4 X)
-{
-	union
-	{
-		float4 value;
-		uint32 retval;
-	} u = { .value = X };
-
-	return (Datum) u.retval;
-}
-
-/*
- * Convert Arrow array to an array of Postgres Datum's.
- * Marked as noinline for the ease of debugging. Inlining it shouldn't be
- * beneficial because it's a big loop.
- */
-static pg_noinline void
-convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow, bool reverse)
-{
-	const int n = arrow->length;
-	Assert(n > 0);
-
-/* Unroll the conversion loop to generate more efficient code. */
-#define INNER_LOOP_SIZE 8
-	const size_t n_padded = ((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
-
-	const size_t arrow_bitmap_elements = (n + 64 - 1) / 64;
-	const int n_nulls_padded = arrow_bitmap_elements * 64;
-
-	/* Convert Arrow to Data/nulls arrays. */
-	const uint64 *restrict validity_bitmap = arrow->buffers[0];
-	const void *restrict arrow_values = arrow->buffers[1];
-
-	/*
-	 * Note that we need padding both in front and in the back, to allow us to
-	 * use fixed-size loops for both forward and reverse directions. This means
-	 * these pointers can't be passed to pfree.
-	 */
-	Datum *restrict datums =
-		(Datum *) palloc(sizeof(Datum) * (n_padded + INNER_LOOP_SIZE)) + INNER_LOOP_SIZE;
-	bool *restrict nulls = (bool *) palloc(sizeof(bool) * (n_nulls_padded + 64)) + 64;
-
-/*
- * Specialize the conversion loop for the particular direction, Arrow and
- * Postgres type, to generate more efficient code.
- */
-#define CONVERSION_LOOP(REVERSE, OID, CTYPE, CONVERSION)                                           \
-	case OID:                                                                                      \
-		for (size_t outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                         \
-		{                                                                                          \
-			for (size_t inner = 0; inner < INNER_LOOP_SIZE; inner++)                               \
-			{                                                                                      \
-				const size_t input_row = outer + inner;                                            \
-				const size_t output_row = (REVERSE) ? n - 1 - input_row : input_row;               \
-				datums[output_row] = CONVERSION(((CTYPE *) arrow_values)[input_row]);              \
-				Assert(input_row < n_padded);                                                      \
-			}                                                                                      \
-		}                                                                                          \
-		break
-
-#define CONVERSION_SWITCH(REVERSE)                                                                 \
-	switch (column->typid)                                                                         \
-	{                                                                                              \
-		/*                                                                                         \
-		 * We don't really have to perform sign-extension when converting int16                    \
-		 * and int32 to Datum, they will convert back just fine without                            \
-		 * sign-extension. Unfortunately the Postgres function do it, which                        \
-		 * generates some pretty creative code.                                                    \
-		 */                                                                                        \
-		CONVERSION_LOOP(REVERSE, INT2OID, int16, (Datum) (uint16));                                \
-		CONVERSION_LOOP(REVERSE, INT4OID, int32, (Datum) (uint32));                                \
-		CONVERSION_LOOP(REVERSE, DATEOID, int32, (Datum) (uint32));                                \
-		CONVERSION_LOOP(REVERSE, FLOAT4OID, float4, Float4GetDatumNoSignExtend);                   \
-                                                                                                   \
-		CONVERSION_LOOP(REVERSE, INT8OID, int64, Int64GetDatum);                                   \
-		CONVERSION_LOOP(REVERSE, FLOAT8OID, float8, Float8GetDatum);                               \
-		CONVERSION_LOOP(REVERSE, TIMESTAMPOID, int64, TimestampGetDatum);                          \
-		CONVERSION_LOOP(REVERSE, TIMESTAMPTZOID, int64, TimestampTzGetDatum);                      \
-		default:                                                                                   \
-			Assert(false);                                                                         \
-	}
-
-	//#define CONVERSION_SWITCH(REVERSE)                                                                 \
-//	switch (column->typid)                                                                         \
-//	{                                                                                              \
-//		/*                                                                                         \
-//		 * We don't really have to perform sign-extension when converting int16                    \
-//		 * and int32 to Datum, they will convert back just fine without                            \
-//		 * sign-extension. Unfortunately the Postgres function do it, which                        \
-//		 * generates some pretty creative code.                                                    \
-//		 */                                                                                        \
-//		CONVERSION_LOOP(REVERSE, INT2OID, int16, DatumGetInt16);                                \
-//		CONVERSION_LOOP(REVERSE, INT4OID, int32, DatumGetInt32);                                \
-//		CONVERSION_LOOP(REVERSE, DATEOID, int32, DatumGetDateADT);                                \
-//		CONVERSION_LOOP(REVERSE, FLOAT4OID, float4, Float4GetDatum);                   \
-//																								   \
-//		CONVERSION_LOOP(REVERSE, INT8OID, int64, Int64GetDatum);                                   \
-//		CONVERSION_LOOP(REVERSE, FLOAT8OID, float8, Float8GetDatum);                               \
-//		CONVERSION_LOOP(REVERSE, TIMESTAMPOID, int64, TimestampGetDatum);                          \
-//		CONVERSION_LOOP(REVERSE, TIMESTAMPTZOID, int64, TimestampTzGetDatum);                      \
-//		default:                                                                                   \
-//			Assert(false);                                                                         \
-//	}
-
-#define FILL_NULLS(REVERSE)                                                                        \
-	/* Fill the null bitmap. */                                                                    \
-	for (size_t outer = 0; outer < arrow_bitmap_elements; outer++)                                 \
-	{                                                                                              \
-		const uint64 element = validity_bitmap[outer];                                             \
-		for (size_t inner = 0; inner < 64; inner++)                                                \
-		{                                                                                          \
-			const size_t input_row = outer * 64 + inner;                                           \
-			const size_t output_row = (REVERSE) ? n - (input_row + 1) : input_row;                 \
-			nulls[output_row] = !(element & (1ULL << inner));                                      \
-		}                                                                                          \
-	}
-
-	if (reverse)
-	{
-		CONVERSION_SWITCH(true);
-		FILL_NULLS(true);
-	}
-	else
-	{
-		CONVERSION_SWITCH(false);
-		FILL_NULLS(false);
-	}
-
-#undef FILL_NULLS
-#undef CONVERSION_SWITCH
-#undef CONVERSION_LOOP
-#undef INNER_LOOP_SIZE
-
-	column->compressed.iterator = NULL;
-	column->compressed.datums = datums;
-	column->compressed.nulls = nulls;
-}
-
 /* int8... functions. */
 #define VECTOR_CTYPE int64
 #define CONST_CTYPE int64
@@ -716,8 +577,11 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		{
 			case COMPRESSED_COLUMN:
 			{
-				column->compressed.datums = NULL;
 				column->compressed.iterator = NULL;
+				column->compressed.arrow = NULL;
+				column->compressed.value_bytes = -1;
+				column->compressed.arrow_values = NULL;
+				column->compressed.arrow_validity = NULL;
 				value = slot_getattr(batch_state->compressed_slot,
 									 column->compressed_scan_attno,
 									 &isnull);
@@ -792,11 +656,15 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					}
 
 					column->compressed.arrow = arrow;
+					column->compressed.arrow_values = arrow->buffers[1];
+					column->compressed.arrow_validity = arrow->buffers[0];
 					/*
 					 * Note the fact that we are using bulk decompression, for
 					 * EXPLAIN ANALYZE.
 					 */
 					chunk_state->using_bulk_decompression = true;
+
+					column->compressed.value_bytes = get_typlen(column->typid);
 
 					break;
 				}
@@ -968,19 +836,9 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		{
 			continue;
 		}
-
-		convert_arrow_to_data(column, column->compressed.arrow, chunk_state->reverse);
-		column->compressed.arrow = NULL;
-	}
-
-	if (batch_state->arrow_context)
-	{
-		MemoryContextReset(batch_state->arrow_context);
 	}
 
 	MemoryContextSwitchTo(old_context);
-
-	///	MemoryContextSwitchTo(batch_state->per_batch_context);
 }
 
 /* Perform the projection and selection of the decompressed tuple */
@@ -1211,10 +1069,43 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 				decompressed_slot_scan->tts_isnull[attr] = result.is_null;
 				decompressed_slot_scan->tts_values[attr] = result.val;
 			}
-			else if (column->compressed.datums != NULL)
+			else if (column->compressed.arrow_values != NULL)
 			{
-				decompressed_slot_scan->tts_isnull[attr] = column->compressed.nulls[this_row];
-				decompressed_slot_scan->tts_values[attr] = column->compressed.datums[this_row];
+				const size_t input_row =
+					chunk_state->reverse ? batch_state->total_batch_rows - 1 - this_row : this_row;
+
+				const char *src = column->compressed.arrow_values;
+				Assert(column->compressed.value_bytes > 0);
+
+				/*
+				 * The conversion of Datum to more narrow types will truncate
+				 * the higher bytes, so we don't care if we read some garbage
+				 * into them. These are unaligned reads, so technically we have
+				 * to do memcpy.
+				 */
+				uint64 value;
+				memcpy(&value, &src[column->compressed.value_bytes * input_row], 8);
+
+#ifdef USE_FLOAT8_BYVAL
+				Datum datum = Int64GetDatum(value);
+#else
+				/*
+				 * On 32-bit systems, the data larger than 4 bytes go by
+				 * reference, so we have to jump through these hoops.
+				 */
+				Datum datum;
+				if (column->compressed.value_bytes <= 4)
+				{
+					datum = Int32GetDatum((uint32) value);
+				}
+				else
+				{
+					datum = Int64GetDatum(value);
+				}
+#endif
+				decompressed_slot_scan->tts_values[attr] = datum;
+				decompressed_slot_scan->tts_isnull[attr] =
+					!arrow_row_is_valid(column->compressed.arrow_validity, input_row);
 			}
 		}
 

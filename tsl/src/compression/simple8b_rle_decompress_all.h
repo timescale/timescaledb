@@ -90,7 +90,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
                                                                                                    \
 		const uint64 bitmask = simple8brle_selector_get_bitmask(X);                                \
                                                                                                    \
-		for (uint16 i = 0; i < n_block_values; i++)                                                   \
+		for (uint16 i = 0; i < n_block_values; i++)                                                \
 		{                                                                                          \
 			const ELEMENT_TYPE value = (block_data >> (bits_per_value * i)) & bitmask;             \
 			decompressed_values[decompressed_index + i] = value;                                   \

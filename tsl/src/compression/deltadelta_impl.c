@@ -124,8 +124,8 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 #ifdef USE_ASSERT_CHECKING
 			for (int i = 0; i < 64; i++)
 			{
-				Assert(arrow_row_is_valid(validity_bitmap,
-					(n_total / 64) * 64 + i) == i < n_total % 64);
+				Assert(arrow_row_is_valid(validity_bitmap, (n_total / 64) * 64 + i) ==
+					   i < n_total % 64);
 			}
 #endif
 		}

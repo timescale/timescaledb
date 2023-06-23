@@ -847,7 +847,7 @@ next_bits(SimpleBitIter *iter, uint8 n_bits)
 	/*
 	 * We can produce garbage on corrupted input, but should avoid UB.
 	 * Note that 64 bits is a valid case for e.g. the first compressed number.
-	 * "unlikely" is because the numbers are usually compressible and take less
+	 * It's unlikely because the numbers are usually compressible and take less
 	 * than 64 bits each.
 	 */
 	if (unlikely(n_bits >= 64))
