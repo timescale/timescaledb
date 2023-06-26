@@ -259,25 +259,6 @@ ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tupl
 }
 
 /*
- * Locks all slices of the supplied hypercube
- *
- * Fills in slice ID in the hypercube.
- */
-void
-ts_hypercube_lock_slice_tuples(const Hypercube *cube)
-{
-	ScanTupLock tuplock = {
-		.lockmode = LockTupleKeyShare,
-		.waitpolicy = LockWaitBlock,
-	};
-	int num_locked = ts_hypercube_find_existing_slices(cube, &tuplock);
-	if (num_locked != cube->num_slices)
-	{
-		elog(ERROR, "Not all slices are present for hypercube %d / %d",num_locked ,cube->num_slices);
-	}
-}
-
-/*
  * Calculate the hypercube that encloses the given point.
  *
  * The hypercube's dimensions are calculated one by one, and depend on the
