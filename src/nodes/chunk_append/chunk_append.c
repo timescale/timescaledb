@@ -319,21 +319,40 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			if (flat == NULL)
 				break;
 
+			/*
+			 * For each lc_oid, there will be 0, 1, or 2 matches in flat_list: 0 matches
+			 * if child was pruned, 1 match if the chunk is uncompressed or fully compressed,
+			 * 2 matches if the chunk is partially compressed.
+			 * If there are 2 matches they will also be consecutive (see assumption above)
+			 */
 			foreach (lc_oid, current_oids)
 			{
-				/* postgres may have pruned away some children already */
-				Path *child = (Path *) lfirst(flat);
-				Oid parent_relid = child->parent->relid;
-				bool is_not_pruned =
-					lfirst_oid(lc_oid) == root->simple_rte_array[parent_relid]->relid;
-
-				if (is_not_pruned)
+				bool is_not_pruned = true;
+#ifdef USE_ASSERT_CHECKING
+				int nmatches = 0;
+#endif
+				do
 				{
-					merge_childs = lappend(merge_childs, child);
-					flat = lnext_compat(children, flat);
-					if (flat == NULL)
-						break;
-				}
+					Path *child = (Path *) lfirst(flat);
+					Oid parent_relid = child->parent->relid;
+					is_not_pruned =
+						lfirst_oid(lc_oid) == root->simple_rte_array[parent_relid]->relid;
+					/* postgres may have pruned away some children already */
+					if (is_not_pruned)
+					{
+#ifdef USE_ASSERT_CHECKING
+						nmatches++;
+#endif
+						merge_childs = lappend(merge_childs, child);
+						flat = lnext_compat(children, flat);
+						if (flat == NULL)
+							break;
+					}
+					/* if current one matched then need to check next one for match */
+				} while (is_not_pruned);
+#ifdef USE_ASSERT_CHECKING
+				Assert(nmatches <= 2);
+#endif
 			}
 
 			if (list_length(merge_childs) > 1)

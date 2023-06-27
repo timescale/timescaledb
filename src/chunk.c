@@ -47,6 +47,7 @@
 #include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
+#include "debug_assert.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -1005,6 +1006,44 @@ chunk_insert_into_metadata_after_lock(const Chunk *chunk)
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 }
 
+/*
+ * Ensure the replica identity setting of a chunk matches that of the root
+ * table.
+ */
+static void
+chunk_set_replica_identity(const Chunk *chunk)
+{
+	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	ReplicaIdentityStmt stmt = {
+		.type = T_ReplicaIdentityStmt,
+		.identity_type = ht_rel->rd_rel->relreplident,
+	};
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.def = (Node *) &stmt,
+		.subtype = AT_ReplicaIdentity,
+	};
+	CatalogSecurityContext sec_ctx;
+
+	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
+	{
+		ChunkIndexMapping idxm;
+
+		/* Lookup the corresponding chunk index. If this index is
+		 * dropped, the behavior is the same as NOTHING (as per PG
+		 * documentation). */
+		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, ht_rel->rd_replidindex, &idxm))
+			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
+		else
+			stmt.name = get_rel_name(idxm.indexoid);
+	}
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	AlterTableInternal(chunk->table_id, list_make1(&cmd), false);
+	ts_catalog_restore_user(&sec_ctx);
+	table_close(ht_rel, NoLock);
+}
+
 static void
 chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 {
@@ -1019,6 +1058,8 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 								  chunk->fd.id,
 								  chunk->table_id,
 								  InvalidOid);
+
+		chunk_set_replica_identity(chunk);
 	}
 }
 
@@ -1374,7 +1415,7 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 
 	/* We can only use an existing chunk if it has identical dimensional
 	 * constraints. Otherwise, throw an error */
-	if (!ts_hypercube_equal(stub->cube, hc))
+	if (OidIsValid(chunk_table_relid) || !ts_hypercube_equal(stub->cube, hc))
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_CHUNK_COLLISION),
 				 errmsg("chunk creation failed due to collision")));
@@ -1692,9 +1733,16 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
 	chunk->table_id =
-		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), true);
-	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
+		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), false);
+
+	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
+
 	chunk->relkind = get_rel_relkind(chunk->table_id);
+
+	Ensure(chunk->relkind > 0,
+		   "relkind for chunk \"%s\".\"%s\" is invalid",
+		   NameStr(chunk->fd.schema_name),
+		   NameStr(chunk->fd.table_name));
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE && !IS_OSM_CHUNK(chunk))
 		chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
@@ -2804,8 +2852,7 @@ ts_chunk_get_relid(int32 chunk_id, bool missing_ok)
 	Oid relid = InvalidOid;
 
 	if (chunk_simple_scan_by_id(chunk_id, &form, missing_ok))
-		relid =
-			ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), missing_ok);
+		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
 
 	if (!OidIsValid(relid) && !missing_ok)
 		ereport(ERROR,
@@ -3951,8 +3998,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		ASSERT_IS_VALID_CHUNK(&chunks[i]);
 
 		/* frozen chunks are skipped. Not dropped. */
-		if (!ts_chunk_validate_chunk_status_for_operation(chunks[i].table_id,
-														  chunks[i].fd.status,
+		if (!ts_chunk_validate_chunk_status_for_operation(&chunks[i],
 														  CHUNK_DROP,
 														  false /*throw_error */))
 			continue;
@@ -4120,10 +4166,7 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   CurrentMemoryContext,
 															   true);
 	Assert(ch != NULL);
-	ts_chunk_validate_chunk_status_for_operation(chunk_relid,
-												 ch->fd.status,
-												 CHUNK_DROP,
-												 true /*throw_error */);
+	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);
@@ -4372,9 +4415,12 @@ get_chunk_operation_str(ChunkOperation cmd)
 }
 
 bool
-ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status,
-											 ChunkOperation cmd, bool throw_error)
+ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation cmd,
+											 bool throw_error)
 {
+	Oid chunk_relid = chunk->table_id;
+	int32 chunk_status = chunk->fd.status;
+
 	/* Handle frozen chunks */
 	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))
 	{

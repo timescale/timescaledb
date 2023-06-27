@@ -6,11 +6,21 @@
 # routines for setup.
 
 package TimescaleNode;
+
+# Using linebreaks here to prevent perltidy from performing vertical alignment.
+# This functionality has changed in recent perltidy versions (e.g., 2021 10 29)
+# and would restrict the versions of perltidy that can be used to format the
+# sources.
+
 use if $ENV{PG_VERSION_MAJOR} >= 15, 'parent', qw(PostgreSQL::Test::Cluster);
-use if $ENV{PG_VERSION_MAJOR} < 15,  'parent', qw(PostgresNode);
+
+use if $ENV{PG_VERSION_MAJOR} < 15, 'parent', qw(PostgresNode);
+
 use
   if $ENV{PG_VERSION_MAJOR} >= 15, 'PostgreSQL::Test::Utils', qw(slurp_file);
+
 use if $ENV{PG_VERSION_MAJOR} < 15, 'TestLib', qw(slurp_file);
+
 use strict;
 use warnings;
 

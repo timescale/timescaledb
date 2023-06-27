@@ -54,6 +54,7 @@ setup {
    ALTER TABLE sensor_data SET (
    timescaledb.compress, 
    timescaledb.compress_segmentby = 'sensor_id',
+   timescaledb.compress_orderby = 'time',
    timescaledb.compress_chunk_time_interval = '2 hours');
 }
 
@@ -69,6 +70,20 @@ step "s1_compress_first_half_of_chunks" {
      $$
    ); 
 }
+
+step "s1_compress_all_chunks_single_transaction" {
+    BEGIN;
+    select count(compress_chunk(c, true)) from show_chunks('sensor_data') c;
+}
+
+step "s1_compress_finish" {
+    COMMIT;
+}
+
+step "s1_compress_single_chunk" {
+    select compress_chunk(c, true) from show_chunks('sensor_data') c limit 1;
+}
+
 
 # Compress first two chunks, skip two and compress next two etc.
 step "s1_compress_first_two_by_two" {
@@ -116,9 +131,40 @@ step "s3_count_chunks_post_compression" {
     select count(*), 24 as expected from show_chunks('sensor_data');
 }
 
+step "s3_select_on_compressed_chunk" {
+    DO $$
+    DECLARE
+      hyper_id int;
+      chunk_id int;
+    BEGIN
+      SELECT h.compressed_hypertable_id, c.compressed_chunk_id 
+      INTO hyper_id, chunk_id
+      FROM _timescaledb_catalog.hypertable h 
+      INNER JOIN _timescaledb_catalog.chunk c  
+      ON h.id = c.hypertable_id 
+      WHERE h.table_name = 'sensor_data' 
+      AND c.compressed_chunk_id IS NOT NULL;
+      EXECUTE format('SELECT * 
+        FROM _timescaledb_internal.compress_hyper_%s_%s_chunk 
+        WHERE sensor_id = 40 
+        AND temperature IS NOT NULL;', 
+        hyper_id, 
+        chunk_id);
+    END;
+    $$;
+}
+
+step "s3_wait_for_finish" {
+}
+
+
 
 # Check that we produce 24 chunks out of 48 chunks by merging two 1hour chunks
 # into 2 hour chunks from two different sessions. First session will run until
 # it hits an already compressed chunk.
 permutation "s3_count_chunks_pre_compression" "s3_lock_compression" "s1_compress_first_half_of_chunks" "s2_compress_second_half_of_chunks" (s1_compress_first_half_of_chunks) "s3_unlock_compression" (s2_compress_second_half_of_chunks, s1_compress_first_half_of_chunks) "s3_count_chunks_post_compression"
 permutation "s3_count_chunks_pre_compression" "s3_lock_compression" "s1_compress_first_two_by_two" "s2_compress_second_two_by_two" (s1_compress_first_two_by_two) "s3_unlock_compression" (s2_compress_second_two_by_two, s1_compress_first_two_by_two) "s3_count_chunks_post_compression"
+
+# Check that we can read existing compressed data during chunk compression when merging.
+# The query uses an index scan to verify we are not blocked on using it during compression.
+permutation "s1_compress_single_chunk" "s1_compress_all_chunks_single_transaction" "s3_select_on_compressed_chunk"  "s3_wait_for_finish" "s1_compress_finish"

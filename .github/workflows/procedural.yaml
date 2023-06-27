@@ -15,14 +15,14 @@ jobs:
         with:
           project-url: https://github.com/orgs/timescale/projects/55
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          labeled: bug, needs-triage
+          labeled: bug, needs-triage, flaky-test
           label-operator: OR
 
   waiting-for-author:
     name: Waiting for Author
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && github.event.action == 'labeled'
-      && github.event.label.name == 'need-more-info'
+      && github.event.label.name == 'waiting-for-author'
     steps:
       - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
         with:
@@ -36,7 +36,7 @@ jobs:
     name: Waiting for Engineering
     runs-on: ubuntu-latest
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
-      && contains(github.event.issue.labels.*.name, 'need-more-info')
+      && contains(github.event.issue.labels.*.name, 'waiting-for-author')
     steps:
       - name: Check if organization member
         uses: tspascoal/get-user-teams-membership@v2
@@ -46,11 +46,11 @@ jobs:
          organization: timescale
          team: 'database-eng'
          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      - name: Remove need-more-info label
+      - name: Remove waiting-for-author label
         if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
         uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
         with:
-          remove-labels: 'need-more-info, no-activity'
+          remove-labels: 'waiting-for-author, no-activity'
           repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       - name: Move to waiting for engineering column
         if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}

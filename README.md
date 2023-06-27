@@ -10,9 +10,8 @@ time-series data.  It is engineered up from PostgreSQL and packaged as a
 PostgreSQL extension, providing automatic partitioning across time and space
 (partitioning key), as well as full SQL support.
 
-If you prefer not to install or administer your instance of TimescaleDB, 
-[hosted versions of TimescaleDB](https://tsdb.co/GitHubTimescaleCloud) are 
-available in the cloud of your choice (pay-as-you-go, with a free trial to start).
+If you prefer not to install or administer your instance of [TimescaleDB](https://tsdb.co/GitHubTimescale),
+try Timescale, our fully managed cloud offering (pay-as-you-go, with a free trial to start).
 
 To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts)
 for more information about our Apache-2 version, TimescaleDB Community (self-hosted), and Timescale 
@@ -116,26 +115,15 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 
 ### Installation
 
-TimescaleDB is available pre-packaged for several platforms:
-
-- Linux:
-    - [RedHat / CentOS](https://tsdb.co/GitHubTimescaleRedHatCentOS)
-    - [Ubuntu](https://tsdb.co/GitHubTimescaleUbuntu)
-    - [Debian](https://tsdb.co/GitHubTimescaleDebian)
-- [Docker](https://tsdb.co/GitHubTimescaleDocker)
-- [MacOS (Homebrew)](https://tsdb.co/GitHubTimescaleMacOS)
-- [Windows](https://tsdb.co/GitHubTimescaleWindows)
-
-[Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud)
-(cloud-hosted and managed TimescaleDB) is available via free trial. You create database
-instances in the cloud of your choice and use TimescaleDB to power your
-queries, automating common operational tasks and reducing management overhead.
-
-We recommend following our detailed [installation instructions](https://tsdb.co/GitHubTimescaleInstall).
+TimescaleDB is available pre-packaged for several platforms (Linux, Docker, MacOS, Windows).
+More information can be found in [our documentation](https://docs.timescale.com/self-hosted/latest/install/).
 
 To build from source, see instructions
 [here](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
 
+[Timescale](https://tsdb.co/GitHubTimescale), a fully managed TimescaleDB in the cloud, is
+available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
+so you can power your application with TimescaleDB without the management overhead.
 
 ## Resources
 

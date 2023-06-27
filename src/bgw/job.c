@@ -300,7 +300,7 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)]);
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)])
-		job->fd.config = DatumGetJsonbP(values[AttrNumberGetAttrOffset(Anum_bgw_job_config)]);
+		job->fd.config = DatumGetJsonbPCopy(values[AttrNumberGetAttrOffset(Anum_bgw_job_config)]);
 
 	MemoryContextSwitchTo(old_ctx);
 

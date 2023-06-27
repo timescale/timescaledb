@@ -791,3 +791,114 @@ ALTER TABLE i4474 ALTER COLUMN time SET statistics 10;
 SET ROLE role_4474;
 INSERT INTO i4474 SELECT '2021-01-01';
 RESET ROLE;
+DROP TABLE i4474 CASCADE;
+DROP ROLE role_4474;
+-- verify that setting replica identity works and chunks inherit the
+-- root table's setting
+CREATE TABLE replid(time timestamptz, value int);
+SELECT create_hypertable('replid', 'time', chunk_time_interval => interval '1 day', create_default_indexes => false);
+NOTICE:  adding not-null constraint to column "time"
+  create_hypertable   
+----------------------
+ (16,public,replid,t)
+(1 row)
+
+-- replica identity set to default
+SELECT relreplident FROM pg_class WHERE relname = 'replid';
+ relreplident 
+--------------
+ d
+(1 row)
+
+INSERT INTO replid VALUES ('2023-01-01', 1);
+-- the new chunk should have the same replica identity setting
+SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+      relname       | relreplident 
+--------------------+--------------
+ _hyper_16_31_chunk | d
+(1 row)
+
+-- test change to replica identity full
+ALTER TABLE replid REPLICA IDENTITY FULL;
+SELECT relname, relreplident FROM pg_class WHERE relname = 'replid' ORDER BY relname;
+ relname | relreplident 
+---------+--------------
+ replid  | f
+(1 row)
+
+-- the chunk's setting should also change to FULL
+SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+      relname       | relreplident 
+--------------------+--------------
+ _hyper_16_31_chunk | f
+(1 row)
+
+-- change to replica identity index
+CREATE UNIQUE INDEX time_key ON replid (time);
+ALTER TABLE replid REPLICA IDENTITY USING INDEX time_key;
+SELECT relname, relreplident FROM pg_class WHERE relname = 'replid' ORDER BY relname;
+ relname | relreplident 
+---------+--------------
+ replid  | i
+(1 row)
+
+SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+      relname       | relreplident 
+--------------------+--------------
+ _hyper_16_31_chunk | i
+(1 row)
+
+SELECT indexrelid::regclass::text AS index_name
+FROM show_chunks('replid') chid
+INNER JOIN pg_index i ON (i.indrelid = chid) AND indisreplident=true
+ORDER BY index_name;
+                    index_name                     
+---------------------------------------------------
+ _timescaledb_internal._hyper_16_31_chunk_time_key
+(1 row)
+
+INSERT INTO replid VALUES ('2023-01-02', 2);
+-- the new chunk will also have replica identity "index"
+SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+      relname       | relreplident 
+--------------------+--------------
+ _hyper_16_31_chunk | i
+ _hyper_16_32_chunk | i
+(2 rows)
+
+SELECT indexrelid::regclass::text AS index_name
+FROM show_chunks('replid') chid
+INNER JOIN pg_index i ON (i.indrelid = chid) AND indisreplident=true
+ORDER BY index_name;
+                    index_name                     
+---------------------------------------------------
+ _timescaledb_internal._hyper_16_31_chunk_time_key
+ _timescaledb_internal._hyper_16_32_chunk_time_key
+(2 rows)
+
+-- drop the replica identity index and create a new chunk. The new
+-- chunk should have replica identity "NOTHING" since this is the
+-- behavior of replica identity index when the index is dropped.
+DROP INDEX time_key;
+INSERT INTO replid VALUES ('2023-01-03', 3);
+-- no indexes left
+SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+      relname       | relreplident 
+--------------------+--------------
+ _hyper_16_31_chunk | i
+ _hyper_16_32_chunk | i
+ _hyper_16_33_chunk | n
+(3 rows)
+
+SELECT indexrelid::regclass::text AS index_name
+FROM show_chunks('replid') chid
+INNER JOIN pg_index i ON (i.indrelid = chid) AND indisreplident=true
+ORDER BY index_name;
+ index_name 
+------------
+(0 rows)
+
+-- Alter replica identity directly on a chunk is not supported
+SELECT ch AS chunk_name FROM show_chunks('replid') ch ORDER BY chunk_name LIMIT 1 \gset
+ALTER TABLE :chunk_name REPLICA IDENTITY FULL;
+ERROR:  operation not supported on chunk tables

@@ -225,6 +225,10 @@ typedef struct RowCompressor
 	BulkInsertState bistate;
 	/* segment by index Oid if any */
 	Oid index_oid;
+	/* relation info necessary to update indexes on compressed table */
+	ResultRelInfo *resultRelInfo;
+	/* segment by index index in the RelInfo if any */
+	int8 segmentby_index_index;
 
 	/* in theory we could have more input columns than outputted ones, so we
 	   store the number of inputs/compressors separately */
@@ -251,8 +255,8 @@ typedef struct RowCompressor
 	bool *compressed_is_null;
 	int64 rowcnt_pre_compression;
 	int64 num_compressed_rows;
-	/* if recompressing segmentwise, we must know this so we can reset the sequence number */
-	bool segmentwise_recompress;
+	/* if recompressing segmentwise, we use this info to reset the sequence number */
+	bool reset_sequence;
 	/* flag for checking if we are working on the first tuple */
 	bool first_iteration;
 } RowCompressor;
@@ -345,7 +349,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompr
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
 								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate, bool segmentwise_recompress);
+								bool need_bistate, bool reset_sequence);
 extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
 													  int16 num_cols, Datum *compressed_datums,

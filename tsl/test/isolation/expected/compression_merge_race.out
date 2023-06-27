@@ -103,3 +103,50 @@ count|expected
    24|      24
 (1 row)
 
+
+starting permutation: s1_compress_single_chunk s1_compress_all_chunks_single_transaction s3_select_on_compressed_chunk s3_wait_for_finish s1_compress_finish
+step s1_compress_single_chunk: 
+    select compress_chunk(c, true) from show_chunks('sensor_data') c limit 1;
+
+compress_chunk                            
+------------------------------------------
+_timescaledb_internal._hyper_X_X_chunk
+(1 row)
+
+step s1_compress_all_chunks_single_transaction: 
+    BEGIN;
+    select count(compress_chunk(c, true)) from show_chunks('sensor_data') c;
+
+s1: NOTICE:  chunk "_hyper_X_X_chunk" is already compressed
+count
+-----
+   48
+(1 row)
+
+step s3_select_on_compressed_chunk: 
+    DO $$
+    DECLARE
+      hyper_id int;
+      chunk_id int;
+    BEGIN
+      SELECT h.compressed_hypertable_id, c.compressed_chunk_id 
+      INTO hyper_id, chunk_id
+      FROM _timescaledb_catalog.hypertable h 
+      INNER JOIN _timescaledb_catalog.chunk c  
+      ON h.id = c.hypertable_id 
+      WHERE h.table_name = 'sensor_data' 
+      AND c.compressed_chunk_id IS NOT NULL;
+      EXECUTE format('SELECT * 
+        FROM _timescaledb_internal.compress_hyper_%s_%s_chunk 
+        WHERE sensor_id = 40 
+        AND temperature IS NOT NULL;', 
+        hyper_id, 
+        chunk_id);
+    END;
+    $$;
+
+step s3_wait_for_finish: 
+
+step s1_compress_finish: 
+    COMMIT;
+

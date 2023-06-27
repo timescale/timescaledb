@@ -130,7 +130,7 @@ extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior 
 extern TSDLLEXPORT void ts_hypertable_check_partitioning(const Hypertable *ht,
 														 int32 id_of_updated_dimension);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
-extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
+extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
 extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_for_point(const Hypertable *h,
 															 const Point *point);

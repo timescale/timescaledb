@@ -30,6 +30,7 @@
 #include "chunk_constraint.h"
 #include "chunk_index.h"
 #include "constraint.h"
+#include "debug_assert.h"
 #include "dimension_vector.h"
 #include "dimension_slice.h"
 #include "hypercube.h"
