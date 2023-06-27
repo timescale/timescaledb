@@ -24,6 +24,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
+#include "import/ts_explain.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
@@ -975,6 +976,12 @@ static void
 decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+
+	ts_show_scan_qual(chunk_state->vectorized_quals,
+					  "Vectorized Filter",
+					  &node->ss.ps,
+					  ancestors,
+					  es);
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
 	{
