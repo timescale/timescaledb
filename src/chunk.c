@@ -1319,7 +1319,18 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 }
 
 Chunk *
+ts_chunk_find_or_create_without_cuts1(const Hypertable *ht, Hypercube *hc, const char *schema_name,
+									 const char *table_name, Oid chunk_table_relid, bool *created);
+
+Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
+									 const char *table_name, Oid chunk_table_relid, bool *created)
+{
+	return ts_chunk_find_or_create_without_cuts1(ht,hc,schema_name,table_name,chunk_table_relid, created);
+}
+
+Chunk *
+ts_chunk_find_or_create_without_cuts1(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created)
 {
 	ChunkStub *stub;
