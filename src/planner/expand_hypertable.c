@@ -37,6 +37,7 @@
 #include <parser/parse_func.h>
 #include <parser/parsetree.h>
 #include <partitioning/partbounds.h>
+#include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/errcodes.h>
 #include <utils/fmgroids.h>
@@ -154,6 +155,27 @@ is_timestamptz_op_interval(Expr *expr)
 		   (c1->consttype == INTERVALOID && c2->consttype == TIMESTAMPTZOID);
 }
 
+static Datum
+int_get_datum(int64 value, Oid type)
+{
+	switch (type)
+	{
+		case INT2OID:
+			return Int16GetDatum(value);
+		case INT4OID:
+			return Int32GetDatum(value);
+		case INT8OID:
+			return Int64GetDatum(value);
+		case TIMESTAMPOID:
+			return TimestampGetDatum(value);
+		case TIMESTAMPTZOID:
+			return TimestampTzGetDatum(value);
+	}
+
+	elog(ERROR, "unsupported datatype in int_get_datum: %s", format_type_be(type));
+	pg_unreachable();
+}
+
 static int64
 const_datum_get_int(Const *cnst)
 {
@@ -167,12 +189,15 @@ const_datum_get_int(Const *cnst)
 			return (int64) (DatumGetInt32(cnst->constvalue));
 		case INT8OID:
 			return DatumGetInt64(cnst->constvalue);
+		case DATEOID:
+			return DatumGetDateADT(cnst->constvalue);
+		case TIMESTAMPOID:
+			return DatumGetTimestamp(cnst->constvalue);
+		case TIMESTAMPTZOID:
+			return DatumGetTimestampTz(cnst->constvalue);
 	}
 
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("can only use const_datum_get_int with integer types")));
-
+	elog(ERROR, "unsupported datatype in const_datum_get_int: %s", format_type_be(cnst->consttype));
 	pg_unreachable();
 }
 
@@ -423,46 +448,24 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		switch (tce->type_id)
 		{
 			case INT2OID:
-				integralValue = const_datum_get_int(castNode(Const, value));
-				integralWidth = const_datum_get_int(width);
-
-				if (integralValue >= PG_INT16_MAX - integralWidth)
-					return op;
-
-				datum = Int16GetDatum(integralValue + integralWidth);
-				subst = (Expr *) makeConst(tce->type_id,
-										   -1,
-										   InvalidOid,
-										   tce->typlen,
-										   datum,
-										   false,
-										   tce->typbyval);
-				break;
-
 			case INT4OID:
-				integralValue = const_datum_get_int(castNode(Const, value));
-				integralWidth = const_datum_get_int(width);
-
-				if (integralValue >= PG_INT32_MAX - integralWidth)
-					return op;
-
-				datum = Int32GetDatum(integralValue + integralWidth);
-				subst = (Expr *) makeConst(tce->type_id,
-										   -1,
-										   InvalidOid,
-										   tce->typlen,
-										   datum,
-										   false,
-										   tce->typbyval);
-				break;
 			case INT8OID:
 				integralValue = const_datum_get_int(castNode(Const, value));
 				integralWidth = const_datum_get_int(width);
 
-				if (integralValue >= PG_INT64_MAX - integralWidth)
+				if (integralValue >= ts_time_get_max(tce->type_id) - integralWidth)
 					return op;
 
-				datum = Int64GetDatum(integralValue + integralWidth);
+				/*
+				 * When the time_bucket constraint matches the start of the bucket
+				 * and we have a less than constraint we can skip adding the
+				 * full bucket.
+				 */
+				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+					datum = int_get_datum(integralValue, tce->type_id);
+				else
+					datum = int_get_datum(integralValue + integralWidth, tce->type_id);
+
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -470,10 +473,11 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 										   datum,
 										   false,
 										   tce->typbyval);
-
 				break;
+
 			case DATEOID:
 			{
+				Assert(width->consttype == INTERVALOID);
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
 				/*
@@ -486,14 +490,23 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				if (interval->time >= 0x3FFFFFFFFFFFFFll)
 					return op;
 
-				if (DatumGetDateADT(castNode(Const, value)->constvalue) >=
-					(TS_DATE_END - interval->day +
-					 ceil((double) interval->time / (double) USECS_PER_DAY)))
+				integralValue = const_datum_get_int(castNode(Const, value));
+				integralWidth =
+					interval->day + ceil((double) interval->time / (double) USECS_PER_DAY);
+
+				if (integralValue >= (TS_DATE_END - integralWidth))
 					return op;
 
-				datum = DateADTGetDatum(DatumGetDateADT(castNode(Const, value)->constvalue) +
-										interval->day +
-										ceil((double) interval->time / (double) USECS_PER_DAY));
+				/*
+				 * When the time_bucket constraint matches the start of the bucket
+				 * and we have a less than constraint we can skip adding the
+				 * full bucket.
+				 */
+				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+					datum = DateADTGetDatum(integralValue);
+				else
+					datum = DateADTGetDatum(integralValue + integralWidth);
+
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -504,11 +517,11 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 				break;
 			}
+			case TIMESTAMPOID:
 			case TIMESTAMPTZOID:
 			{
-				Interval *interval = DatumGetIntervalP(width->constvalue);
-
 				Assert(width->consttype == INTERVALOID);
+				Interval *interval = DatumGetIntervalP(width->constvalue);
 
 				/*
 				 * Optimization can't be applied when interval has month component.
@@ -519,27 +532,34 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				/*
 				 * If width interval has day component we merge it with time component
 				 */
+
+				integralWidth = interval->time;
 				if (interval->day != 0)
 				{
-					width = copyObject(width);
-					interval = DatumGetIntervalP(width->constvalue);
-
 					/*
 					 * if our transformed restriction would overflow we skip adding it
 					 */
-					if (interval->time >= PG_INT64_MAX - interval->day * USECS_PER_DAY)
+					if (interval->time >= TS_TIMESTAMP_END - interval->day * USECS_PER_DAY)
 						return op;
 
-					interval->time += interval->day * USECS_PER_DAY;
-					interval->day = 0;
+					integralWidth += interval->day * USECS_PER_DAY;
 				}
 
-				if (DatumGetTimestampTz(castNode(Const, value)->constvalue) >=
-					(TS_TIMESTAMP_END - interval->time))
+				integralValue = const_datum_get_int(castNode(Const, value));
+
+				if (integralValue >= (TS_TIMESTAMP_END - integralWidth))
 					return op;
 
-				datum = TimestampTzGetDatum(
-					DatumGetTimestampTz(castNode(Const, value)->constvalue) + interval->time);
+				/*
+				 * When the time_bucket constraint matches the start of the bucket
+				 * and we have a less than constraint we can skip adding the
+				 * full bucket.
+				 */
+				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+					datum = int_get_datum(integralValue, tce->type_id);
+				else
+					datum = int_get_datum(integralValue + integralWidth, tce->type_id);
+
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -551,52 +571,6 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				break;
 			}
 
-			case TIMESTAMPOID:
-			{
-				Interval *interval = DatumGetIntervalP(width->constvalue);
-
-				Assert(width->consttype == INTERVALOID);
-
-				/*
-				 * Optimization can't be applied when interval has month component.
-				 */
-				if (interval->month != 0)
-					return op;
-
-				/*
-				 * If width interval has day component we merge it with time component
-				 */
-				if (interval->day != 0)
-				{
-					width = copyObject(width);
-					interval = DatumGetIntervalP(width->constvalue);
-
-					/*
-					 * if our merged value overflows we skip adding it
-					 */
-					if (interval->time >= PG_INT64_MAX - interval->day * USECS_PER_DAY)
-						return op;
-
-					interval->time += interval->day * USECS_PER_DAY;
-					interval->day = 0;
-				}
-
-				if (DatumGetTimestamp(castNode(Const, value)->constvalue) >=
-					(TS_TIMESTAMP_END - interval->time))
-					return op;
-
-				datum = TimestampGetDatum(DatumGetTimestamp(castNode(Const, value)->constvalue) +
-										  interval->time);
-				subst = (Expr *) makeConst(tce->type_id,
-										   -1,
-										   InvalidOid,
-										   tce->typlen,
-										   datum,
-										   false,
-										   tce->typbyval);
-
-				break;
-			}
 			default:
 				return op;
 				break;
