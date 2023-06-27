@@ -1,5 +1,5 @@
-* should it be in chunk_api ?
 * chunk_detach returns something meaningfull
 * separate chunk_attach
 * can we save detached chunk metadata?
   * constriants?
+* find_or_create
