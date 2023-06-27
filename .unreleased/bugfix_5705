@@ -1,1 +1,0 @@
-Fixes: #5711 Scheduler accidentally getting killed when calling `delete_job`

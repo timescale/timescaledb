@@ -1,4 +1,0 @@
-Fixes: #5798 Fixed batch look ahead in compressed sorted merge
-
-Thanks: @JamieD9 for reporting an issue with a wrong result ordering
-
