@@ -98,6 +98,8 @@ ts_create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel)
 	parallel_workers =
 		compute_parallel_worker(rel, rel->pages, -1, max_parallel_workers_per_gather);
 
+	parallel_workers = Max(1, parallel_workers);
+
 	/* If any limit was set to zero, the user doesn't want a parallel scan. */
 	if (parallel_workers <= 0)
 		return;
