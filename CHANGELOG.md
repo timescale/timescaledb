@@ -4,6 +4,29 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.11.1 (2023-06-29)
+
+This release contains bug fixes since the 2.11.0 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* #5679 Update the loader to add support for the OSM extension (used for data tiering on [Timescale](https://www.timescale.com/))
+
+**Bugfixes**
+* #5705 Scheduler accidentally getting killed when calling `delete_job`
+* #5742 Fix Result node handling with ConstraintAwareAppend on compressed chunks
+* #5750 Ensure tlist is present in decompress chunk plan 
+* #5754 Fixed handling of NULL values in bookend_sfunc 
+* #5798 Fixed batch look ahead in compressed sorted merge
+* #5804 Mark cagg_watermark function as PARALLEL RESTRICTED
+* #5807 Copy job config JSONB structure into current MemoryContext
+* #5824 Improve continuous aggregate query chunk exclusion
+
+**Thanks**
+* @JamieD9 for reporting an issue with a wrong result ordering
+* @xvaara for reporting an issue with Result node handling in ConstraintAwareAppend
+
+
 ## 2.11.0 (2023-05-12)
 
 This release contains new features and bug fixes since the 2.10.3 release.
