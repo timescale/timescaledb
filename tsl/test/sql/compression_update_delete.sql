@@ -762,6 +762,7 @@ WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
 ORDER BY ch1.id LIMIT 1 \gset
 
 -- check that you uncompress and delete only for exact SEGMENTBY value
+SET client_min_messages TO DEBUG1;
 BEGIN;
 -- report 10 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
@@ -943,6 +944,30 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and 
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
 ROLLBACK;
+
+-- check that you uncompress and delete only tuples which satisfy SEGMENTBY
+-- and ORDERBY qualifiers.
+-- no: of rows satisfying SEGMENTBY qualifiers is 10
+-- no: of rows satisfying ORDERBY qualifiers is 3
+-- Once both qualifiers are applied ensure that only 7 rows are present in
+-- compressed chunk
+BEGIN;
+-- report 0 rows in uncompressed chunk
+SELECT COUNT(*) FROM ONLY :CHUNK_1;
+-- report 10 compressed rows for given condition c4 = 4
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
+-- report 3 compressed rows for given condition c4 = 4 and c1 >= 7
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7;
+SELECT COUNT(*) AS "total_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 \gset
+SELECT COUNT(*) AS "total_affected_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7 \gset
+UPDATE sample_table SET c3 = c3 + 0 WHERE c4 = 4 AND c1 >= 7;
+-- report 7 rows
+SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
+-- ensure correct number of rows are moved from compressed chunk
+-- report true
+SELECT COUNT(*) = :total_rows - :total_affected_rows FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
+ROLLBACK;
+RESET client_min_messages;
 
 --github issue: 5640
 CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
@@ -1229,3 +1254,50 @@ ROLLBACK;
 UPDATE sample_table SET c3 = NULL WHERE time >= '2023-03-17 00:00:00-00'::timestamptz AND c3 IS NULL;
 DELETE FROM sample_table WHERE time >= '2023-03-17 00:00:00-00'::timestamptz;
 \set ON_ERROR_STOP 1
+
+--github issue: 5586
+--testcase with multiple indexes
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE IF EXISTS test;
+CREATE DATABASE test;
+\c test :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+SELECT create_hypertable('tab1','time',create_default_indexes:=false);
+INSERT INTO tab1(filler_1, filler_2, filler_3,time,device_id,v0,v1,v2,v3) SELECT device_id, device_id+1,  device_id + 2, time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE tab1 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id, filler_1, filler_2, filler_3');
+-- create multiple indexes on compressed hypertable
+DROP INDEX _timescaledb_internal._compressed_hypertable_2_device_id_filler_1_filler_2_filler_idx;
+CREATE INDEX ON _timescaledb_internal._compressed_hypertable_2 (_ts_meta_min_1);
+CREATE INDEX ON _timescaledb_internal._compressed_hypertable_2 (_ts_meta_min_1, _ts_meta_sequence_num);
+CREATE INDEX ON _timescaledb_internal._compressed_hypertable_2 (_ts_meta_min_1, _ts_meta_max_1, filler_1);
+
+CREATE INDEX filler_1 ON _timescaledb_internal._compressed_hypertable_2 (filler_1);
+CREATE INDEX filler_2 ON _timescaledb_internal._compressed_hypertable_2 (filler_2);
+CREATE INDEX filler_3 ON _timescaledb_internal._compressed_hypertable_2 (filler_3);
+-- below indexes should be selected
+CREATE INDEX filler_1_filler_2 ON _timescaledb_internal._compressed_hypertable_2 (filler_1, filler_2);
+CREATE INDEX filler_2_filler_3 ON _timescaledb_internal._compressed_hypertable_2 (filler_2, filler_3);
+
+SELECT compress_chunk(show_chunks('tab1'));
+SET client_min_messages TO DEBUG2;
+BEGIN;
+SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
+UPDATE tab1 SET v0 = v1 + v2 WHERE filler_3 = 5 AND filler_2 = 4;
+ROLLBACK;
+
+BEGIN;
+SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5 AND filler_2 = 4;
+UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5 AND filler_2 = 4;
+ROLLBACK;
+
+-- idealy filler_1 index should be selected,
+-- instead first matching index is selected
+BEGIN;
+SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5;
+UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5;
+ROLLBACK;
+
+RESET client_min_messages;
+DROP TABLE tab1;

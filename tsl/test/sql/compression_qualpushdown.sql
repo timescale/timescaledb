@@ -106,6 +106,7 @@ ALTER TABLE pushdown_relabel SET (timescaledb.compress, timescaledb.compress_seg
 
 INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
 SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
+ANALYZE pushdown_relabel;
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';

@@ -714,7 +714,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		int32 parent_hypertable_id = ts_chunk_get_hypertable_id_by_relid(chunk_reloid);
 		if (parent_hypertable_id != INVALID_HYPERTABLE_ID)
 		{
-			Assert(ts_hypertable_id_to_relid(parent_hypertable_id) == parent_reloid);
+			Assert(ts_hypertable_id_to_relid(parent_hypertable_id, false) == parent_reloid);
 
 			if (ht != NULL)
 			{
@@ -733,10 +733,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		if (hypertable_id != INVALID_HYPERTABLE_ID)
 		{
 			/* Hypertable reloid not specified by the caller, look it up. */
-			parent_reloid = ts_hypertable_id_to_relid(hypertable_id);
-			Ensure(OidIsValid(parent_reloid),
-				   "unable to get valid parent Oid for hypertable %d",
-				   hypertable_id);
+			parent_reloid = ts_hypertable_id_to_relid(hypertable_id, /* return_invalid */ false);
 
 			ht = ts_planner_get_hypertable(parent_reloid, CACHE_FLAG_NONE);
 			Assert(ht != NULL);
@@ -916,31 +913,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 							return true;
 					}
 					return false;
-				}
-
-				/*
-				 * Check for partially compressed chunks with space partitioning.
-				 *
-				 * When partially compressed chunks are present on a hypertable with
-				 * more than 1 dimension, we can not do 1-level ordered append.
-				 * We instead need nested Appends to correctly preserve
-				 * ordering. For now we skip ordered append optimization when we encounter
-				 * partial chunks on space-partitioned hypertables.
-				 * When there is no space partitioning, we move the check for partial chunks
-				 * to the place where we do chunk append for space partitioned hypertables.
-				 */
-				foreach (lc, merge->subpaths)
-				{
-					Path *child = lfirst(lc);
-					RelOptInfo *chunk_rel = child->parent;
-					if (chunk_rel->fdw_private)
-					{
-						TimescaleDBPrivate *private = chunk_rel->fdw_private;
-						/* for all partially compressed chunks in the plan */
-						if (private->chunk && ts_chunk_is_partial(private->chunk) &&
-							ht->space->num_dimensions > 1)
-							return false;
-					}
 				}
 
 				pk = linitial_node(PathKey, path->pathkeys);

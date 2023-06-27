@@ -13,6 +13,7 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <utils/acl.h>
+#include <utils/snapmgr.h>
 
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
@@ -88,6 +89,16 @@ cagg_watermark_get(Hypertable *mat_ht)
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_WATERMARK, AccessShareLock, CurrentMemoryContext);
 
+	/*
+	 * The watermark of a CAGG has to be fetched by using the transaction snapshot.
+	 *
+	 * By default, the ts_scanner uses the SnapshotSelf to perform a scan. However, reading the
+	 * watermark must be done using the transaction snapshot in order to ensure that the view on the
+	 * watermark and the materialized part of the CAGG match.
+	 */
+	iterator.ctx.snapshot = GetTransactionSnapshot();
+	Assert(iterator.ctx.snapshot != NULL);
+
 	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, mat_ht->fd.id);
 
 	ts_scanner_foreach(&iterator)
@@ -104,6 +115,13 @@ cagg_watermark_get(Hypertable *mat_ht)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("watermark not defined for continuous aggregate: %d", mat_ht->fd.id)));
+
+	/* Log the read watermark, needed for MVCC tap tests */
+	ereport(DEBUG5,
+			(errcode(ERRCODE_SUCCESSFUL_COMPLETION),
+			 errmsg("watermark for continuous aggregate, '%d' is: " INT64_FORMAT,
+					mat_ht->fd.id,
+					DatumGetInt64(watermark))));
 
 	return DatumGetInt64(watermark);
 }

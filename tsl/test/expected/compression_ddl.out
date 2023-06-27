@@ -2132,3 +2132,223 @@ SELECT * FROM test_partials ORDER BY time;
  Mon Jan 01 00:02:00 2024 PST | 1 | 2
 (13 rows)
 
+-- add test for space partioning with partial chunks
+CREATE TABLE space_part (time timestamptz, a int, b int, c int);
+SELECT create_hypertable('space_part', 'time', chunk_time_interval => INTERVAL '1 day');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable     
+--------------------------
+ (36,public,space_part,t)
+(1 row)
+
+INSERT INTO space_part VALUES
+-- chunk1
+('2020-01-01 00:00', 1, 1, 1),
+('2020-01-01 00:00', 2, 1, 1),
+('2020-01-01 00:03', 1, 1, 1),
+('2020-01-01 00:03', 2, 1, 1);
+INSERT INTO space_part values
+-- chunk2
+('2021-01-01 00:00', 1, 1, 1),
+('2021-01-01 00:00', 2, 1, 1),
+('2021-01-01 00:03', 1, 1, 1),
+('2021-01-01 00:03', 2, 1, 1);
+-- compress them
+ALTER TABLE space_part SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('space_part'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_36_130_chunk
+ _timescaledb_internal._hyper_36_131_chunk
+(2 rows)
+
+-- make first chunk partial
+INSERT INTO space_part VALUES
+-- chunk1
+('2020-01-01 00:01', 1, 1, 1),
+('2020-01-01 00:01', 2, 1, 1);
+-------- now enable the space partitioning, this will take effect for chunks created subsequently
+SELECT add_dimension('space_part', 'a', number_partitions => 5);
+       add_dimension        
+----------------------------
+ (19,public,space_part,a,t)
+(1 row)
+
+-- plan is still the same
+EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on space_part
+   Order: space_part."time"
+   ->  Merge Append
+         Sort Key: _hyper_36_130_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_130_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_132_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_132_chunk
+         ->  Sort
+               Sort Key: _hyper_36_130_chunk."time"
+               ->  Seq Scan on _hyper_36_130_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_36_131_chunk
+         ->  Sort
+               Sort Key: compress_hyper_37_133_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_37_133_chunk
+(15 rows)
+
+-- now add more chunks that do adhere to the new space partitioning
+-- chunks 3,4
+INSERT INTO space_part VALUES
+('2022-01-01 00:00', 1, 1, 1),
+('2022-01-01 00:00', 2, 1, 1),
+('2022-01-01 00:03', 1, 1, 1),
+('2022-01-01 00:03', 2, 1, 1);
+-- plan still ok
+EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on space_part
+   Order: space_part."time"
+   ->  Merge Append
+         Sort Key: _hyper_36_130_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_130_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_132_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_132_chunk
+         ->  Sort
+               Sort Key: _hyper_36_130_chunk."time"
+               ->  Seq Scan on _hyper_36_130_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_36_131_chunk
+         ->  Sort
+               Sort Key: compress_hyper_37_133_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_37_133_chunk
+   ->  Merge Append
+         Sort Key: _hyper_36_134_chunk."time"
+         ->  Index Scan Backward using _hyper_36_134_chunk_space_part_time_idx on _hyper_36_134_chunk
+         ->  Index Scan Backward using _hyper_36_135_chunk_space_part_time_idx on _hyper_36_135_chunk
+(19 rows)
+
+-- compress them
+SELECT compress_chunk(c, if_not_compressed=>true) FROM show_chunks('space_part') c;
+NOTICE:  chunk "_hyper_36_130_chunk" is already compressed
+NOTICE:  chunk "_hyper_36_131_chunk" is already compressed
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_36_130_chunk
+ _timescaledb_internal._hyper_36_131_chunk
+ _timescaledb_internal._hyper_36_134_chunk
+ _timescaledb_internal._hyper_36_135_chunk
+(4 rows)
+
+-- plan still ok
+EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on space_part
+   Order: space_part."time"
+   ->  Merge Append
+         Sort Key: _hyper_36_130_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_130_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_132_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_132_chunk
+         ->  Sort
+               Sort Key: _hyper_36_130_chunk."time"
+               ->  Seq Scan on _hyper_36_130_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_36_131_chunk
+         ->  Sort
+               Sort Key: compress_hyper_37_133_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_37_133_chunk
+   ->  Merge Append
+         Sort Key: _hyper_36_134_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_134_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_136_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_136_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_36_135_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_137_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_137_chunk
+(25 rows)
+
+-- make second one of them partial
+insert into space_part values
+('2022-01-01 00:02', 2, 1, 1),
+('2022-01-01 00:02', 2, 1, 1);
+EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on space_part
+   Order: space_part."time"
+   ->  Merge Append
+         Sort Key: _hyper_36_130_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_130_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_132_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_132_chunk
+         ->  Sort
+               Sort Key: _hyper_36_130_chunk."time"
+               ->  Seq Scan on _hyper_36_130_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_36_131_chunk
+         ->  Sort
+               Sort Key: compress_hyper_37_133_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_37_133_chunk
+   ->  Merge Append
+         Sort Key: _hyper_36_134_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_134_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_136_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_136_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_36_135_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_137_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_137_chunk
+         ->  Sort
+               Sort Key: _hyper_36_135_chunk."time"
+               ->  Sort
+                     Sort Key: _hyper_36_135_chunk."time"
+                     ->  Seq Scan on _hyper_36_135_chunk
+(30 rows)
+
+-- make other one partial too
+INSERT INTO space_part VALUES
+('2022-01-01 00:02', 1, 1, 1);
+EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on space_part
+   Order: space_part."time"
+   ->  Merge Append
+         Sort Key: _hyper_36_130_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_130_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_132_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_132_chunk
+         ->  Sort
+               Sort Key: _hyper_36_130_chunk."time"
+               ->  Seq Scan on _hyper_36_130_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_36_131_chunk
+         ->  Sort
+               Sort Key: compress_hyper_37_133_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_37_133_chunk
+   ->  Merge Append
+         Sort Key: _hyper_36_134_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_36_134_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_136_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_136_chunk
+         ->  Sort
+               Sort Key: _hyper_36_134_chunk."time"
+               ->  Sort
+                     Sort Key: _hyper_36_134_chunk."time"
+                     ->  Seq Scan on _hyper_36_134_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_36_135_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_37_137_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_37_137_chunk
+         ->  Sort
+               Sort Key: _hyper_36_135_chunk."time"
+               ->  Sort
+                     Sort Key: _hyper_36_135_chunk."time"
+                     ->  Seq Scan on _hyper_36_135_chunk
+(35 rows)
+

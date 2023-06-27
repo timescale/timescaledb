@@ -60,6 +60,10 @@ ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_o
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.compressed_chunk_id IS NULL
 ORDER BY c.table_name DESC;
+-- Reindexing compressed hypertable to update statistics
+-- this is for planner tests which depend on them
+-- necessary because this operation was previously done by compress_chunk
+REINDEX TABLE _timescaledb_internal._compressed_hypertable_4;
 
 -- create hypertable with space partitioning and compression
 CREATE TABLE metrics_space_compressed(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
@@ -80,6 +84,10 @@ ALTER TABLE metrics_space_compressed SET (timescaledb.compress, timescaledb.comp
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_space_compressed' and c.compressed_chunk_id IS NULL
 ORDER BY c.table_name DESC;
+-- Reindexing compressed hypertable to update statistics
+-- this is for planner tests which depend on them
+-- necessary because this operation was previously done by compress_chunk
+REINDEX TABLE _timescaledb_internal._compressed_hypertable_6;
 
 RESET ROLE;
 

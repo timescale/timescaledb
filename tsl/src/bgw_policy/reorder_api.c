@@ -91,7 +91,7 @@ check_valid_index(Hypertable *ht, Name index_name)
 	HeapTuple idxtuple;
 	Form_pg_index indexForm;
 
-	index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), NameStr(*index_name), false);
+	index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), NameStr(*index_name), true);
 	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(idxtuple))
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid reorder index")));

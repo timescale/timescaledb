@@ -442,13 +442,34 @@ if(CMAKE_FORMAT)
                          ${PROJECT_SOURCE_DIR}/scripts/cmake_format_all.sh)
 endif()
 
-if(TARGET clang-format OR TARGET cmake-format)
+find_program(
+  PERLTIDY
+  NAMES perltidy
+  PATHS /bin /usr/bin /usr/local/bin /usr/local/opt/ /opt/bin
+  DOC "The path to perltidy")
+
+if(PERLTIDY)
+  message(STATUS "Using perltidy ${PERLTIDY}")
+  add_custom_target(
+    perltidy
+    COMMAND
+      ${CMAKE_COMMAND} -E env PERLTIDY=${PERLTIDY}
+      PERLTIDY_CONFIG="${PROJECT_SOURCE_DIR}/.perltidyrc"
+      ${PROJECT_SOURCE_DIR}/scripts/perltidy_format_all.sh)
+endif()
+
+if(TARGET clang-format
+   OR TARGET cmake-format
+   OR TARGET perltidy)
   add_custom_target(format)
   if(TARGET clang-format)
     add_dependencies(format clang-format)
   endif()
   if(TARGET cmake-format)
     add_dependencies(format cmake-format)
+  endif()
+  if(TARGET perltidy)
+    add_dependencies(format perltidy)
   endif()
 endif()
 

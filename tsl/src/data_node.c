@@ -1127,7 +1127,7 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 	foreach (lc, hypertable_data_nodes)
 	{
 		HypertableDataNode *node = lfirst(lc);
-		Oid relid = ts_hypertable_id_to_relid(node->fd.hypertable_id);
+		Oid relid = ts_hypertable_id_to_relid(node->fd.hypertable_id, false);
 		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_NONE);
 		bool has_privs = ts_hypertable_has_privs_of(relid, GetUserId());
 		bool update_dimension_partitions = false;

@@ -676,7 +676,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const CaggRefreshCallContext callctx, int32 chunk_id)
 {
 	InvalidationStore *invalidations;
-	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id);
+	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 	bool do_merged_refresh = false;
 	InternalTimeRange merged_refresh_window;
 	long max_materializations;

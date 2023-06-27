@@ -185,13 +185,17 @@ ts_hypertable_cache_get_cache_and_entry(const Oid relid, const unsigned int flag
 Hypertable *
 ts_hypertable_cache_get_entry_rv(Cache *cache, const RangeVar *rv)
 {
-	return ts_hypertable_cache_get_entry(cache, RangeVarGetRelid(rv, NoLock, true), true);
+	return ts_hypertable_cache_get_entry(cache,
+										 RangeVarGetRelid(rv, NoLock, true),
+										 CACHE_FLAG_MISSING_OK);
 }
 
 TSDLLEXPORT Hypertable *
 ts_hypertable_cache_get_entry_by_id(Cache *cache, const int32 hypertable_id)
 {
-	return ts_hypertable_cache_get_entry(cache, ts_hypertable_id_to_relid(hypertable_id), true);
+	return ts_hypertable_cache_get_entry(cache,
+										 ts_hypertable_id_to_relid(hypertable_id, true),
+										 CACHE_FLAG_MISSING_OK);
 }
 
 Hypertable *

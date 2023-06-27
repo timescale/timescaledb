@@ -800,7 +800,11 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	 */
 	/* createSubid is creation check, newRelfilenodeSubid is truncation check */
 	if (ccstate->rel->rd_createSubid != InvalidSubTransactionId ||
+#if PG16_LT
 		ccstate->rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
+#else
+		ccstate->rel->rd_newRelfilelocatorSubid != InvalidSubTransactionId)
+#endif
 	{
 		ti_options |= HEAP_INSERT_SKIP_FSM;
 #if PG13_LT

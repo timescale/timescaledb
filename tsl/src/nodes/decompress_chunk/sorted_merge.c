@@ -108,7 +108,7 @@ decompress_batch_open_next_batch(DecompressChunkState *chunk_state)
 
 		decompress_initialize_batch(chunk_state, batch_state, subslot);
 
-		decompress_get_next_tuple_from_batch(chunk_state, batch_state);
+		bool first_tuple_returned = decompress_get_next_tuple_from_batch(chunk_state, batch_state);
 
 		if (!TupIsNull(batch_state->decompressed_slot_projected))
 		{
@@ -118,7 +118,18 @@ decompress_batch_open_next_batch(DecompressChunkState *chunk_state)
 
 			chunk_state->most_recent_batch = batch_state_id;
 
-			return;
+			/* In decompress_sorted_merge_get_next_tuple it is determined how many batches
+			 * need to be opened currently to perform a sorted merge. This is done by
+			 * checking if the first tuple from the last opened batch is larger than the
+			 * last returned tuple.
+			 *
+			 * If a filter removes the first tuple, the first into the heap inserted
+			 * tuple from this batch can no longer be used to perform the check.
+			 * Therefore, we must continue opening additional batches until the condition
+			 * is met.
+			 */
+			if (first_tuple_returned)
+				return;
 		}
 	}
 }

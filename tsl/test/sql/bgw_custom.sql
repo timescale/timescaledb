@@ -23,11 +23,11 @@ $$;
 CREATE OR REPLACE PROCEDURE custom_proc2(job_id int, args jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
-  INSERT INTO custom_log VALUES($1, $2, 'custom_proc 1 COMMIT');
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc2 1 COMMIT ' || (args->>'type'));
   COMMIT;
-  INSERT INTO custom_log VALUES($1, $2, 'custom_proc 2 ROLLBACK');
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc2 2 ROLLBACK ' || (args->>'type'));
   ROLLBACK;
-  INSERT INTO custom_log VALUES($1, $2, 'custom_proc 3 COMMIT');
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc2 3 COMMIT ' || (args->>'type'));
   COMMIT;
 END
 $$;

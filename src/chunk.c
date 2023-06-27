@@ -47,6 +47,7 @@
 #include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
+#include "debug_assert.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -1694,9 +1695,16 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
 	chunk->table_id =
-		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), true);
-	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
+		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), false);
+
+	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
+
 	chunk->relkind = get_rel_relkind(chunk->table_id);
+
+	Ensure(chunk->relkind > 0,
+		   "relkind for chunk \"%s\".\"%s\" is invalid",
+		   NameStr(chunk->fd.schema_name),
+		   NameStr(chunk->fd.table_name));
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE && !IS_OSM_CHUNK(chunk))
 		chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
@@ -2806,8 +2814,7 @@ ts_chunk_get_relid(int32 chunk_id, bool missing_ok)
 	Oid relid = InvalidOid;
 
 	if (chunk_simple_scan_by_id(chunk_id, &form, missing_ok))
-		relid =
-			ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), missing_ok);
+		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
 
 	if (!OidIsValid(relid) && !missing_ok)
 		ereport(ERROR,

@@ -820,10 +820,18 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		relid = classform->oid;
 
 		/* check permissions of relation */
+#if PG16_LT
 		if (!vacuum_is_relation_owner(relid,
 									  classform,
 									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
 			continue;
+
+#else
+		if (!vacuum_is_permitted_for_relation(relid,
+											  classform,
+											  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+			continue;
+#endif
 
 		/*
 		 * We include partitioned tables here; depending on which operation is
@@ -3178,7 +3186,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 static void
 process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	Oid index_relid = ts_get_relation_relid(NameStr(ht->fd.schema_name), cmd->name, false);
+	Oid index_relid = ts_get_relation_relid(NameStr(ht->fd.schema_name), cmd->name, true);
 
 	/* If this is part of changing the type of a column that is used in a clustered index
 	 * the above lookup might fail. But in this case we don't need to mark the index clustered
