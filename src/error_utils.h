@@ -12,7 +12,7 @@
 		if (!OidIsValid(var))                                                                      \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
-					 errmsg("%s cannot be NULL", name)));                                          \
+					 errmsg(name " cannot be NULL" )));                                            \
 	}
 
 #define GETARG_NOTNULL_NULLABLE(var, arg, name, type)                                              \
@@ -20,7 +20,7 @@
 		if (PG_ARGISNULL(arg))                                                                     \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
-					 errmsg("%s cannot be NULL", name)));                                          \
+					 errmsg(name " cannot be NULL")));                                             \
 		var = PG_GETARG_##type(arg);                                                               \
 	}
 

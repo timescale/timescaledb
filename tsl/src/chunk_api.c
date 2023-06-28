@@ -96,7 +96,7 @@ hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
 
 		k.type = jbvString;
 		k.val.string.len = strlen(dim_name);
-		k.val.string.val = dim_name;
+		k.val.string.val = pstrdup(dim_name);
 
 		pushJsonbValue(ps, WJB_KEY, &k);
 		pushJsonbValue(ps, WJB_BEGIN_ARRAY, NULL);
@@ -1840,37 +1840,29 @@ chunk_api_detach(PG_FUNCTION_ARGS)
 	Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(ch->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
+	JsonbParseState *ps = NULL;
+	JsonbValue *jv = hypercube_to_jsonb_value(ch->cube, ht->space, &ps);
+
 	ts_chunk_table_drop_inherit(ch, ht);
 	int num_removed = ts_chunk_delete_by_name(NameStr(ch->fd.schema_name),
 											  NameStr(ch->fd.table_name),
 											  DROP_RESTRICT);
 	Ensure(num_removed == 1, "num_removed is expected to be exactly one at this point");
 
-	// FIXME: ensure that no slices are left behind
-
 	ts_cache_release(hcache);
-	PG_RETURN_BOOL(true);
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(jv));
 }
 
 Datum
 chunk_api_attach(PG_FUNCTION_ARGS)
 {
-	if (PG_ARGISNULL(0))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("argument1: hypertable regclass may not be null")));
-	if (PG_ARGISNULL(1))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("argument2: slices jsonb may not be null")));
-	if (PG_ARGISNULL(2))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("argument3: chunk_table regclass may not be null")));
+	Oid hypertable_relid ;
+	Jsonb *slices;
+	Oid chunk_table_relid;
+	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
+	GETARG_NOTNULL_NULLABLE(slices, 1, "slices", JSONB_P);
+	GETARG_NOTNULL_OID(chunk_table_relid, 2, "chunk_table");
 
-	Oid hypertable_relid = PG_GETARG_OID(0);
-	Jsonb *slices = PG_GETARG_JSONB_P(1);
-	Oid chunk_table_relid = PG_GETARG_OID(2);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	if (ht == NULL)

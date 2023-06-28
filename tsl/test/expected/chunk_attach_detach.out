@@ -136,9 +136,9 @@ ERROR:  can't detach chunk "_hyper_1_3_chunk" from hypertable which has continou
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW mat_m1;
 select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
- chunk_detach 
---------------
- t
+                  chunk_detach                  
+------------------------------------------------
+ {"time": [1520035200000000, 1520078400000000]}
 (1 row)
 
 select count(1) from :chunk;
@@ -161,9 +161,9 @@ select count(1) from main_table;
  device_id | text                     |           |          | 
 
 select _timescaledb_internal.chunk_detach(:'chunk2'::regclass);
- chunk_detach 
---------------
- t
+                  chunk_detach                  
+------------------------------------------------
+ {"time": [1520078400000000, 1520121600000000]}
 (1 row)
 
 --create table n as table main_table with no data;
