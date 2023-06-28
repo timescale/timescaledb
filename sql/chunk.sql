@@ -55,6 +55,36 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_attach' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.slice_union(hypertable REGCLASS, slice1 JSONB,slice2 JSONB) RETURNS JSONB
 AS '@MODULE_PATHNAME@', 'ts_slice_union' LANGUAGE C VOLATILE;
 
+CREATE SEQUENCE _timescaledb_catalog.temp_table_seq;
+
+CREATE OR REPLACE FUNCTION chunk_merge(hypertable REGCLASS, chunk1 REGCLASS,chunk2 REGCLASS) RETURNS REGCLASS
+AS
+$BODY$
+DECLARE
+    merged_slice  jsonb;
+    tmp_table_name text;
+BEGIN
+    select slices into merged_slice
+        from _timescaledb_internal.chunk_detach(chunk1) as t(slices);
+    select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
+        from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
+
+    -- FIXME: earlier check for collision
+
+    SELECT 'merge_1' into tmp_table_name;
+
+    EXECUTE format('create table %s ( like %s )',tmp_table_name,hypertable);
+    EXECUTE format('insert into %s select * from %s union all select * from %s',tmp_table_name,chunk1,chunk2);
+    
+    RAISE NOTICE 'merged_slice: %',merged_slice;
+
+    RETURN _timescaledb_internal.chunk_attach(hypertable,merged_slice, tmp_table_name);
+END;
+$BODY$
+LANGUAGE PLPGSQL VOLATILE;
+
+
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_merge1(hypertable REGCLASS, VARIADIC chunks REGCLASS[]) RETURNS REGCLASS
 AS
 $BODY$

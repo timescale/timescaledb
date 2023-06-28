@@ -31,29 +31,6 @@ select slices as slice3 from _timescaledb_internal.show_chunk(:'chunk3') \gset
 
 select assert_equal(count(1),75::bigint) from main_table;
 
-CREATE OR REPLACE FUNCTION chunk_merge(hypertable REGCLASS, chunk1 REGCLASS,chunk2 REGCLASS) RETURNS REGCLASS
-AS
-$BODY$
-DECLARE
-    merged_slice  jsonb;
-BEGIN
-    select slices into merged_slice
-        from _timescaledb_internal.chunk_detach(chunk1) as t(slices);
-    select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
-        from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
-
-    -- FIXME: earlier check for collision
-
-    EXECUTE format('create table new_1 ( like %s )',hypertable);
-    EXECUTE format('insert into new_1 select * from %s union all select * from %s',chunk1,chunk2);
-    
-    RAISE NOTICE 'merged_slice: %',merged_slice;
-
-    RETURN _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
-END;
-$BODY$
-LANGUAGE PLPGSQL VOLATILE;
-
 \d :chunk1
 \d :chunk2
 
