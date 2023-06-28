@@ -1326,51 +1326,8 @@ Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created)
 {
-			return ts_chunk_find_or_create_without_cuts1(ht,hc,schema_name,table_name,chunk_table_relid, created);
-
-	ChunkStub *stub;
-	Chunk *chunk = NULL;
-
-	stub = chunk_collides(ht, hc);
-	if(stub) {
-		/* Serialize chunk creation around the root hypertable */
-		LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-
-		/* Check again after lock */
-		stub = chunk_collides(ht, hc);
-
-		if (NULL == stub)
-		{
-			return ts_chunk_find_or_create_without_cuts1(ht,hc,schema_name,table_name,chunk_table_relid, created);
-		}
-
-		/* We didn't need the lock, so release it */
-		UnlockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-	}
-
-	Assert(NULL != stub);
-
-	/* We can only use an existing chunk if it has identical dimensional
-	 * constraints. Otherwise, throw an error */
-	if (OidIsValid(chunk_table_relid) || !ts_hypercube_equal(stub->cube, hc))
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_CHUNK_COLLISION),
-				 errmsg("chunk creation failed due to collision")));
-
-	/* chunk_collides only returned a stub, so we need to lookup the full
-	 * chunk. */
-	chunk = ts_chunk_get_by_id(stub->id, true);
-
-	if (NULL != created)
-		*created = false;
-
-	DEBUG_WAITPOINT("find_or_create_chunk_found");
-
-	ASSERT_IS_VALID_CHUNK(chunk);
-
-	return chunk;
+	return ts_chunk_find_or_create_without_cuts1(ht,hc,schema_name,table_name,chunk_table_relid, created);
 }
-
 
 Chunk *
 ts_chunk_find_or_create_without_cuts1(const Hypertable *ht, Hypercube *hc, const char *schema_name,
