@@ -4129,6 +4129,12 @@ ts_chunk_attach(PG_FUNCTION_ARGS)
 }
 
 Datum
+ts_chunk_merge(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->chunk_merge(fcinfo);
+}
+
+Datum
 ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 {
 	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);

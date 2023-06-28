@@ -1889,3 +1889,13 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 
 	PG_RETURN_OID(chunk->table_id);
 }
+
+// Datum
+// chunk_api_merge(PG_FUNCTION_ARGS) {
+// 	Oid hypertable_relid ;
+// 	Jsonb *slices;
+// 	Oid chunk_table_relid;
+// 	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
+// 	GETARG_NOTNULL_OID(chunk_table_relid, 1, "chunk_table");
+
+// }
