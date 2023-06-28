@@ -28,5 +28,6 @@ extern void chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *no
 											  Oid serverid);
 extern Datum chunk_api_detach(PG_FUNCTION_ARGS);
 extern Datum chunk_api_attach(PG_FUNCTION_ARGS);
+extern Datum chunk_api_slice_union(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */

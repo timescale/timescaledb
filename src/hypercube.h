@@ -44,6 +44,7 @@ extern TSDLLEXPORT const DimensionSlice *ts_hypercube_get_slice_by_dimension_id(
 																				int32 dimension_id);
 extern Hypercube *ts_hypercube_copy(const Hypercube *hc);
 extern bool ts_hypercube_equal(const Hypercube *hc1, const Hypercube *hc2);
-extern void ts_hypercube_slice_sort(Hypercube *hc);
+extern TSDLLEXPORT void ts_hypercube_slice_sort(Hypercube *hc);
+
 
 #endif /* TIMESCALEDB_HYPERCUBE_H */

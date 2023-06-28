@@ -51,6 +51,20 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_detach' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_attach(hypertable REGCLASS, slices JSONB, chunk_table REGCLASS) RETURNS REGCLASS
 AS '@MODULE_PATHNAME@', 'ts_chunk_attach' LANGUAGE C VOLATILE;
 
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.slice_union(hypertable REGCLASS, slice1 JSONB,slice2 JSONB) RETURNS JSONB
+AS '@MODULE_PATHNAME@', 'ts_slice_union' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_merge1(hypertable REGCLASS, VARIADIC chunks REGCLASS[]) RETURNS REGCLASS
+AS
+$BODY$
+DECLARE
+BEGIN
+
+END;
+$BODY$
+LANGUAGE PLPGSQL VOLATILE;
+
 -- Create a chunk with the given dimensional constraints (slices) as
 -- given in the JSONB. If chunk_table is a valid relation, it will be
 -- attached to the hypertable and used as the data table for the new

@@ -219,6 +219,7 @@ hypercube_from_jsonb(Jsonb *json, const Hyperspace *hs, const char **parse_error
 
 		ts_hypercube_add_slice_from_range(hc, dim->fd.id, range[0], range[1]);
 	}
+	ts_hypercube_slice_sort(hc);
 
 out_err:
 	if (NULL != parse_error)
@@ -1853,6 +1854,7 @@ chunk_api_detach(PG_FUNCTION_ARGS)
 	PG_RETURN_JSONB_P(JsonbValueToJsonb(jv));
 }
 
+
 Datum
 chunk_api_attach(PG_FUNCTION_ARGS)
 {
@@ -1888,4 +1890,57 @@ chunk_api_attach(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 
 	PG_RETURN_OID(chunk->table_id);
+}
+
+static Hypercube *
+get_hypercube_union(const Hypertable *ht, const Hypercube*hc1, const Hypercube*hc2) {
+	
+	const Hyperspace *hs=ht->space;
+	Ensure(hc1->num_slices == hs->num_dimensions, "fully contrainted slice expected");
+	Ensure(hc2->num_slices == hs->num_dimensions, "fully contrainted slice expected");
+
+	Hypercube *hc = ts_hypercube_alloc(hs->num_dimensions);
+
+	for(int dim = 0;dim<hs->num_dimensions;dim++) {
+		DimensionSlice *slice1=hc1->slices[dim];
+		DimensionSlice *slice2=hc2->slices[dim];
+		Ensure(slice1->fd.dimension_id == slice2->fd.dimension_id, "slice dimension_id mismatch");
+
+		ts_hypercube_add_slice_from_range(hc, slice1->fd.dimension_id,
+MIN(slice1->fd.range_start,slice2->fd.range_start),
+MAX(slice1->fd.range_end,slice2->fd.range_end)
+		);
+	}
+
+	return hc;
+}
+
+Datum
+chunk_api_slice_union(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_relid;
+	Jsonb *slice1;
+	Jsonb *slice2;
+	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
+	GETARG_NOTNULL_NULLABLE(slice1, 1, "slice1", JSONB_P);
+	GETARG_NOTNULL_NULLABLE(slice2, 2, "slice2", JSONB_P);
+
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
+	if (ht == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("supplied hypertable regclass is not a hypertable")));
+
+	Hypercube *hc1=get_hypercube_from_slices(slice1,ht);
+	Hypercube *hc2=get_hypercube_from_slices(slice2,ht);
+
+	Hypercube *new_hc = get_hypercube_union(ht,hc1,hc2);
+
+	JsonbParseState *ps = NULL;
+	JsonbValue *jv = hypercube_to_jsonb_value(new_hc, ht->space, &ps);
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(jv));
 }

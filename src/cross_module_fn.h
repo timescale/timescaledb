@@ -213,6 +213,7 @@ typedef struct CrossModuleFunctions
 									  JoinPathExtraData *extra);
 	PGFunction chunk_detach;
 	PGFunction chunk_attach;
+	PGFunction slice_union;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
