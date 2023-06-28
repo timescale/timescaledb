@@ -46,6 +46,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_api.sql
     chunk_merge.sql
     chunk_attach_detach.sql
+    chunk_split_merge.sql
     chunk_utils_compression.sql
     compression_algos.sql
     compression_ddl.sql

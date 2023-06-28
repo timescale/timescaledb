@@ -18,12 +18,11 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('main_table')
 ORDER BY slices;
 
-
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
-select (select ch from t limit 1 offset 2), (select ch from t limit 1 offset 3);
+select (select ch from t limit 1 offset 2) as chunk, (select ch from t limit 1 offset 3) as chunk2 \gset
 
-select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
-select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
+-- select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
+-- select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
 
 select _timescaledb_internal.show_chunk(:'chunk');
 select _timescaledb_internal.show_chunk(:'chunk2');
