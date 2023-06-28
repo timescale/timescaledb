@@ -42,11 +42,12 @@ BEGIN
     select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
         from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
 
+    -- FIXME: earlier check for collision
+
     EXECUTE format('create table new_1 ( like %s )',hypertable);
     EXECUTE format('insert into new_1 select * from %s union all select * from %s',chunk1,chunk2);
     
     RAISE NOTICE 'merged_slice: %',merged_slice;
-    -- perform _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 
     RETURN _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 END;
@@ -71,5 +72,7 @@ select assert_equal(count(1),75::bigint) from main_table;
 
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch desc)
 select (select ch from t limit 1) as new_chunk \gset
+
+select * from _timescaledb_internal.show_chunk(:'new_chunk');
 
 \d :new_chunk

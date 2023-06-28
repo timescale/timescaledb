@@ -91,11 +91,12 @@ BEGIN
     select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
         from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
 
+    -- FIXME: earlier check for collision
+
     EXECUTE format('create table new_1 ( like %s )',hypertable);
     EXECUTE format('insert into new_1 select * from %s union all select * from %s',chunk1,chunk2);
     
     RAISE NOTICE 'merged_slice: %',merged_slice;
-    -- perform _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 
     RETURN _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 END;
@@ -169,6 +170,12 @@ Child tables: _timescaledb_internal._hyper_1_1_chunk,
 
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch desc)
 select (select ch from t limit 1) as new_chunk \gset
+select * from _timescaledb_internal.show_chunk(:'new_chunk');
+ chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                     slices                     
+----------+---------------+-----------------------+------------------+---------+------------------------------------------------
+        8 |             1 | _timescaledb_internal | _hyper_1_8_chunk | r       | {"time": [1520035200000000, 1520121600000000]}
+(1 row)
+
 \d :new_chunk
             Table "_timescaledb_internal._hyper_1_8_chunk"
   Column   |           Type           | Collation | Nullable | Default 
