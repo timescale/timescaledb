@@ -145,7 +145,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
  */
 static ELEMENT_TYPE *FUNCTION_NAME(simple8brle_decompress_all,
 								   ELEMENT_TYPE)(Simple8bRleSerialized *compressed, uint16 *n_)
-	__attribute__((unused));
+	pg_attribute_unused();
 
 static ELEMENT_TYPE *
 FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed,

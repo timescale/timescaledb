@@ -50,7 +50,7 @@ simple8brle_bitmap_num_ones(Simple8bRleBitmap *bitmap)
  * header.
  */
 static Simple8bRleBitmap simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
-	__attribute__((unused));
+	pg_attribute_unused();
 
 static Simple8bRleBitmap
 simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
