@@ -18,18 +18,16 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('main_table')
 ORDER BY slices;
 
-
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
-select (select ch from t limit 1 offset 2), (select ch from t limit 1 offset 3);
+select (select ch from t limit 1 offset 2) as chunk, (select ch from t limit 1 offset 3) as chunk2 \gset
 
-select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
-select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
+select * from _timescaledb_internal.show_chunk(:'chunk')
+union all
+select * from _timescaledb_internal.show_chunk(:'chunk2');
 
-select _timescaledb_internal.show_chunk(:'chunk');
-select _timescaledb_internal.show_chunk(:'chunk2');
-
-select count(1) from :chunk;
-select count(1) from main_table;
+select assert_equal(count(1),12::bigint) from :chunk;
+select assert_equal(count(1),12::bigint) from :chunk2;
+select assert_equal(count(1),75::bigint) from main_table;
 \d :chunk
 
 -- reject detach if compressed
@@ -47,36 +45,22 @@ select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW mat_m1;
 
+
+-- detach chunks
 select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
-
-select count(1) from :chunk;
-select count(1) from main_table;
+select assert_equal(count(1),63::bigint) from main_table;
 \d :chunk
-
 select _timescaledb_internal.chunk_detach(:'chunk2'::regclass);
 
---create table n as table main_table with no data;
-create table n (like main_table);
+select assert_equal(count(1),51::bigint) from main_table;
 
+-- create union chunk
+create table n (like main_table);
 \d n
 insert into n 
 select * from :chunk union all select * from :chunk2;
 
-create table bad (like main_table);
-insert into bad
-select * from :chunk union all select * from :chunk2;
-alter table bad add column asd integer not null default 77;
-
-
---select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
--- incompatible table should be rejected
-select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'bad'::regclass);
-
+-- attach new chunk
 select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
 
-select count(1) from main_table;
 select assert_equal(count(1),75::bigint) from main_table;
-
-
-insert into n 
-select * from :chunk union all select * from :chunk2;
