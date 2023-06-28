@@ -82,21 +82,17 @@ DECLARE
     merged_slice  jsonb;
 BEGIN
     select slices into merged_slice
-        from _timescaledb_internal.show_chunk(chunk1);
+        from _timescaledb_internal.chunk_detach(chunk1) as t(slices);
     RAISE NOTICE 'asd %',merged_slice;
     select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
-        from _timescaledb_internal.show_chunk(chunk2);
+        from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
     RAISE NOTICE 'asd %',merged_slice;
-
-    perform _timescaledb_internal.chunk_detach(chunk1);
-    perform _timescaledb_internal.chunk_detach(chunk2);
 
     EXECUTE format('create table new_1 ( like %s )',hypertable);
     EXECUTE format('insert into new_1 select * from %s union all select * from %s',chunk1,chunk2);
     
     perform _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 
---    RAISE EXCEPTION 'asd %',merged_slice;
     RETURN merged_slice;
 END;
 $BODY$
@@ -113,7 +109,30 @@ select assert_equal(count(1),75::bigint) from main_table;
  
 (1 row)
 
-\set ON_ERROR_STOP 0
+\d :chunk
+            Table "_timescaledb_internal._hyper_1_3_chunk"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | text                     |           |          | 
+Indexes:
+    "_hyper_1_3_chunk_main_table_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_3" CHECK ("time" >= 'Fri Mar 02 16:00:00 2018 PST'::timestamp with time zone AND "time" < 'Sat Mar 03 04:00:00 2018 PST'::timestamp with time zone)
+Inherits: main_table
+
+\d :chunk2
+            Table "_timescaledb_internal._hyper_1_4_chunk"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | text                     |           |          | 
+Indexes:
+    "_hyper_1_4_chunk_main_table_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_4" CHECK ("time" >= 'Sat Mar 03 04:00:00 2018 PST'::timestamp with time zone AND "time" < 'Sat Mar 03 16:00:00 2018 PST'::timestamp with time zone)
+Inherits: main_table
+
 select chunk_merge('main_table', :'chunk', :'chunk2');
 NOTICE:  asd {"time": [1520035200000000, 1520078400000000]}
 NOTICE:  asd {"time": [1520035200000000, 1520121600000000]}
@@ -122,10 +141,40 @@ NOTICE:  asd {"time": [1520035200000000, 1520121600000000]}
  {"time": [1520035200000000, 1520121600000000]}
 (1 row)
 
-\set ON_ERROR_STOP 1
 select assert_equal(count(1),75::bigint) from main_table;
  assert_equal 
 --------------
  
 (1 row)
+
+\d+ main_table
+                                           Table "public.main_table"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+-----------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ time      | timestamp with time zone |           | not null |         | plain    |              | 
+ device_id | text                     |           |          |         | extended |              | 
+Indexes:
+    "main_table_time_idx" btree ("time" DESC)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON main_table FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
+Child tables: _timescaledb_internal._hyper_1_1_chunk,
+              _timescaledb_internal._hyper_1_2_chunk,
+              _timescaledb_internal._hyper_1_5_chunk,
+              _timescaledb_internal._hyper_1_6_chunk,
+              _timescaledb_internal._hyper_1_7_chunk,
+              _timescaledb_internal._hyper_1_8_chunk
+
+with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch desc)
+select (select ch from t limit 1) as new_chunk \gset
+\d :new_chunk
+            Table "_timescaledb_internal._hyper_1_8_chunk"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | text                     |           |          | 
+Indexes:
+    "_hyper_1_8_chunk_main_table_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_8" CHECK ("time" >= 'Fri Mar 02 16:00:00 2018 PST'::timestamp with time zone AND "time" < 'Sat Mar 03 16:00:00 2018 PST'::timestamp with time zone)
+Inherits: main_table
 

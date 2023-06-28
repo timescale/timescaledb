@@ -26,8 +26,6 @@ select slices as slice2 from _timescaledb_internal.show_chunk(:'chunk2') \gset
 
 select assert_equal(count(1),75::bigint) from main_table;
 
-
-
 CREATE OR REPLACE FUNCTION chunk_merge(hypertable REGCLASS, chunk1 REGCLASS,chunk2 REGCLASS) RETURNS jsonb
 AS
 $BODY$
@@ -35,21 +33,17 @@ DECLARE
     merged_slice  jsonb;
 BEGIN
     select slices into merged_slice
-        from _timescaledb_internal.show_chunk(chunk1);
+        from _timescaledb_internal.chunk_detach(chunk1) as t(slices);
     RAISE NOTICE 'asd %',merged_slice;
     select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
-        from _timescaledb_internal.show_chunk(chunk2);
+        from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
     RAISE NOTICE 'asd %',merged_slice;
-
-    perform _timescaledb_internal.chunk_detach(chunk1);
-    perform _timescaledb_internal.chunk_detach(chunk2);
 
     EXECUTE format('create table new_1 ( like %s )',hypertable);
     EXECUTE format('insert into new_1 select * from %s union all select * from %s',chunk1,chunk2);
     
     perform _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 
---    RAISE EXCEPTION 'asd %',merged_slice;
     RETURN merged_slice;
 END;
 $BODY$
@@ -60,8 +54,16 @@ select slices from _timescaledb_internal.show_chunk(:'chunk');
 
 select assert_equal(count(1),75::bigint) from main_table;
 
-\set ON_ERROR_STOP 0
+\d :chunk
+\d :chunk2
 select chunk_merge('main_table', :'chunk', :'chunk2');
-\set ON_ERROR_STOP 1
+
 
 select assert_equal(count(1),75::bigint) from main_table;
+
+\d+ main_table
+
+with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch desc)
+select (select ch from t limit 1) as new_chunk \gset
+
+\d :new_chunk
