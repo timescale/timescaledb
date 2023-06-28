@@ -31,7 +31,7 @@ select slices as slice3 from _timescaledb_internal.show_chunk(:'chunk3') \gset
 
 select assert_equal(count(1),75::bigint) from main_table;
 
-CREATE OR REPLACE FUNCTION chunk_merge(hypertable REGCLASS, chunk1 REGCLASS,chunk2 REGCLASS) RETURNS jsonb
+CREATE OR REPLACE FUNCTION chunk_merge(hypertable REGCLASS, chunk1 REGCLASS,chunk2 REGCLASS) RETURNS REGCLASS
 AS
 $BODY$
 DECLARE
@@ -39,17 +39,16 @@ DECLARE
 BEGIN
     select slices into merged_slice
         from _timescaledb_internal.chunk_detach(chunk1) as t(slices);
-    RAISE NOTICE 'asd %',merged_slice;
     select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
         from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
-    RAISE NOTICE 'asd %',merged_slice;
 
     EXECUTE format('create table new_1 ( like %s )',hypertable);
     EXECUTE format('insert into new_1 select * from %s union all select * from %s',chunk1,chunk2);
     
-    perform _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
+    RAISE NOTICE 'merged_slice: %',merged_slice;
+    -- perform _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 
-    RETURN merged_slice;
+    RETURN _timescaledb_internal.chunk_attach(hypertable,merged_slice, 'new_1');
 END;
 $BODY$
 LANGUAGE PLPGSQL VOLATILE;
@@ -58,6 +57,11 @@ LANGUAGE PLPGSQL VOLATILE;
 \d :chunk2
 
 select assert_equal(count(1),75::bigint) from main_table;
+
+-- invalid range must fail
+\set ON_ERROR_STOP 0
+select chunk_merge('main_table', :'chunk1', :'chunk3');
+\set ON_ERROR_STOP 1
 
 select chunk_merge('main_table', :'chunk1', :'chunk2');
 
