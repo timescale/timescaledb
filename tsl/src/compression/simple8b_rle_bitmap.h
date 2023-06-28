@@ -97,7 +97,6 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 			const bool repeated_value = simple8brle_rledata_value(block_data);
-			CheckCompressedData(repeated_value <= 1);
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
