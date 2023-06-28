@@ -69,7 +69,9 @@ BEGIN
     select _timescaledb_internal.slice_union(hypertable,slices,merged_slice) into merged_slice
         from _timescaledb_internal.chunk_detach(chunk2) as t(slices);
 
-    -- FIXME: earlier check for collision
+
+      -- FIXME: earlier check for collision
+      -- alternate approach: create empty; insert into all other data
 
     SELECT 'merge_1' into tmp_table_name;
 
