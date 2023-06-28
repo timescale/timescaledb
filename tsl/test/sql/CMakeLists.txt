@@ -78,6 +78,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     data_node.sql
     ddl_hook.sql
     debug_notice.sql
+    decompress_vector_qual.sql
     deparse.sql
     dist_api_calls.sql
     dist_commands.sql

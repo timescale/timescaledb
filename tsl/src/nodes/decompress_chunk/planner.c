@@ -59,6 +59,11 @@ check_for_system_columns(Bitmapset *attrs_used)
 /*
  * Given the scan targetlist and the bitmapset of the needed columns, determine
  * which scan columns become which decompressed columns (fill decompression_map).
+ *
+ * Note that the chunk_attrs_needed bitmap is offset by the
+ * FirstLowInvalidHeapAttributeNumber, similar to RelOptInfo.attr_needed. This
+ * allows to encode the requirement for system columns, which have negative
+ * attnos.
  */
 static void
 build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *chunk_attrs_needed)
@@ -113,6 +118,9 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 
 		compressed_attno_to_compression_info[compressed_attno] = fd;
 	}
+
+	path->uncompressed_chunk_attno_to_compression_info =
+		palloc0(sizeof(void *) * (path->info->chunk_rel->max_attr + 1));
 
 	/*
 	 * Go over the scan targetlist and determine to which output column each
@@ -230,10 +238,16 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 		path->is_segmentby_column =
 			lappend_int(path->is_segmentby_column,
 						compression_info && compression_info->segmentby_column_index != 0);
+
+		if (destination_attno_in_uncompressed_chunk > 0)
+		{
+			path->uncompressed_chunk_attno_to_compression_info
+				[destination_attno_in_uncompressed_chunk] = compression_info;
+		}
 	}
 
 	/*
-	 * Check that we have found all the needed columns in the scan targetlist.
+	 * Check that we have found all the needed columns in the compressed targetlist.
 	 * We can't conveniently check that we have all columns for all-row vars, so
 	 * skip attno 0 in this check.
 	 */
@@ -242,7 +256,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	if (bit >= 0)
 	{
 		elog(ERROR,
-			 "column '%s' (%d) not found in the scan targetlist for compressed chunk '%s'",
+			 "column '%s' (%d) not found in the targetlist for compressed chunk '%s'",
 			 get_attname(path->info->chunk_rte->relid,
 						 bit + FirstLowInvalidHeapAttributeNumber,
 						 /* missing_ok = */ true),
@@ -252,7 +266,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 
 	if (missing_count)
 	{
-		elog(ERROR, "the count column was not found in the compressed scan targetlist");
+		elog(ERROR, "the count column was not found in the compressed targetlist");
 	}
 
 	if (missing_sequence)
@@ -365,52 +379,107 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 	pg_unreachable();
 }
 
+static bool
+qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
+{
+	/* Only simple "Var op Const" binary predicates for now. */
+	if (!IsA(qual, OpExpr))
+	{
+		return false;
+	}
+
+	OpExpr *o = castNode(OpExpr, qual);
+
+	if (list_length(o->args) != 2)
+	{
+		return false;
+	}
+
+	if (!IsA(lsecond(o->args), Const))
+	{
+		return false;
+	}
+
+	if (!IsA(linitial(o->args), Var))
+	{
+		return false;
+	}
+
+	Var *var = castNode(Var, linitial(o->args));
+	Assert(var->varno == path->info->chunk_rel->relid);
+	FormData_hypertable_compression *column_compression =
+		path->uncompressed_chunk_attno_to_compression_info[var->varattno];
+
+	if (column_compression == NULL)
+	{
+		/* Not a compressed or segmentby column. */
+		return false;
+	}
+
+	if (column_compression->segmentby_column_index != 0)
+	{
+		/* A segmentby column. */
+		return false;
+	}
+
+	if (column_compression->algo_id != COMPRESSION_ALGORITHM_GORILLA &&
+		column_compression->algo_id != COMPRESSION_ALGORITHM_DELTADELTA)
+	{
+		/* Doesn't support bulk decompression. */
+		return false;
+	}
+
+	Oid opcode = get_opcode(o->opno);
+	switch (opcode)
+	{
+		case F_INT24EQ:
+		case F_INT24GE:
+		case F_INT24GT:
+		case F_INT24LE:
+		case F_INT24LT:
+		case F_INT8EQ:
+		case F_INT8GE:
+		case F_INT8GT:
+		case F_INT8LE:
+		case F_INT8LT:
+		case F_INT84EQ:
+		case F_INT84GE:
+		case F_INT84GT:
+		case F_INT84LE:
+		case F_INT84LT:
+		case F_TIMESTAMPTZ_EQ:
+		case F_TIMESTAMPTZ_GE:
+		case F_TIMESTAMPTZ_GT:
+		case F_TIMESTAMPTZ_LE:
+		case F_TIMESTAMPTZ_LT:
+		case F_TIMESTAMP_EQ:
+		case F_TIMESTAMP_GE:
+		case F_TIMESTAMP_GT:
+		case F_TIMESTAMP_LE:
+		case F_TIMESTAMP_LT:
+			return true;
+	}
+
+	return false;
+}
+
 static void
-split_qual(List *qual, List **vectorized, List **nonvectorized)
+split_qual(DecompressChunkPath *path, List *qual, List **vectorized, List **nonvectorized)
 {
 	//	fprintf(stderr, "input:\n");
 	//	my_print(qual);
 
+	/*
+	 * ExecQual is performed before ExecProject, operates on the scan slot,
+	 * so the qual attnos are the uncompressed chunk attnos -- probably?
+	 */
+
 	ListCell *lc;
 	foreach (lc, qual)
 	{
-		Expr *e = lfirst(lc);
-		if (IsA(e, OpExpr))
-		{
-			OpExpr *o = castNode(OpExpr, e);
-			Oid opcode = get_opcode(o->opno);
-			if (list_length(o->args) == 2 && IsA(linitial(o->args), Var) &&
-				IsA(lsecond(o->args), Const))
-			{
-				switch (opcode)
-				{
-					case F_INT24EQ:
-					case F_INT24GE:
-					case F_INT24GT:
-					case F_INT24LE:
-					case F_INT24LT:
-					case F_INT8EQ:
-					case F_INT8GE:
-					case F_INT8GT:
-					case F_INT8LE:
-					case F_INT8LT:
-					case F_TIMESTAMPTZ_EQ:
-					case F_TIMESTAMPTZ_GE:
-					case F_TIMESTAMPTZ_GT:
-					case F_TIMESTAMPTZ_LE:
-					case F_TIMESTAMPTZ_LT:
-					case F_TIMESTAMP_EQ:
-					case F_TIMESTAMP_GE:
-					case F_TIMESTAMP_GT:
-					case F_TIMESTAMP_LE:
-					case F_TIMESTAMP_LT:
-						*vectorized = lappend(*vectorized, e);
-						continue;
-				}
-			}
-		}
-
-		*nonvectorized = lappend(*nonvectorized, e);
+		Node *node = lfirst(lc);
+		List **dest = qual_is_vectorizable(path, node) ? vectorized : nonvectorized;
+		*dest = lappend(*dest, node);
 	}
 
 	//	fprintf(stderr, "vectorized:\n");
@@ -418,6 +487,17 @@ split_qual(List *qual, List **vectorized, List **nonvectorized)
 
 	//	fprintf(stderr, "nonvectorized:\n");
 	//	my_print(*nonvectorized);
+
+#ifdef TS_DEBUG
+	if (ts_guc_debug_enable_vector_qual == EVQ_Off && list_length(*vectorized) > 0)
+	{
+		elog(ERROR, "debug: encountered vector quals when they are disabled");
+	}
+	else if (ts_guc_debug_enable_vector_qual == EVQ_Only && list_length(*nonvectorized) > 0)
+	{
+		elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+	}
+#endif
 }
 
 Plan *
@@ -665,7 +745,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	if (!dcpath->sorted_merge_append && ts_guc_enable_bulk_decompression)
 	{
 		List *nonvectorized = NIL;
-		split_qual(decompress_plan->scan.plan.qual, &vectorized_quals, &nonvectorized);
+		split_qual(dcpath, decompress_plan->scan.plan.qual, &vectorized_quals, &nonvectorized);
 
 		decompress_plan->scan.plan.qual = nonvectorized;
 	}

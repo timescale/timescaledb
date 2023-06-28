@@ -111,6 +111,15 @@ bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
 #endif
 
+#ifdef TS_DEBUG
+static const struct config_enum_entry enable_vector_qual_options[] = { { "on", EVQ_On, false },
+																	   { "off", EVQ_Off, false },
+																	   { "only", EVQ_Only, false },
+																	   { NULL, 0, false } };
+#endif
+
+DebugEnableVectorQual ts_guc_debug_enable_vector_qual = EVQ_On;
+
 /*
  * We have to understand if we have finished initializing the GUCs, so that we
  * know when it's OK to check their values for mutual consistency.
@@ -633,6 +642,22 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomEnumVariable(/* name= */ "timescaledb.debug_enable_vector_qual",
+							 /* short_desc= */
+							 "disable non-vectorized filters in DecompressChunk node",
+							 /* long_desc= */
+							 "this is for debugging purposes, to let us check if the vectorized "
+							 "quals are used. EXPLAIN differs after PG15 for custom nodes, and "
+							 "using the test templates is a pain",
+							 /* valueAddr= */ (int *) &ts_guc_debug_enable_vector_qual,
+							 /* bootValue= */ EVQ_On,
+							 /* options = */ enable_vector_qual_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 #endif
 
 	DefineCustomEnumVariable("timescaledb.hypertable_distributed_default",

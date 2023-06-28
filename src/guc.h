@@ -102,6 +102,15 @@ extern char *ts_current_timestamp_mock;
 #define ts_shutdown_bgw false
 #endif
 
+typedef enum DebugEnableVectorQual
+{
+	EVQ_On = 0,
+	EVQ_Off,
+	EVQ_Only
+} DebugEnableVectorQual;
+
+extern TSDLLEXPORT DebugEnableVectorQual ts_guc_debug_enable_vector_qual;
+
 void _guc_init(void);
 void _guc_fini(void);
 extern TSDLLEXPORT void ts_assign_ssl_options_hook(void *fn);
