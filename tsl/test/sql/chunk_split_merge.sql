@@ -21,45 +21,11 @@ ORDER BY slices;
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
 select (select ch from t limit 1 offset 2) as chunk, (select ch from t limit 1 offset 3) as chunk2 \gset
 
--- select '_timescaledb_internal._hyper_1_3_chunk' as chunk \gset
--- select '_timescaledb_internal._hyper_1_4_chunk' as chunk2 \gset
+select slices as slice1 from _timescaledb_internal.show_chunk(:'chunk') \gset
+select slices as slice2 from _timescaledb_internal.show_chunk(:'chunk2') \gset
 
-select _timescaledb_internal.show_chunk(:'chunk');
-select _timescaledb_internal.show_chunk(:'chunk2');
+select assert_equal(count(1),75::bigint) from main_table;
 
-select count(1) from :chunk;
-select count(1) from main_table;
-\d :chunk
-
--- reject detach if compressed
-select compress_chunk(:'chunk'::regclass);
-\set ON_ERROR_STOP 0
-select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
-\set ON_ERROR_STOP 1
-select decompress_chunk(:'chunk'::regclass);
-
--- reject if cagg is present
-CREATE MATERIALIZED VIEW mat_m1(a, countb) WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-as select time_bucket('1 hour', time),device_id, count(1) from main_table group by time_bucket('1 hour', time), device_id WITH NO DATA;
-\set ON_ERROR_STOP 0
-select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
-\set ON_ERROR_STOP 1
-DROP MATERIALIZED VIEW mat_m1;
-
-select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
-
-select assert_equal(count(1),12::bigint) from :chunk;
-select assert_equal(count(1),63::bigint) from main_table;
-\d :chunk
-
-select _timescaledb_internal.chunk_detach(:'chunk2'::regclass);
-
-create table n (like main_table);
-
-\d n
-insert into n 
-select * from :chunk union all select * from :chunk2;
-
-select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
+select chunk_merge(main_table, :chunk, :chunk2);
 
 select assert_equal(count(1),75::bigint) from main_table;
