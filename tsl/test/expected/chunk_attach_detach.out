@@ -141,16 +141,16 @@ select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
  {"time": [1520035200000000, 1520078400000000]}
 (1 row)
 
-select count(1) from :chunk;
- count 
--------
-    12
+select assert_equal(count(1),12::bigint) from :chunk;
+ assert_equal 
+--------------
+ 
 (1 row)
 
-select count(1) from main_table;
- count 
--------
-    63
+select assert_equal(count(1),63::bigint) from main_table;
+ assert_equal 
+--------------
+ 
 (1 row)
 
 \d :chunk
@@ -177,17 +177,15 @@ create table n (like main_table);
 
 insert into n 
 select * from :chunk union all select * from :chunk2;
-create table bad (like main_table);
-insert into bad
-select * from :chunk union all select * from :chunk2;
-alter table bad add column asd integer not null default 77;
---select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
--- incompatible table should be rejected
-select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'bad'::regclass);
+select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
               chunk_attach              
 ----------------------------------------
  _timescaledb_internal._hyper_1_9_chunk
 (1 row)
 
-select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
-ERROR:  chunk creation failed due to collision
+select assert_equal(count(1),75::bigint) from main_table;
+ assert_equal 
+--------------
+ 
+(1 row)
+

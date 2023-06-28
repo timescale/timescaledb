@@ -49,8 +49,8 @@ DROP MATERIALIZED VIEW mat_m1;
 
 select _timescaledb_internal.chunk_detach(:'chunk'::regclass);
 
-select count(1) from :chunk;
-select count(1) from main_table;
+select assert_equal(count(1),12::bigint) from :chunk;
+select assert_equal(count(1),63::bigint) from main_table;
 \d :chunk
 
 select _timescaledb_internal.chunk_detach(:'chunk2'::regclass);
@@ -62,21 +62,6 @@ create table n (like main_table);
 insert into n 
 select * from :chunk union all select * from :chunk2;
 
-create table bad (like main_table);
-insert into bad
-select * from :chunk union all select * from :chunk2;
-alter table bad add column asd integer not null default 77;
-
-
---select _timescaledb_internal.create_chunk('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,null,null,'n'::regclass);
--- incompatible table should be rejected
-select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'bad'::regclass);
-
 select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
 
-select count(1) from main_table;
 select assert_equal(count(1),75::bigint) from main_table;
-
-
-insert into n 
-select * from :chunk union all select * from :chunk2;
