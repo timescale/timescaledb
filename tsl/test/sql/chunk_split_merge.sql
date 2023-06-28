@@ -19,10 +19,15 @@ FROM show_chunks('main_table')
 ORDER BY slices;
 
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
-select (select ch from t limit 1 offset 2) as chunk, (select ch from t limit 1 offset 3) as chunk2 \gset
+select
+    (select ch from t limit 1 offset 2) as chunk1,
+    (select ch from t limit 1 offset 3) as chunk2,
+    (select ch from t limit 1 offset 4) as chunk3
+    \gset
 
-select slices as slice1 from _timescaledb_internal.show_chunk(:'chunk') \gset
+select slices as slice1 from _timescaledb_internal.show_chunk(:'chunk1') \gset
 select slices as slice2 from _timescaledb_internal.show_chunk(:'chunk2') \gset
+select slices as slice3 from _timescaledb_internal.show_chunk(:'chunk3') \gset
 
 select assert_equal(count(1),75::bigint) from main_table;
 
@@ -49,15 +54,12 @@ END;
 $BODY$
 LANGUAGE PLPGSQL VOLATILE;
 
-select slices from _timescaledb_internal.show_chunk(:'chunk');
-
+\d :chunk1
+\d :chunk2
 
 select assert_equal(count(1),75::bigint) from main_table;
 
-\d :chunk
-\d :chunk2
-select chunk_merge('main_table', :'chunk', :'chunk2');
-
+select chunk_merge('main_table', :'chunk1', :'chunk2');
 
 select assert_equal(count(1),75::bigint) from main_table;
 

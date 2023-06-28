@@ -66,9 +66,14 @@ ORDER BY slices;
 (7 rows)
 
 with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
-select (select ch from t limit 1 offset 2) as chunk, (select ch from t limit 1 offset 3) as chunk2 \gset
-select slices as slice1 from _timescaledb_internal.show_chunk(:'chunk') \gset
+select
+    (select ch from t limit 1 offset 2) as chunk1,
+    (select ch from t limit 1 offset 3) as chunk2,
+    (select ch from t limit 1 offset 4) as chunk3
+    \gset
+select slices as slice1 from _timescaledb_internal.show_chunk(:'chunk1') \gset
 select slices as slice2 from _timescaledb_internal.show_chunk(:'chunk2') \gset
+select slices as slice3 from _timescaledb_internal.show_chunk(:'chunk3') \gset
 select assert_equal(count(1),75::bigint) from main_table;
  assert_equal 
 --------------
@@ -97,19 +102,7 @@ BEGIN
 END;
 $BODY$
 LANGUAGE PLPGSQL VOLATILE;
-select slices from _timescaledb_internal.show_chunk(:'chunk');
-                     slices                     
-------------------------------------------------
- {"time": [1520035200000000, 1520078400000000]}
-(1 row)
-
-select assert_equal(count(1),75::bigint) from main_table;
- assert_equal 
---------------
- 
-(1 row)
-
-\d :chunk
+\d :chunk1
             Table "_timescaledb_internal._hyper_1_3_chunk"
   Column   |           Type           | Collation | Nullable | Default 
 -----------+--------------------------+-----------+----------+---------
@@ -133,7 +126,13 @@ Check constraints:
     "constraint_4" CHECK ("time" >= 'Sat Mar 03 04:00:00 2018 PST'::timestamp with time zone AND "time" < 'Sat Mar 03 16:00:00 2018 PST'::timestamp with time zone)
 Inherits: main_table
 
-select chunk_merge('main_table', :'chunk', :'chunk2');
+select assert_equal(count(1),75::bigint) from main_table;
+ assert_equal 
+--------------
+ 
+(1 row)
+
+select chunk_merge('main_table', :'chunk1', :'chunk2');
 NOTICE:  asd {"time": [1520035200000000, 1520078400000000]}
 NOTICE:  asd {"time": [1520035200000000, 1520121600000000]}
                   chunk_merge                   
