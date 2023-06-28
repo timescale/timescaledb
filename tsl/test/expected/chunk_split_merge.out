@@ -1,0 +1,79 @@
+\ir ../../../test/sql/include/test_utils.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE OR REPLACE FUNCTION assert_true(
+    val boolean
+)
+ RETURNS VOID LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    IF val IS NOT TRUE THEN
+        RAISE 'Assert failed';
+    END IF;
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION assert_equal(
+    val1 anyelement,
+    val2 anyelement
+)
+ RETURNS VOID LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    IF (val1 = val2) IS NOT TRUE THEN
+        RAISE 'Assert failed: % = %',val1,val2;
+    END IF;
+END
+$BODY$;
+CREATE TABLE main_table AS
+SELECT '2011-11-11 11:11:11'::timestamptz AS time, 'foo' AS device_id limit 0;
+SELECT create_hypertable('main_table', 'time', chunk_time_interval => interval '12 hour', migrate_data => TRUE);
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (1,public,main_table,t)
+(1 row)
+
+ALTER TABLE main_table SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'device_id',
+    timescaledb.compress_orderby = '');
+INSERT INTO main_table SELECT t, 'dev1'  FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-05 3:00', '1 hour') t;
+select show_chunks('main_table');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+(7 rows)
+
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('main_table')
+ORDER BY slices;
+ chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                     slices                     
+----------+---------------+-----------------------+------------------+---------+------------------------------------------------
+        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1519948800000000, 1519992000000000]}
+        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk | r       | {"time": [1519992000000000, 1520035200000000]}
+        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk | r       | {"time": [1520035200000000, 1520078400000000]}
+        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk | r       | {"time": [1520078400000000, 1520121600000000]}
+        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk | r       | {"time": [1520121600000000, 1520164800000000]}
+        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk | r       | {"time": [1520164800000000, 1520208000000000]}
+        7 |             1 | _timescaledb_internal | _hyper_1_7_chunk | r       | {"time": [1520208000000000, 1520251200000000]}
+(7 rows)
+
+with t as (SELECT * FROM show_chunks('main_table') as t(ch) order by ch)
+select (select ch from t limit 1 offset 2) as chunk, (select ch from t limit 1 offset 3) as chunk2 \gset
+select slices as slice1 from _timescaledb_internal.show_chunk(:'chunk') \gset
+select slices as slice2 from _timescaledb_internal.show_chunk(:'chunk2') \gset
+select assert_equal(count(1),75::bigint) from main_table;
+ assert_equal 
+--------------
+ 
+(1 row)
+
+select chunk_merge(main_table, :chunk, :chunk2);
+ERROR:  column "main_table" does not exist at character 20
