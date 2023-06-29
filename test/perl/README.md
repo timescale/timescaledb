@@ -15,7 +15,7 @@ Note that all tests and test tools should have perltidy run on them
 using perltidy, for example:
 
 ```
-perltidy --profile=$TS_SRC_DIR/scripts/perltidyrc /path/to/taptest
+perltidy --profile=$TS_SRC_DIR/.perltidyrc /path/to/taptest
 ```
 
 ## Writing tests
