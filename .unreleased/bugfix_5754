@@ -1,1 +1,0 @@
-Fixes: #5754 Fixed handling of NULL values in bookend_sfunc 
