@@ -1,2 +1,0 @@
-Fixes: #5742 Fix Result node handling with ConstraintAwareAppend on compressed chunks
-Thanks: @xvaara for reporting an issue with Result node handling in ConstraintAwareAppend
