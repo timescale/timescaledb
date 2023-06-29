@@ -21,7 +21,7 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 = 0 ORDER BY chunk.id
 )
 AS sub;
 
@@ -42,7 +42,7 @@ FROM
 SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NOT NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 > 0 ORDER BY chunk.id
 LIMIT 1
 )
 AS sub;
@@ -63,7 +63,7 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 = 0 ORDER BY chunk.id
 )
 AS sub;
 SELECT count(*) from test1 where new_coli  = 100;
@@ -102,7 +102,7 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name = 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name = 'test1' and chunk.status & 1 = 0 ORDER BY chunk.id
 ) q;
 
 --check if all chunks have new column names

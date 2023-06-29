@@ -760,10 +760,10 @@ SELECT compress_chunk(c)
 FROM show_chunks('disthyper') c ORDER BY c LIMIT 4;
                 compress_chunk                
 ----------------------------------------------
- _timescaledb_internal._dist_hyper_6_19_chunk
- _timescaledb_internal._dist_hyper_6_20_chunk
- _timescaledb_internal._dist_hyper_6_21_chunk
- _timescaledb_internal._dist_hyper_6_22_chunk
+ _timescaledb_internal._dist_hyper_6_25_chunk
+ _timescaledb_internal._dist_hyper_6_26_chunk
+ _timescaledb_internal._dist_hyper_6_27_chunk
+ _timescaledb_internal._dist_hyper_6_28_chunk
 (4 rows)
 
 ANALYZE disthyper;

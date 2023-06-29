@@ -32,6 +32,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunk(
     numrows_post_compression BIGINT
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_create_compressed_chunk' LANGUAGE C STRICT VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunks_for_hypertable(
+    hypertable REGCLASS
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_create_compressed_chunks_for_hypertable' LANGUAGE C STRICT VOLATILE;
+
 CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = false

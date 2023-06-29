@@ -169,7 +169,7 @@ FROM _timescaledb_catalog.chunk c1
 JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
 
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
 
 -- Get compressed chunk stat
@@ -192,7 +192,7 @@ JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
 
 -- Try to query hypertable member with compressed chunk
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
 
 -- Ensure that compressed chunk stats match stats from the source data node
@@ -207,7 +207,7 @@ JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
 
 \set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
 \set ON_ERROR_STOP 1
 
@@ -244,7 +244,7 @@ FROM _timescaledb_catalog.chunk c1
 JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
 
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
 SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE chunk_name = '_dist_hyper_3_12_chunk';
 

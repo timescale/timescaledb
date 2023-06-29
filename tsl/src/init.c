@@ -202,6 +202,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_set_default_data_node = chunk_set_default_data_node,
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
+	.create_compressed_chunks_for_hypertable = tsl_create_compressed_chunks_for_hypertable,
 	.create_chunk = chunk_create,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
 	.chunk_drop_replica = chunk_drop_replica,

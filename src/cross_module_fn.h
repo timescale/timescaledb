@@ -135,6 +135,7 @@ typedef struct CrossModuleFunctions
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction create_compressed_chunk;
+	PGFunction create_compressed_chunks_for_hypertable;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, Chunk *chunk,

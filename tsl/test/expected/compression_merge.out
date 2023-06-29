@@ -260,14 +260,23 @@ SELECT
 SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
 (4 rows)
 
+SELECT cc.schema_name || '.' || cc.table_name AS "COMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.hypertable h
+INNER JOIN _timescaledb_catalog.chunk c
+ON h.id = c.hypertable_id
+INNER JOIN _timescaledb_catalog.chunk cc
+ON cc.id = c.compressed_chunk_id
+WHERE h.table_name = 'test5'
+AND c.status = 1
+LIMIT 1 \gset
 -- Make sure sequence numbers are correctly fetched from index.
-SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+SELECT _ts_meta_sequence_num FROM :COMPRESSED_CHUNK_NAME where i = 1;
  _ts_meta_sequence_num 
 -----------------------
                     10
@@ -285,18 +294,18 @@ DROP INDEX :INDEXNAME;
 -- We dropped the index from compressed chunk thats needed to determine sequence numbers
 -- during merge, merging will fallback to doing heap scans and work just fine.
 SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
-NOTICE:  chunk "_hyper_9_163_chunk" is already compressed
+NOTICE:  chunk "_hyper_9_147_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
- _timescaledb_internal._hyper_9_163_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
+ _timescaledb_internal._hyper_9_147_chunk
 (5 rows)
 
 -- Make sure sequence numbers are correctly fetched from heap.
-SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+SELECT _ts_meta_sequence_num FROM :COMPRESSED_CHUNK_NAME where i = 1;
  _ts_meta_sequence_num 
 -----------------------
                     10
@@ -315,7 +324,7 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_163_chunk" is already compressed
+psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_147_chunk" is already compressed
  count_compressed 
 ------------------
                17
@@ -355,30 +364,30 @@ ALTER TABLE test6 set (timescaledb.compress, timescaledb.compress_segmentby='i',
 SELECT compress_chunk(i) FROM show_chunks('test6') i;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_188_chunk
- _timescaledb_internal._hyper_11_188_chunk
- _timescaledb_internal._hyper_11_190_chunk
- _timescaledb_internal._hyper_11_190_chunk
- _timescaledb_internal._hyper_11_192_chunk
- _timescaledb_internal._hyper_11_192_chunk
- _timescaledb_internal._hyper_11_194_chunk
- _timescaledb_internal._hyper_11_194_chunk
- _timescaledb_internal._hyper_11_196_chunk
- _timescaledb_internal._hyper_11_196_chunk
- _timescaledb_internal._hyper_11_198_chunk
- _timescaledb_internal._hyper_11_198_chunk
- _timescaledb_internal._hyper_11_200_chunk
- _timescaledb_internal._hyper_11_200_chunk
- _timescaledb_internal._hyper_11_202_chunk
- _timescaledb_internal._hyper_11_202_chunk
- _timescaledb_internal._hyper_11_204_chunk
- _timescaledb_internal._hyper_11_204_chunk
- _timescaledb_internal._hyper_11_206_chunk
- _timescaledb_internal._hyper_11_206_chunk
- _timescaledb_internal._hyper_11_208_chunk
- _timescaledb_internal._hyper_11_208_chunk
- _timescaledb_internal._hyper_11_210_chunk
- _timescaledb_internal._hyper_11_210_chunk
+ _timescaledb_internal._hyper_11_195_chunk
+ _timescaledb_internal._hyper_11_195_chunk
+ _timescaledb_internal._hyper_11_197_chunk
+ _timescaledb_internal._hyper_11_197_chunk
+ _timescaledb_internal._hyper_11_199_chunk
+ _timescaledb_internal._hyper_11_199_chunk
+ _timescaledb_internal._hyper_11_201_chunk
+ _timescaledb_internal._hyper_11_201_chunk
+ _timescaledb_internal._hyper_11_203_chunk
+ _timescaledb_internal._hyper_11_203_chunk
+ _timescaledb_internal._hyper_11_205_chunk
+ _timescaledb_internal._hyper_11_205_chunk
+ _timescaledb_internal._hyper_11_207_chunk
+ _timescaledb_internal._hyper_11_207_chunk
+ _timescaledb_internal._hyper_11_209_chunk
+ _timescaledb_internal._hyper_11_209_chunk
+ _timescaledb_internal._hyper_11_211_chunk
+ _timescaledb_internal._hyper_11_211_chunk
+ _timescaledb_internal._hyper_11_213_chunk
+ _timescaledb_internal._hyper_11_213_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_217_chunk
 (24 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -395,56 +404,56 @@ CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 6 chunks from the additional 24 chunks.
 ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='4 hours');
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-NOTICE:  chunk "_hyper_11_188_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_190_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_192_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_194_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_196_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_198_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_200_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_202_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_204_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_206_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_208_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_210_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_195_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_197_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_199_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_201_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_203_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_205_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_207_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_209_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_211_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_213_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_215_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_217_chunk" is already compressed
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_188_chunk
- _timescaledb_internal._hyper_11_190_chunk
- _timescaledb_internal._hyper_11_192_chunk
- _timescaledb_internal._hyper_11_194_chunk
- _timescaledb_internal._hyper_11_196_chunk
- _timescaledb_internal._hyper_11_198_chunk
- _timescaledb_internal._hyper_11_200_chunk
- _timescaledb_internal._hyper_11_202_chunk
- _timescaledb_internal._hyper_11_204_chunk
- _timescaledb_internal._hyper_11_206_chunk
- _timescaledb_internal._hyper_11_208_chunk
- _timescaledb_internal._hyper_11_210_chunk
- _timescaledb_internal._hyper_11_210_chunk
- _timescaledb_internal._hyper_11_210_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_238_chunk
- _timescaledb_internal._hyper_11_238_chunk
- _timescaledb_internal._hyper_11_238_chunk
- _timescaledb_internal._hyper_11_238_chunk
- _timescaledb_internal._hyper_11_242_chunk
- _timescaledb_internal._hyper_11_242_chunk
- _timescaledb_internal._hyper_11_242_chunk
- _timescaledb_internal._hyper_11_242_chunk
- _timescaledb_internal._hyper_11_246_chunk
- _timescaledb_internal._hyper_11_246_chunk
+ _timescaledb_internal._hyper_11_195_chunk
+ _timescaledb_internal._hyper_11_197_chunk
+ _timescaledb_internal._hyper_11_199_chunk
+ _timescaledb_internal._hyper_11_201_chunk
+ _timescaledb_internal._hyper_11_203_chunk
+ _timescaledb_internal._hyper_11_205_chunk
+ _timescaledb_internal._hyper_11_207_chunk
+ _timescaledb_internal._hyper_11_209_chunk
+ _timescaledb_internal._hyper_11_211_chunk
+ _timescaledb_internal._hyper_11_213_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_247_chunk
+ _timescaledb_internal._hyper_11_247_chunk
+ _timescaledb_internal._hyper_11_247_chunk
+ _timescaledb_internal._hyper_11_247_chunk
+ _timescaledb_internal._hyper_11_255_chunk
+ _timescaledb_internal._hyper_11_255_chunk
+ _timescaledb_internal._hyper_11_255_chunk
+ _timescaledb_internal._hyper_11_255_chunk
+ _timescaledb_internal._hyper_11_263_chunk
+ _timescaledb_internal._hyper_11_263_chunk
+ _timescaledb_internal._hyper_11_263_chunk
+ _timescaledb_internal._hyper_11_263_chunk
+ _timescaledb_internal._hyper_11_271_chunk
+ _timescaledb_internal._hyper_11_271_chunk
+ _timescaledb_internal._hyper_11_271_chunk
+ _timescaledb_internal._hyper_11_271_chunk
+ _timescaledb_internal._hyper_11_279_chunk
+ _timescaledb_internal._hyper_11_279_chunk
+ _timescaledb_internal._hyper_11_279_chunk
+ _timescaledb_internal._hyper_11_279_chunk
+ _timescaledb_internal._hyper_11_287_chunk
+ _timescaledb_internal._hyper_11_287_chunk
 (36 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -463,47 +472,47 @@ CROSS JOIN generate_series(1, 5, 1) i;
 ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='30 minutes');
 WARNING:  compress chunk interval is not a multiple of chunk interval, you should use a factor of chunk interval to merge as much as possible
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-NOTICE:  chunk "_hyper_11_188_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_190_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_192_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_194_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_196_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_198_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_200_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_202_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_204_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_206_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_208_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_210_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_238_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_242_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_246_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_195_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_197_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_199_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_201_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_203_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_205_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_207_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_209_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_211_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_213_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_215_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_217_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_247_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_255_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_263_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_271_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_279_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_287_chunk" is already compressed
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_188_chunk
- _timescaledb_internal._hyper_11_190_chunk
- _timescaledb_internal._hyper_11_192_chunk
- _timescaledb_internal._hyper_11_194_chunk
- _timescaledb_internal._hyper_11_196_chunk
- _timescaledb_internal._hyper_11_198_chunk
- _timescaledb_internal._hyper_11_200_chunk
- _timescaledb_internal._hyper_11_202_chunk
- _timescaledb_internal._hyper_11_204_chunk
- _timescaledb_internal._hyper_11_206_chunk
- _timescaledb_internal._hyper_11_208_chunk
- _timescaledb_internal._hyper_11_210_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_238_chunk
- _timescaledb_internal._hyper_11_242_chunk
- _timescaledb_internal._hyper_11_246_chunk
- _timescaledb_internal._hyper_11_254_chunk
+ _timescaledb_internal._hyper_11_195_chunk
+ _timescaledb_internal._hyper_11_197_chunk
+ _timescaledb_internal._hyper_11_199_chunk
+ _timescaledb_internal._hyper_11_201_chunk
+ _timescaledb_internal._hyper_11_203_chunk
+ _timescaledb_internal._hyper_11_205_chunk
+ _timescaledb_internal._hyper_11_207_chunk
+ _timescaledb_internal._hyper_11_209_chunk
+ _timescaledb_internal._hyper_11_211_chunk
+ _timescaledb_internal._hyper_11_213_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_247_chunk
  _timescaledb_internal._hyper_11_255_chunk
- _timescaledb_internal._hyper_11_256_chunk
+ _timescaledb_internal._hyper_11_263_chunk
+ _timescaledb_internal._hyper_11_271_chunk
+ _timescaledb_internal._hyper_11_279_chunk
+ _timescaledb_internal._hyper_11_287_chunk
+ _timescaledb_internal._hyper_11_291_chunk
+ _timescaledb_internal._hyper_11_293_chunk
+ _timescaledb_internal._hyper_11_295_chunk
 (21 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -521,53 +530,53 @@ CROSS JOIN generate_series(1, 5, 1) i;
 -- Setting compressed chunk to anything less than chunk interval should disable merging chunks.
 ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=0);
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-NOTICE:  chunk "_hyper_11_188_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_190_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_192_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_194_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_196_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_198_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_200_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_202_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_204_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_206_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_208_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_210_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_238_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_242_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_246_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_254_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_195_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_197_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_199_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_201_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_203_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_205_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_207_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_209_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_211_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_213_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_215_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_217_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_247_chunk" is already compressed
 NOTICE:  chunk "_hyper_11_255_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_256_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_263_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_271_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_279_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_287_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_291_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_293_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_295_chunk" is already compressed
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_188_chunk
- _timescaledb_internal._hyper_11_190_chunk
- _timescaledb_internal._hyper_11_192_chunk
- _timescaledb_internal._hyper_11_194_chunk
- _timescaledb_internal._hyper_11_196_chunk
- _timescaledb_internal._hyper_11_198_chunk
- _timescaledb_internal._hyper_11_200_chunk
- _timescaledb_internal._hyper_11_202_chunk
- _timescaledb_internal._hyper_11_204_chunk
- _timescaledb_internal._hyper_11_206_chunk
- _timescaledb_internal._hyper_11_208_chunk
- _timescaledb_internal._hyper_11_210_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_238_chunk
- _timescaledb_internal._hyper_11_242_chunk
- _timescaledb_internal._hyper_11_246_chunk
- _timescaledb_internal._hyper_11_254_chunk
+ _timescaledb_internal._hyper_11_195_chunk
+ _timescaledb_internal._hyper_11_197_chunk
+ _timescaledb_internal._hyper_11_199_chunk
+ _timescaledb_internal._hyper_11_201_chunk
+ _timescaledb_internal._hyper_11_203_chunk
+ _timescaledb_internal._hyper_11_205_chunk
+ _timescaledb_internal._hyper_11_207_chunk
+ _timescaledb_internal._hyper_11_209_chunk
+ _timescaledb_internal._hyper_11_211_chunk
+ _timescaledb_internal._hyper_11_213_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_247_chunk
  _timescaledb_internal._hyper_11_255_chunk
- _timescaledb_internal._hyper_11_256_chunk
- _timescaledb_internal._hyper_11_260_chunk
- _timescaledb_internal._hyper_11_261_chunk
- _timescaledb_internal._hyper_11_262_chunk
+ _timescaledb_internal._hyper_11_263_chunk
+ _timescaledb_internal._hyper_11_271_chunk
+ _timescaledb_internal._hyper_11_279_chunk
+ _timescaledb_internal._hyper_11_287_chunk
+ _timescaledb_internal._hyper_11_291_chunk
+ _timescaledb_internal._hyper_11_293_chunk
+ _timescaledb_internal._hyper_11_295_chunk
+ _timescaledb_internal._hyper_11_297_chunk
+ _timescaledb_internal._hyper_11_299_chunk
+ _timescaledb_internal._hyper_11_301_chunk
 (24 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -644,10 +653,10 @@ INSERT INTO test8 (time, series_id, value) SELECT t, s, 1 FROM generate_series(N
 SELECT compress_chunk(c, true) FROM show_chunks('test8') c LIMIT 4;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_15_314_chunk
- _timescaledb_internal._hyper_15_314_chunk
- _timescaledb_internal._hyper_15_314_chunk
- _timescaledb_internal._hyper_15_314_chunk
+ _timescaledb_internal._hyper_15_351_chunk
+ _timescaledb_internal._hyper_15_351_chunk
+ _timescaledb_internal._hyper_15_351_chunk
+ _timescaledb_internal._hyper_15_351_chunk
 (4 rows)
 
 SET enable_indexscan TO OFF;

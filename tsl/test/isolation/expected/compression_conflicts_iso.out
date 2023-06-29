@@ -1,4 +1,4 @@
-Parsed test spec with 9 sessions
+Parsed test spec with 11 sessions
 
 starting permutation: LockChunk1 IB I1 C1 UnlockChunk Ic Cc SC1 S1 SChunkStat
 step LockChunk1: 
@@ -47,7 +47,7 @@ count(*)|count(*) only
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
-   10
+   11
 (1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
@@ -105,7 +105,7 @@ count(*)|count(*) only
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
-   10
+   11
 (1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
@@ -163,7 +163,7 @@ count(*)|count(*) only
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
-   10
+   11
 (1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
@@ -221,7 +221,7 @@ count(*)|count(*) only
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
-   10
+   11
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
@@ -285,7 +285,7 @@ count(*)|count(*) only
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
-   10
+   11
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
@@ -349,7 +349,7 @@ count(*)|count(*) only
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
-   10
+   11
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
@@ -423,7 +423,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -490,7 +491,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -557,7 +559,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -624,7 +627,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -691,7 +695,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -758,7 +763,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -826,7 +832,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -887,7 +894,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -948,7 +956,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IB I1 INu1 UnlockChunkTuple Ic INc SChunkStat SU SA
@@ -1014,7 +1023,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR I1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1075,7 +1085,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS I1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1136,7 +1147,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IB Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SU SA
@@ -1203,7 +1215,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1264,7 +1277,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1325,7 +1339,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IB Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SU SA
@@ -1392,7 +1407,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1453,7 +1469,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1514,7 +1531,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IB I1 UnlockChunk Ic SH SA SChunkStat
@@ -1528,7 +1546,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -1579,7 +1598,7 @@ step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -1595,7 +1614,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1616,7 +1636,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -1667,7 +1688,7 @@ step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -1683,7 +1704,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1704,7 +1726,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -1755,7 +1778,7 @@ step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -1771,7 +1794,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1792,7 +1816,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -1843,7 +1868,7 @@ step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -1859,7 +1884,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1880,7 +1906,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -1931,7 +1958,7 @@ step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -1947,7 +1974,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1974,7 +2002,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2025,7 +2054,7 @@ step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2041,7 +2070,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2068,7 +2098,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2116,7 +2147,7 @@ step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2132,7 +2163,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2153,7 +2185,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2201,7 +2234,7 @@ step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2217,7 +2250,8 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2244,7 +2278,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2295,7 +2330,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2311,7 +2346,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2332,7 +2368,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2383,7 +2420,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2399,7 +2436,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2420,7 +2458,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2471,7 +2510,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2487,7 +2526,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2508,7 +2548,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2559,7 +2600,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2575,7 +2616,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2602,7 +2644,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2653,7 +2696,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2669,7 +2712,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2696,7 +2740,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2747,7 +2792,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2763,7 +2808,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2790,7 +2836,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2838,7 +2885,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2854,7 +2901,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2875,7 +2923,8 @@ step CA1:
 compress
 --------
 t       
-(1 row)
+t       
+(2 rows)
 
 step CAc: COMMIT;
 step I1: 
@@ -2923,7 +2972,7 @@ step RC: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
-           1|                       1
+           2|                       2
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -2939,7 +2988,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+ 100|     1|     100|   20
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2953,4 +3003,56 @@ time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   99
 (1 row)
+
+
+starting permutation: s1_compress_one s2_compress_one s2_commit s1_commit
+step s1_compress_one: 
+    BEGIN; 
+    SELECT compress_chunk(i.show_chunks) FROM (SELECT show_chunks('ts_device_table') ORDER BY 1 ASC LIMIT 1) i;
+
+compress_chunk                            
+------------------------------------------
+_timescaledb_internal._hyper_X_X_chunk
+(1 row)
+
+step s2_compress_one: 
+    BEGIN; 
+    SELECT compress_chunk(i.show_chunks) FROM (SELECT show_chunks('ts_device_table') ORDER BY 1 DESC LIMIT 1) i;
+
+compress_chunk                            
+------------------------------------------
+_timescaledb_internal._hyper_X_X_chunk
+(1 row)
+
+step s2_commit: 
+    COMMIT;
+
+step s1_commit: 
+    COMMIT;
+
+
+starting permutation: s2_compress_one s1_compress_one s2_commit s1_commit
+step s2_compress_one: 
+    BEGIN; 
+    SELECT compress_chunk(i.show_chunks) FROM (SELECT show_chunks('ts_device_table') ORDER BY 1 DESC LIMIT 1) i;
+
+compress_chunk                            
+------------------------------------------
+_timescaledb_internal._hyper_X_X_chunk
+(1 row)
+
+step s1_compress_one: 
+    BEGIN; 
+    SELECT compress_chunk(i.show_chunks) FROM (SELECT show_chunks('ts_device_table') ORDER BY 1 ASC LIMIT 1) i;
+
+compress_chunk                            
+------------------------------------------
+_timescaledb_internal._hyper_X_X_chunk
+(1 row)
+
+step s2_commit: 
+    COMMIT;
+
+step s1_commit: 
+    COMMIT;
 

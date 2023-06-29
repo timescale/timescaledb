@@ -58,7 +58,7 @@ ANALYZE metrics_compressed;
 -- compress chunks
 ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.compressed_chunk_id IS NULL
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.status & 1 = 0
 ORDER BY c.table_name DESC;
 -- Reindexing compressed hypertable to update statistics
 -- this is for planner tests which depend on them
@@ -82,7 +82,7 @@ ANALYZE metrics_space_compressed;
 -- compress chunks
 ALTER TABLE metrics_space_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_space_compressed' and c.compressed_chunk_id IS NULL
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_space_compressed' and c.status & 1 = 0
 ORDER BY c.table_name DESC;
 -- Reindexing compressed hypertable to update statistics
 -- this is for planner tests which depend on them

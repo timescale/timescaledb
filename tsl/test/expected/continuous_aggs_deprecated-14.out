@@ -1679,7 +1679,7 @@ NOTICE:  defaulting compress_orderby to time_bucket
 SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_44_91_chunk
+ _timescaledb_internal._hyper_44_92_chunk
 (1 row)
 
 SELECT * FROM test_morecols_cagg;
@@ -1952,8 +1952,8 @@ Indexes:
     "_materialized_hypertable_53_bucket_idx" btree (bucket DESC)
 Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_53 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
-Child tables: _timescaledb_internal._hyper_53_114_chunk,
-              _timescaledb_internal._hyper_53_115_chunk
+Child tables: _timescaledb_internal._hyper_53_115_chunk,
+              _timescaledb_internal._hyper_53_116_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"

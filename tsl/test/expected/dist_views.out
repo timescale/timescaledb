@@ -88,19 +88,19 @@ ORDER BY chunk_name, node_name;
 -----------------------+-----------------------+-------------+-------------+-------------+-------------+-----------------
  _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       32768 |        8192 |       49152 | db_dist_views_1
  _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       32768 |        8192 |       49152 | db_dist_views_2
- _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
- _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_3
- _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
- _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_3
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_views_3
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_views_3
 (6 rows)
 
 SELECT * FROM hypertable_detailed_size('dist_table'::regclass)
 ORDER BY node_name;;
  table_bytes | index_bytes | toast_bytes | total_bytes |    node_name    
 -------------+-------------+-------------+-------------+-----------------
-       16384 |       81920 |        8192 |      106496 | db_dist_views_1
-       16384 |       81920 |        8192 |      106496 | db_dist_views_2
-       16384 |       81920 |           0 |       98304 | db_dist_views_3
+       16384 |       90112 |       16384 |      122880 | db_dist_views_1
+       16384 |       90112 |       16384 |      122880 | db_dist_views_2
+       16384 |       98304 |       16384 |      131072 | db_dist_views_3
            0 |       16384 |           0 |       16384 | 
 (4 rows)
 

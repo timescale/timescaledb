@@ -60,7 +60,7 @@ alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby
 --- compress_chunks and decompress_chunks fail without correct perm --
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.status & 1 = 0;
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
 select add_compression_policy('conditions', '1day'::interval);
@@ -77,7 +77,7 @@ select remove_compression_policy('conditions', true);
 GRANT SELECT on conditions to :ROLE_DEFAULT_PERM_USER_2;
 select count(*) from
 (select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL ) as subq;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.status & 1 = 0 ) as subq;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 select count(*) from conditions;
 

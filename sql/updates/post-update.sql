@@ -194,3 +194,17 @@ BEGIN
 END;
 $$;
 
+-- create compressed chunks for all uncompressed chunks for all hypertables that have compression enabled
+DO $$
+DECLARE
+  schema name;
+  ht_name name;
+BEGIN
+  FOR schema, ht_name IN
+  SELECT schema_name, table_name FROM _timescaledb_catalog.hypertable
+  WHERE compressed_hypertable_id IS NOT NULL
+  LOOP
+    PERFORM _timescaledb_functions.create_compressed_chunks_for_hypertable(schema || '.' || ht_name);
+  END LOOP;
+END;
+$$;

@@ -185,7 +185,7 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name, true)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'compressed' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'compressed' and chunk.status & 1 = 0 ORDER BY chunk.id
 )
 AS sub;
 

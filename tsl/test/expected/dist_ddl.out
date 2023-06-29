@@ -3328,7 +3328,9 @@ SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
  32 | _dist_hyper_35_39_chunk
  33 | _dist_hyper_35_40_chunk
  34 | compress_hyper_33_34_chunk
-(4 rows)
+ 35 | compress_hyper_33_35_chunk
+ 36 | compress_hyper_33_36_chunk
+(6 rows)
 
 SELECT * from show_chunks('dist_test');
                   show_chunks                  
@@ -3404,11 +3406,13 @@ SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_3');
 
 \c :DATA_NODE_1
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
- id |       table_name        
-----+-------------------------
+ id |         table_name         
+----+----------------------------
  32 | _dist_hyper_35_39_chunk
  33 | _dist_hyper_35_40_chunk
-(2 rows)
+ 35 | compress_hyper_33_35_chunk
+ 36 | compress_hyper_33_36_chunk
+(4 rows)
 
 SELECT * from show_chunks('dist_test');
                   show_chunks                  
@@ -3494,11 +3498,11 @@ DROP FOREIGN TABLE _timescaledb_internal._dist_hyper_36_42_chunk;
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
  id |       table_name        
 ----+-------------------------
- 35 | _dist_hyper_36_41_chunk
- 36 | _dist_hyper_36_42_chunk
- 37 | _dist_hyper_36_43_chunk
- 38 | _dist_hyper_36_44_chunk
- 39 | _dist_hyper_36_45_chunk
+ 37 | _dist_hyper_36_41_chunk
+ 38 | _dist_hyper_36_42_chunk
+ 39 | _dist_hyper_36_43_chunk
+ 40 | _dist_hyper_36_44_chunk
+ 41 | _dist_hyper_36_45_chunk
 (5 rows)
 
 SELECT * from show_chunks('dist_test');
@@ -3523,9 +3527,9 @@ SELECT alter_data_node(:'DATA_NODE_1', available => true);
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
  id |       table_name        
 ----+-------------------------
- 37 | _dist_hyper_36_43_chunk
- 38 | _dist_hyper_36_44_chunk
- 39 | _dist_hyper_36_45_chunk
+ 39 | _dist_hyper_36_43_chunk
+ 40 | _dist_hyper_36_44_chunk
+ 41 | _dist_hyper_36_45_chunk
 (3 rows)
 
 SELECT * from show_chunks('dist_test');

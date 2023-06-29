@@ -418,7 +418,7 @@ FROM show_chunks('test_gen') c;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_11_chunk
- _timescaledb_internal._hyper_9_12_chunk
+ _timescaledb_internal._hyper_9_13_chunk
 (2 rows)
 
 INSERT INTO test_gen (payload) values(17);
@@ -718,7 +718,7 @@ NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_15_chunk
- _timescaledb_internal._hyper_11_18_chunk
+ _timescaledb_internal._hyper_11_19_chunk
 (2 rows)
 
 CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
@@ -733,7 +733,7 @@ INSERT INTO trigger_test VALUES
                    ( '2000-01-01',1,11, 'eleven', 111),
                    ( '2010-01-01',10,10, 'ten', 222);
 NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11,eleven,111) <NULL>
-NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_18_chunk: ("Fri Jan 01 00:00:00 2010 PST",10,10,ten,222) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_19_chunk: ("Fri Jan 01 00:00:00 2010 PST",10,10,ten,222) <NULL>
 SELECT * FROM trigger_test ORDER BY 1 ,2, 3, 5;
              time             | device | value | addcolv | addcoli 
 ------------------------------+--------+-------+---------+---------
@@ -772,23 +772,23 @@ INSERT INTO test_ordering VALUES (5),(4),(3);
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
- Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
+ Index Only Scan Backward using _hyper_13_21_chunk_test_ordering_time_idx on _hyper_13_21_chunk
 (1 row)
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_13_20_chunk
+ _timescaledb_internal._hyper_13_21_chunk
 (1 row)
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                QUERY PLAN                                
 -------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+ Custom Scan (DecompressChunk) on _hyper_13_21_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-         ->  Seq Scan on compress_hyper_14_21_chunk
+         Sort Key: compress_hyper_14_22_chunk._ts_meta_sequence_num DESC
+         ->  Seq Scan on compress_hyper_14_22_chunk
 (4 rows)
 
 INSERT INTO test_ordering SELECT 1;
@@ -805,14 +805,14 @@ INSERT INTO test_ordering SELECT 1;
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+         Sort Key: _hyper_13_21_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_21_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_14_21_chunk
+                     Sort Key: compress_hyper_14_22_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_22_chunk
          ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
+               Sort Key: _hyper_13_21_chunk."time"
+               ->  Seq Scan on _hyper_13_21_chunk
 (11 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
@@ -823,15 +823,15 @@ INSERT INTO test_ordering VALUES (105),(104),(103);
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+         Sort Key: _hyper_13_21_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_21_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_14_21_chunk
+                     Sort Key: compress_hyper_14_22_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_22_chunk
          ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
-   ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
+               Sort Key: _hyper_13_21_chunk."time"
+               ->  Seq Scan on _hyper_13_21_chunk
+   ->  Index Only Scan Backward using _hyper_13_23_chunk_test_ordering_time_idx on _hyper_13_23_chunk
 (12 rows)
 
 --insert into compressed + uncompressed chunk
@@ -860,17 +860,17 @@ INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING *;
 INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass, *;
                  tableoid                 | time 
 ------------------------------------------+------
- _timescaledb_internal._hyper_13_20_chunk |   23
- _timescaledb_internal._hyper_13_20_chunk |   24
- _timescaledb_internal._hyper_13_22_chunk |  115
+ _timescaledb_internal._hyper_13_21_chunk |   23
+ _timescaledb_internal._hyper_13_21_chunk |   24
+ _timescaledb_internal._hyper_13_23_chunk |  115
 (3 rows)
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
-NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
+NOTICE:  chunk "_hyper_13_21_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_13_20_chunk
- _timescaledb_internal._hyper_13_22_chunk
+ _timescaledb_internal._hyper_13_21_chunk
+ _timescaledb_internal._hyper_13_23_chunk
 (2 rows)
 
 -- should be ordered append
@@ -880,18 +880,18 @@ NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+         Sort Key: _hyper_13_21_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_21_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_14_21_chunk
+                     Sort Key: compress_hyper_14_22_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_14_22_chunk
          ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
+               Sort Key: _hyper_13_21_chunk."time"
+               ->  Seq Scan on _hyper_13_21_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_23_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_14_23_chunk
+               Sort Key: compress_hyper_14_24_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_24_chunk
 (15 rows)
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
@@ -926,7 +926,7 @@ ALTER TABLE conditions SET (timescaledb.compress);
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_15_24_chunk
+ _timescaledb_internal._hyper_15_25_chunk
 (1 row)
 
 SELECT chunk_name, range_start, range_end, is_compressed
@@ -934,7 +934,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions';
      chunk_name     |         range_start          |          range_end           | is_compressed 
 --------------------+------------------------------+------------------------------+---------------
- _hyper_15_24_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
+ _hyper_15_25_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
 (1 row)
 
 --now insert into compressed chunk

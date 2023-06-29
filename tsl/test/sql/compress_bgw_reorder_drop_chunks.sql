@@ -63,7 +63,7 @@ ALTER TABLE test_retention_table set (timescaledb.compress, timescaledb.compress
 SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test_retention_table' and chunk.compressed_chunk_id IS NULL;
+WHERE hypertable.table_name like 'test_retention_table' and chunk.status & 1 = 0;
 
 --make sure same # of compressed and uncompressed chunks before policy
 SELECT count(*) as count_chunks_uncompressed
@@ -128,9 +128,10 @@ WHERE hypertable.table_name like 'test_reorder_chunks_table';
 -- and 2 compressed ones:
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test_reorder_chunks_table';
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (chunk.hypertable_id = uncomp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test_reorder_chunks_table'
+AND chunk.status & 1 > 0;
 
 -- enable reorder policy
 SELECT add_reorder_policy('test_reorder_chunks_table', 'test_reorder_chunks_table_time_idx') AS reorder_job_id \gset

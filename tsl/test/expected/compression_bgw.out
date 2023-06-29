@@ -75,11 +75,13 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
  id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   4 | f       |      1 | f
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                     | f       |      0 | f
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |                     | f       |      0 | f
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   2 | f       |      1 | f
+  2 |             2 | _timescaledb_internal | compress_hyper_2_2_chunk |                     | f       |      0 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |                   4 | f       |      0 | f
   4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
-(4 rows)
+  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk         |                   6 | f       |      0 | f
+  6 |             2 | _timescaledb_internal | compress_hyper_2_6_chunk |                     | f       |      0 | f
+(6 rows)
 
 -- TEST 4 --
 --cannot set another policy
@@ -131,7 +133,7 @@ ERROR:  relation is not a hypertable or continuous aggregate
 \set ON_ERROR_STOP 1
 -- We're done with the table, so drop it.
 DROP TABLE IF EXISTS conditions CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_2_4_chunk
+NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to view dummyv1
 --TEST 7
 --compression policy for smallint, integer or bigint based partition hypertable
@@ -172,8 +174,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
 ------------------+--------------------------------+-------------------------------
- _hyper_3_5_chunk |                          24576 |                         16384
- _hyper_3_6_chunk |                          24576 |                         16384
+ _hyper_3_7_chunk |                          24576 |                         16384
+ _hyper_3_8_chunk |                          24576 |                         16384
 (2 rows)
 
 --integer tests
@@ -209,8 +211,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_5_12_chunk |                          24576 |                         16384
- _hyper_5_13_chunk |                          24576 |                         16384
+ _hyper_5_17_chunk |                          24576 |                         16384
+ _hyper_5_18_chunk |                          24576 |                         16384
 (2 rows)
 
 --bigint test
@@ -246,8 +248,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_7_19_chunk |                          24576 |                         16384
- _hyper_7_20_chunk |                          24576 |                         16384
+ _hyper_7_27_chunk |                          24576 |                         16384
+ _hyper_7_28_chunk |                          24576 |                         16384
 (2 rows)
 
 --TEST 8
@@ -345,7 +347,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
 set client_min_messages TO LOG;
 CALL run_job(:job_id);
 LOG:  statement: CALL run_job(1004);
-LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
+LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_51_chunk
 set client_min_messages TO NOTICE;
 LOG:  statement: set client_min_messages TO NOTICE;
 SELECT count(*) FROM timescaledb_information.chunks
@@ -388,9 +390,9 @@ timescaledb.compress_segmentby = 'b',
 timescaledb.compress_orderby = 'timec DESC');
 SELECT compress_chunk(c)
 FROM show_chunks('test2') c;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_14_103_chunk
 (1 row)
 
 ---insert into the middle of the range ---
@@ -415,9 +417,9 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
- chunk_status |     CHUNK_NAME     
---------------+--------------------
-            9 | _hyper_14_62_chunk
+ chunk_status |     CHUNK_NAME      
+--------------+---------------------
+            9 | _hyper_14_103_chunk
 (1 row)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
@@ -452,9 +454,9 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
- chunk_status |     CHUNK_NAME     
---------------+--------------------
-            1 | _hyper_14_62_chunk
+ chunk_status |     CHUNK_NAME      
+--------------+---------------------
+            1 | _hyper_14_103_chunk
 (1 row)
 
 --- insert into a compressed chunk again + a new chunk--
@@ -479,10 +481,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
- chunk_status |     CHUNK_NAME     
---------------+--------------------
-            9 | _hyper_14_62_chunk
-            0 | _hyper_14_64_chunk
+ chunk_status |     CHUNK_NAME      
+--------------+---------------------
+            9 | _hyper_14_103_chunk
+            0 | _hyper_14_105_chunk
 (2 rows)
 
 SELECT add_compression_policy AS job_id
@@ -494,24 +496,24 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
- chunk_status |     CHUNK_NAME     
---------------+--------------------
-            1 | _hyper_14_62_chunk
-            1 | _hyper_14_64_chunk
+ chunk_status |     CHUNK_NAME      
+--------------+---------------------
+            1 | _hyper_14_103_chunk
+            1 | _hyper_14_105_chunk
 (2 rows)
 
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
 CALL recompress_chunk(:'CHUNK_NAME'::regclass, true);
-psql:include/recompress_basic.sql:110: NOTICE:  nothing to recompress in chunk "_hyper_14_62_chunk"
+psql:include/recompress_basic.sql:110: NOTICE:  nothing to recompress in chunk "_hyper_14_103_chunk"
 -- This will succeed and compress the chunk for the test below.
 CALL recompress_chunk(:'CHUNK_NAME'::regclass, false);
-psql:include/recompress_basic.sql:113: ERROR:  nothing to recompress in chunk "_hyper_14_62_chunk"
+psql:include/recompress_basic.sql:113: ERROR:  nothing to recompress in chunk "_hyper_14_103_chunk"
 --now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
-             decompress_chunk             
-------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+             decompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_14_103_chunk
 (1 row)
 
 CALL recompress_chunk(:'CHUNK_NAME'::regclass);

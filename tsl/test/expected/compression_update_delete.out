@@ -265,7 +265,7 @@ SELECT compress_chunk(show_chunks('sample_table'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_5_chunk
- _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_3_7_chunk
 (2 rows)
 
 -- get FIRST compressed chunk
@@ -436,7 +436,7 @@ SELECT compress_chunk(show_chunks('sample_table'));
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
+ _timescaledb_internal._hyper_5_11_chunk
 (2 rows)
 
 -- get FIRST compressed chunk
@@ -623,7 +623,7 @@ SELECT compress_chunk(show_chunks('sample_table'));
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_19_chunk
- _timescaledb_internal._hyper_9_20_chunk
+ _timescaledb_internal._hyper_9_21_chunk
 (2 rows)
 
 -- get FIRST compressed chunk
@@ -707,7 +707,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
             9 | _hyper_9_19_chunk
-            9 | _hyper_9_20_chunk
+            9 | _hyper_9_21_chunk
 (2 rows)
 
 DROP TABLE sample_table;
@@ -733,7 +733,7 @@ SELECT compress_chunk(show_chunks('sample_table'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_23_chunk
- _timescaledb_internal._hyper_11_24_chunk
+ _timescaledb_internal._hyper_11_25_chunk
 (2 rows)
 
 -- get FIRST compressed chunk
@@ -769,7 +769,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
             1 | _hyper_11_23_chunk
-            9 | _hyper_11_24_chunk
+            9 | _hyper_11_25_chunk
 (2 rows)
 
 DROP TABLE sample_table;
@@ -796,7 +796,7 @@ SELECT compress_chunk(show_chunks('sample_table'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_27_chunk
- _timescaledb_internal._hyper_13_28_chunk
+ _timescaledb_internal._hyper_13_29_chunk
 (2 rows)
 
 -- test will multiple NULL/NOT NULL columns
@@ -945,7 +945,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
             9 | _hyper_13_27_chunk
-            1 | _hyper_13_28_chunk
+            1 | _hyper_13_29_chunk
 (2 rows)
 
 -- added tests for code coverage
@@ -994,26 +994,16 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
             1 | _hyper_15_32_chunk
 (2 rows)
 
--- get FIRST uncompressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
-ORDER BY ch1.id LIMIT 1 \gset
--- get SECOND uncompressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_2"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
-ORDER BY ch1.id DESC LIMIT 1 \gset
--- get FIRST compressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
-ORDER BY ch1.id LIMIT 1 \gset
--- get SECOND compressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_2"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
-ORDER BY ch1.id DESC LIMIT 1 \gset
+-- get FIRST chunk
+SELECT ch.schema_name || '.' || ch.table_name AS "UNCOMPRESS_CHUNK_1", ch1.schema_name || '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ch.hypertable_id = ht.id AND ht.table_name = 'sample_table' and ch.compressed_chunk_id = ch1.id
+ORDER BY ch.id LIMIT 1 \gset
+-- get SECOND chunk
+SELECT ch.schema_name || '.' || ch.table_name AS "UNCOMPRESS_CHUNK_2", ch1.schema_name || '.' || ch1.table_name AS "COMPRESS_CHUNK_2"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ch.hypertable_id = ht.id AND ht.table_name = 'sample_table' and ch.compressed_chunk_id = ch1.id
+ORDER BY ch.id DESC LIMIT 1 \gset
 -- ensure segment by column index position in compressed and uncompressed
 -- chunk is different
 SELECT attname, attnum
@@ -2052,23 +2042,23 @@ SELECT compress_chunk(show_chunks('join_test1'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_25_51_chunk
- _timescaledb_internal._hyper_25_52_chunk
  _timescaledb_internal._hyper_25_53_chunk
+ _timescaledb_internal._hyper_25_55_chunk
 (3 rows)
 
 SELECT compress_chunk(show_chunks('join_test2'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_26_54_chunk
+ _timescaledb_internal._hyper_26_57_chunk
 (1 row)
 
 SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      1
- join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      1
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 BEGIN;
@@ -2078,9 +2068,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      9
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 ROLLBACK;
@@ -2091,9 +2081,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      1
- join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      9
+ join_test1 | _hyper_25_55_chunk |      1
+ join_test2 | _hyper_26_57_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2104,9 +2094,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      1
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 ROLLBACK;
@@ -2117,9 +2107,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      9
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 ROLLBACK;
@@ -2130,9 +2120,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      9
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 ROLLBACK;
@@ -2143,9 +2133,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      1
- join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      9
+ join_test1 | _hyper_25_55_chunk |      1
+ join_test2 | _hyper_26_57_chunk |      9
 (4 rows)
 
 ROLLBACK;
@@ -2156,9 +2146,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      1
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 ROLLBACK;
@@ -2169,9 +2159,9 @@ SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
 ------------+--------------------+--------
  join_test1 | _hyper_25_51_chunk |      9
- join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
- join_test2 | _hyper_26_54_chunk |      1
+ join_test1 | _hyper_25_55_chunk |      9
+ join_test2 | _hyper_26_57_chunk |      1
 (4 rows)
 
 ROLLBACK;

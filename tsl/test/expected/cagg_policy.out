@@ -1126,7 +1126,7 @@ ALTER TABLE metrics SET ( timescaledb.compress );
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_18_19_chunk
+ _timescaledb_internal._hyper_18_24_chunk
 (1 row)
 
 CREATE MATERIALIZED VIEW metrics_cagg WITH (timescaledb.continuous,

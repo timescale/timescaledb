@@ -59,7 +59,7 @@ ERROR:  must be owner of table conditions
 --- compress_chunks and decompress_chunks fail without correct perm --
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.status & 1 = 0;
 ERROR:  must be owner of hypertable "conditions"
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
@@ -83,7 +83,7 @@ ERROR:  must be owner of hypertable "conditions"
 GRANT SELECT on conditions to :ROLE_DEFAULT_PERM_USER_2;
 select count(*) from
 (select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL ) as subq;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.status & 1 = 0 ) as subq;
  count 
 -------
      2
@@ -157,7 +157,7 @@ select count(*) from v2;
 ERROR:  permission denied for table conditions
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to view v2
 -- Testing that permissions propagate to compressed hypertables and to
 -- compressed chunks.
@@ -185,11 +185,11 @@ SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 SELECT compress_chunk(show_chunks('conditions'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_6_chunk
  _timescaledb_internal._hyper_3_7_chunk
- _timescaledb_internal._hyper_3_8_chunk
  _timescaledb_internal._hyper_3_9_chunk
- _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_13_chunk
+ _timescaledb_internal._hyper_3_15_chunk
 (5 rows)
 
 -- Check that ACL propagates to compressed hypertable.  We could prune
@@ -209,7 +209,7 @@ ORDER BY hypertable, chunk;
 -[ RECORD 1 ]--+------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | 
-chunk          | _timescaledb_internal.compress_hyper_4_11_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_10_chunk
 chunk_acl      | 
 -[ RECORD 2 ]--+------------------------------------------------
 hypertable     | public.conditions
@@ -219,17 +219,17 @@ chunk_acl      |
 -[ RECORD 3 ]--+------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | 
-chunk          | _timescaledb_internal.compress_hyper_4_13_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_14_chunk
 chunk_acl      | 
 -[ RECORD 4 ]--+------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | 
-chunk          | _timescaledb_internal.compress_hyper_4_14_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_16_chunk
 chunk_acl      | 
 -[ RECORD 5 ]--+------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | 
-chunk          | _timescaledb_internal.compress_hyper_4_15_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_8_chunk
 chunk_acl      | 
 
 GRANT SELECT ON conditions TO :ROLE_DEFAULT_PERM_USER;
@@ -246,7 +246,7 @@ ORDER BY hypertable, chunk;
 -[ RECORD 1 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_11_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_10_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 2 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
@@ -256,17 +256,17 @@ chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 3 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_13_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_14_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 4 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_14_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_16_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 5 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_15_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_8_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 
 -- Add some new data and compress the chunks. The chunks should get
@@ -276,17 +276,17 @@ INSERT INTO conditions
 SELECT generate_series('2019-01-07 00:00'::timestamp, '2019-02-07 00:00'::timestamp, '1 day'), 'XYZ', 47, 11;
 SELECT compress_chunk(show_chunks('conditions', newer_than => '2019-01-01'));
 -[ RECORD 1 ]--+----------------------------------------
-compress_chunk | _timescaledb_internal._hyper_3_16_chunk
--[ RECORD 2 ]--+----------------------------------------
 compress_chunk | _timescaledb_internal._hyper_3_17_chunk
--[ RECORD 3 ]--+----------------------------------------
-compress_chunk | _timescaledb_internal._hyper_3_18_chunk
--[ RECORD 4 ]--+----------------------------------------
+-[ RECORD 2 ]--+----------------------------------------
 compress_chunk | _timescaledb_internal._hyper_3_19_chunk
--[ RECORD 5 ]--+----------------------------------------
-compress_chunk | _timescaledb_internal._hyper_3_20_chunk
--[ RECORD 6 ]--+----------------------------------------
+-[ RECORD 3 ]--+----------------------------------------
 compress_chunk | _timescaledb_internal._hyper_3_21_chunk
+-[ RECORD 4 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_3_23_chunk
+-[ RECORD 5 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_3_25_chunk
+-[ RECORD 6 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_3_27_chunk
 
 SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
   FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
@@ -294,7 +294,7 @@ ORDER BY hypertable, chunk;
 -[ RECORD 1 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_11_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_10_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 2 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
@@ -304,27 +304,27 @@ chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 3 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_13_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_14_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 4 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_14_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_16_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 5 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_15_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_18_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 6 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_22_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_20_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 7 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_23_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_22_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 8 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
@@ -334,17 +334,17 @@ chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 9 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_25_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_26_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 10 ]-+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_26_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_28_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 -[ RECORD 11 ]-+---------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
-chunk          | _timescaledb_internal.compress_hyper_4_27_chunk
+chunk          | _timescaledb_internal.compress_hyper_4_8_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 
 \x off

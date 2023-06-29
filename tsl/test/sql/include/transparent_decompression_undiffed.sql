@@ -17,7 +17,7 @@ INSERT into readings select g, 1, 1.3 from generate_series('2001-03-01 01:01:01'
 SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name))
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name = 'readings' and chunk.compressed_chunk_id IS NULL;
+WHERE hypertable.table_name = 'readings' and chunk.status & 1 = 0;
 
 EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t

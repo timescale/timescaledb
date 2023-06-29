@@ -135,7 +135,7 @@ step s3_select_on_compressed_chunk:
       INNER JOIN _timescaledb_catalog.chunk c  
       ON h.id = c.hypertable_id 
       WHERE h.table_name = 'sensor_data' 
-      AND c.compressed_chunk_id IS NOT NULL;
+      AND c.status = 1;
       EXECUTE format('SELECT * 
         FROM _timescaledb_internal.compress_hyper_%s_%s_chunk 
         WHERE sensor_id = 40 

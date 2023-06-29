@@ -39,9 +39,9 @@ WHERE time > 2::bigint and time < 4;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
    Filter: ((_hyper_1_1_chunk."time" > '2'::bigint) AND (_hyper_1_1_chunk."time" < 4))
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-         Output: compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.val, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
-         Filter: ((compress_hyper_2_3_chunk._ts_meta_max_1 > '2'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_min_1 < 4))
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+         Output: compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk.device_id, compress_hyper_2_2_chunk.val, compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_sequence_num, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1
+         Filter: ((compress_hyper_2_2_chunk._ts_meta_max_1 > '2'::bigint) AND (compress_hyper_2_2_chunk._ts_meta_min_1 < 4))
 (5 rows)
 
 explain (costs off, verbose)
@@ -52,9 +52,9 @@ WHERE time = 3::bigint;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
    Filter: (_hyper_1_1_chunk."time" = '3'::bigint)
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-         Output: compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.val, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
-         Filter: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= '3'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= '3'::bigint))
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+         Output: compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk.device_id, compress_hyper_2_2_chunk.val, compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_sequence_num, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1
+         Filter: ((compress_hyper_2_2_chunk._ts_meta_min_1 <= '3'::bigint) AND (compress_hyper_2_2_chunk._ts_meta_max_1 >= '3'::bigint))
 (5 rows)
 
 SELECT *
@@ -105,7 +105,7 @@ INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00'
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_5_chunk
 (1 row)
 
 select factorid, end_dt, logret
@@ -127,14 +127,14 @@ order by factorid, end_dt;
                                                                                                                                                                                                                         QUERY PLAN                                                                                                                                                                                                                         
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
-   Sort Key: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_4_chunk
-         Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
-         Filter: ((_hyper_3_4_chunk.end_dt >= '12-10-2012'::date) AND (_hyper_3_4_chunk.end_dt <= '12-11-2012'::date) AND (_hyper_3_4_chunk.fmid = 56))
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_5_chunk
-               Output: compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.start_dt, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.interval_number, compress_hyper_4_5_chunk.logret, compress_hyper_4_5_chunk.knowledge_date, compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk._ts_meta_sequence_num, compress_hyper_4_5_chunk._ts_meta_min_1, compress_hyper_4_5_chunk._ts_meta_max_1
-               Filter: ((compress_hyper_4_5_chunk._ts_meta_max_1 >= '12-10-2012'::date) AND (compress_hyper_4_5_chunk._ts_meta_min_1 <= '12-11-2012'::date))
+   Output: _hyper_3_5_chunk.factorid, _hyper_3_5_chunk.end_dt, _hyper_3_5_chunk.logret
+   Sort Key: _hyper_3_5_chunk.factorid, _hyper_3_5_chunk.end_dt
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_5_chunk
+         Output: _hyper_3_5_chunk.factorid, _hyper_3_5_chunk.end_dt, _hyper_3_5_chunk.logret
+         Filter: ((_hyper_3_5_chunk.end_dt >= '12-10-2012'::date) AND (_hyper_3_5_chunk.end_dt <= '12-11-2012'::date) AND (_hyper_3_5_chunk.fmid = 56))
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_6_chunk
+               Output: compress_hyper_4_6_chunk.fmid, compress_hyper_4_6_chunk.factorid, compress_hyper_4_6_chunk.start_dt, compress_hyper_4_6_chunk.end_dt, compress_hyper_4_6_chunk.interval_number, compress_hyper_4_6_chunk.logret, compress_hyper_4_6_chunk.knowledge_date, compress_hyper_4_6_chunk._ts_meta_count, compress_hyper_4_6_chunk._ts_meta_sequence_num, compress_hyper_4_6_chunk._ts_meta_min_1, compress_hyper_4_6_chunk._ts_meta_max_1
+               Filter: ((compress_hyper_4_6_chunk._ts_meta_max_1 >= '12-10-2012'::date) AND (compress_hyper_4_6_chunk._ts_meta_min_1 <= '12-11-2012'::date))
 (9 rows)
 
 --no pushdown here
@@ -157,13 +157,13 @@ order by factorid, end_dt;
                                                                                                                                                                                                                         QUERY PLAN                                                                                                                                                                                                                         
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
-   Sort Key: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_4_chunk
-         Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
-         Filter: ((_hyper_3_4_chunk.fmid = 56) AND ((_hyper_3_4_chunk.end_dt)::date >= 'Mon Dec 10 00:00:00 2012'::timestamp without time zone) AND ((_hyper_3_4_chunk.end_dt)::date <= '12-11-2012'::date))
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_5_chunk
-               Output: compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.start_dt, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.interval_number, compress_hyper_4_5_chunk.logret, compress_hyper_4_5_chunk.knowledge_date, compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk._ts_meta_sequence_num, compress_hyper_4_5_chunk._ts_meta_min_1, compress_hyper_4_5_chunk._ts_meta_max_1
+   Output: _hyper_3_5_chunk.factorid, _hyper_3_5_chunk.end_dt, _hyper_3_5_chunk.logret
+   Sort Key: _hyper_3_5_chunk.factorid, _hyper_3_5_chunk.end_dt
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_5_chunk
+         Output: _hyper_3_5_chunk.factorid, _hyper_3_5_chunk.end_dt, _hyper_3_5_chunk.logret
+         Filter: ((_hyper_3_5_chunk.fmid = 56) AND ((_hyper_3_5_chunk.end_dt)::date >= 'Mon Dec 10 00:00:00 2012'::timestamp without time zone) AND ((_hyper_3_5_chunk.end_dt)::date <= '12-11-2012'::date))
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_6_chunk
+               Output: compress_hyper_4_6_chunk.fmid, compress_hyper_4_6_chunk.factorid, compress_hyper_4_6_chunk.start_dt, compress_hyper_4_6_chunk.end_dt, compress_hyper_4_6_chunk.interval_number, compress_hyper_4_6_chunk.logret, compress_hyper_4_6_chunk.knowledge_date, compress_hyper_4_6_chunk._ts_meta_count, compress_hyper_4_6_chunk._ts_meta_sequence_num, compress_hyper_4_6_chunk._ts_meta_min_1, compress_hyper_4_6_chunk._ts_meta_max_1
 (8 rows)
 
 --should fail
@@ -192,39 +192,39 @@ INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
 SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_6_chunk
+ _timescaledb_internal._hyper_5_7_chunk
 (1 row)
 
 ANALYZE pushdown_relabel;
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
                      QUERY PLAN                     
 ----------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Seq Scan on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Seq Scan on compress_hyper_6_8_chunk
          Filter: ((dev_vc)::text = 'varchar'::text)
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
                     QUERY PLAN                     
 ---------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Seq Scan on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Seq Scan on compress_hyper_6_8_chunk
          Filter: (dev_c = 'char'::bpchar)
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Seq Scan on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Seq Scan on compress_hyper_6_8_chunk
          Filter: (((dev_vc)::text = 'varchar'::text) AND (dev_c = 'char'::bpchar))
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Seq Scan on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Seq Scan on compress_hyper_6_8_chunk
          Filter: (((dev_vc)::bpchar = 'varchar   '::character(10)) AND (dev_c = 'char'::bpchar))
 (3 rows)
 
@@ -233,32 +233,32 @@ SET enable_seqscan TO false;
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Index Scan using compress_hyper_6_8_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_8_chunk
          Index Cond: ((dev_vc)::text = 'varchar'::text)
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Index Scan using compress_hyper_6_8_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_8_chunk
          Index Cond: (dev_c = 'char'::bpchar)
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Index Scan using compress_hyper_6_8_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_8_chunk
          Index Cond: (((dev_vc)::text = 'varchar'::text) AND (dev_c = 'char'::bpchar))
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_7_chunk
+ Custom Scan (DecompressChunk) on _hyper_5_7_chunk
+   ->  Index Scan using compress_hyper_6_8_chunk__compressed_hypertable_6_dev_vc_dev_c_ on compress_hyper_6_8_chunk
          Index Cond: (dev_c = 'char'::bpchar)
          Filter: ((dev_vc)::bpchar = 'varchar   '::character(10))
 (4 rows)
@@ -283,15 +283,15 @@ ALTER TABLE deleteme SET (
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_8_chunk
+ _timescaledb_internal._hyper_7_9_chunk
 (1 row)
 
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
                        QUERY PLAN                        
 ---------------------------------------------------------
  Aggregate
-   ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
-         ->  Seq Scan on compress_hyper_8_9_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_7_9_chunk
+         ->  Seq Scan on compress_hyper_8_10_chunk
                Filter: ((segment)::text ~~ '%4%'::text)
 (4 rows)
 
@@ -299,8 +299,8 @@ EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
                        QUERY PLAN                        
 ---------------------------------------------------------
  Aggregate
-   ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
-         ->  Seq Scan on compress_hyper_8_9_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_7_9_chunk
+         ->  Seq Scan on compress_hyper_8_10_chunk
                Filter: ('4'::text = (segment)::text)
 (4 rows)
 
@@ -320,15 +320,15 @@ ALTER TABLE deleteme_with_bytea SET (
 SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_9_10_chunk
+ _timescaledb_internal._hyper_9_11_chunk
 (1 row)
 
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Result
-   ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
-         ->  Index Scan using compress_hyper_10_11_chunk__compressed_hypertable_10_bdata__ts_ on compress_hyper_10_11_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_11_chunk
+         ->  Index Scan using compress_hyper_10_12_chunk__compressed_hypertable_10_bdata__ts_ on compress_hyper_10_12_chunk
                Index Cond: (bdata = '\x'::bytea)
 (4 rows)
 
@@ -336,8 +336,8 @@ EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123
                         QUERY PLAN                        
 ----------------------------------------------------------
  Result
-   ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
-         ->  Seq Scan on compress_hyper_10_11_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_11_chunk
+         ->  Seq Scan on compress_hyper_10_12_chunk
                Filter: ((bdata)::text = '123'::text)
 (4 rows)
 

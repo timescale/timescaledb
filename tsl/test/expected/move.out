@@ -482,6 +482,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 SELECT * FROM test.show_indexesp('_timescaledb_internal.compress_hyper%_chunk');
                      Table                      |                                         Index                                         |             Columns              | Expr | Unique | Primary | Exclusion | Tablespace  
 ------------------------------------------------+---------------------------------------------------------------------------------------+----------------------------------+------+--------+---------+-----------+-------------
- _timescaledb_internal.compress_hyper_2_3_chunk | _timescaledb_internal.compress_hyper_2_3_chunk__compressed_hypertable_2_location__ts_ | {location,_ts_meta_sequence_num} |      | f      | f       | f         | tablespace1
-(1 row)
+ _timescaledb_internal.compress_hyper_2_3_chunk | _timescaledb_internal.compress_hyper_2_3_chunk__compressed_hypertable_2_location__ts_ | {location,_ts_meta_sequence_num} |      | f      | f       | f         | 
+ _timescaledb_internal.compress_hyper_2_4_chunk | _timescaledb_internal.compress_hyper_2_4_chunk__compressed_hypertable_2_location__ts_ | {location,_ts_meta_sequence_num} |      | f      | f       | f         | tablespace1
+(2 rows)
 

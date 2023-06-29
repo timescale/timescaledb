@@ -1,0 +1,74 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE conditions (
+    "time" TIMESTAMPTZ NOT NULL,
+    city TEXT NOT NULL,
+    temperature INTEGER NOT NULL,
+    device_id INTEGER NOT NULL
+);
+SELECT table_name FROM create_hypertable('conditions', 'time');
+ table_name 
+------------
+ conditions
+(1 row)
+
+INSERT INTO
+    conditions ("time", city, temperature, device_id)
+VALUES
+  ('2021-06-14 00:00:00-00', 'Moscow', 26,1),
+  ('2021-06-15 00:00:00-00', 'Berlin', 22,2),
+  ('2021-06-16 00:00:00-00', 'Stockholm', 24,3),
+  ('2021-06-17 00:00:00-00', 'London', 24,4),
+  ('2021-06-18 00:00:00-00', 'London', 27,4),
+  ('2021-06-19 00:00:00-00', 'Moscow', 28,4);
+ALTER TABLE conditions SET (timescaledb.compress);
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY 1,2;
+ id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   3 | f       |      0 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                   4 | f       |      0 | f
+  3 |             2 | _timescaledb_internal | compress_hyper_2_3_chunk |                     | f       |      0 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
+(4 rows)
+
+UPDATE _timescaledb_catalog.chunk SET compressed_chunk_id = NULL WHERE id = 1;
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY 1,2;
+ id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                     | f       |      0 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                   4 | f       |      0 | f
+  3 |             2 | _timescaledb_internal | compress_hyper_2_3_chunk |                     | f       |      0 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
+(4 rows)
+
+SELECT _timescaledb_functions.create_compressed_chunks_for_hypertable('conditions');
+ create_compressed_chunks_for_hypertable 
+-----------------------------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
+  3 |             2 | _timescaledb_internal | compress_hyper_2_3_chunk |                     | f       |      0 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                   4 | f       |      0 | f
+  5 |             2 | _timescaledb_internal | compress_hyper_2_5_chunk |                     | f       |      0 | f
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   5 | f       |      0 | f
+(5 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id |      schema_name      |        table_name        | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
+----+-----------------------+--------------------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
+  2 | _timescaledb_internal | _compressed_hypertable_2 | _timescaledb_internal  | _hyper_2                |              0 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 2 |                          |                   
+  1 | public                | conditions               | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                        2 |                   
+(2 rows)
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunks_for_hypertable('_timescaledb_internal._compressed_hypertable_2');
+ERROR:  hypertable doesn't have compression enabled
+SELECT _timescaledb_functions.create_compressed_chunks_for_hypertable('nonexistant');
+ERROR:  relation "nonexistant" does not exist at character 71
+\set ON_ERROR_STOP 1

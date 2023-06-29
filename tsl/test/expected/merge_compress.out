@@ -29,7 +29,7 @@ INSERT INTO target (series_id, value, partition_column)
 -- compress chunks
 SELECT count(compress_chunk(c.schema_name|| '.' || c.table_name))
   FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where
-    c.hypertable_id = ht.id and ht.table_name = 'target' and c.compressed_chunk_id IS NULL;
+    c.hypertable_id = ht.id and ht.table_name = 'target' and c.status & 1 = 0;
  count 
 -------
      4

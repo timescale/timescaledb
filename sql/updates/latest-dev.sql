@@ -167,3 +167,6 @@ ALTER FUNCTION _timescaledb_internal.finalize_agg_ffunc(internal,text,name,name,
 ALTER FUNCTION _timescaledb_internal.finalize_agg_sfunc(internal,text,name,name,name[],bytea,anyelement) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.partialize_agg(anyelement) SET SCHEMA _timescaledb_functions;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunks_for_hypertable(
+    hypertable REGCLASS
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_create_compressed_chunks_for_hypertable' LANGUAGE C STRICT VOLATILE;

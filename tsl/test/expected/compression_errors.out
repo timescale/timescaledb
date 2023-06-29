@@ -226,15 +226,15 @@ select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _time
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1;
-ERROR:  chunk "_hyper_15_2_chunk" is not compressed
+ERROR:  chunk "_hyper_15_2_chunk" is already decompressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1 \gset
 select decompress_chunk(:'CHUNK_NAME');
-ERROR:  chunk "_hyper_15_2_chunk" is not compressed
+ERROR:  chunk "_hyper_15_2_chunk" is already decompressed
 select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
-NOTICE:  chunk "_hyper_15_2_chunk" is not compressed
+NOTICE:  chunk "_hyper_15_2_chunk" is already decompressed
  decompress_chunk 
 ------------------
  
@@ -274,7 +274,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ERROR:  missing compressed hypertable
 --should succeed
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' and ch1.compressed_chunk_id IS NOT NULL;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' and ch1.status & 1 > 0;
             decompress_chunk             
 -----------------------------------------
  _timescaledb_internal._hyper_15_2_chunk
@@ -388,9 +388,9 @@ where ch1.hypertable_id = ht.id and ht.table_name like 'table_constr'
 ORDER BY ch1.id limit 1 \gset
 -- we have 1 compressed and 1 uncompressed chunk after this.
 select compress_chunk(:'CHUNK_NAME');
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_19_7_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_19_18_chunk
 (1 row)
 
 SELECT  total_chunks , number_compressed_chunks
@@ -427,7 +427,7 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
 SELECT compress_chunk(:'CHUNK_NAME');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_25_10_chunk
+ _timescaledb_internal._hyper_25_22_chunk
 (1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
@@ -437,7 +437,7 @@ DETAIL:  There are compressed chunks that prevent changing the existing compress
 SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_25_10_chunk
+ _timescaledb_internal._hyper_25_22_chunk
 (1 row)
 
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
@@ -532,7 +532,7 @@ FROM generate_series('2021-08-17 00:00:00'::timestamp,
 SELECT compress_chunk(show_chunks('metric'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_17_chunk
+ _timescaledb_internal._hyper_29_34_chunk
 (1 row)
 
 -- column does not exist the first time
@@ -583,14 +583,14 @@ EXPLAIN SELECT DISTINCT 1 FROM test;
 ----------------------------------------------------------------------------------
  Unique  (cost=0.00..50.80 rows=1 width=4)
    ->  Result  (cost=0.00..50.80 rows=2040 width=4)
-         ->  Seq Scan on _hyper_31_19_chunk  (cost=0.00..30.40 rows=2040 width=0)
+         ->  Seq Scan on _hyper_31_36_chunk  (cost=0.00..30.40 rows=2040 width=0)
 (3 rows)
 
 --compress chunks
 SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_31_19_chunk
+ _timescaledb_internal._hyper_31_36_chunk
 (1 row)
 
 ANALYZE test;
@@ -607,8 +607,8 @@ EXPLAIN SELECT DISTINCT 1 FROM test;
 ------------------------------------------------------------------------------------------------------
  Unique  (cost=0.51..21.02 rows=1 width=4)
    ->  Result  (cost=0.51..21.02 rows=2000 width=4)
-         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
-               ->  Seq Scan on compress_hyper_32_20_chunk  (cost=0.00..1.02 rows=2 width=4)
+         ->  Custom Scan (DecompressChunk) on _hyper_31_36_chunk  (cost=0.51..1.02 rows=2000 width=0)
+               ->  Seq Scan on compress_hyper_32_37_chunk  (cost=0.00..1.02 rows=2 width=4)
 (4 rows)
 
 --github issue 4398
@@ -632,6 +632,7 @@ INSERT INTO ts_table SELECT * FROM data_table;
 --cleanup tables
 DROP TABLE data_table cascade;
 DROP TABLE ts_table cascade;
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_34_39_chunk
 -- #5458 invalid reads for row expressions after column dropped on compressed tables
 CREATE TABLE readings(
     "time"  TIMESTAMPTZ NOT NULL,
@@ -651,7 +652,7 @@ ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 
 SELECT compress_chunk(show_chunks('readings'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
+ _timescaledb_internal._hyper_35_40_chunk
 (1 row)
 
 ALTER TABLE readings DROP COLUMN battery_status;
@@ -665,25 +666,25 @@ SELECT readings FROM readings;
 
 -- #5577 On-insert decompression after schema changes may not work properly
 SELECT decompress_chunk(show_chunks('readings'),true);
-NOTICE:  chunk "_hyper_35_24_chunk" is not compressed
+NOTICE:  chunk "_hyper_35_42_chunk" is already decompressed
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
+ _timescaledb_internal._hyper_35_40_chunk
  
 (2 rows)
 
 SELECT compress_chunk(show_chunks('readings'),true);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
- _timescaledb_internal._hyper_35_24_chunk
+ _timescaledb_internal._hyper_35_40_chunk
+ _timescaledb_internal._hyper_35_42_chunk
 (2 rows)
 
 \set ON_ERROR_STOP 0
 INSERT INTO readings ("time", battery_temperature) VALUES
     ('2022-11-11 11:11:11',0.2) -- same record as inserted
 ;
-ERROR:  duplicate key value violates unique constraint "_hyper_35_24_chunk_readings_uniq_idx"
+ERROR:  duplicate key value violates unique constraint "_hyper_35_42_chunk_readings_uniq_idx"
 \set ON_ERROR_STOP 1
 SELECT * from readings;
              time             | battery_temperature 
@@ -702,8 +703,8 @@ SELECT assert_equal(count(1), 2::bigint) FROM readings;
 SELECT decompress_chunk(show_chunks('readings'),true);
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
- _timescaledb_internal._hyper_35_24_chunk
+ _timescaledb_internal._hyper_35_40_chunk
+ _timescaledb_internal._hyper_35_42_chunk
 (2 rows)
 
 -- #5553 Unique constraints are not always respected on compressed tables
@@ -725,19 +726,19 @@ ALTER TABLE main_table SET (
 SELECT compress_chunk(show_chunks('main_table'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_37_27_chunk
+ _timescaledb_internal._hyper_37_44_chunk
 (1 row)
 
 -- insert rejected
 \set ON_ERROR_STOP 0
 INSERT INTO main_table VALUES
     ('2011-11-11 11:11:11', 'foo');
-ERROR:  duplicate key value violates unique constraint "_hyper_37_27_chunk_xm"
+ERROR:  duplicate key value violates unique constraint "_hyper_37_44_chunk_xm"
 -- insert rejected in case 1st row doesn't violate constraint with different segmentby
 INSERT INTO main_table VALUES
     ('2011-11-11 11:12:11', 'bar'),
     ('2011-11-11 11:11:11', 'foo');
-ERROR:  duplicate key value violates unique constraint "_hyper_37_27_chunk_xm"
+ERROR:  duplicate key value violates unique constraint "_hyper_37_44_chunk_xm"
 \set ON_ERROR_STOP 1
 SELECT assert_equal(count(1), 1::bigint) FROM main_table;
  assert_equal 
@@ -749,7 +750,7 @@ SELECT assert_equal(count(1), 1::bigint) FROM main_table;
 SELECT decompress_chunk(show_chunks('main_table'), TRUE);
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_37_27_chunk
+ _timescaledb_internal._hyper_37_44_chunk
 (1 row)
 
 DROP TABLE IF EXISTS readings;
@@ -775,7 +776,7 @@ INSERT INTO readings("time", candy, battery_temperature)
 SELECT compress_chunk(show_chunks('readings'), TRUE);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_39_29_chunk
+ _timescaledb_internal._hyper_39_46_chunk
 (1 row)
 
 -- no error happens

@@ -623,105 +623,6 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols, Oid tablespa
 	return compress_hypertable_id;
 }
 
-/*
- * Create compress chunk for specific table.
- *
- * If table_id is InvalidOid, create a new table.
- *
- * Constraints and triggers are not created on the PG chunk table.
- * Caller is expected to do this explicitly.
- */
-Chunk *
-create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
-{
-	Hyperspace *hs = compress_ht->space;
-	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
-	Chunk *compress_chunk;
-	int namelen;
-	Oid tablespace_oid;
-	const char *tablespace;
-
-	/* Create a new chunk based on the hypercube */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
-										  hs->num_dimensions,
-										  RELKIND_RELATION);
-	ts_catalog_restore_user(&sec_ctx);
-
-	compress_chunk->fd.hypertable_id = hs->hypertable_id;
-	compress_chunk->cube = src_chunk->cube;
-	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
-	compress_chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
-	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
-
-	if (OidIsValid(table_id))
-	{
-		Relation table_rel = table_open(table_id, AccessShareLock);
-		strncpy(NameStr(compress_chunk->fd.table_name),
-				RelationGetRelationName(table_rel),
-				NAMEDATALEN);
-		table_close(table_rel, AccessShareLock);
-	}
-	else
-	{
-		/* Fail if we overflow the name limit */
-		namelen = snprintf(NameStr(compress_chunk->fd.table_name),
-						   NAMEDATALEN,
-						   "compress%s_%d_chunk",
-						   NameStr(compress_ht->fd.associated_table_prefix),
-						   compress_chunk->fd.id);
-
-		if (namelen >= NAMEDATALEN)
-			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
-					 errmsg("invalid name \"%s\" for compressed chunk",
-							NameStr(compress_chunk->fd.table_name)),
-					 errdetail("The associated table prefix is too long.")));
-	}
-
-	/* Insert chunk */
-	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
-
-	/* only add inheritable constraints. no dimension constraints */
-	ts_chunk_constraints_add_inheritable_constraints(compress_chunk->constraints,
-													 compress_chunk->fd.id,
-													 compress_chunk->relkind,
-													 compress_chunk->hypertable_relid);
-
-	ts_chunk_constraints_insert_metadata(compress_chunk->constraints);
-
-	/* Create the actual table relation for the chunk
-	 * Note that we have to pick the tablespace here as the compressed ht doesn't have dimensions
-	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
-	 * for now.
-	 */
-	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
-	tablespace = get_tablespace_name(tablespace_oid);
-
-	if (OidIsValid(table_id))
-		compress_chunk->table_id = table_id;
-	else
-		compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht, tablespace);
-
-	if (!OidIsValid(compress_chunk->table_id))
-		elog(ERROR, "could not create compressed chunk table");
-
-	/* if the src chunk is not in the default tablespace, the compressed indexes
-	 * should also be in a non-default tablespace. IN the usual case, this is inferred
-	 * from the hypertable's and chunk's tablespace info. We do not propagate
-	 * attach_tablespace settings to the compressed hypertable. So we have to explicitly
-	 * pass the tablespace information here
-	 */
-	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
-							  compress_chunk->hypertable_relid,
-							  compress_chunk->fd.id,
-							  compress_chunk->table_id,
-							  tablespace_oid);
-
-	return compress_chunk;
-}
-
 /* Add  the hypertable time column to the end of the orderby list if
  * it's not already in the orderby or segmentby. */
 static List *
@@ -1042,9 +943,36 @@ drop_existing_compression_table(Hypertable *ht)
 						   " compressed hypertable could not be found.",
 						   NameStr(ht->fd.table_name))));
 
-	/* need to drop the old compressed hypertable in case the segment by columns changed (and
-	 * thus the column types of compressed hypertable need to change) */
-	ts_hypertable_drop(compressed, DROP_RESTRICT);
+	/* Need to drop the old compressed hypertable in case the segment by columns
+	 * changed (and thus the column types of compressed hypertable need to change)
+	 *
+	 */
+	if (OidIsValid(compressed->main_table_relid))
+	{
+		/* Drop all compressed chunks too since we don't remove them
+		 * during decompression anymore
+		 */
+		ObjectAddresses *objects = new_object_addresses();
+		List *chunk_id_list = ts_chunk_get_chunk_ids_by_hypertable_id(compressed->fd.id);
+		ListCell *lc;
+		foreach (lc, chunk_id_list)
+		{
+			int32 chunk_id = lfirst_int(lc);
+			Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+			if (OidIsValid(chunk->table_id))
+			{
+				ObjectAddress chunk_addr = (ObjectAddress){
+					.classId = RelationRelationId,
+					.objectId = chunk->table_id,
+				};
+				add_exact_object_address(&chunk_addr, objects);
+			}
+		}
+		performMultipleDeletions(objects, DROP_RESTRICT, 0);
+		free_object_addresses(objects);
+
+		ts_hypertable_drop(compressed, DROP_RESTRICT);
+	}
 	ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
 	ts_hypertable_unset_compressed(ht);
 }
@@ -1160,6 +1088,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	List *segmentby_cols;
 	List *orderby_cols;
 	List *constraint_list = NIL;
+	Hypertable *compress_ht = NULL;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
@@ -1233,6 +1162,20 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
 		compress_htid = create_compression_table(ownerid, &compress_cols, tablespace_oid);
 		ts_hypertable_set_compressed(ht, compress_htid);
+		/*
+		 * If chunks are present then create compressed chunks as well
+		 * as part of enabling compression
+		 */
+		compress_ht = ts_hypertable_get_by_id(compress_htid);
+		ListCell *lc;
+		List *chunk_id_list = ts_chunk_get_chunk_ids_by_hypertable_id(ht->fd.id);
+		foreach (lc, chunk_id_list)
+		{
+			int32 chunk_id = lfirst_int(lc);
+			Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+			Chunk *compress_chunk = ts_chunk_create_compress_chunk(compress_ht, chunk, InvalidOid);
+			ts_chunk_set_compressed_chunk(chunk, compress_chunk->fd.id);
+		}
 	}
 
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);

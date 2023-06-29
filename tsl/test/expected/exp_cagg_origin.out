@@ -703,7 +703,7 @@ ORDER BY month, city;
 -- Clean up
 DROP TABLE conditions_empty CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_225_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_227_chunk
 -- Make sure add_continuous_aggregate_policy() works
 CREATE TABLE conditions_policy(
   day DATE NOT NULL,
@@ -770,7 +770,7 @@ SELECT add_continuous_aggregate_policy('conditions_summary_policy',
 -- Clean up
 DROP TABLE conditions_policy CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_240_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_242_chunk
 -- Make sure CAGGs with custom origin work for timestamp type
 CREATE TABLE conditions_timestamp(
   tstamp TIMESTAMP NOT NULL,
@@ -845,8 +845,8 @@ ALTER TABLE conditions_timestamp SET (
 SELECT compress_chunk(ch) FROM show_chunks('conditions_timestamp') AS ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_14_241_chunk
  _timescaledb_internal._hyper_14_243_chunk
+ _timescaledb_internal._hyper_14_245_chunk
 (2 rows)
 
 -- New data is seen because the cagg is real-time
@@ -896,7 +896,7 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamp',
 DROP TABLE conditions_timestamp CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_242_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_244_chunk
 -- Make sure CAGGs with custom origin work for timestamptz type
 CREATE TABLE conditions_timestamptz(
   tstamp TIMESTAMPTZ NOT NULL,
@@ -1059,9 +1059,9 @@ ALTER TABLE conditions_timestamptz SET (
 SELECT compress_chunk(ch) FROM show_chunks('conditions_timestamptz') AS ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_246_chunk
- _timescaledb_internal._hyper_17_247_chunk
+ _timescaledb_internal._hyper_17_248_chunk
  _timescaledb_internal._hyper_17_249_chunk
+ _timescaledb_internal._hyper_17_251_chunk
 (3 rows)
 
 -- New data is seen because the cagg is real-time
@@ -1111,7 +1111,7 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamptz',
 DROP TABLE conditions_timestamptz CASCADE;
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_248_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_250_chunk
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;

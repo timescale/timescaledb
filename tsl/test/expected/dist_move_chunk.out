@@ -411,10 +411,10 @@ JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
         table_name        
 --------------------------
- compress_hyper_3_6_chunk
+ compress_hyper_3_7_chunk
 (1 row)
 
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
                            time                           | device |                                                                       temp                                                                       | _ts_meta_count | _ts_meta_sequence_num |      _ts_meta_min_1      |      _ts_meta_max_1      
 ----------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------+--------------------------+--------------------------
  BAAAAgna9rUEAAACCdr2tQQAAAAAAQAAAAEAAAAAAAAADgAEE7XtaggA |      1 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 01:00:00 2018 | Thu Mar 08 01:00:00 2018
@@ -454,11 +454,11 @@ JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
         table_name        
 --------------------------
- compress_hyper_3_6_chunk
+ compress_hyper_3_7_chunk
 (1 row)
 
 -- Try to query hypertable member with compressed chunk
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
                            time                           | device |                                                                       temp                                                                       | _ts_meta_count | _ts_meta_sequence_num |      _ts_meta_min_1      |      _ts_meta_max_1      
 ----------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------+--------------------------+--------------------------
  BAAAAgna9rUEAAACCdr2tQQAAAAAAQAAAAEAAAAAAAAADgAEE7XtaggA |      1 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 01:00:00 2018 | Thu Mar 08 01:00:00 2018
@@ -490,8 +490,8 @@ WHERE c1.table_name = '_dist_hyper_3_12_chunk';
 (0 rows)
 
 \set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
-ERROR:  relation "_timescaledb_internal.compress_hyper_3_6_chunk" does not exist at character 15
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
+ERROR:  relation "_timescaledb_internal.compress_hyper_3_7_chunk" does not exist at character 15
 SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
 ERROR:  relation "_timescaledb_internal._dist_hyper_3_12_chunk" does not exist at character 15
 \set ON_ERROR_STOP 1
@@ -575,10 +575,10 @@ JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
 WHERE c1.table_name = '_dist_hyper_3_12_chunk';
         table_name        
 --------------------------
- compress_hyper_3_6_chunk
+ compress_hyper_3_7_chunk
 (1 row)
 
-SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk ORDER BY device, _ts_meta_min_1;
+SELECT * FROM _timescaledb_internal.compress_hyper_3_7_chunk ORDER BY device, _ts_meta_min_1;
                            time                           | device |                                                                       temp                                                                       | _ts_meta_count | _ts_meta_sequence_num |      _ts_meta_min_1      |      _ts_meta_max_1      
 ----------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------+--------------------------+--------------------------
  BAAAAgna9rUEAAACCdr2tQQAAAAAAQAAAAEAAAAAAAAADgAEE7XtaggA |      1 | AwA/uZmZmZmZmgAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAGAAAAAAAAAD0AAAABPR/czMzMzMzN |              1 |                    10 | Thu Mar 08 01:00:00 2018 | Thu Mar 08 01:00:00 2018

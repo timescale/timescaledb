@@ -82,6 +82,7 @@ CROSSMODULE_WRAPPER(dictionary_compressor_finish);
 CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
+CROSSMODULE_WRAPPER(create_compressed_chunks_for_hypertable);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 

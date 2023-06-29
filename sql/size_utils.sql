@@ -515,10 +515,10 @@ SELECT
     srcht.table_name AS hypertable_name,
     srcch.schema_name AS chunk_schema,
     srcch.table_name AS chunk_name,
-    CASE WHEN srcch.compressed_chunk_id IS NULL THEN
-        'Uncompressed'::text
-    ELSE
+    CASE WHEN srcch.status & 1 > 0 THEN
         'Compressed'::text
+    ELSE
+        'Uncompressed'::text
     END AS compression_status,
     map.uncompressed_heap_size,
     map.uncompressed_index_size,

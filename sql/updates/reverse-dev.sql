@@ -273,3 +273,27 @@ ALTER FUNCTION _timescaledb_functions.finalize_agg_sfunc(internal,text,name,name
 ALTER FUNCTION _timescaledb_functions.partialize_agg(anyelement) SET SCHEMA _timescaledb_internal;
 ALTER AGGREGATE _timescaledb_functions.finalize_agg(text,name,name,name[][],bytea,anyelement) SET SCHEMA _timescaledb_internal;
 
+-- remove compressed chunks for all uncompressed chunks for all hypertables that have compression enabled
+DO $$
+DECLARE
+  schema name;
+  chunk_name name;
+BEGIN
+  FOR schema, chunk_name IN
+  SELECT c.schema_name, c.table_name FROM _timescaledb_catalog.hypertable h
+  INNER JOIN _timescaledb_catalog.chunk c ON c.hypertable_id = h.id
+  WHERE h.compressed_hypertable_id IS NOT NULL
+  AND c.status & 1 = 0
+  LOOP
+    EXECUTE format('DROP TABLE %s.%s', schema, chunk_name);
+  END LOOP;
+
+  UPDATE _timescaledb_catalog.chunk SET compressed_chunk_id = NULL
+  FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id
+  WHERE h.compressed_hypertable_id IS NOT NULL
+  AND c.status & 1 = 0;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.create_compressed_chunks_for_hypertable(REGCLASS);

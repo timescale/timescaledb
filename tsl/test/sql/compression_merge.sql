@@ -112,8 +112,18 @@ SELECT
 
 SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
 
+SELECT cc.schema_name || '.' || cc.table_name AS "COMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.hypertable h
+INNER JOIN _timescaledb_catalog.chunk c
+ON h.id = c.hypertable_id
+INNER JOIN _timescaledb_catalog.chunk cc
+ON cc.id = c.compressed_chunk_id
+WHERE h.table_name = 'test5'
+AND c.status = 1
+LIMIT 1 \gset
+
 -- Make sure sequence numbers are correctly fetched from index.
-SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+SELECT _ts_meta_sequence_num FROM :COMPRESSED_CHUNK_NAME where i = 1;
 
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
@@ -129,7 +139,7 @@ DROP INDEX :INDEXNAME;
 SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
 
 -- Make sure sequence numbers are correctly fetched from heap.
-SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+SELECT _ts_meta_sequence_num FROM :COMPRESSED_CHUNK_NAME where i = 1;
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql

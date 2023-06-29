@@ -1708,6 +1708,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 psql:include/cagg_ddl_common.sql:1149: NOTICE:  defaulting compress_orderby to time_bucket
+psql:include/cagg_ddl_common.sql:1149: NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_41_49_chunk
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1724,6 +1725,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 (1 row)
 
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='false');
+psql:include/cagg_ddl_common.sql:1156: NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_42_50_chunk
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1793,6 +1795,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 psql:include/cagg_ddl_common.sql:1193: NOTICE:  defaulting compress_orderby to time_bucket
+psql:include/cagg_ddl_common.sql:1193: NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_44_52_chunk
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1809,6 +1812,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 (1 row)
 
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='false');
+psql:include/cagg_ddl_common.sql:1200: NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_45_53_chunk
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1953,8 +1957,8 @@ Indexes:
     "_materialized_hypertable_47_bucket_idx" btree (bucket DESC)
 Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_47 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
-Child tables: _timescaledb_internal._hyper_47_52_chunk,
-              _timescaledb_internal._hyper_47_53_chunk
+Child tables: _timescaledb_internal._hyper_47_56_chunk,
+              _timescaledb_internal._hyper_47_57_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"

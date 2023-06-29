@@ -294,10 +294,10 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_1]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
- 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1|f        
- 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  6|f      |     1|f        
- 5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0|f        
- 6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0|f        
+ 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  3|f      |     1|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  4|f      |     1|f        
+ 3|            2|_timescaledb_internal|compress_hyper_2_3_chunk|                   |f      |     0|f        
+ 4|            2|_timescaledb_internal|compress_hyper_2_4_chunk|                   |f      |     0|f        
 (4 rows)
 
 
@@ -306,10 +306,10 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_2]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
- 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  5|f      |     1|f        
- 2|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  6|f      |     1|f        
- 5|            2|_timescaledb_internal|compress_hyper_2_5_chunk|                   |f      |     0|f        
- 6|            2|_timescaledb_internal|compress_hyper_2_6_chunk|                   |f      |     0|f        
+ 1|            1|_timescaledb_internal|_dist_hyper_1_1_chunk   |                  3|f      |     1|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  4|f      |     1|f        
+ 3|            2|_timescaledb_internal|compress_hyper_2_3_chunk|                   |f      |     0|f        
+ 4|            2|_timescaledb_internal|compress_hyper_2_4_chunk|                   |f      |     0|f        
 (4 rows)
 
 
@@ -318,8 +318,8 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_3]:
 id|hypertable_id|schema_name          |table_name              |compressed_chunk_id|dropped|status|osm_chunk
 --+-------------+---------------------+------------------------+-------------------+-------+------+---------
- 1|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  4|f      |     1|f        
- 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  3|f      |     1|f        
+ 1|            1|_timescaledb_internal|_dist_hyper_1_2_chunk   |                  3|f      |     1|f        
+ 2|            1|_timescaledb_internal|_dist_hyper_1_3_chunk   |                  4|f      |     1|f        
  3|            2|_timescaledb_internal|compress_hyper_2_3_chunk|                   |f      |     0|f        
  4|            2|_timescaledb_internal|compress_hyper_2_4_chunk|                   |f      |     0|f        
 (4 rows)
@@ -455,20 +455,20 @@ SELECT * FROM chunks_detailed_size('compressed'::regclass)
 ORDER BY chunk_name, node_name;
      chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |       node_name       
 -----------------------+-----------------------+-------------+-------------+-------------+-------------+-----------------------
- _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       32768 |           0 |       40960 | db_dist_compression_1
- _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       32768 |           0 |       40960 | db_dist_compression_2
- _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | db_dist_compression_2
- _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | db_dist_compression_3
- _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | db_dist_compression_1
- _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | db_dist_compression_3
+ _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_compression_1
+ _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_compression_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_compression_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_compression_3
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_compression_1
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       40960 |        8192 |       57344 | db_dist_compression_3
 (6 rows)
 
 SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes |       node_name       
 -------------+-------------+-------------+-------------+-----------------------
-       16384 |       81920 |           0 |       98304 | db_dist_compression_1
-       16384 |       81920 |           0 |       98304 | db_dist_compression_2
-       16384 |       81920 |           0 |       98304 | db_dist_compression_3
+       16384 |       98304 |       16384 |      131072 | db_dist_compression_1
+       16384 |       98304 |       16384 |      131072 | db_dist_compression_2
+       16384 |       98304 |       16384 |      131072 | db_dist_compression_3
            0 |       16384 |           0 |       16384 | 
 (4 rows)
 
@@ -555,12 +555,12 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name, true)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'compressed' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'compressed' and chunk.status & 1 = 0 ORDER BY chunk.id
 )
 AS sub;
  count_compressed 
 ------------------
-                4
+                3
 (1 row)
 
 SELECT * from compressed where new_coli is not null;

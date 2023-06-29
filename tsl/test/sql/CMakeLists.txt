@@ -51,6 +51,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_merge.sql
     chunk_utils_compression.sql
     compression_algos.sql
+    compression_create_chunks.sql
     compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql

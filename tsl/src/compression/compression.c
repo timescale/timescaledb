@@ -1443,6 +1443,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	FreeBulkInsertState(decompressor.bistate);
 	MemoryContextDelete(decompressor.per_compressed_row_ctx);
 	ts_catalog_close_indexes(decompressor.indexstate);
+	truncate_relation(in_table);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);

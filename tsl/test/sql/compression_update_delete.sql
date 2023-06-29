@@ -591,29 +591,17 @@ SELECT chunk_status,
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
--- get FIRST uncompressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
-ORDER BY ch1.id LIMIT 1 \gset
+-- get FIRST chunk
+SELECT ch.schema_name || '.' || ch.table_name AS "UNCOMPRESS_CHUNK_1", ch1.schema_name || '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ch.hypertable_id = ht.id AND ht.table_name = 'sample_table' and ch.compressed_chunk_id = ch1.id
+ORDER BY ch.id LIMIT 1 \gset
 
--- get SECOND uncompressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_2"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
-ORDER BY ch1.id DESC LIMIT 1 \gset
-
--- get FIRST compressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
-ORDER BY ch1.id LIMIT 1 \gset
-
--- get SECOND compressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_2"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
-ORDER BY ch1.id DESC LIMIT 1 \gset
+-- get SECOND chunk
+SELECT ch.schema_name || '.' || ch.table_name AS "UNCOMPRESS_CHUNK_2", ch1.schema_name || '.' || ch1.table_name AS "COMPRESS_CHUNK_2"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ch.hypertable_id = ht.id AND ht.table_name = 'sample_table' and ch.compressed_chunk_id = ch1.id
+ORDER BY ch.id DESC LIMIT 1 \gset
 
 -- ensure segment by column index position in compressed and uncompressed
 -- chunk is different

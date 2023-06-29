@@ -581,10 +581,6 @@ INSERT INTO sensor_data
 
 -- enable compression
 ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
--- add new compression policy job
-SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
--- set recompress to true
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 -- create new chunks
 INSERT INTO sensor_data
@@ -604,13 +600,18 @@ SELECT chunk_name AS new_uncompressed_chunk_name
   FROM timescaledb_information.chunks
   WHERE hypertable_name = 'sensor_data' AND NOT is_compressed LIMIT 1 \gset
 
--- change compression status so that this chunk is skipped when policy is run
-update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompressed_chunk_name';
+-- change compression status to invalid value so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=-1 where table_name = :'new_uncompressed_chunk_name';
 
 -- verify that there are other uncompressed new chunks that need to be compressed
 SELECT count(*) > 1
   FROM timescaledb_information.chunks
   WHERE hypertable_name = 'sensor_data' AND NOT is_compressed;
+
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 -- disable notice/warning as the new_uncompressed_chunk_name
 -- is dynamic and it will be printed in those messages.

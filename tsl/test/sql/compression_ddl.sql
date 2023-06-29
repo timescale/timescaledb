@@ -28,7 +28,7 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 = 0 ORDER BY chunk.id
 )
 AS sub;
 
@@ -138,19 +138,19 @@ FROM pg_tables WHERE tablespace = 'tablespace1';
 
 SELECT decompress_chunk(:'UNCOMPRESSED_CHUNK_NAME');
 
---the compresse chunk was dropped by decompression
+--the compressed chunk remains (empty) after decompression
 SELECT count(*)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 SELECT move_chunk(chunk=>:'UNCOMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."_hyper_1_1_chunk_test1_Time_idx"');
 
---the uncompressed chunks has now been moved
+--the chunks has now been moved
 SELECT count(*)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 SELECT compress_chunk(:'UNCOMPRESSED_CHUNK_NAME');
 
---the compressed chunk is now in the same tablespace as the uncompressed one
+--the compressed chunk is in the same tablespace as the uncompressed one, was moved previously
 SELECT count(*)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
@@ -379,7 +379,7 @@ FROM
 SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NOT NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 > 0 ORDER BY chunk.id
 )
 AS sub;
 
@@ -420,7 +420,7 @@ FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 = 0 ORDER BY chunk.id
 )
 AS sub;
 
@@ -456,7 +456,7 @@ SELECT COUNT(*) AS count_compressed FROM
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id) AS subq;
+WHERE hypertable.table_name like 'test1' and chunk.status & 1 = 0 ORDER BY chunk.id) AS subq;
 
 SELECT COUNT(*) AS count_compressed FROM
 (
@@ -645,7 +645,7 @@ FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0'
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
 WHERE c.hypertable_id = ht.id and ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
+AND c.status & 1 = 0
 ORDER BY c.table_name DESC \gset
 
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
@@ -693,7 +693,7 @@ SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
 WHERE c.hypertable_id = ht.id
 AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
+AND c.status & 1 = 0
 ORDER BY c.table_name DESC \gset
 
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
@@ -735,7 +735,7 @@ SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
 WHERE c.hypertable_id = ht.id
 AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
+AND c.status & 1 = 0
 ORDER BY c.table_name DESC \gset
 
 ALTER TABLE compression_insert DROP COLUMN filler_2;
@@ -778,7 +778,7 @@ SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
 WHERE c.hypertable_id = ht.id
 AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
+AND c.status & 1 = 0
 ORDER BY c.table_name DESC \gset
 
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
@@ -818,7 +818,7 @@ SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
 WHERE c.hypertable_id = ht.id
 AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
+AND c.status & 1 = 0
 ORDER BY c.table_name DESC \gset
 
 ALTER TABLE compression_insert ADD COLUMN filler_5 int;
@@ -897,7 +897,7 @@ DECLARE
 BEGIN
   FOR chunk IN
   SELECT format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL AND NOT dropped
+    FROM _timescaledb_catalog.chunk WHERE status = 9 AND NOT dropped
   LOOP
     EXECUTE format('select decompress_chunk(''%s'');', chunk::text);
     EXECUTE format('select compress_chunk(''%s'');', chunk::text);

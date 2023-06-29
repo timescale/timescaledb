@@ -46,7 +46,7 @@ INSERT INTO metric_5m (time, series_id, value)
 -- manually compress all chunks
 SELECT count(compress_chunk(c.schema_name|| '.' || c.table_name))
     FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where
-    c.hypertable_id = ht.id and ht.table_name = 'metric_5m' and c.compressed_chunk_id IS NULL;
+    c.hypertable_id = ht.id and ht.table_name = 'metric_5m' and c.status & 1 = 0;
 
 -- populate into compressed hypertable, this should not crash
 INSERT INTO metric_5m (time, series_id, value)

@@ -379,16 +379,16 @@ SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_6_122_chunk
- _timescaledb_internal._hyper_6_123_chunk
- _timescaledb_internal._hyper_6_124_chunk
- _timescaledb_internal._hyper_6_125_chunk
- _timescaledb_internal._hyper_6_126_chunk
- _timescaledb_internal._hyper_6_127_chunk
- _timescaledb_internal._hyper_6_128_chunk
- _timescaledb_internal._hyper_6_129_chunk
- _timescaledb_internal._hyper_6_130_chunk
- _timescaledb_internal._hyper_6_131_chunk
+ _timescaledb_internal._hyper_6_132_chunk
+ _timescaledb_internal._hyper_6_134_chunk
+ _timescaledb_internal._hyper_6_136_chunk
+ _timescaledb_internal._hyper_6_138_chunk
+ _timescaledb_internal._hyper_6_140_chunk
+ _timescaledb_internal._hyper_6_142_chunk
+ _timescaledb_internal._hyper_6_144_chunk
+ _timescaledb_internal._hyper_6_146_chunk
+ _timescaledb_internal._hyper_6_148_chunk
+ _timescaledb_internal._hyper_6_150_chunk
 (10 rows)
 
 -- check migrated data after compression. should return 0 (zero) rows
@@ -1056,23 +1056,23 @@ SELECT * FROM conditions_summary_daily_new;
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_16_245_chunk
- _timescaledb_internal._hyper_16_246_chunk
- _timescaledb_internal._hyper_16_247_chunk
- _timescaledb_internal._hyper_16_248_chunk
- _timescaledb_internal._hyper_16_249_chunk
- _timescaledb_internal._hyper_16_250_chunk
+ _timescaledb_internal._hyper_16_265_chunk
+ _timescaledb_internal._hyper_16_266_chunk
+ _timescaledb_internal._hyper_16_267_chunk
+ _timescaledb_internal._hyper_16_268_chunk
+ _timescaledb_internal._hyper_16_269_chunk
+ _timescaledb_internal._hyper_16_270_chunk
 (6 rows)
 
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_19_257_chunk
- _timescaledb_internal._hyper_19_258_chunk
- _timescaledb_internal._hyper_19_259_chunk
- _timescaledb_internal._hyper_19_260_chunk
- _timescaledb_internal._hyper_19_261_chunk
- _timescaledb_internal._hyper_19_262_chunk
+ _timescaledb_internal._hyper_19_283_chunk
+ _timescaledb_internal._hyper_19_285_chunk
+ _timescaledb_internal._hyper_19_287_chunk
+ _timescaledb_internal._hyper_19_289_chunk
+ _timescaledb_internal._hyper_19_291_chunk
+ _timescaledb_internal._hyper_19_293_chunk
 (6 rows)
 
 -- check migrated data after compression. should return 0 (zero) rows
@@ -1735,23 +1735,23 @@ SELECT * FROM conditions_summary_daily_new;
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_29_352_chunk
- _timescaledb_internal._hyper_29_353_chunk
- _timescaledb_internal._hyper_29_354_chunk
- _timescaledb_internal._hyper_29_355_chunk
- _timescaledb_internal._hyper_29_356_chunk
- _timescaledb_internal._hyper_29_357_chunk
+ _timescaledb_internal._hyper_29_384_chunk
+ _timescaledb_internal._hyper_29_385_chunk
+ _timescaledb_internal._hyper_29_386_chunk
+ _timescaledb_internal._hyper_29_387_chunk
+ _timescaledb_internal._hyper_29_388_chunk
+ _timescaledb_internal._hyper_29_389_chunk
 (6 rows)
 
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_32_364_chunk
- _timescaledb_internal._hyper_32_365_chunk
- _timescaledb_internal._hyper_32_366_chunk
- _timescaledb_internal._hyper_32_367_chunk
- _timescaledb_internal._hyper_32_368_chunk
- _timescaledb_internal._hyper_32_369_chunk
+ _timescaledb_internal._hyper_32_402_chunk
+ _timescaledb_internal._hyper_32_404_chunk
+ _timescaledb_internal._hyper_32_406_chunk
+ _timescaledb_internal._hyper_32_408_chunk
+ _timescaledb_internal._hyper_32_410_chunk
+ _timescaledb_internal._hyper_32_412_chunk
 (6 rows)
 
 -- check migrated data after compression. should return 0 (zero) rows

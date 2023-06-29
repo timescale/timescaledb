@@ -318,7 +318,7 @@ select show_chunks as chunk_to_compress_prep from show_chunks('mytab_prep') limi
 SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared plan would change before and after compress
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_9_10_chunk
+ _timescaledb_internal._hyper_9_11_chunk
 (1 row)
 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
@@ -327,9 +327,9 @@ EXPLAIN (COSTS OFF) EXECUTE p1;
                         QUERY PLAN                        
 ----------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
-         ->  Seq Scan on compress_hyper_10_11_chunk
-   ->  Seq Scan on _hyper_9_10_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_11_chunk
+         ->  Seq Scan on compress_hyper_10_12_chunk
+   ->  Seq Scan on _hyper_9_11_chunk
 (4 rows)
 
 EXECUTE p1;
@@ -345,8 +345,8 @@ CALL recompress_chunk(:'chunk_to_compress_prep');
 EXPLAIN (COSTS OFF) EXECUTE p1;
                      QUERY PLAN                     
 ----------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_9_10_chunk
-   ->  Seq Scan on compress_hyper_10_11_chunk
+ Custom Scan (DecompressChunk) on _hyper_9_11_chunk
+   ->  Seq Scan on compress_hyper_10_12_chunk
 (2 rows)
 
 EXECUTE p1;
@@ -377,7 +377,7 @@ alter table mytab set (timescaledb.compress, timescaledb.compress_segmentby = 'a
 select compress_chunk(show_chunks('mytab'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_12_chunk
+ _timescaledb_internal._hyper_11_13_chunk
 (1 row)
 
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
@@ -388,13 +388,13 @@ select compressed_chunk_name as compressed_chunk_name_after_recompression from c
 select :'compressed_chunk_name_before_recompression' as before_segmentwise_recompression, :'compressed_chunk_name_after_recompression' as after_segmentwise_recompression;
  before_segmentwise_recompression | after_segmentwise_recompression 
 ----------------------------------+---------------------------------
- compress_hyper_12_13_chunk       | compress_hyper_12_13_chunk
+ compress_hyper_12_14_chunk       | compress_hyper_12_14_chunk
 (1 row)
 
 SELECT decompress_chunk(show_chunks('mytab'));
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_11_12_chunk
+ _timescaledb_internal._hyper_11_13_chunk
 (1 row)
 
 alter table mytab set (timescaledb.compress = false);
@@ -402,7 +402,7 @@ alter table mytab set (timescaledb.compress);
 select compress_chunk(show_chunks('mytab'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_12_chunk
+ _timescaledb_internal._hyper_11_13_chunk
 (1 row)
 
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
@@ -413,7 +413,7 @@ select compressed_chunk_name as compressed_chunk_name_after_recompression from c
 select :'compressed_chunk_name_before_recompression' as before_recompression, :'compressed_chunk_name_after_recompression' as after_recompression;
     before_recompression    |    after_recompression     
 ----------------------------+----------------------------
- compress_hyper_13_14_chunk | compress_hyper_13_15_chunk
+ compress_hyper_13_15_chunk | compress_hyper_13_15_chunk
 (1 row)
 
 -- check behavior with NULL values in segmentby columns

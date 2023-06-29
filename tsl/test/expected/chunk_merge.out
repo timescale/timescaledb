@@ -36,31 +36,37 @@ NOTICE:  adding not-null constraint to column "Time"
 -- This creates chunks 7 - 9 on second hypertable.
 INSERT INTO test2 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0 | f
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                     | f       |      0 | f
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                     | f       |      0 | f
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                     | f       |      0 | f
-  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |                     | f       |      0 | f
-  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |                     | f       |      0 | f
-  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk |                     | f       |      0 | f
-  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk |                     | f       |      0 | f
-  9 |             3 | _timescaledb_internal | _hyper_3_9_chunk |                     | f       |      0 | f
-(9 rows)
+ id | hypertable_id |      schema_name      |        table_name         | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+---------------------------+---------------------+---------+--------+-----------
+  2 |             2 | _timescaledb_internal | compress_hyper_2_2_chunk  |                     | f       |      0 | f
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk          |                   2 | f       |      0 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk  |                     | f       |      0 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk          |                   4 | f       |      0 | f
+  6 |             2 | _timescaledb_internal | compress_hyper_2_6_chunk  |                     | f       |      0 | f
+  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk          |                   6 | f       |      0 | f
+  8 |             2 | _timescaledb_internal | compress_hyper_2_8_chunk  |                     | f       |      0 | f
+  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk          |                   8 | f       |      0 | f
+ 10 |             2 | _timescaledb_internal | compress_hyper_2_10_chunk |                     | f       |      0 | f
+  9 |             1 | _timescaledb_internal | _hyper_1_9_chunk          |                  10 | f       |      0 | f
+ 12 |             2 | _timescaledb_internal | compress_hyper_2_12_chunk |                     | f       |      0 | f
+ 11 |             1 | _timescaledb_internal | _hyper_1_11_chunk         |                  12 | f       |      0 | f
+ 13 |             3 | _timescaledb_internal | _hyper_3_13_chunk         |                     | f       |      0 | f
+ 14 |             3 | _timescaledb_internal | _hyper_3_14_chunk         |                     | f       |      0 | f
+ 15 |             3 | _timescaledb_internal | _hyper_3_15_chunk         |                     | f       |      0 | f
+(15 rows)
 
 \set ON_ERROR_STOP 0
 -- Cannot merge chunks from different hypertables
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_3_7_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_3_13_chunk', 1);
 ERROR:  cannot merge chunks from different hypertables
 -- Cannot merge non-adjacent chunks
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_3_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_5_chunk', 1);
 ERROR:  cannot merge non-adjacent chunks over supplied dimension
 -- Cannot merge same chunk to itself (its not adjacent to itself).
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_1_chunk', 1);
 ERROR:  cannot merge non-adjacent chunks over supplied dimension
 -- Cannot merge chunks on with different partitioning schemas.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_7_chunk', 1);
 ERROR:  cannot merge chunks with different partitioning schemas
 -- Cannot merge chunks on with non-existant dimension slice.
 -- NOTE: we are merging the same chunk just so they have the exact same partitioning schema and we don't hit the previous test error.
@@ -68,14 +74,14 @@ SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_intern
 ERROR:  cannot find slice for merging dimension
 \set ON_ERROR_STOP 1
 -- Merge on open (time) dimension.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_5_chunk','_timescaledb_internal._hyper_1_6_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_9_chunk','_timescaledb_internal._hyper_1_11_chunk', 1);
  test_merge_chunks_on_dimension 
 --------------------------------
  
 (1 row)
 
 -- Merge on closed dimension.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 2);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_7_chunk', 2);
  test_merge_chunks_on_dimension 
 --------------------------------
  
@@ -85,14 +91,14 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
- _timescaledb_internal._hyper_1_2_chunk
- _timescaledb_internal._hyper_1_2_chunk
- _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_9_chunk
 (4 rows)
 
 \set ON_ERROR_STOP 0
 -- Cannot merge chunks internal compressed chunks, no dimensions on them.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal.compress_hyper_2_10_chunk','_timescaledb_internal.compress_hyper_2_11_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal.compress_hyper_2_2_chunk','_timescaledb_internal.compress_hyper_2_4_chunk', 1);
 ERROR:  cannot find slice for merging dimension
 \set ON_ERROR_STOP 1
 -- This creates more data so caggs has multiple chunks.

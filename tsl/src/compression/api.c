@@ -355,7 +355,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.
 	 */
-	if (!previous_chunk || !OidIsValid(previous_chunk->fd.compressed_chunk_id))
+	if (!previous_chunk || !ts_chunk_is_compressed(previous_chunk))
 		return NULL;
 
 	Assert(previous_chunk->cube->num_slices > 0);
@@ -443,7 +443,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	int i = 0, htcols_listlen;
 	RelationSize before_size, after_size;
 	CompressionStats cstat;
-	bool new_compressed_chunk = false;
 
 	hcache = ts_hypertable_cache_pin();
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
@@ -477,9 +476,12 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	mergable_chunk = find_chunk_to_merge_into(cxt.srcht, cxt.srcht_chunk);
 	if (!mergable_chunk)
 	{
-		/* create compressed chunk and a new table */
-		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
-		new_compressed_chunk = true;
+		Assert(cxt.srcht_chunk->fd.compressed_chunk_id != 0);
+		compress_ht_chunk = ts_chunk_get_by_id(cxt.srcht_chunk->fd.compressed_chunk_id, false);
+		if (!compress_ht_chunk)
+		{
+			elog(ERROR, "cannot compress chunk, missing compressed chunk table");
+		}
 	}
 	else
 	{
@@ -507,7 +509,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	ts_chunk_drop_fks(cxt.srcht_chunk);
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 
-	if (new_compressed_chunk)
+	if (!mergable_chunk)
 	{
 		compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 											  &before_size,
@@ -515,14 +517,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 											  &after_size,
 											  cstat.rowcnt_pre_compression,
 											  cstat.rowcnt_post_compression);
-
-		/* Copy chunk constraints (including fkey) to compressed chunk.
-		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
-		 * referenced table during compression.
-		 */
-		ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-		ts_trigger_create_all_on_chunk(compress_ht_chunk);
-		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
+		ts_chunk_set_compressed(cxt.srcht_chunk);
 	}
 	else
 	{
@@ -584,12 +579,11 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 		elog(ERROR, "hypertable and chunk do not match");
 
-	if (uncompressed_chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+	if (!ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk,
+													  CHUNK_DECOMPRESS,
+													  !if_compressed))
 	{
 		ts_cache_release(hcache);
-		ereport((if_compressed ? NOTICE : ERROR),
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_relid))));
 		return false;
 	}
 
@@ -643,19 +637,8 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
-	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+	ts_chunk_set_uncompressed(uncompressed_chunk);
 
-	/*
-	 * Lock the compressed chunk that is going to be deleted. At this point,
-	 * the reference to the compressed chunk is already removed from the
-	 * catalog. So, new readers do not include it in their operations.
-	 *
-	 * Note: Calling performMultipleDeletions in chunk_index_tuple_delete
-	 * also requests an AccessExclusiveLock on the compressed_chunk. However,
-	 * this call makes the lock on the chunk explicit.
-	 */
-	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
-	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	ts_cache_release(hcache);
 	return true;
 }
@@ -668,13 +651,8 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 Oid
 tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed)
 {
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-	{
-		ereport((if_not_compressed ? NOTICE : ERROR),
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
+	if (!ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_COMPRESS, !if_not_compressed))
 		return chunk->table_id;
-	}
 
 	return compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 }
@@ -793,11 +771,8 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
 	/* Create compressed chunk using existing table */
-	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
-
-	/* Copy chunk constraints (including fkey) to compressed chunk */
-	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-	ts_trigger_create_all_on_chunk(compress_ht_chunk);
+	compress_ht_chunk =
+		ts_chunk_create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
 
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
 	 * cascading deleted data in FK-referenced tables, while blocking deleting data
@@ -815,6 +790,8 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 
 	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
+	ts_chunk_set_compressed(cxt.srcht_chunk);
+
 	if (!chunk_was_compressed && ts_table_has_tuples(cxt.srcht_chunk->table_id, AccessShareLock))
 	{
 		/* The chunk was not compressed before it had the compressed chunk
@@ -822,9 +799,49 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 		 */
 		ts_chunk_set_partial(cxt.srcht_chunk);
 	}
+
 	ts_cache_release(hcache);
 
 	PG_RETURN_OID(chunk_relid);
+}
+
+/*
+ * Create compressed chunks for uncompressed chunks
+ * for hypertable which has compression enabled.
+ */
+Datum
+tsl_create_compressed_chunks_for_hypertable(PG_FUNCTION_ARGS)
+{
+	Hypertable *hypertable, *compress_ht;
+	Cache *hcache;
+	Oid table_relid = PG_GETARG_OID(0);
+
+	ts_hypertable_permissions_check(table_relid, GetUserId());
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(hypertable))
+	{
+		elog(ERROR, "hypertable doesn't have compression enabled");
+	}
+
+	compress_ht = ts_hypertable_get_by_id(hypertable->fd.compressed_hypertable_id);
+
+	ListCell *lc;
+	List *chunk_id_list = ts_chunk_get_chunk_ids_by_hypertable_id(hypertable->fd.id);
+	foreach (lc, chunk_id_list)
+	{
+		int32 chunk_id = lfirst_int(lc);
+		Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+		if (!ts_chunk_is_compressed(chunk) && chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+		{
+			Chunk *compress_chunk = ts_chunk_create_compress_chunk(compress_ht, chunk, InvalidOid);
+			ts_chunk_set_compressed_chunk(chunk, compress_chunk->fd.id);
+		}
+	}
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_VOID();
 }
 
 Datum
@@ -849,8 +866,16 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		 * compression. In the event of failure, the compressed status will NOT be set. The
 		 * distributed compression policy will attempt to compress again, which is idempotent, thus
 		 * the metadata are eventually consistent.
+		 *
+		 * Setting INVALID_CHUNK_ID for compressed chunks is valid for an Access Node. It means
+		 * the data nodes contain the actual compressed chunks, and the meta-chunk is
+		 * marked as compressed in the Access Node.
 		 */
 		ts_chunk_set_compressed_chunk(chunk, INVALID_CHUNK_ID);
+		if (!ts_chunk_is_compressed(chunk))
+		{
+			ts_chunk_set_compressed(chunk);
+		}
 	}
 	else
 	{
@@ -887,7 +912,10 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 		 * hypertables one should take advantage of the idempotent properties of remote
 		 * compress_chunk() and distributed compression policy to make progress.
 		 */
-		ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+		if (ts_chunk_is_compressed(uncompressed_chunk))
+		{
+			ts_chunk_set_uncompressed(uncompressed_chunk);
+		}
 
 		if (!decompress_remote_chunk(fcinfo, uncompressed_chunk, if_compressed))
 			PG_RETURN_NULL();

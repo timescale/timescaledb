@@ -653,16 +653,16 @@ INFO:  compress_chunk_tuplesort_start
 
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab2'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_81_chunk_idx2_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_82_chunk_idx2_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_83_chunk_idx2_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_84_chunk_idx2_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_2_73_chunk_idx2_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_2_74_chunk_idx2_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_2_75_chunk_idx2_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_2_76_chunk_idx2_asc_null_first"
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_2_81_chunk
- _timescaledb_internal._hyper_2_82_chunk
- _timescaledb_internal._hyper_2_83_chunk
- _timescaledb_internal._hyper_2_84_chunk
+ _timescaledb_internal._hyper_2_73_chunk
+ _timescaledb_internal._hyper_2_74_chunk
+ _timescaledb_internal._hyper_2_75_chunk
+ _timescaledb_internal._hyper_2_76_chunk
 (4 rows)
 
 SELECT id, time from tab1 EXCEPT SELECT id, time from tab2;
@@ -682,10 +682,10 @@ SELECT decompress_chunk(show_chunks('tab1'));
 SELECT decompress_chunk(show_chunks('tab2'));
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_2_81_chunk
- _timescaledb_internal._hyper_2_82_chunk
- _timescaledb_internal._hyper_2_83_chunk
- _timescaledb_internal._hyper_2_84_chunk
+ _timescaledb_internal._hyper_2_73_chunk
+ _timescaledb_internal._hyper_2_74_chunk
+ _timescaledb_internal._hyper_2_75_chunk
+ _timescaledb_internal._hyper_2_76_chunk
 (4 rows)
 
 DROP INDEX idx2_asc_null_first;
@@ -719,42 +719,42 @@ INFO:  compress_chunk_tuplesort_start
 INFO:  compress_chunk_tuplesort_start
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_93_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_94_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_95_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_96_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_85_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_86_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_87_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_88_chunk_idxcol_asc_null_first"
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 DROP INDEX idx_asc_null_first;
@@ -769,42 +769,42 @@ INFO:  compress_chunk_tuplesort_start
 INFO:  compress_chunk_tuplesort_start
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_93_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_94_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_95_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_22_96_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_85_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_86_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_87_chunk_idxcol_asc_null_first"
+INFO:  compress_chunk_indexscan_start matched index "_hyper_22_88_chunk_idxcol_asc_null_first"
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_22_93_chunk
- _timescaledb_internal._hyper_22_94_chunk
- _timescaledb_internal._hyper_22_95_chunk
- _timescaledb_internal._hyper_22_96_chunk
+ _timescaledb_internal._hyper_22_85_chunk
+ _timescaledb_internal._hyper_22_86_chunk
+ _timescaledb_internal._hyper_22_87_chunk
+ _timescaledb_internal._hyper_22_88_chunk
 (4 rows)
 
 DROP INDEX idx_asc_null_first;

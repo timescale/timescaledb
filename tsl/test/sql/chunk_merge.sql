@@ -29,16 +29,16 @@ SELECT * FROM _timescaledb_catalog.chunk;
 \set ON_ERROR_STOP 0
 
 -- Cannot merge chunks from different hypertables
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_3_7_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_3_13_chunk', 1);
 
 -- Cannot merge non-adjacent chunks
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_3_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_5_chunk', 1);
 
 -- Cannot merge same chunk to itself (its not adjacent to itself).
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_1_chunk', 1);
 
 -- Cannot merge chunks on with different partitioning schemas.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_7_chunk', 1);
 
 -- Cannot merge chunks on with non-existant dimension slice.
 -- NOTE: we are merging the same chunk just so they have the exact same partitioning schema and we don't hit the previous test error.
@@ -48,17 +48,17 @@ SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_intern
 \set ON_ERROR_STOP 1
 
 -- Merge on open (time) dimension.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_5_chunk','_timescaledb_internal._hyper_1_6_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_9_chunk','_timescaledb_internal._hyper_1_11_chunk', 1);
 
 -- Merge on closed dimension.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 2);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_7_chunk', 2);
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
 
 \set ON_ERROR_STOP 0
 
 -- Cannot merge chunks internal compressed chunks, no dimensions on them.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal.compress_hyper_2_10_chunk','_timescaledb_internal.compress_hyper_2_11_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal.compress_hyper_2_2_chunk','_timescaledb_internal.compress_hyper_2_4_chunk', 1);
 
 \set ON_ERROR_STOP 1
 

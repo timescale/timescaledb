@@ -126,7 +126,7 @@ select * from _timescaledb_catalog.compression_chunk_size
 order by chunk_id;
 -[ RECORD 1 ]------------+------
 chunk_id                 | 1
-compressed_chunk_id      | 6
+compressed_chunk_id      | 5
 uncompressed_heap_size   | 8192
 uncompressed_toast_size  | 0
 uncompressed_index_size  | 32768
@@ -137,7 +137,7 @@ numrows_pre_compression  | 1
 numrows_post_compression | 1
 -[ RECORD 2 ]------------+------
 chunk_id                 | 2
-compressed_chunk_id      | 5
+compressed_chunk_id      | 6
 uncompressed_heap_size   | 8192
 uncompressed_toast_size  | 0
 uncompressed_index_size  | 32768
@@ -154,9 +154,11 @@ _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2
 where ch1.compressed_chunk_id = ch2.id;
  id |      schema_name      |    table_name    |      compress_table      
 ----+-----------------------+------------------+--------------------------
-  2 | _timescaledb_internal | _hyper_1_2_chunk | compress_hyper_2_5_chunk
-  1 | _timescaledb_internal | _hyper_1_1_chunk | compress_hyper_2_6_chunk
-(2 rows)
+  3 | _timescaledb_internal | _hyper_1_3_chunk | compress_hyper_2_7_chunk
+  4 | _timescaledb_internal | _hyper_1_4_chunk | compress_hyper_2_8_chunk
+  2 | _timescaledb_internal | _hyper_1_2_chunk | compress_hyper_2_6_chunk
+  1 | _timescaledb_internal | _hyper_1_1_chunk | compress_hyper_2_5_chunk
+(4 rows)
 
 \set ON_ERROR_STOP 0
 --cannot recompress the chunk the second time around
@@ -307,15 +309,15 @@ SELECT count(*) as "ORIGINAL_CHUNK_COUNT" from :CHUNK_NAME \gset
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
                 tableoid                 | count 
 -----------------------------------------+-------
- _timescaledb_internal._hyper_5_12_chunk |    42
- _timescaledb_internal._hyper_5_13_chunk |    20
+ _timescaledb_internal._hyper_5_14_chunk |    42
+ _timescaledb_internal._hyper_5_16_chunk |    20
 (2 rows)
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' ORDER BY ch1.id limit 1;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_5_14_chunk
 (1 row)
 
 --test that only one chunk was affected
@@ -323,14 +325,14 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
                 tableoid                 | count 
 -----------------------------------------+-------
- _timescaledb_internal._hyper_5_13_chunk |    20
+ _timescaledb_internal._hyper_5_16_chunk |    20
 (1 row)
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.status & 1 = 0;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_16_chunk
 (1 row)
 
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
@@ -375,11 +377,11 @@ WHERE map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
        and srcht.table_name like 'conditions'
 order by chunk_id;
 -[ RECORD 1 ]------------+---
-chunk_id                 | 12
+chunk_id                 | 14
 numrows_pre_compression  | 42
 numrows_post_compression | 2
 -[ RECORD 2 ]------------+---
-chunk_id                 | 13
+chunk_id                 | 16
 numrows_pre_compression  | 20
 numrows_post_compression | 2
 
@@ -387,7 +389,7 @@ select * from chunk_compression_stats('conditions')
 order by chunk_name;
 -[ RECORD 1 ]------------------+----------------------
 chunk_schema                   | _timescaledb_internal
-chunk_name                     | _hyper_5_12_chunk
+chunk_name                     | _hyper_5_14_chunk
 compression_status             | Compressed
 before_compression_table_bytes | 8192
 before_compression_index_bytes | 16384
@@ -400,7 +402,7 @@ after_compression_total_bytes  | 32768
 node_name                      | 
 -[ RECORD 2 ]------------------+----------------------
 chunk_schema                   | _timescaledb_internal
-chunk_name                     | _hyper_5_13_chunk
+chunk_name                     | _hyper_5_16_chunk
 compression_status             | Compressed
 before_compression_table_bytes | 8192
 before_compression_index_bytes | 16384
@@ -487,8 +489,8 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name LIKE 'conditions'
 ORDER BY chunk;
                   chunk                  
 -----------------------------------------
- _timescaledb_internal._hyper_5_12_chunk
- _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_14_chunk
+ _timescaledb_internal._hyper_5_16_chunk
 (2 rows)
 
 SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
@@ -497,11 +499,13 @@ SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
     42 | t
 (1 row)
 
---check that the compressed chunk is dropped
-\set ON_ERROR_STOP 0
+--check that the compressed chunk is empty
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
-ERROR:  relation "_timescaledb_internal.compress_hyper_6_14_chunk" does not exist at character 22
-\set ON_ERROR_STOP 1
+ count 
+-------
+     0
+(1 row)
+
 --size information is gone too
 select count(*)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht,
@@ -514,7 +518,7 @@ and map.chunk_id = ch1.id;
 (1 row)
 
 --make sure  compressed_chunk_id  is reset to NULL
-select ch1.compressed_chunk_id IS NULL
+select ch1.status & 1 = 0
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
  ?column? 
 ----------
@@ -561,7 +565,7 @@ SELECT tableoid::regclass AS "CHUNK_NAME" FROM plan_inval ORDER BY time LIMIT 1
 SELECT compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_7_16_chunk
+ _timescaledb_internal._hyper_7_18_chunk
 (1 row)
 
 EXECUTE prep_plan;
@@ -575,9 +579,9 @@ EXPLAIN (COSTS OFF) EXECUTE prep_plan;
 ----------------------------------------------------------------
  Aggregate
    ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_7_16_chunk
-               ->  Seq Scan on compress_hyper_8_18_chunk
-         ->  Seq Scan on _hyper_7_17_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_7_18_chunk
+               ->  Seq Scan on compress_hyper_8_19_chunk
+         ->  Seq Scan on _hyper_7_20_chunk
 (5 rows)
 
 CREATE TABLE test_collation (
@@ -612,8 +616,8 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_9_19_chunk
- _timescaledb_internal._hyper_9_20_chunk
+ _timescaledb_internal._hyper_9_22_chunk
+ _timescaledb_internal._hyper_9_24_chunk
 (2 rows)
 
 CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
@@ -635,27 +639,27 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
                         QUERY PLAN                        
 ----------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
-         ->  Seq Scan on compress_hyper_10_29_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
                Filter: (device_id < 'a'::text)
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
-         ->  Seq Scan on compress_hyper_10_30_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
+         ->  Seq Scan on compress_hyper_10_25_chunk
                Filter: (device_id < 'a'::text)
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (device_id < 'a'::text)
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (device_id < 'a'::text)
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (device_id < 'a'::text)
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (device_id < 'a'::text)
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (device_id < 'a'::text)
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (device_id < 'a'::text)
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (device_id < 'a'::text)
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (device_id < 'a'::text)
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (device_id < 'a'::text)
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (device_id < 'a'::text)
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (device_id < 'a'::text)
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (device_id < 'a'::text)
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (device_id < 'a'::text)
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (device_id < 'a'::text)
 (23 rows)
 
@@ -663,27 +667,27 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
-         ->  Seq Scan on compress_hyper_10_29_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
                Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
-         ->  Seq Scan on compress_hyper_10_30_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
+         ->  Seq Scan on compress_hyper_10_25_chunk
                Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (device_id < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (device_id < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (device_id < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (device_id < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (device_id < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (device_id < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (device_id < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (device_id < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (device_id < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (device_id < 'a'::text COLLATE "POSIX")
 (23 rows)
 
@@ -699,29 +703,29 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
                         QUERY PLAN                        
 ----------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
          Filter: (val_1 < 'a'::text)
-         ->  Seq Scan on compress_hyper_10_29_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
                Filter: (_ts_meta_min_1 < 'a'::text)
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
          Filter: (val_1 < 'a'::text)
-         ->  Seq Scan on compress_hyper_10_30_chunk
+         ->  Seq Scan on compress_hyper_10_25_chunk
                Filter: (_ts_meta_min_1 < 'a'::text)
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (val_1 < 'a'::text)
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (val_1 < 'a'::text)
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (val_1 < 'a'::text)
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (val_1 < 'a'::text)
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (val_1 < 'a'::text)
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (val_1 < 'a'::text)
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (val_1 < 'a'::text)
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (val_1 < 'a'::text)
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (val_1 < 'a'::text)
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (val_1 < 'a'::text)
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (val_1 < 'a'::text)
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (val_1 < 'a'::text)
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (val_1 < 'a'::text)
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (val_1 < 'a'::text)
 (25 rows)
 
@@ -729,29 +733,29 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
                         QUERY PLAN                        
 ----------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
          Filter: (val_2 < 'a'::text)
-         ->  Seq Scan on compress_hyper_10_29_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
                Filter: (_ts_meta_min_2 < 'a'::text)
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
          Filter: (val_2 < 'a'::text)
-         ->  Seq Scan on compress_hyper_10_30_chunk
+         ->  Seq Scan on compress_hyper_10_25_chunk
                Filter: (_ts_meta_min_2 < 'a'::text)
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (val_2 < 'a'::text)
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (val_2 < 'a'::text)
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (val_2 < 'a'::text)
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (val_2 < 'a'::text)
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (val_2 < 'a'::text)
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (val_2 < 'a'::text)
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (val_2 < 'a'::text)
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (val_2 < 'a'::text)
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (val_2 < 'a'::text)
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (val_2 < 'a'::text)
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (val_2 < 'a'::text)
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (val_2 < 'a'::text)
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (val_2 < 'a'::text)
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (val_2 < 'a'::text)
 (25 rows)
 
@@ -759,29 +763,29 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
                            QUERY PLAN                           
 ----------------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
-         ->  Seq Scan on compress_hyper_10_29_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
                Filter: (_ts_meta_min_1 < 'a'::text COLLATE "C")
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
-         ->  Seq Scan on compress_hyper_10_30_chunk
+         ->  Seq Scan on compress_hyper_10_25_chunk
                Filter: (_ts_meta_min_1 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (val_1 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (val_1 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (val_1 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (val_1 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (val_1 < 'a'::text COLLATE "C")
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (val_1 < 'a'::text COLLATE "C")
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (val_1 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (val_1 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (val_1 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (val_1 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (val_1 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (val_1 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
 (25 rows)
 
@@ -789,29 +793,29 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSI
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
-         ->  Seq Scan on compress_hyper_10_29_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
                Filter: (_ts_meta_min_2 < 'a'::text COLLATE "POSIX")
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
-         ->  Seq Scan on compress_hyper_10_30_chunk
+         ->  Seq Scan on compress_hyper_10_25_chunk
                Filter: (_ts_meta_min_2 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (val_2 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (val_2 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (val_2 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (val_2 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (val_2 < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (val_2 < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (val_2 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (val_2 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (val_2 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (val_2 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (val_2 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (val_2 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
 (25 rows)
 
@@ -820,27 +824,27 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSI
                         QUERY PLAN                        
 ----------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
          Filter: (val_1 < 'a'::text COLLATE "POSIX")
-         ->  Seq Scan on compress_hyper_10_29_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
          Filter: (val_1 < 'a'::text COLLATE "POSIX")
-         ->  Seq Scan on compress_hyper_10_30_chunk
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (val_1 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (val_1 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (val_1 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (val_1 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+         ->  Seq Scan on compress_hyper_10_25_chunk
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (val_1 < 'a'::text COLLATE "POSIX")
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (val_1 < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (val_1 < 'a'::text COLLATE "POSIX")
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (val_1 < 'a'::text COLLATE "POSIX")
 (23 rows)
 
@@ -848,27 +852,27 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
                         QUERY PLAN                        
 ----------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_22_chunk
          Filter: (val_2 < 'a'::text COLLATE "C")
-         ->  Seq Scan on compress_hyper_10_29_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
+         ->  Seq Scan on compress_hyper_10_23_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_9_24_chunk
          Filter: (val_2 < 'a'::text COLLATE "C")
-         ->  Seq Scan on compress_hyper_10_30_chunk
-   ->  Seq Scan on _hyper_9_21_chunk
-         Filter: (val_2 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_22_chunk
-         Filter: (val_2 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_23_chunk
-         Filter: (val_2 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_24_chunk
-         Filter: (val_2 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_25_chunk
-         Filter: (val_2 < 'a'::text COLLATE "C")
+         ->  Seq Scan on compress_hyper_10_25_chunk
    ->  Seq Scan on _hyper_9_26_chunk
          Filter: (val_2 < 'a'::text COLLATE "C")
-   ->  Seq Scan on _hyper_9_27_chunk
-         Filter: (val_2 < 'a'::text COLLATE "C")
    ->  Seq Scan on _hyper_9_28_chunk
+         Filter: (val_2 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_30_chunk
+         Filter: (val_2 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_32_chunk
+         Filter: (val_2 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_34_chunk
+         Filter: (val_2 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_36_chunk
+         Filter: (val_2 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_38_chunk
+         Filter: (val_2 < 'a'::text COLLATE "C")
+   ->  Seq Scan on _hyper_9_40_chunk
          Filter: (val_2 < 'a'::text COLLATE "C")
 (23 rows)
 
@@ -903,7 +907,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 and ht.table_name like 'datatype_test' ORDER BY ch1.id;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_31_chunk
+ _timescaledb_internal._hyper_11_42_chunk
 (1 row)
 
 SELECT
@@ -992,7 +996,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 and ht.table_name like 'rescan_test' ORDER BY ch1.id LIMIT 1;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_16_36_chunk
+ _timescaledb_internal._hyper_16_49_chunk
 (1 row)
 
 -- count should be equal to count before compression
@@ -1048,13 +1052,13 @@ WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
    constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
 -----------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_6_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+ _timescaledb_internal | 59_7_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_59_chunk | FOREIGN KEY
 (1 row)
 
 SELECT compress_chunk(:'CHUNK_FULL_NAME');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_18_42_chunk
+ _timescaledb_internal._hyper_18_59_chunk
 (1 row)
 
 SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_type
@@ -1092,16 +1096,16 @@ SELECT * FROM hyper ORDER BY time, device_id;
 SELECT decompress_chunk(:'CHUNK_FULL_NAME');
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_18_42_chunk
+ _timescaledb_internal._hyper_18_59_chunk
 (1 row)
 
 SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_type
 FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
-   constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
------------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_9_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+   constraint_schema   |      constraint_name       |     table_schema      |     table_name     | constraint_type 
+-----------------------+----------------------------+-----------------------+--------------------+-----------------
+ _timescaledb_internal | 59_10_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_59_chunk | FOREIGN KEY
 (1 row)
 
 -- create hypertable with 2 chunks
@@ -1119,21 +1123,21 @@ ALTER TABLE ht5 SET (timescaledb.compress);
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_20_45_chunk
- _timescaledb_internal._hyper_20_46_chunk
+ _timescaledb_internal._hyper_20_63_chunk
+ _timescaledb_internal._hyper_20_64_chunk
 (2 rows)
 
 SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_20_46_chunk
+ _timescaledb_internal._hyper_20_64_chunk
 (1 row)
 
 select chunk_name from chunk_compression_stats('ht5')
 order by chunk_name;
      chunk_name     
 --------------------
- _hyper_20_45_chunk
+ _hyper_20_63_chunk
 (1 row)
 
 -- Test enabling compression for a table with compound foreign key
@@ -1214,8 +1218,8 @@ WHERE ch1.hypertable_id = ht.id
 ORDER BY ch1.id;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_25_51_chunk
- _timescaledb_internal._hyper_25_52_chunk
+ _timescaledb_internal._hyper_25_69_chunk
+ _timescaledb_internal._hyper_25_71_chunk
 (2 rows)
 
 BEGIN;
@@ -1278,7 +1282,7 @@ SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_27_55_chunk
+ _timescaledb_internal._hyper_27_73_chunk
 (1 row)
 
 SELECT approximate_row_count('stattest');
@@ -1382,7 +1386,7 @@ SELECT reloptions FROM pg_class WHERE relname = :statchunk;
 SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_27_55_chunk
+ _timescaledb_internal._hyper_27_73_chunk
 (1 row)
 
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
@@ -1394,7 +1398,7 @@ SELECT reloptions FROM pg_class WHERE relname = :statchunk;
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_27_55_chunk
+ _timescaledb_internal._hyper_27_73_chunk
 (1 row)
 
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
@@ -1407,7 +1411,7 @@ ALTER TABLE stattest SET (autovacuum_enabled = false);
 SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_27_55_chunk
+ _timescaledb_internal._hyper_27_73_chunk
 (1 row)
 
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
@@ -1451,7 +1455,7 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name like 'stattest2'
  ORDER BY ch1.id limit 1;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_58_chunk
+ _timescaledb_internal._hyper_29_75_chunk
 (1 row)
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
@@ -1462,8 +1466,8 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 order by relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |         0 |        0 |             0
- _hyper_29_59_chunk |         0 |        0 |             0
+ _hyper_29_75_chunk |         0 |        0 |             0
+ _hyper_29_77_chunk |         0 |        0 |             0
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1484,8 +1488,8 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 order by relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |         0 |        0 |             0
- _hyper_29_59_chunk |         0 |        0 |             0
+ _hyper_29_75_chunk |         0 |        0 |             0
+ _hyper_29_77_chunk |         0 |        0 |             0
 (2 rows)
 
 SELECT '_timescaledb_internal.' || compht.table_name as "STAT_COMP_TABLE",
@@ -1502,8 +1506,8 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 ORDER BY relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |         0 |        0 |             0
- _hyper_29_59_chunk |         0 |        0 |             0
+ _hyper_29_75_chunk |         0 |        0 |             0
+ _hyper_29_77_chunk |         0 |        0 |             0
 (2 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
@@ -1513,8 +1517,9 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
           relname           | reltuples | relpages | relallvisible 
 ----------------------------+-----------+----------+---------------
- compress_hyper_30_60_chunk |         1 |        1 |             0
-(1 row)
+ compress_hyper_30_76_chunk |         1 |        1 |             0
+ compress_hyper_30_78_chunk |         0 |        0 |             0
+(2 rows)
 
 --analyze on stattest2 should not overwrite
 ANALYZE stattest2;
@@ -1525,8 +1530,8 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
- _hyper_29_58_chunk |         0 |        0 |             0
- _hyper_29_59_chunk |       200 |        2 |             0
+ _hyper_29_75_chunk |         0 |        0 |             0
+ _hyper_29_77_chunk |       200 |        2 |             0
 (2 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
@@ -1536,8 +1541,9 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
           relname           | reltuples | relpages | relallvisible 
 ----------------------------+-----------+----------+---------------
- compress_hyper_30_60_chunk |         1 |        1 |             0
-(1 row)
+ compress_hyper_30_76_chunk |         1 |        1 |             0
+ compress_hyper_30_78_chunk |         0 |        0 |             0
+(2 rows)
 
 -- analyze on compressed hypertable should restore stats
 -- Test approximate_row_count() with compressed hypertable
@@ -1584,8 +1590,8 @@ FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch ) q;
 SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_13_33_chunk
- _timescaledb_internal._hyper_13_34_chunk
+ _timescaledb_internal._hyper_13_44_chunk
+ _timescaledb_internal._hyper_13_45_chunk
 (2 rows)
 
 SELECT
@@ -1596,8 +1602,8 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_13_33_chunk |            0 | t       |        
- _hyper_13_34_chunk |            0 | t       |        
+ _hyper_13_44_chunk |            0 | t       |        
+ _hyper_13_45_chunk |            0 | t       |        
 (2 rows)
 
 SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
@@ -1628,8 +1634,8 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_13_33_chunk |            1 | f       |      64
- _hyper_13_34_chunk |            1 | f       |      65
+ _hyper_13_44_chunk |            1 | f       |      81
+ _hyper_13_45_chunk |            1 | f       |      82
 (2 rows)
 
 SELECT count(*) FROM metrics;
@@ -1656,7 +1662,7 @@ INSERT INTO local_seq SELECT '2000-01-01', generate_series(5,8);
 SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_33_66_chunk
+ _timescaledb_internal._hyper_33_83_chunk
 (1 row)
 
 SELECT
@@ -1748,7 +1754,7 @@ SELECT set_chunk_time_interval('f_sensor_data', INTERVAL '1 year');
 SELECT * FROM _timescaledb_functions.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
  chunk_id | hypertable_id |      schema_name      |     table_name     | relkind |                    slices                    | created 
 ----------+---------------+-----------------------+--------------------+---------+----------------------------------------------+---------
-       71 |            37 | _timescaledb_internal | _hyper_37_71_chunk | r       | {"time": [181900977000000, 515024000000000]} | t
+       88 |            37 | _timescaledb_internal | _hyper_37_88_chunk | r       | {"time": [181900977000000, 515024000000000]} | t
 (1 row)
 
 INSERT INTO f_sensor_data
@@ -1766,7 +1772,7 @@ ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmen
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_37_71_chunk
+ _timescaledb_internal._hyper_37_88_chunk
 (1 row)
 
 CALL reindex_compressed_hypertable('f_sensor_data');
@@ -1808,16 +1814,16 @@ SELECT sum(cpu) FROM f_sensor_data;
                                                                                                                                                                               QUERY PLAN                                                                                                                                                                              
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_37_71_chunk.cpu)
+   Output: sum(_hyper_37_88_chunk.cpu)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_37_71_chunk.cpu))
+         Output: (PARTIAL sum(_hyper_37_88_chunk.cpu))
          Workers Planned: 4
          ->  Partial Aggregate
-               Output: PARTIAL sum(_hyper_37_71_chunk.cpu)
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
-                     Output: _hyper_37_71_chunk.cpu
-                     ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_72_chunk
-                           Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+               Output: PARTIAL sum(_hyper_37_88_chunk.cpu)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_88_chunk
+                     Output: _hyper_37_88_chunk.cpu
+                     ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_89_chunk
+                           Output: compress_hyper_38_89_chunk."time", compress_hyper_38_89_chunk.sensor_id, compress_hyper_38_89_chunk.cpu, compress_hyper_38_89_chunk.temperature, compress_hyper_38_89_chunk._ts_meta_count, compress_hyper_38_89_chunk._ts_meta_sequence_num, compress_hyper_38_89_chunk._ts_meta_min_1, compress_hyper_38_89_chunk._ts_meta_max_1
 (11 rows)
 
 -- Encourage use of Index Scan
@@ -1831,13 +1837,13 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
                                                                                                                                                                         QUERY PLAN                                                                                                                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Gather
-   Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+   Output: _hyper_37_88_chunk."time", _hyper_37_88_chunk.sensor_id, _hyper_37_88_chunk.cpu, _hyper_37_88_chunk.temperature
    Workers Planned: 2
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
-         Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
-         ->  Parallel Index Scan using compress_hyper_38_72_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_72_chunk
-               Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
-               Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_88_chunk
+         Output: _hyper_37_88_chunk."time", _hyper_37_88_chunk.sensor_id, _hyper_37_88_chunk.cpu, _hyper_37_88_chunk.temperature
+         ->  Parallel Index Scan using compress_hyper_38_89_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_89_chunk
+               Output: compress_hyper_38_89_chunk."time", compress_hyper_38_89_chunk.sensor_id, compress_hyper_38_89_chunk.cpu, compress_hyper_38_89_chunk.temperature, compress_hyper_38_89_chunk._ts_meta_count, compress_hyper_38_89_chunk._ts_meta_sequence_num, compress_hyper_38_89_chunk._ts_meta_min_1, compress_hyper_38_89_chunk._ts_meta_max_1
+               Index Cond: (compress_hyper_38_89_chunk.sensor_id > 100)
 (8 rows)
 
 RESET enable_parallel_append;
@@ -1858,19 +1864,19 @@ SELECT sum(cpu) FROM f_sensor_data;
                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_37_71_chunk.cpu)
+   Output: sum(_hyper_37_88_chunk.cpu)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_37_71_chunk.cpu))
+         Output: (PARTIAL sum(_hyper_37_88_chunk.cpu))
          Workers Planned: 4
          ->  Partial Aggregate
-               Output: PARTIAL sum(_hyper_37_71_chunk.cpu)
+               Output: PARTIAL sum(_hyper_37_88_chunk.cpu)
                ->  Parallel Append
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_71_chunk
-                           Output: _hyper_37_71_chunk.cpu
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
-                           Output: _hyper_37_71_chunk.cpu
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_72_chunk
-                                 Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_88_chunk
+                           Output: _hyper_37_88_chunk.cpu
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_88_chunk
+                           Output: _hyper_37_88_chunk.cpu
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_89_chunk
+                                 Output: compress_hyper_38_89_chunk."time", compress_hyper_38_89_chunk.sensor_id, compress_hyper_38_89_chunk.cpu, compress_hyper_38_89_chunk.temperature, compress_hyper_38_89_chunk._ts_meta_count, compress_hyper_38_89_chunk._ts_meta_sequence_num, compress_hyper_38_89_chunk._ts_meta_min_1, compress_hyper_38_89_chunk._ts_meta_max_1
 (14 rows)
 
 :explain
@@ -1878,18 +1884,18 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
                                                                                                                                                                            QUERY PLAN                                                                                                                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Gather
-   Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+   Output: _hyper_37_88_chunk."time", _hyper_37_88_chunk.sensor_id, _hyper_37_88_chunk.cpu, _hyper_37_88_chunk.temperature
    Workers Planned: 3
    ->  Parallel Append
-         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
-               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
-               Filter: (_hyper_37_71_chunk.sensor_id > 100)
-               ->  Parallel Index Scan using compress_hyper_38_72_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_72_chunk
-                     Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
-                     Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
-         ->  Parallel Index Scan using _hyper_37_71_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_71_chunk
-               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
-               Index Cond: (_hyper_37_71_chunk.sensor_id > 100)
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_88_chunk
+               Output: _hyper_37_88_chunk."time", _hyper_37_88_chunk.sensor_id, _hyper_37_88_chunk.cpu, _hyper_37_88_chunk.temperature
+               Filter: (_hyper_37_88_chunk.sensor_id > 100)
+               ->  Parallel Index Scan using compress_hyper_38_89_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_89_chunk
+                     Output: compress_hyper_38_89_chunk."time", compress_hyper_38_89_chunk.sensor_id, compress_hyper_38_89_chunk.cpu, compress_hyper_38_89_chunk.temperature, compress_hyper_38_89_chunk._ts_meta_count, compress_hyper_38_89_chunk._ts_meta_sequence_num, compress_hyper_38_89_chunk._ts_meta_min_1, compress_hyper_38_89_chunk._ts_meta_max_1
+                     Index Cond: (compress_hyper_38_89_chunk.sensor_id > 100)
+         ->  Parallel Index Scan using _hyper_37_88_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_88_chunk
+               Output: _hyper_37_88_chunk."time", _hyper_37_88_chunk.sensor_id, _hyper_37_88_chunk.cpu, _hyper_37_88_chunk.temperature
+               Index Cond: (_hyper_37_88_chunk.sensor_id > 100)
 (13 rows)
 
 -- Test non-partial paths below append are not executed multiple times
@@ -1962,8 +1968,8 @@ SELECT time, device, device * 0.1 FROM
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_41_75_chunk
- _timescaledb_internal._hyper_41_76_chunk
+ _timescaledb_internal._hyper_41_92_chunk
+ _timescaledb_internal._hyper_41_94_chunk
 (2 rows)
 
 INSERT INTO ht_metrics_partially_compressed VALUES ('2020-01-01'::timestamptz, 1, 0.1);
@@ -1979,25 +1985,25 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
          Startup Exclusion: false
          Runtime Exclusion: false
          ->  Sort
-               Output: _hyper_41_76_chunk."time", _hyper_41_76_chunk.device, _hyper_41_76_chunk.value
-               Sort Key: _hyper_41_76_chunk."time" DESC, _hyper_41_76_chunk.device
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_76_chunk
-                     Output: _hyper_41_76_chunk."time", _hyper_41_76_chunk.device, _hyper_41_76_chunk.value
-                     ->  Seq Scan on _timescaledb_internal.compress_hyper_42_78_chunk
-                           Output: compress_hyper_42_78_chunk."time", compress_hyper_42_78_chunk.device, compress_hyper_42_78_chunk.value, compress_hyper_42_78_chunk._ts_meta_count, compress_hyper_42_78_chunk._ts_meta_sequence_num, compress_hyper_42_78_chunk._ts_meta_min_1, compress_hyper_42_78_chunk._ts_meta_max_1
+               Output: _hyper_41_94_chunk."time", _hyper_41_94_chunk.device, _hyper_41_94_chunk.value
+               Sort Key: _hyper_41_94_chunk."time" DESC, _hyper_41_94_chunk.device
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_94_chunk
+                     Output: _hyper_41_94_chunk."time", _hyper_41_94_chunk.device, _hyper_41_94_chunk.value
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_42_95_chunk
+                           Output: compress_hyper_42_95_chunk."time", compress_hyper_42_95_chunk.device, compress_hyper_42_95_chunk.value, compress_hyper_42_95_chunk._ts_meta_count, compress_hyper_42_95_chunk._ts_meta_sequence_num, compress_hyper_42_95_chunk._ts_meta_min_1, compress_hyper_42_95_chunk._ts_meta_max_1
          ->  Merge Append
-               Sort Key: _hyper_41_75_chunk."time" DESC, _hyper_41_75_chunk.device
+               Sort Key: _hyper_41_92_chunk."time" DESC, _hyper_41_92_chunk.device
                ->  Sort
-                     Output: _hyper_41_75_chunk."time", _hyper_41_75_chunk.device, _hyper_41_75_chunk.value
-                     Sort Key: _hyper_41_75_chunk."time" DESC, _hyper_41_75_chunk.device
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_75_chunk
-                           Output: _hyper_41_75_chunk."time", _hyper_41_75_chunk.device, _hyper_41_75_chunk.value
-                           ->  Seq Scan on _timescaledb_internal.compress_hyper_42_77_chunk
-                                 Output: compress_hyper_42_77_chunk."time", compress_hyper_42_77_chunk.device, compress_hyper_42_77_chunk.value, compress_hyper_42_77_chunk._ts_meta_count, compress_hyper_42_77_chunk._ts_meta_sequence_num, compress_hyper_42_77_chunk._ts_meta_min_1, compress_hyper_42_77_chunk._ts_meta_max_1
+                     Output: _hyper_41_92_chunk."time", _hyper_41_92_chunk.device, _hyper_41_92_chunk.value
+                     Sort Key: _hyper_41_92_chunk."time" DESC, _hyper_41_92_chunk.device
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_92_chunk
+                           Output: _hyper_41_92_chunk."time", _hyper_41_92_chunk.device, _hyper_41_92_chunk.value
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_42_93_chunk
+                                 Output: compress_hyper_42_93_chunk."time", compress_hyper_42_93_chunk.device, compress_hyper_42_93_chunk.value, compress_hyper_42_93_chunk._ts_meta_count, compress_hyper_42_93_chunk._ts_meta_sequence_num, compress_hyper_42_93_chunk._ts_meta_min_1, compress_hyper_42_93_chunk._ts_meta_max_1
                ->  Sort
-                     Output: _hyper_41_75_chunk."time", _hyper_41_75_chunk.device, _hyper_41_75_chunk.value
-                     Sort Key: _hyper_41_75_chunk."time" DESC, _hyper_41_75_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_41_75_chunk
-                           Output: _hyper_41_75_chunk."time", _hyper_41_75_chunk.device, _hyper_41_75_chunk.value
+                     Output: _hyper_41_92_chunk."time", _hyper_41_92_chunk.device, _hyper_41_92_chunk.value
+                     Sort Key: _hyper_41_92_chunk."time" DESC, _hyper_41_92_chunk.device
+                     ->  Seq Scan on _timescaledb_internal._hyper_41_92_chunk
+                           Output: _hyper_41_92_chunk."time", _hyper_41_92_chunk.device, _hyper_41_92_chunk.value
 (28 rows)
 

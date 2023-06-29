@@ -25,7 +25,7 @@ WHERE (original.*) IS DISTINCT FROM (compressed.*);
 SELECT count(decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_decompressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like :'HYPERTABLE_NAME' and chunk.compressed_chunk_id IS NOT NULL;
+WHERE hypertable.table_name like :'HYPERTABLE_NAME' and chunk.status & 1 > 0;
 
 
 --run data on data that's been compressed and decompressed, make sure it's the same.

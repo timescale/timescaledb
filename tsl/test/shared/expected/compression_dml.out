@@ -52,7 +52,7 @@ INSERT INTO metric_5m (time, series_id, value)
 -- manually compress all chunks
 SELECT count(compress_chunk(c.schema_name|| '.' || c.table_name))
     FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where
-    c.hypertable_id = ht.id and ht.table_name = 'metric_5m' and c.compressed_chunk_id IS NULL;
+    c.hypertable_id = ht.id and ht.table_name = 'metric_5m' and c.status & 1 = 0;
  count 
    289
 (1 row)
@@ -103,4 +103,4 @@ QUERY PLAN
 (4 rows)
 
 DROP TABLE mytab CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_X_X_chunk
+NOTICE:  drop cascades to 4 other objects

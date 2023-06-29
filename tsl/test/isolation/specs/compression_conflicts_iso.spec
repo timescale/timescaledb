@@ -8,6 +8,7 @@ setup
     CREATE UNIQUE INDEX device_time_idx on ts_device_table(time, device);
     SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 10);
     INSERT INTO ts_device_table SELECT generate_series(0,9,1), 1, 100, 20;
+    INSERT INTO ts_device_table VALUES (100, 1, 100, 20);
     ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
     CREATE FUNCTION lock_chunktable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s IN SHARE MODE', name);
@@ -114,6 +115,27 @@ step "RC" {
   $$;
 }
 
+session "s1"
+step "s1_compress_one" {
+    BEGIN; 
+    SELECT compress_chunk(i.show_chunks) FROM (SELECT show_chunks('ts_device_table') ORDER BY 1 ASC LIMIT 1) i;
+}
+
+step "s1_commit" {
+    COMMIT;
+}
+
+session "s2"
+step "s2_compress_one" {
+    BEGIN; 
+    SELECT compress_chunk(i.show_chunks) FROM (SELECT show_chunks('ts_device_table') ORDER BY 1 DESC LIMIT 1) i;
+}
+
+step "s2_commit" {
+    COMMIT;
+}
+
+
 #If insert is in progress, compression  is blocked.
 permutation "LockChunk1" "IB"   "I1"   "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1" "SChunkStat"
 permutation "LockChunk1" "IBRR" "I1"   "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1" "SChunkStat"
@@ -167,3 +189,7 @@ permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IBRR" "Iu1" "RC"  "Unloc
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IBS"  "Iu1" "RC"  "UnlockChunk" "Ic" "SH" "SA" "SChunkStat" "SU"
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IN1"  "RC" "UnlockChunk" "INc" "SH" "SA" "SChunkStat"
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "INu1" "RC" "UnlockChunk" "INc" "SH" "SA" "SChunkStat" "SU"
+
+## two compression jobs should be able to work on different chunks independently 
+permutation "s1_compress_one" "s2_compress_one" "s2_commit" "s1_commit"
+permutation "s2_compress_one" "s1_compress_one" "s2_commit" "s1_commit"

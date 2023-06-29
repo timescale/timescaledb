@@ -150,7 +150,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}
 
-		if (fdw_private->cached_chunk_struct->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		if (ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
 			ts_decompress_chunk_generate_paths(root, rel, ht, fdw_private->cached_chunk_struct);
 	}
 }
@@ -184,7 +184,7 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	{
 		ListCell *lc;
 		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true);
-		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		if (ts_chunk_is_compressed(chunk))
 		{
 			foreach (lc, rel->pathlist)
 			{

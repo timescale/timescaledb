@@ -437,8 +437,8 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |    chunk_name    | compression_status | uncompressed_heap_size | uncompressed_index_size | uncompressed_toast_size | uncompressed_total_size | compressed_heap_size | compressed_index_size | compressed_toast_size | compressed_total_size 
 -------------------+-----------------+-----------------------+------------------+--------------------+------------------------+-------------------------+-------------------------+-------------------------+----------------------+-----------------------+-----------------------+-----------------------
  public            | conditions      | _timescaledb_internal | _hyper_1_1_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
- public            | conditions      | _timescaledb_internal | _hyper_1_2_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
  public            | conditions      | _timescaledb_internal | _hyper_1_3_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
+ public            | conditions      | _timescaledb_internal | _hyper_1_5_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
 (3 rows)
 
 -- Compression policy
@@ -454,8 +454,8 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |    chunk_name    | compression_status | uncompressed_heap_size | uncompressed_index_size | uncompressed_toast_size | uncompressed_total_size | compressed_heap_size | compressed_index_size | compressed_toast_size | compressed_total_size 
 -------------------+-----------------+-----------------------+------------------+--------------------+------------------------+-------------------------+-------------------------+-------------------------+----------------------+-----------------------+-----------------------+-----------------------
  public            | conditions      | _timescaledb_internal | _hyper_1_1_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                 8192 |                 16384 |                  8192 |                 32768
- public            | conditions      | _timescaledb_internal | _hyper_1_2_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                 8192 |                 16384 |                  8192 |                 32768
  public            | conditions      | _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                 8192 |                 16384 |                  8192 |                 32768
+ public            | conditions      | _timescaledb_internal | _hyper_1_5_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                 8192 |                 16384 |                  8192 |                 32768
 (3 rows)
 
 --TEST compression job after inserting data into previously compressed chunk
@@ -468,8 +468,8 @@ order by id;
  id |    table_name    | status 
 ----+------------------+--------
   1 | _hyper_1_1_chunk |      9
-  2 | _hyper_1_2_chunk |      9
   3 | _hyper_1_3_chunk |      9
+  5 | _hyper_1_5_chunk |      9
 (3 rows)
 
 --running job second time, wait for it to complete
@@ -492,8 +492,8 @@ order by id;
  id |    table_name    | status 
 ----+------------------+--------
   1 | _hyper_1_1_chunk |      1
-  2 | _hyper_1_2_chunk |      1
   3 | _hyper_1_3_chunk |      1
+  5 | _hyper_1_5_chunk |      1
 (3 rows)
 
 -- Drop the compression job
@@ -508,8 +508,8 @@ SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
- _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_5_chunk
 (3 rows)
 
 -- TEST Continuous Aggregate job
@@ -572,7 +572,7 @@ FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 --verify that job is dropped when cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_10_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_7_chunk
 SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
  id | proc_name | hypertable_id 
@@ -913,15 +913,6 @@ INSERT INTO sensor_data
 		time;
 -- enable compression
 ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
--- add new compression policy job
-SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
--- set recompress to true
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                                           alter_job                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1014,"@ 3 days 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_functions.policy_compression_check,f,,)
-(1 row)
-
 -- create new chunks
 INSERT INTO sensor_data
 	SELECT
@@ -938,8 +929,8 @@ INSERT INTO sensor_data
 SELECT chunk_name AS new_uncompressed_chunk_name
   FROM timescaledb_information.chunks
   WHERE hypertable_name = 'sensor_data' AND NOT is_compressed LIMIT 1 \gset
--- change compression status so that this chunk is skipped when policy is run
-update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompressed_chunk_name';
+-- change compression status to invalid value so that this chunk is skipped when policy is run
+update _timescaledb_catalog.chunk set status=-1 where table_name = :'new_uncompressed_chunk_name';
 -- verify that there are other uncompressed new chunks that need to be compressed
 SELECT count(*) > 1
   FROM timescaledb_information.chunks
@@ -947,6 +938,15 @@ SELECT count(*) > 1
  ?column? 
 ----------
  t
+(1 row)
+
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+                                                                                           alter_job                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1014,"@ 3 days 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_functions.policy_compression_check,f,,)
 (1 row)
 
 -- disable notice/warning as the new_uncompressed_chunk_name
@@ -958,7 +958,7 @@ SET client_min_messages TO NOTICE;
 SELECT status FROM _timescaledb_catalog.chunk where table_name = :'new_uncompressed_chunk_name';
  status 
 --------
-      3
+     -1
 (1 row)
 
 -- confirm all the other new chunks are now compressed despite

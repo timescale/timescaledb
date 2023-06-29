@@ -1910,8 +1910,8 @@ Indexes:
     "_materialized_hypertable_47_bucket_idx" btree (bucket DESC)
 Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_47 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
-Child tables: _timescaledb_internal._hyper_47_52_chunk,
-              _timescaledb_internal._hyper_47_53_chunk
+Child tables: _timescaledb_internal._hyper_47_56_chunk,
+              _timescaledb_internal._hyper_47_57_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"

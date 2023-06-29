@@ -3919,19 +3919,19 @@ SELECT table_name FROM create_hypertable('i3629', 'time');
 
 INSERT INTO i3629 SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
 EXPLAIN (SUMMARY OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
-                   QUERY PLAN                   
-------------------------------------------------
+                   QUERY PLAN                    
+-------------------------------------------------
  Unique
    ->  Sort
-         Sort Key: _hyper_3_6_chunk."time" DESC
+         Sort Key: _hyper_3_9_chunk."time" DESC
          ->  Append
-               ->  Seq Scan on _hyper_3_6_chunk
-                     Filter: (a = 2)
-               ->  Seq Scan on _hyper_3_7_chunk
-                     Filter: (a = 2)
-               ->  Seq Scan on _hyper_3_8_chunk
-                     Filter: (a = 2)
                ->  Seq Scan on _hyper_3_9_chunk
+                     Filter: (a = 2)
+               ->  Seq Scan on _hyper_3_10_chunk
+                     Filter: (a = 2)
+               ->  Seq Scan on _hyper_3_11_chunk
+                     Filter: (a = 2)
+               ->  Seq Scan on _hyper_3_12_chunk
                      Filter: (a = 2)
 (12 rows)
 
@@ -3959,8 +3959,8 @@ ANALYZE i3720;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
-   ->  Custom Scan (SkipScan) on _hyper_4_10_chunk (actual rows=3 loops=1)
-         ->  Index Only Scan using _hyper_4_10_chunk_i3720_data_time_idx on _hyper_4_10_chunk (actual rows=3 loops=1)
+   ->  Custom Scan (SkipScan) on _hyper_4_13_chunk (actual rows=3 loops=1)
+         ->  Index Only Scan using _hyper_4_13_chunk_i3720_data_time_idx on _hyper_4_13_chunk (actual rows=3 loops=1)
                Index Cond: (data > NULL::text)
                Heap Fetches: 3
 (5 rows)
