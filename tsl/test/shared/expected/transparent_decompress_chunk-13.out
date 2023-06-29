@@ -119,7 +119,7 @@ QUERY PLAN
    Sort Method: quicksort 
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=0 loops=1)
          Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
-         Filter: (_hyper_X_X_chunk.v3 > '10'::double precision)
+         Vectorized Filter: (_hyper_X_X_chunk.v3 > '10'::double precision)
          Rows Removed by Filter: 17990
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=20 loops=1)
@@ -233,7 +233,7 @@ QUERY PLAN
 QUERY PLAN
  Limit (actual rows=5 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5 loops=1)
-         Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+         Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
          Rows Removed by Filter: 2985
          ->  Sort (actual rows=5 loops=1)
                Sort Key: compress_hyper_X_X_chunk.device_id
@@ -250,7 +250,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: top-N heapsort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=150 loops=1)
-               Filter: ("time" < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Vectorized Filter: ("time" < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 2840
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                      Filter: (_ts_meta_min_1 < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -264,7 +264,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: top-N heapsort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=155 loops=1)
-               Filter: ("time" <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Vectorized Filter: ("time" <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 2835
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                      Filter: (_ts_meta_min_1 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -278,7 +278,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: top-N heapsort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17840 loops=1)
-               Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Vectorized Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 150
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
                      Filter: (_ts_meta_max_1 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -291,7 +291,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: top-N heapsort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17835 loops=1)
-               Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Vectorized Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 155
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
                      Filter: (_ts_meta_max_1 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -304,7 +304,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: top-N heapsort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17835 loops=1)
-               Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
+               Vectorized Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 155
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
                      Filter: (_ts_meta_max_1 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -318,7 +318,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: (v0 < 1)
+               Vectorized Filter: (v0 < 1)
                Rows Removed by Filter: 17990
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (8 rows)
@@ -378,7 +378,7 @@ QUERY PLAN
    Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=10 loops=1)
          Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
-         Filter: (_hyper_X_X_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+         Vectorized Filter: (_hyper_X_X_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
          Rows Removed by Filter: 31
          Bulk Decompression: true
          ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=1 loops=1)
