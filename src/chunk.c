@@ -3633,7 +3633,7 @@ chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id
 	if (is_compressed)
 	{
 		form.compressed_chunk_id = compressed_chunk_id;
-		form.status = ts_set_flags_32(form.status, CHUNK_STATUS_COMPRESSED);
+		form.status = ts_set_flags_32(form.status, CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_PARTIAL);
 	}
 	else
 	{
