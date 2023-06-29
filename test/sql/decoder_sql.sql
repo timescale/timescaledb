@@ -130,5 +130,28 @@ UPDATE tt SET t=t WHERE a=2;
 SELECT substr(data, 1, 50), substr(data, 3000, 45)
   FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_transaction', 'off');
 DROP TABLE tt;
+
+-- test include_relations option 
+CREATE TABLE aa (a int primary key, b text NOT NULL);
+CREATE TABLE bb (a int primary key, b text NOT NULL);
+CREATE TABLE cc (a int primary key, b text NOT NULL);
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+INSERT INTO bb VALUES (1, 'aa'), (2, 'bb');
+INSERT INTO cc VALUES (1, 'aa'), (2, 'bb');
+-- peek into changes in two of the above relations 
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_relations', 'public.aa,public.bb');
+-- now consume changes including the other relation
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_relations', 'public.cc,public.bb');
+
+INSERT INTO bb VALUES (3, 'aa'), (4, 'bb');
+INSERT INTO bb VALUES (5, 'aa'), (6, 'bb');
+INSERT INTO aa VALUES (7, 'aa'), (8, 'bb');
+INSERT INTO cc VALUES (8, 'aa'), (9, 'bb');
+-- consume changes and write to a hypertable
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_relations', 'public.bb', 'target_hypertable', 'public.ht');
+DROP TABLE aa;
+DROP TABLE bb;
+DROP TABLE cc;
+
 -- Drop replication slot
 SELECT pg_drop_replication_slot('custom_slot');

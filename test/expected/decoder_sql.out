@@ -342,6 +342,50 @@ SELECT substr(data, 1, 50), substr(data, 3000, 45)
 (4 rows)
 
 DROP TABLE tt;
+-- test include_relations option 
+CREATE TABLE aa (a int primary key, b text NOT NULL);
+CREATE TABLE bb (a int primary key, b text NOT NULL);
+CREATE TABLE cc (a int primary key, b text NOT NULL);
+INSERT INTO aa VALUES (1, 'aa'), (2, 'bb');
+INSERT INTO bb VALUES (1, 'aa'), (2, 'bb');
+INSERT INTO cc VALUES (1, 'aa'), (2, 'bb');
+-- peek into changes in two of the above relations 
+SELECT data FROM pg_logical_slot_peek_changes('custom_slot', NULL, NULL, 'include_relations', 'public.aa,public.bb');
+                      data                      
+------------------------------------------------
+ INSERT INTO public.aa (a, b) VALUES (1, 'aa');
+ INSERT INTO public.aa (a, b) VALUES (2, 'bb');
+ INSERT INTO public.bb (a, b) VALUES (1, 'aa');
+ INSERT INTO public.bb (a, b) VALUES (2, 'bb');
+(4 rows)
+
+-- now consume changes including the other relation
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_relations', 'public.cc,public.bb');
+                      data                      
+------------------------------------------------
+ INSERT INTO public.bb (a, b) VALUES (1, 'aa');
+ INSERT INTO public.bb (a, b) VALUES (2, 'bb');
+ INSERT INTO public.cc (a, b) VALUES (1, 'aa');
+ INSERT INTO public.cc (a, b) VALUES (2, 'bb');
+(4 rows)
+
+INSERT INTO bb VALUES (3, 'aa'), (4, 'bb');
+INSERT INTO bb VALUES (5, 'aa'), (6, 'bb');
+INSERT INTO aa VALUES (7, 'aa'), (8, 'bb');
+INSERT INTO cc VALUES (8, 'aa'), (9, 'bb');
+-- consume changes and write to a hypertable
+SELECT data FROM pg_logical_slot_get_changes('custom_slot', NULL, NULL, 'include_relations', 'public.bb', 'target_hypertable', 'public.ht');
+                       data                       
+--------------------------------------------------
+ INSERT INTO "public.ht" (a, b) VALUES (3, 'aa');
+ INSERT INTO "public.ht" (a, b) VALUES (4, 'bb');
+ INSERT INTO "public.ht" (a, b) VALUES (5, 'aa');
+ INSERT INTO "public.ht" (a, b) VALUES (6, 'bb');
+(4 rows)
+
+DROP TABLE aa;
+DROP TABLE bb;
+DROP TABLE cc;
 -- Drop replication slot
 SELECT pg_drop_replication_slot('custom_slot');
  pg_drop_replication_slot 
