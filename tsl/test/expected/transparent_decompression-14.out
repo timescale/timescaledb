@@ -961,7 +961,7 @@ LIMIT 10;
                      Sort Key: _hyper_1_1_chunk."time"
                      Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
-                           Filter: (v0 < 1)
+                           Vectorized Filter: (v0 < 1)
                            ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=0 loops=1)
                                  Filter: (_ts_meta_min_1 < 1)
                                  Rows Removed by Filter: 5
@@ -971,7 +971,7 @@ LIMIT 10;
                ->  Sort (never executed)
                      Sort Key: _hyper_1_3_chunk."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
-                           Filter: (v0 < 1)
+                           Vectorized Filter: (v0 < 1)
                            ->  Seq Scan on compress_hyper_5_16_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < 1)
 (24 rows)
@@ -4470,7 +4470,7 @@ LIMIT 10;
                                  Sort Key: _hyper_2_4_chunk."time"
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=0 loops=1)
-                                       Filter: (v0 < 1)
+                                       Vectorized Filter: (v0 < 1)
                                        ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
                                              Filter: (_ts_meta_min_1 < 1)
                                              Rows Removed by Filter: 1
@@ -4481,7 +4481,7 @@ LIMIT 10;
                                  Sort Key: _hyper_2_5_chunk."time"
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=0 loops=1)
-                                       Filter: (v0 < 1)
+                                       Vectorized Filter: (v0 < 1)
                                        ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=0 loops=1)
                                              Filter: (_ts_meta_min_1 < 1)
                                              Rows Removed by Filter: 3
@@ -4492,7 +4492,7 @@ LIMIT 10;
                                  Sort Key: _hyper_2_6_chunk."time"
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=0 loops=1)
-                                       Filter: (v0 < 1)
+                                       Vectorized Filter: (v0 < 1)
                                        ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
                                              Filter: (_ts_meta_min_1 < 1)
                                              Rows Removed by Filter: 1
@@ -4516,7 +4516,7 @@ LIMIT 10;
                                  Sort Key: _hyper_2_10_chunk."time"
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=0 loops=1)
-                                       Filter: (v0 < 1)
+                                       Vectorized Filter: (v0 < 1)
                                        ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=0 loops=1)
                                              Filter: (_ts_meta_min_1 < 1)
                                              Rows Removed by Filter: 1
@@ -4527,7 +4527,7 @@ LIMIT 10;
                                  Sort Key: _hyper_2_11_chunk."time"
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=0 loops=1)
-                                       Filter: (v0 < 1)
+                                       Vectorized Filter: (v0 < 1)
                                        ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=0 loops=1)
                                              Filter: (_ts_meta_min_1 < 1)
                                              Rows Removed by Filter: 3

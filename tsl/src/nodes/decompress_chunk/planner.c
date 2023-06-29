@@ -414,7 +414,7 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 	}
 
 	Var *var = castNode(Var, linitial(o->args));
-	Assert(var->varno == path->info->chunk_rel->relid);
+	Assert((Index) var->varno == path->info->chunk_rel->relid);
 	FormData_hypertable_compression *column_compression =
 		path->uncompressed_chunk_attno_to_compression_info[var->varattno];
 

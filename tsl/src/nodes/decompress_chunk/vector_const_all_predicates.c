@@ -46,6 +46,14 @@
 
 #include "vector_const_one_type.c"
 
+/* int48... functions. */
+#define VECTOR_CTYPE int32
+#define CONST_CTYPE int64
+#define CONST_CONVERSION(X) DatumGetInt32(X)
+#define PG_PREDICATE(X) F_INT48##X
+
+#include "vector_const_one_type.c"
+
 /* float8 functions. */
 #define VECTOR_CTYPE float8
 #define CONST_CTYPE float8
