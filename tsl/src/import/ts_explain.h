@@ -21,3 +21,6 @@
 
 void ts_show_scan_qual(List *qual, const char *qlabel, PlanState *planstate, List *ancestors,
 					   ExplainState *es);
+
+void ts_show_instrumentation_count(const char *qlabel, int which, PlanState *planstate,
+								   ExplainState *es);

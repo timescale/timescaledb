@@ -30,6 +30,7 @@
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/sorted_merge.h"
 #include "ts_catalog/hypertable_compression.h"
+#include "vector_predicates.h"
 
 static TupleTableSlot *decompress_chunk_exec(CustomScanState *node);
 static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
@@ -487,94 +488,101 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return arrow;
 }
 
-/* int8... functions. */
-#define VECTOR_CTYPE int64
-#define CONST_CTYPE int64
-#define CONST_CONVERSION(X) DatumGetInt64(X)
+static void
+apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+{
+	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
+	batch_state->proj_result = palloc(bitmap_bytes);
+	memset(batch_state->proj_result, 0xFF, bitmap_bytes);
 
-#define PREDICATE_NAME ge
-#define PREDICATE(X, Y) ((X) >= (Y))
-#include "vector_const_predicate_impl.c"
+	ListCell *lc;
+	foreach (lc, chunk_state->vectorized_quals)
+	{
+		OpExpr *oe = castNode(OpExpr, lfirst(lc));
+		Var *var = castNode(Var, linitial(oe->args));
+		Const *constnode = castNode(Const, lsecond(oe->args));
 
-#define PREDICATE_NAME le
-#define PREDICATE(X, Y) ((X) <= (Y))
-#include "vector_const_predicate_impl.c"
+		// Assert(get_opcode(oe->opno) == F_INT8GE);
 
-#define PREDICATE_NAME lt
-#define PREDICATE(X, Y) ((X) < (Y))
-#include "vector_const_predicate_impl.c"
+		DecompressChunkColumnState *column = NULL;
+		for (int i = 0; i < chunk_state->num_columns; i++)
+		{
+			column = &batch_state->columns[i];
+			if (column->output_attno == var->varattno)
+			{
+				break;
+			}
+			else
+			{
+				column = NULL;
+			}
+		}
 
-#define PREDICATE_NAME gt
-#define PREDICATE(X, Y) ((X) > (Y))
-#include "vector_const_predicate_impl.c"
+		Ensure(column != NULL, "decompressed column %d not found in batch", var->varattno);
 
-#define PREDICATE_NAME eq
-#define PREDICATE(X, Y) ((X) == (Y))
-#include "vector_const_predicate_impl.c"
+		uint64 default_value_predicate_result;
+		uint64 *predicate_result = batch_state->proj_result;
+		ArrowArray *arrow = column->compressed.arrow;
+		if (column->compressed.arrow == NULL)
+		{
+			/*
+			 * The compressed column had a default value. We can't fall back to
+			 * the non-vectorized quals now, so build a single-value ArrowArray
+			 * with this default value, check if it passes the predicate, and apply
+			 * it to the entire batch.
+			 */
+			AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
-#undef VECTOR_CTYPE
-#undef CONST_CTYPE
-#undef CONST_CONVERSION
+			Ensure(column->compressed.iterator == NULL,
+				   "ArrowArray expected for column %s",
+				   NameStr(
+					   TupleDescAttr(batch_state->decompressed_slot_scan->tts_tupleDescriptor, attr)
+						   ->attname));
 
-/* int24... functions. */
-#define VECTOR_CTYPE int16
-#define CONST_CTYPE int32
-#define CONST_CONVERSION(X) DatumGetInt32(X)
+			/*
+			 * We saved the actual default value into the decompressed scan slot
+			 * above, so pull it from there.
+			 */
+			arrow = make_single_value_arrow(column->typid,
+											batch_state->decompressed_slot_scan->tts_values[attr],
+											batch_state->decompressed_slot_scan->tts_isnull[attr]);
 
-#define PREDICATE_NAME ge
-#define PREDICATE(X, Y) ((X) >= (Y))
-#include "vector_const_predicate_impl.c"
+			/*
+			 * We start from an all-valid bitmap, because the predicate is
+			 * AND-ed to it.
+			 */
+			default_value_predicate_result = 1;
+			predicate_result = &default_value_predicate_result;
+		}
 
-#define PREDICATE_NAME le
-#define PREDICATE(X, Y) ((X) <= (Y))
-#include "vector_const_predicate_impl.c"
+		void (*predicate)(const ArrowArray *, Datum, uint64 *restrict) =
+			get_vector_const_predicate(get_opcode(oe->opno));
 
-#define PREDICATE_NAME lt
-#define PREDICATE(X, Y) ((X) < (Y))
-#include "vector_const_predicate_impl.c"
+		Ensure(predicate != NULL,
+			   "vectorized predicate not found for postgres predicate %d",
+			   get_opcode(oe->opno));
 
-#define PREDICATE_NAME gt
-#define PREDICATE(X, Y) ((X) > (Y))
-#include "vector_const_predicate_impl.c"
+		predicate(arrow, constnode->constvalue, predicate_result);
 
-#define PREDICATE_NAME eq
-#define PREDICATE(X, Y) ((X) == (Y))
-#include "vector_const_predicate_impl.c"
+		if (column->compressed.arrow == NULL)
+		{
+			/* The column had a default value. */
+			Assert(column->compressed.iterator == NULL);
 
-#undef VECTOR_CTYPE
-#undef CONST_CTYPE
-#undef CONST_CONVERSION
-
-/* int84... functions. */
-#define VECTOR_CTYPE int64
-#define CONST_CTYPE int32
-#define CONST_CONVERSION(X) DatumGetInt32(X)
-
-#define PREDICATE_NAME ge
-#define PREDICATE(X, Y) ((X) >= (Y))
-#include "vector_const_predicate_impl.c"
-
-#define PREDICATE_NAME le
-#define PREDICATE(X, Y) ((X) <= (Y))
-#include "vector_const_predicate_impl.c"
-
-#define PREDICATE_NAME lt
-#define PREDICATE(X, Y) ((X) < (Y))
-#include "vector_const_predicate_impl.c"
-
-#define PREDICATE_NAME gt
-#define PREDICATE(X, Y) ((X) > (Y))
-#include "vector_const_predicate_impl.c"
-
-#define PREDICATE_NAME eq
-#define PREDICATE(X, Y) ((X) == (Y))
-#include "vector_const_predicate_impl.c"
-
-#undef PREDICATE_NAME
-#undef PREDICATE
-#undef VECTOR_CTYPE
-#undef CONST_CTYPE
-#undef CONST_CONVERSION
+			if (!(default_value_predicate_result & 1))
+			{
+				/*
+				 * We had a default value for the compressed column, and it
+				 * didn't pass the predicate, so the entire batch didn't pass.
+				 */
+				for (int i = 0; i < bitmap_bytes / 8; i++)
+				{
+					batch_state->proj_result[i] = 0;
+				}
+			}
+		}
+	}
+}
 
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
@@ -829,186 +837,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 	}
 	batch_state->initialized = true;
 
-	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
-	batch_state->proj_result = palloc(bitmap_bytes);
-	memset(batch_state->proj_result, 0xFF, bitmap_bytes);
-
-	ListCell *lc;
-	foreach (lc, chunk_state->vectorized_quals)
-	{
-		OpExpr *oe = castNode(OpExpr, lfirst(lc));
-		Var *var = castNode(Var, linitial(oe->args));
-		Const *constnode = castNode(Const, lsecond(oe->args));
-
-		// Assert(get_opcode(oe->opno) == F_INT8GE);
-
-		DecompressChunkColumnState *column;
-		for (int i = 0; i < chunk_state->num_columns; i++)
-		{
-			column = &batch_state->columns[i];
-			if (column->output_attno == var->varattno)
-			{
-				break;
-			}
-			else
-			{
-				column = NULL;
-			}
-		}
-
-		Assert(column != NULL);
-
-		uint64 default_value_predicate_result;
-		uint64 *predicate_result = batch_state->proj_result;
-		ArrowArray *arrow = column->compressed.arrow;
-		if (column->compressed.arrow == NULL)
-		{
-			/*
-			 * The compressed column had a default value. We can't fall back to
-			 * the non-vectorized quals now, so build a single-value ArrowArray
-			 * with this default value, check if it passes the predicate, and apply
-			 * it to the entire batch.
-			 */
-			Assert(column->compressed.iterator == NULL);
-
-			AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
-
-			/*
-			 * We saved the actual default value into the decompressed scan slot
-			 * above, so pull it from there.
-			 */
-			arrow = make_single_value_arrow(column->typid,
-											batch_state->decompressed_slot_scan->tts_values[attr],
-											batch_state->decompressed_slot_scan->tts_isnull[attr]);
-
-			/*
-			 * We start from an all-valid bitmap, because the predicate is
-			 * AND-ed to it.
-			 */
-			default_value_predicate_result = 1;
-			predicate_result = &default_value_predicate_result;
-		}
-
-		switch (get_opcode(oe->opno))
-		{
-			case F_INT8EQ:
-			case F_TIMESTAMPTZ_EQ:
-			case F_TIMESTAMP_EQ:
-				predicate_eq_int64_vector_int64_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT8GE:
-			case F_TIMESTAMPTZ_GE:
-			case F_TIMESTAMP_GE:
-				predicate_ge_int64_vector_int64_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT8GT:
-			case F_TIMESTAMP_GT:
-			case F_TIMESTAMPTZ_GT:
-				predicate_gt_int64_vector_int64_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT8LE:
-			case F_TIMESTAMP_LE:
-			case F_TIMESTAMPTZ_LE:
-				predicate_le_int64_vector_int64_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT8LT:
-			case F_TIMESTAMP_LT:
-			case F_TIMESTAMPTZ_LT:
-				predicate_lt_int64_vector_int64_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT24EQ:
-				predicate_eq_int16_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT24GE:
-				predicate_ge_int16_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT24GT:
-				predicate_gt_int16_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT24LE:
-				predicate_le_int16_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT24LT:
-				predicate_lt_int16_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT84EQ:
-				predicate_eq_int64_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT84GE:
-				predicate_ge_int64_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT84GT:
-				predicate_gt_int64_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT84LE:
-				predicate_le_int64_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			case F_INT84LT:
-				predicate_lt_int64_vector_int32_const(arrow,
-													  constnode->constvalue,
-													  predicate_result);
-				break;
-			default:
-				elog(ERROR, "unexpected opcode %s", get_func_name(get_opcode(oe->opno)));
-				pg_unreachable();
-		}
-
-		if (column->compressed.arrow == NULL)
-		{
-			/* The column had a default value. */
-			Assert(column->compressed.iterator == NULL);
-
-			if (!(default_value_predicate_result & 1))
-			{
-				/*
-				 * We had a default value for the compressed column, and it
-				 * didn't pass the predicate, so the entire batch didn't pass.
-				 */
-				for (int i = 0; i < bitmap_bytes / 8; i++)
-				{
-					batch_state->proj_result[i] = 0;
-				}
-			}
-		}
-	}
-
-	for (int i = 0; i < chunk_state->num_columns; i++)
-	{
-		DecompressChunkColumnState *column = &batch_state->columns[i];
-
-		if (column->type != COMPRESSED_COLUMN || column->compressed.arrow == NULL)
-		{
-			continue;
-		}
-	}
+	apply_vector_quals(chunk_state, batch_state);
 
 	MemoryContextSwitchTo(old_context);
 }
@@ -1159,6 +988,15 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 					  &node->ss.ps,
 					  ancestors,
 					  es);
+
+	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals)
+	{
+		/*
+		 * The normal explain won't show this if there are no normal quals but
+		 * only the vectorized ones.
+		 */
+		ts_show_instrumentation_count("Rows Removed by Filter", 1, &node->ss.ps, es);
+	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
 	{

@@ -23,12 +23,13 @@
 
 #include "compression/compression.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/planner.h"
-#include "nodes/decompress_chunk/exec.h"
-#include "import/planner.h"
-#include "guc.h"
 #include "custom_type_cache.h"
+#include "guc.h"
+#include "import/planner.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/planner.h"
+#include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",
@@ -395,12 +396,19 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 		return false;
 	}
 
-	if (!IsA(lsecond(o->args), Const))
+	if (IsA(lsecond(o->args), Var) && IsA(linitial(o->args), Const))
 	{
-		return false;
+		/* Try to commute the operator if the constant is on the right. */
+		Oid commutator_opno = get_commutator(o->opno);
+		if (commutator_opno != InvalidOid)
+		{
+			o->opno = commutator_opno;
+			o->opfuncid = InvalidOid;
+			o->args = list_make2(lsecond(o->args), linitial(o->args));
+		}
 	}
 
-	if (!IsA(linitial(o->args), Var))
+	if (!IsA(linitial(o->args), Var) || !IsA(lsecond(o->args), Const))
 	{
 		return false;
 	}
@@ -430,34 +438,9 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 	}
 
 	Oid opcode = get_opcode(o->opno);
-	switch (opcode)
+	if (get_vector_const_predicate(opcode))
 	{
-		case F_INT24EQ:
-		case F_INT24GE:
-		case F_INT24GT:
-		case F_INT24LE:
-		case F_INT24LT:
-		case F_INT8EQ:
-		case F_INT8GE:
-		case F_INT8GT:
-		case F_INT8LE:
-		case F_INT8LT:
-		case F_INT84EQ:
-		case F_INT84GE:
-		case F_INT84GT:
-		case F_INT84LE:
-		case F_INT84LT:
-		case F_TIMESTAMPTZ_EQ:
-		case F_TIMESTAMPTZ_GE:
-		case F_TIMESTAMPTZ_GT:
-		case F_TIMESTAMPTZ_LE:
-		case F_TIMESTAMPTZ_LT:
-		case F_TIMESTAMP_EQ:
-		case F_TIMESTAMP_GE:
-		case F_TIMESTAMP_GT:
-		case F_TIMESTAMP_LE:
-		case F_TIMESTAMP_LT:
-			return true;
+		return true;
 	}
 
 	return false;

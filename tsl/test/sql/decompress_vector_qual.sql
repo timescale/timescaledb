@@ -21,12 +21,14 @@ alter table vectorqual add column metric4 int8;
 insert into vectorqual(ts, device, metric2, metric3, metric4) values ('2023-01-01 00:00:00', 4, 42, 43, 44);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 
-set timescaledb.debug_enable_vector_qual to 'only';
+set timescaledb.debug_enable_vector_qual to 'only' /* all following quals must be vectorized */;
 select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
 select count(*) from vectorqual where metric2 = 22;
+select count(*) from vectorqual where 22 = metric2 /* commutators */;
 select count(*) from vectorqual where metric3 = 33;
 select count(*) from vectorqual where metric3 = 777 /* default value */;
 select count(*) from vectorqual where metric4 = 44 /* column with default null */;
+select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the qual */;
 
 set timescaledb.debug_enable_vector_qual to 'off';
-select count(*) from vectorqual where device = 1;
+select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;

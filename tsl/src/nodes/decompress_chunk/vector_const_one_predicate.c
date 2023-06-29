@@ -11,8 +11,15 @@
  * beneficial because it's a big loop.
  */
 
+#define PG_PREDICATE_HELPER(X) PG_PREDICATE(X)
+
 #define FUNCTION_NAME_HELPER(X, Y, Z) predicate_##X##_##Y##_vector_##Z##_const
 #define FUNCTION_NAME(X, Y, Z) FUNCTION_NAME_HELPER(X, Y, Z)
+
+#ifdef GENERATE_DISPATCH
+case PG_PREDICATE_HELPER(PREDICATE_NAME):
+	return FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE, CONST_CTYPE);
+#else
 
 static pg_noinline void
 FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE,
@@ -37,7 +44,7 @@ FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE,
 		uint64 word = 0;
 		for (size_t inner = 0; inner < 64; inner++)
 		{
-			const bool valid = PREDICATE(vector[outer * 64 + inner], constvalue);
+			const bool valid = PREDICATE_EXPRESSION(vector[outer * 64 + inner], constvalue);
 			word |= ((uint64) valid) << inner;
 		}
 		result[outer] &= word;
@@ -48,15 +55,19 @@ FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE,
 		uint64 tail_word = 0;
 		for (size_t i = (n / 64) * 64; i < n; i++)
 		{
-			const bool valid = PREDICATE(vector[i], constvalue);
+			const bool valid = PREDICATE_EXPRESSION(vector[i], constvalue);
 			tail_word |= ((uint64) valid) << (i % 64);
 		}
 		result[n / 64] &= tail_word;
 	}
 }
 
+#endif
+
+#undef PG_PREDICATE_HELPER
+
 #undef FUNCTION_NAME
 #undef FUNCTION_NAME_HELPER
 
-#undef PREDICATE
+#undef PREDICATE_EXPRESSION
 #undef PREDICATE_NAME

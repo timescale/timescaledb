@@ -48,7 +48,7 @@ NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
      4
 (1 row)
 
-set timescaledb.debug_enable_vector_qual to 'only';
+set timescaledb.debug_enable_vector_qual to 'only' /* all following quals must be vectorized */;
 select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
  count 
 -------
@@ -56,6 +56,12 @@ select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
 (1 row)
 
 select count(*) from vectorqual where metric2 = 22;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where 22 = metric2 /* commutators */;
  count 
 -------
      1
@@ -79,8 +85,14 @@ select count(*) from vectorqual where metric4 = 44 /* column with default null *
      1
 (1 row)
 
+select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the qual */;
+ count 
+-------
+     1
+(1 row)
+
 set timescaledb.debug_enable_vector_qual to 'off';
-select count(*) from vectorqual where device = 1;
+select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
  count 
 -------
      1
