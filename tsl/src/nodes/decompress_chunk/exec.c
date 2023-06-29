@@ -125,7 +125,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->sorted_merge_append = lfourth_int(settings);
 	chunk_state->decompression_map = lsecond(cscan->custom_private);
 	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
-	chunk_state->vectorized_quals = lfifth(cscan->custom_private);
+	chunk_state->vectorized_quals = linitial(cscan->custom_exprs);
 
 	/* Extract sort info */
 	List *sortinfo = lfourth(cscan->custom_private);
@@ -207,6 +207,7 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 	batch_state->initialized = false;
 	batch_state->total_batch_rows = 0;
 	batch_state->current_batch_row = 0;
+	batch_state->proj_result = NULL;
 
 	if (batch_state->compressed_slot != NULL)
 		ExecClearTuple(batch_state->compressed_slot);
@@ -282,6 +283,7 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	batch_state->decompressed_slot_projected = NULL;
 	batch_state->decompressed_slot_scan = NULL;
 	batch_state->compressed_slot = NULL;
+	batch_state->proj_result = NULL;
 
 	AttrNumber next_compressed_scan_attno = 0;
 	chunk_state->num_columns = 0;
@@ -491,6 +493,11 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 static void
 apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
+	if (!chunk_state->vectorized_quals)
+	{
+		return;
+	}
+
 	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
 	batch_state->proj_result = palloc(bitmap_bytes);
 	memset(batch_state->proj_result, 0xFF, bitmap_bytes);
@@ -519,6 +526,7 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 		}
 
 		Ensure(column != NULL, "decompressed column %d not found in batch", var->varattno);
+		Assert(column->typid == var->vartype);
 
 		uint64 default_value_predicate_result;
 		uint64 *predicate_result = batch_state->proj_result;
@@ -1061,10 +1069,25 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 		Assert(batch_state->total_batch_rows > 0);
 		Assert(batch_state->current_batch_row < batch_state->total_batch_rows);
 
-		const int this_row = batch_state->current_batch_row++;
+		const int output_row = batch_state->current_batch_row++;
+		const size_t arrow_row =
+			chunk_state->reverse ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
-		if (!arrow_row_is_valid(batch_state->proj_result, this_row))
+		if (batch_state->proj_result && !arrow_row_is_valid(batch_state->proj_result, arrow_row))
 		{
+			/*
+			 * This row doesn't pass the vectorized quals. Advance the iterated
+			 * compressed columns if we have any.
+			 */
+			for (int i = 0; i < chunk_state->num_columns; i++)
+			{
+				DecompressChunkColumnState *column = &batch_state->columns[i];
+				if (column->type != COMPRESSED_COLUMN || column->compressed.iterator == NULL)
+				{
+					continue;
+				}
+				column->compressed.iterator->try_next(column->compressed.iterator);
+			}
 			InstrCountFiltered1(&chunk_state->csstate, 1);
 			continue;
 		}
@@ -1094,9 +1117,6 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			}
 			else if (column->compressed.arrow_values != NULL)
 			{
-				const size_t input_row =
-					chunk_state->reverse ? batch_state->total_batch_rows - 1 - this_row : this_row;
-
 				const char *src = column->compressed.arrow_values;
 				Assert(column->compressed.value_bytes > 0);
 
@@ -1107,7 +1127,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 				 * to do memcpy.
 				 */
 				uint64 value;
-				memcpy(&value, &src[column->compressed.value_bytes * input_row], 8);
+				memcpy(&value, &src[column->compressed.value_bytes * arrow_row], 8);
 
 #ifdef USE_FLOAT8_BYVAL
 				Datum datum = Int64GetDatum(value);
@@ -1128,7 +1148,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 #endif
 				decompressed_slot_scan->tts_values[attr] = datum;
 				decompressed_slot_scan->tts_isnull[attr] =
-					!arrow_row_is_valid(column->compressed.arrow_validity, input_row);
+					!arrow_row_is_valid(column->compressed.arrow_validity, arrow_row);
 			}
 		}
 

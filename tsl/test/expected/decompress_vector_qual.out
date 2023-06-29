@@ -98,3 +98,27 @@ select count(*) from vectorqual where device = 1 /* can't apply vector ops to th
      1
 (1 row)
 
+-- Test columns that don't support bulk decompression.
+alter table vectorqual add column tag text;
+insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_7_chunk" is already compressed
+ count 
+-------
+     5
+(1 row)
+
+set timescaledb.debug_enable_vector_qual to 'only';
+select tag from vectorqual where metric2 > 0;
+ tag  
+------
+ 
+ 
+ 
+ 
+ tag5
+(5 rows)
+

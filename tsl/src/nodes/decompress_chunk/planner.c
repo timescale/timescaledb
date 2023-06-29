@@ -738,11 +738,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 							  dcpath->reverse,
 							  dcpath->sorted_merge_append);
 
-	decompress_plan->custom_private = list_make5(settings,
-												 dcpath->decompression_map,
-												 dcpath->is_segmentby_column,
-												 sort_options,
-												 vectorized_quals);
+	decompress_plan->custom_exprs = list_make1(vectorized_quals);
+	decompress_plan->custom_private =
+		list_make4(settings, dcpath->decompression_map, dcpath->is_segmentby_column, sort_options);
 
 	return &decompress_plan->scan.plan;
 }

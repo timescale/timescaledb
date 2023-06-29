@@ -32,3 +32,11 @@ select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the q
 
 set timescaledb.debug_enable_vector_qual to 'off';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
+
+-- Test columns that don't support bulk decompression.
+alter table vectorqual add column tag text;
+insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+
+set timescaledb.debug_enable_vector_qual to 'only';
+select tag from vectorqual where metric2 > 0;
