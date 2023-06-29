@@ -864,10 +864,10 @@ next_bits(SimpleBitIter *iter, uint8 n_bits)
 	 */
 	CheckCompressedData(first_word_index <= iter->num_words);
 
-	const unsigned int128 two_words =
-		((unsigned int128) iter->words[first_word_index]) |
-		((unsigned int128) iter->words[first_word_index + 1]) << 64;
-	const unsigned int128 n_ones_mask = (((unsigned int128) 1) << n_bits) - 1;
+	const unsigned __int128 two_words =
+		((unsigned __int128) iter->words[first_word_index]) |
+		((unsigned __int128) iter->words[first_word_index + 1]) << 64;
+	const unsigned __int128 n_ones_mask = (((unsigned __int128) 1) << n_bits) - 1;
 	const uint64 result = (two_words >> start_in_word) & n_ones_mask;
 
 	iter->starting_bit_index += n_bits;
