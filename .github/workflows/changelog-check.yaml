@@ -38,7 +38,7 @@ jobs:
           folder=".unreleased"
 
           # Get the list of modified files in this pull request
-          files=$(git --no-pager diff --name-only HEAD $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}))
+          files=$(git --no-pager diff --name-only --diff-filter=d $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}) HEAD)
 
           if  echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"; then
             # skip changelog checks if forced
