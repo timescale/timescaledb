@@ -17,13 +17,16 @@ WHERE user_view_name = 'hypersize_cagg'
 
 SELECT * FROM hypertable_size(:'MAT_HYPERTABLE_NAME');
 SELECT * FROM hypertable_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
 SELECT * FROM hypertable_size('hypersize_cagg');
 SELECT * FROM hypertable_detailed_size('hypersize_cagg') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
 
 -- Test size functions on non-empty countinuous aggregate
 CALL refresh_continuous_aggregate('hypersize_cagg', NULL, NULL);
 SELECT * FROM hypertable_size('hypersize_cagg');
 SELECT * FROM hypertable_detailed_size('hypersize_cagg') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
 SELECT * FROM hypertable_size(:'MAT_HYPERTABLE_NAME');
 SELECT * FROM hypertable_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
-
+SELECT * FROM chunks_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;

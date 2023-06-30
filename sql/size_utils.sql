@@ -348,8 +348,18 @@ BEGIN
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
         WHERE c.OID = hypertable;
 
-		IF table_name IS NULL THEN
-		    RETURN;
+        IF table_name IS NULL THEN
+            SELECT h.schema_name, h.table_name, replication_factor > 0
+            INTO schema_name, table_name, is_distributed
+            FROM pg_class c
+            INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+            INNER JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
+            INNER JOIN _timescaledb_catalog.hypertable h ON h.id = a.mat_hypertable_id
+            WHERE c.OID = hypertable;
+
+            IF table_name IS NULL THEN
+                RETURN;
+            END IF;
 		END IF;
 
         CASE WHEN is_distributed THEN
