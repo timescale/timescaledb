@@ -400,7 +400,7 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 	{
 		/* Try to commute the operator if the constant is on the right. */
 		Oid commutator_opno = get_commutator(o->opno);
-		if (commutator_opno != InvalidOid)
+		if (OidIsValid(commutator_opno))
 		{
 			o->opno = commutator_opno;
 			o->opfuncid = InvalidOid;
