@@ -9,15 +9,31 @@
  * table for them.
  */
 
+/* In PG <= 13, in fmgroids.h the defines for TIMESTAMP functions specify
+ * TIMESTAMPTZ oids, and the actual TIMESTAMP oids are nowhere to be found. Fix
+ * this by manually defining the TIMESTAMPTZ defines to specify TIMESTAMP oids.
+ * This means that the tz/non-tz versions are swithced, but we don't care since
+ * the implementation is the same.
+ */
+#if PG14_LT
+#undef F_TIMESTAMPTZ_EQ
+#undef F_TIMESTAMPTZ_NE
+#undef F_TIMESTAMPTZ_LT
+#undef F_TIMESTAMPTZ_LE
+#undef F_TIMESTAMPTZ_GE
+#undef F_TIMESTAMPTZ_GT
+#define F_TIMESTAMPTZ_EQ 2052
+#define F_TIMESTAMPTZ_NE 2053
+#define F_TIMESTAMPTZ_LT 2054
+#define F_TIMESTAMPTZ_LE 2055
+#define F_TIMESTAMPTZ_GE 2056
+#define F_TIMESTAMPTZ_GT 2057
+#endif
+
 /* int8... functions. */
 #define VECTOR_CTYPE int64
 #define CONST_CTYPE int64
-#if PG14_LT
-/* No separate TIMESTAMPTZ functions in PG <= 13 */
-#define PG_PREDICATE(X) F_INT8##X: case F_TIMESTAMP_##X
-#else
 #define PG_PREDICATE(X) F_INT8##X: case F_TIMESTAMPTZ_##X: case F_TIMESTAMP_##X
-#endif
 #define CONST_CONVERSION(X) DatumGetInt64(X)
 
 #include "vector_const_one_type.c"
