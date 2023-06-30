@@ -57,8 +57,15 @@ select assert_equal(count(1),51::bigint) from main_table;
 -- create union chunk
 create table n (like main_table);
 \d n
-insert into n 
+insert into n
 select * from :chunk union all select * from :chunk2;
+
+-- attaching invalid chunk with invalid schema is not possible
+alter table :chunk rename column device_id to some_col;
+\set ON_ERROR_STOP 0
+select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,:'chunk');
+\set ON_ERROR_STOP 1
+
 
 -- attach new chunk
 select _timescaledb_internal.chunk_attach('main_table','{"time": [1520035200000000, 1520121600000000]}'::jsonb,'n'::regclass);
