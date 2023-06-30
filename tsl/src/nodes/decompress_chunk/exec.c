@@ -218,9 +218,9 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 		ExecClearTuple(batch_state->decompressed_slot_scan);
 
 	MemoryContextReset(batch_state->per_batch_context);
-	if (batch_state->arrow_context)
+	if (batch_state->bulk_decompression_context)
 	{
-		MemoryContextReset(batch_state->arrow_context);
+		MemoryContextReset(batch_state->bulk_decompression_context);
 	}
 
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
@@ -268,7 +268,7 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 														   "DecompressChunk per_batch",
 														   ALLOCSET_DEFAULT_SIZES);
 	/* Initialized on demand to save memory. */
-	batch_state->arrow_context = NULL;
+	batch_state->bulk_decompression_context = NULL;
 
 	batch_state->initialized = false;
 
@@ -796,24 +796,32 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * merge plans. They involve keeping many open batches at
 					 * the same time, so the memory usage might increase greatly.
 					 */
-					if (batch_state->arrow_context == NULL)
+					if (batch_state->bulk_decompression_context == NULL)
 					{
-						batch_state->arrow_context =
+						batch_state->bulk_decompression_context =
 							AllocSetContextCreate(MemoryContextGetParent(
 													  batch_state->per_batch_context),
-												  "DecompressChunk Arrow arrays",
+												  "bulk decompression",
 												  /* minContextSize = */ 0,
 												  /* initBlockSize = */ 64 * 1024,
 												  /* maxBlockSize = */ 64 * 1024);
 					}
 
-					MemoryContext context_before_decompression =
-						MemoryContextSwitchTo(batch_state->arrow_context);
+					DecompressAllFunction decompress_all =
+						tsl_get_decompress_all_function(header->compression_algorithm);
+					if (decompress_all)
+					{
+						MemoryContext context_before_decompression =
+							MemoryContextSwitchTo(batch_state->bulk_decompression_context);
 
-					arrow = tsl_try_decompress_all(header->compression_algorithm,
-												   PointerGetDatum(header),
-												   column->typid);
-					MemoryContextSwitchTo(context_before_decompression);
+						arrow = decompress_all(PointerGetDatum(header),
+											   column->typid,
+											   batch_state->per_batch_context);
+
+						MemoryContextReset(batch_state->bulk_decompression_context);
+
+						MemoryContextSwitchTo(context_before_decompression);
+					}
 				}
 
 				if (arrow)

@@ -93,7 +93,11 @@ typedef struct DecompressBatchState
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
-	MemoryContext arrow_context;
+	/*
+	 * Scratch space for bulk decompression which might need a lot of temporary
+	 * data.
+	 */
+	MemoryContext bulk_decompression_context;
 	uint64_t *vector_qual_result;
 
 	DecompressChunkColumnState columns[FLEXIBLE_ARRAY_MEMBER];

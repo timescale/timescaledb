@@ -13,7 +13,8 @@
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
 static ArrowArray *
-FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *gorilla_data)
+FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *gorilla_data,
+													MemoryContext dest_mctx)
 {
 	const bool has_nulls = gorilla_data->nulls != NULL;
 	const uint16 n_total =
@@ -33,7 +34,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * converts the elements to postres Datum always reads in 8 bytes.
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
-	ELEMENT_TYPE *restrict decompressed_values = palloc(buffer_bytes);
+	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
 
 	const uint16 n_notnull = gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total >= n_notnull);
@@ -134,7 +135,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * and fill the validity bitmap.
 	 */
 	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 
 	/*
 	 * For starters, set the validity bitmap to all ones. We probably have less
@@ -192,8 +193,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	}
 
 	/* Return the result. */
-	ArrowArray *result = palloc0(sizeof(ArrowArray));
-	const void **buffers = palloc(sizeof(void *) * 2);
+	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	const void **buffers = (const void **) &result[1];
 	buffers[0] = validity_bitmap;
 	buffers[1] = decompressed_values;
 	result->n_buffers = 2;

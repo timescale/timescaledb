@@ -896,7 +896,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 #undef ELEMENT_TYPE
 
 ArrowArray *
-gorilla_decompress_all(Datum datum, Oid element_type)
+gorilla_decompress_all(Datum datum, Oid element_type, MemoryContext dest_mctx)
 {
 	CompressedGorillaData gorilla_data;
 	compressed_gorilla_data_init_from_datum(&gorilla_data, datum);
@@ -904,9 +904,9 @@ gorilla_decompress_all(Datum datum, Oid element_type)
 	switch (element_type)
 	{
 		case FLOAT8OID:
-			return gorilla_decompress_all_uint64(&gorilla_data);
+			return gorilla_decompress_all_uint64(&gorilla_data, dest_mctx);
 		case FLOAT4OID:
-			return gorilla_decompress_all_uint32(&gorilla_data);
+			return gorilla_decompress_all_uint32(&gorilla_data, dest_mctx);
 		default:
 			elog(ERROR,
 				 "type '%s' is not supported for gorilla decompression",

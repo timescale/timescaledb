@@ -392,7 +392,8 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	/* Forward decompression. */
 	DecompressionIterator *iter =
 		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT8OID);
-	ArrowArray *bulk_result = gorilla_decompress_all(PointerGetDatum(compressed), FLOAT8OID);
+	ArrowArray *bulk_result =
+		gorilla_decompress_all(PointerGetDatum(compressed), FLOAT8OID, CurrentMemoryContext);
 	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter);
@@ -550,7 +551,8 @@ test_delta3(bool have_nulls, bool have_random)
 	/* Forward decompression. */
 	DecompressionIterator *iter =
 		delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), INT8OID);
-	ArrowArray *bulk_result = delta_delta_decompress_all(PointerGetDatum(compressed), INT8OID);
+	ArrowArray *bulk_result =
+		delta_delta_decompress_all(PointerGetDatum(compressed), INT8OID, CurrentMemoryContext);
 	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
@@ -610,7 +612,7 @@ test_delta4(const int32 *values, int n)
 	}
 	Datum compressed = (Datum) compressor->finish(compressor);
 
-	ArrowArray *arrow = delta_delta_decompress_all(compressed, INT4OID);
+	ArrowArray *arrow = delta_delta_decompress_all(compressed, INT4OID, CurrentMemoryContext);
 	DecompressionIterator *iter =
 		delta_delta_decompression_iterator_from_datum_forward(compressed, INT4OID);
 	int i = 0;

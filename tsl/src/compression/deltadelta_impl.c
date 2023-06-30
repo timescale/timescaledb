@@ -13,7 +13,7 @@
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
 static ArrowArray *
-FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
+FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, MemoryContext dest_mctx)
 {
 	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
@@ -57,14 +57,14 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 
 	/*
 	 * We need additional padding at the end of buffer, because the code that
 	 * converts the elements to postres Datum always reads in 8 bytes.
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
-	ELEMENT_TYPE *restrict decompressed_values = palloc(buffer_bytes);
+	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
 
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;
@@ -142,8 +142,8 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	}
 
 	/* Return the result. */
-	ArrowArray *result = palloc0(sizeof(ArrowArray));
-	const void **buffers = palloc(sizeof(void *) * 2);
+	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	const void **buffers = (const void **) &result[1];
 	buffers[0] = validity_bitmap;
 	buffers[1] = decompressed_values;
 	result->n_buffers = 2;
