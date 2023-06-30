@@ -45,9 +45,9 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 											 bit_widths,
 											 MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
-	SimpleBitIter xor_bits_iter = { .words = gorilla_data->xors.buckets.data,
-									.num_words = gorilla_data->xors.buckets.num_elements,
-									.starting_bit_index = 0 };
+	BitArray xors_bitarray = gorilla_data->xors;
+	BitArrayIterator xors_iterator;
+	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
 
 	/*
 	 * Now decompress the non-null data.
@@ -91,8 +91,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		 */
 		const uint8 shift = (64 - (current_xor_bits + current_leading_zeros)) & 63;
 
-		const uint64 current_xor = next_bits(&xor_bits_iter, current_xor_bits);
-
+		const uint64 current_xor = bit_array_iter_next(&xors_iterator, current_xor_bits);
 		prev ^= current_xor << shift;
 		decompressed_values[i] = prev;
 	}

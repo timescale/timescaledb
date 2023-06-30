@@ -401,12 +401,7 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 
-	/*
-	 * Add padding for simple decompression of the xors bitarray that comes the
-	 * last in the serialized structure. This padding is also added by the recv
-	 * function, but for the tests we use the serialized struct directly.
-	 */
-	data = palloc0(compressed_size + 2 * sizeof(uint64));
+	data = palloc0(compressed_size);
 	compressed = (GorillaCompressed *) data;
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
 
@@ -829,50 +824,6 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 	return convert_from_internal(gorilla_decompression_iterator_try_next_reverse_internal(
 									 (GorillaDecompressionIterator *) iter_base),
 								 iter_base->element_type);
-}
-
-/*
- * Simplified bit iterator to extract variable-width packed xor values.
- */
-typedef struct SimpleBitIter
-{
-	const uint64 *restrict words;
-	const unsigned int num_words;
-	unsigned int starting_bit_index;
-} SimpleBitIter;
-
-static uint64
-next_bits(SimpleBitIter *iter, uint8 n_bits)
-{
-	/*
-	 * We can produce garbage on corrupted input, but should avoid UB.
-	 * Note that 64 bits is a valid case for e.g. the first compressed number.
-	 * It's unlikely because the numbers are usually compressible and take less
-	 * than 64 bits each.
-	 */
-	if (unlikely(n_bits >= 64))
-	{
-		n_bits = 64;
-	}
-
-	const unsigned int start_in_word = iter->starting_bit_index % 64;
-	const unsigned int first_word_index = iter->starting_bit_index / 64;
-
-	/*
-	 * We have 2 words of padding, so that we can always access the first and
-	 * the second words, even if the bit array is empty.
-	 */
-	CheckCompressedData(first_word_index <= iter->num_words);
-
-	const unsigned __int128 two_words = ((unsigned __int128) iter->words[first_word_index]) |
-										((unsigned __int128) iter->words[first_word_index + 1])
-											<< 64;
-	const unsigned __int128 n_ones_mask = (((unsigned __int128) 1) << n_bits) - 1;
-	const uint64 result = (two_words >> start_in_word) & n_ones_mask;
-
-	iter->starting_bit_index += n_bits;
-
-	return result;
 }
 
 #define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)

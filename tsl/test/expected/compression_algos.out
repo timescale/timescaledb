@@ -1550,9 +1550,9 @@ from ts_read_compressed_data_directory('gorilla', 'float8', (:'TEST_INPUT_DIR' |
 group by 2 order by 1 desc;
  count | result 
 -------+--------
-   225 | XX001
+   224 | XX001
     55 | true
-    22 | 08P01
+    23 | 08P01
 (3 rows)
 
 select count(*), coalesce((rows >= 0)::text, sqlstate) result
