@@ -164,7 +164,7 @@ typedef enum
 	TOAST_STORAGE_EXTENDED
 } CompressionStorage;
 
-typedef ArrowArray *(*const DecompressAllFunction)(Datum compressed, Oid element_type,
+typedef ArrowArray *(*DecompressAllFunction)(Datum compressed, Oid element_type,
 												   MemoryContext dest_mctx);
 
 typedef struct CompressionAlgorithmDefinition
