@@ -147,7 +147,11 @@ batch_states_create(DecompressChunkState *chunk_state, int nbatches)
 	Assert(nbatches >= 0);
 
 	chunk_state->n_batch_states = nbatches;
-	chunk_state->batch_states = palloc0(chunk_state->n_batch_state_bytes * nbatches);
+	/*
+	 * Don't use palloc0 to have the same initialization guarantees (that is,
+	 * none) with the later repalloc.
+	 */
+	chunk_state->batch_states = palloc(chunk_state->n_batch_state_bytes * nbatches);
 
 	for (int segment = 0; segment < nbatches; segment++)
 	{
@@ -270,10 +274,6 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	batch_state->decompressed_slot_scan = NULL;
 	batch_state->compressed_slot = NULL;
 	batch_state->vector_qual_result = NULL;
-
-	memcpy(batch_state->columns,
-		   chunk_state->template_columns,
-		   sizeof(DecompressChunkColumnState) * chunk_state->num_columns);
 }
 
 typedef struct ConstifyTableOidContext
@@ -414,8 +414,10 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		num_total++;
 	}
 
-	chunk_state->num_columns = num_total;
-	chunk_state->template_columns = palloc0(sizeof(DecompressChunkColumnState) * num_total);
+	Assert(num_compressed <= num_total);
+	chunk_state->num_compressed_columns = num_compressed;
+	chunk_state->num_total_columns = num_total;
+	chunk_state->template_columns = palloc0(sizeof(DecompressChunkColumnDescription) * num_total);
 
 	TupleDesc desc = chunk_state->csstate.ss.ss_ScanTupleSlot->tts_tupleDescriptor;
 
@@ -472,7 +474,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			}
 		}
 
-		DecompressChunkColumnState *column;
+		DecompressChunkColumnDescription *column;
 
 		if (column_type == COMPRESSED_COLUMN)
 		{
@@ -491,12 +493,12 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		column->type = column_type;
 	}
 
-	Assert(num_compressed <= num_total);
-	Assert(num_total == chunk_state->num_columns);
+	Assert(current_compressed == num_compressed);
+	Assert(current_not_compressed == num_total);
 
 	chunk_state->n_batch_state_bytes =
 		sizeof(DecompressBatchState) +
-		sizeof(DecompressChunkColumnState) * chunk_state->num_columns;
+		sizeof(DecompressChunkColumnValues) * chunk_state->num_compressed_columns;
 }
 
 static ArrowArray *
@@ -565,27 +567,35 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 
 		// Assert(get_opcode(oe->opno) == F_INT8GE);
 
-		DecompressChunkColumnState *column = NULL;
-		for (int i = 0; i < chunk_state->num_columns; i++)
+		DecompressChunkColumnDescription *column_description = NULL;
+		int column_index = 0;
+		for (; column_index < chunk_state->num_total_columns; column_index++)
 		{
-			column = &batch_state->columns[i];
-			if (column->output_attno == var->varattno)
+			column_description = &chunk_state->template_columns[column_index];
+			if (column_description->output_attno == var->varattno)
 			{
 				break;
 			}
-			else
-			{
-				column = NULL;
-			}
 		}
 
-		Ensure(column != NULL, "decompressed column %d not found in batch", var->varattno);
-		Assert(column->typid == var->vartype);
+		Ensure(column_index < chunk_state->num_total_columns,
+			   "decompressed column %d not found in batch",
+			   var->varattno);
+		Assert(column_description != NULL);
+		Assert(column_description->typid == var->vartype);
+
+		Ensure(column_description->type == COMPRESSED_COLUMN,
+			   "only compressed columns are supported in vectorized quals");
+		Assert(column_index < chunk_state->num_compressed_columns);
+
+		DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[column_index];
+		Ensure(column_values->iterator == NULL,
+			   "only arrow columns are supported in vectorized quals");
 
 		uint64 default_value_predicate_result;
 		uint64 *predicate_result = batch_state->vector_qual_result;
-		ArrowArray *arrow = column->compressed.arrow;
-		if (column->compressed.arrow == NULL)
+		ArrowArray *arrow = column_values->arrow;
+		if (column_values->arrow == NULL)
 		{
 			/*
 			 * The compressed column had a default value. We can't fall back to
@@ -593,9 +603,9 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 			 * with this default value, check if it passes the predicate, and apply
 			 * it to the entire batch.
 			 */
-			AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+			AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
 
-			Ensure(column->compressed.iterator == NULL,
+			Ensure(column_values->iterator == NULL,
 				   "ArrowArray expected for column %s",
 				   NameStr(
 					   TupleDescAttr(batch_state->decompressed_slot_scan->tts_tupleDescriptor, attr)
@@ -605,7 +615,7 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 			 * We saved the actual default value into the decompressed scan slot
 			 * above, so pull it from there.
 			 */
-			arrow = make_single_value_arrow(column->typid,
+			arrow = make_single_value_arrow(column_description->typid,
 											batch_state->decompressed_slot_scan->tts_values[attr],
 											batch_state->decompressed_slot_scan->tts_isnull[attr]);
 
@@ -626,10 +636,10 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 
 		predicate(arrow, constnode->constvalue, predicate_result);
 
-		if (column->compressed.arrow == NULL)
+		if (column_values->arrow == NULL)
 		{
 			/* The column had a default value. */
-			Assert(column->compressed.iterator == NULL);
+			Assert(column_values->iterator == NULL);
 
 			if (!(default_value_predicate_result & 1))
 			{
@@ -740,21 +750,24 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 	MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
 	MemoryContextReset(batch_state->per_batch_context);
 
-	for (i = 0; i < chunk_state->num_columns; i++)
+	for (i = 0; i < chunk_state->num_total_columns; i++)
 	{
-		DecompressChunkColumnState *column = &batch_state->columns[i];
+		DecompressChunkColumnDescription *column_description = &chunk_state->template_columns[i];
 
-		switch (column->type)
+		switch (column_description->type)
 		{
 			case COMPRESSED_COLUMN:
 			{
-				column->compressed.iterator = NULL;
-				column->compressed.arrow = NULL;
-				column->compressed.value_bytes = -1;
-				column->compressed.arrow_values = NULL;
-				column->compressed.arrow_validity = NULL;
+				Assert(i < chunk_state->num_compressed_columns);
+				DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+				column_values->iterator = NULL;
+				column_values->arrow = NULL;
+				column_values->value_bytes = -1;
+				column_values->arrow_values = NULL;
+				column_values->arrow_validity = NULL;
+				column_values->output_attno = column_description->output_attno;
 				value = slot_getattr(batch_state->compressed_slot,
-									 column->compressed_scan_attno,
+									 column_description->compressed_scan_attno,
 									 &isnull);
 				if (isnull)
 				{
@@ -762,8 +775,8 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * The column will have a default value for the entire batch,
 					 * set it now.
 					 */
-					column->compressed.iterator = NULL;
-					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+					column_values->iterator = NULL;
+					AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
 
 					batch_state->decompressed_slot_scan->tts_values[attr] =
 						getmissingattr(batch_state->decompressed_slot_scan->tts_tupleDescriptor,
@@ -802,7 +815,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 							MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
 
 						arrow = decompress_all(PointerGetDatum(header),
-											   column->typid,
+											   column_description->typid,
 											   batch_state->per_batch_context);
 
 						MemoryContextReset(chunk_state->bulk_decompression_context);
@@ -822,9 +835,9 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
 
-					column->compressed.arrow = arrow;
-					column->compressed.arrow_values = arrow->buffers[1];
-					column->compressed.arrow_validity = arrow->buffers[0];
+					column_values->arrow = arrow;
+					column_values->arrow_values = arrow->buffers[1];
+					column_values->arrow_validity = arrow->buffers[0];
 
 					/*
 					 * Note the fact that we are using bulk decompression, for
@@ -832,17 +845,17 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 */
 					chunk_state->using_bulk_decompression = true;
 
-					column->compressed.value_bytes = get_typlen(column->typid);
+					column_values->value_bytes = get_typlen(column_description->typid);
 
 					break;
 				}
 
 				/* As a fallback, decompress row-by-row. */
-				column->compressed.iterator =
+				column_values->iterator =
 					tsl_get_decompression_iterator_init(header->compression_algorithm,
-														chunk_state->reverse)(PointerGetDatum(
-																				  header),
-																			  column->typid);
+														chunk_state
+															->reverse)(PointerGetDatum(header),
+																	   column_description->typid);
 
 				break;
 			}
@@ -853,17 +866,17 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 				 * and our output tuples are read-only, so it's enough to only
 				 * save it once per batch, which we do here.
 				 */
-				AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
 				batch_state->decompressed_slot_scan->tts_values[attr] =
 					slot_getattr(batch_state->compressed_slot,
-								 column->compressed_scan_attno,
+								 column_description->compressed_scan_attno,
 								 &batch_state->decompressed_slot_scan->tts_isnull[attr]);
 				break;
 			}
 			case COUNT_COLUMN:
 			{
 				value = slot_getattr(batch_state->compressed_slot,
-									 column->compressed_scan_attno,
+									 column_description->compressed_scan_attno,
 									 &isnull);
 				/* count column should never be NULL */
 				Assert(!isnull);
@@ -1088,7 +1101,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 	Assert(decompressed_slot_scan != NULL);
 	Assert(decompressed_slot_projected != NULL);
 
-	const int num_columns = chunk_state->num_columns;
+	const int num_compressed_columns = chunk_state->num_compressed_columns;
 	const bool reverse = chunk_state->reverse;
 
 	while (true)
@@ -1100,13 +1113,13 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			 * row-by-row have also ended.
 			 */
 			batch_state->initialized = false;
-			for (int i = 0; i < num_columns; i++)
+			for (int i = 0; i < num_compressed_columns; i++)
 			{
-				DecompressChunkColumnState *column = &batch_state->columns[i];
-				if (column->type == COMPRESSED_COLUMN && column->compressed.iterator)
+				DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+				if (column_values->iterator)
 				{
 					DecompressResult result =
-						column->compressed.iterator->try_next(column->compressed.iterator);
+						column_values->iterator->try_next(column_values->iterator);
 					if (!result.is_done)
 					{
 						elog(ERROR, "compressed column out of sync with batch counter");
@@ -1135,46 +1148,40 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			 * This row doesn't pass the vectorized quals. Advance the iterated
 			 * compressed columns if we have any.
 			 */
-			for (int i = 0; i < num_columns; i++)
+			for (int i = 0; i < num_compressed_columns; i++)
 			{
-				DecompressChunkColumnState *column = &batch_state->columns[i];
-				if (column->type != COMPRESSED_COLUMN || column->compressed.iterator == NULL)
+				DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+				if (column_values->iterator)
 				{
-					continue;
+					column_values->iterator->try_next(column_values->iterator);
 				}
-				column->compressed.iterator->try_next(column->compressed.iterator);
 			}
 			InstrCountFiltered1(&chunk_state->csstate, 1);
 			continue;
 		}
 
-		for (int i = 0; i < num_columns; i++)
+		for (int i = 0; i < num_compressed_columns; i++)
 		{
-			DecompressChunkColumnState *column = &batch_state->columns[i];
+			DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
 
-			if (column->type != COMPRESSED_COLUMN)
-			{
-				continue;
-			}
-
-			const AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
-			if (column->compressed.iterator != NULL)
+			if (column_values->iterator != NULL)
 			{
 				DecompressResult result =
-					column->compressed.iterator->try_next(column->compressed.iterator);
+					column_values->iterator->try_next(column_values->iterator);
 
 				if (result.is_done)
 				{
 					elog(ERROR, "compressed column out of sync with batch counter");
 				}
 
+				const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
 				decompressed_slot_scan->tts_isnull[attr] = result.is_null;
 				decompressed_slot_scan->tts_values[attr] = result.val;
 			}
-			else if (column->compressed.arrow_values != NULL)
+			else if (column_values->arrow_values != NULL)
 			{
-				const char *src = column->compressed.arrow_values;
-				Assert(column->compressed.value_bytes > 0);
+				const char *src = column_values->arrow_values;
+				Assert(column_values->value_bytes > 0);
 
 				/*
 				 * The conversion of Datum to more narrow types will truncate
@@ -1183,7 +1190,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 				 * to do memcpy.
 				 */
 				uint64 value;
-				memcpy(&value, &src[column->compressed.value_bytes * arrow_row], 8);
+				memcpy(&value, &src[column_values->value_bytes * arrow_row], 8);
 
 #ifdef USE_FLOAT8_BYVAL
 				Datum datum = Int64GetDatum(value);
@@ -1193,7 +1200,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 				 * reference, so we have to jump through these hoops.
 				 */
 				Datum datum;
-				if (column->compressed.value_bytes <= 4)
+				if (column_values->value_bytes <= 4)
 				{
 					datum = Int32GetDatum((uint32) value);
 				}
@@ -1202,9 +1209,10 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 					datum = Int64GetDatum(value);
 				}
 #endif
+				const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
 				decompressed_slot_scan->tts_values[attr] = datum;
 				decompressed_slot_scan->tts_isnull[attr] =
-					!arrow_row_is_valid(column->compressed.arrow_validity, arrow_row);
+					!arrow_row_is_valid(column_values->arrow_validity, arrow_row);
 			}
 		}
 

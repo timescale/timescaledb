@@ -32,7 +32,7 @@ typedef enum DecompressChunkColumnType
 	SEQUENCE_NUM_COLUMN,
 } DecompressChunkColumnType;
 
-typedef struct DecompressChunkColumnState
+typedef struct DecompressChunkColumnDescription
 {
 	DecompressChunkColumnType type;
 	Oid typid;
@@ -49,37 +49,30 @@ typedef struct DecompressChunkColumnState
 	 * Attno of the compressed column in the input compressed chunk scan.
 	 */
 	AttrNumber compressed_scan_attno;
+} DecompressChunkColumnDescription;
 
-	union
-	{
-		struct
-		{
-			Datum value;
-			bool isnull;
-			int count;
-		} segmentby;
+typedef struct DecompressChunkColumnValues
+{
+	/* The below fields are only for compressed columns. */
 
-		struct
-		{
-			/* For row-by-row decompression. */
-			DecompressionIterator *iterator;
+	/* For row-by-row decompression. */
+	DecompressionIterator *iterator;
 
-			/*
-			 * For bulk decompression and vectorized filters, mutually exclusive
-			 * with the above.
-			 */
-			ArrowArray *arrow;
+	/*
+	 * For bulk decompression and vectorized filters, mutually exclusive
+	 * with the above.
+	 */
+	ArrowArray *arrow;
 
-			/*
-			 * These are the arrow buffers cached here to reduce the amount of
-			 * indirections (we have about three there, so it matters).
-			 */
-			const void *arrow_values;
-			const void *arrow_validity;
-			int value_bytes;
-		} compressed;
-	};
-} DecompressChunkColumnState;
+	/*
+	 * These are the arrow buffers cached here to reduce the amount of
+	 * indirections (we have about three there, so it matters).
+	 */
+	const void *arrow_validity;
+	const void *arrow_values;
+	int value_bytes;
+	AttrNumber output_attno; /* Copied here for better data locality. */
+} DecompressChunkColumnValues;
 
 /*
  * All the needed information to decompress a batch
@@ -95,7 +88,7 @@ typedef struct DecompressBatchState
 	MemoryContext per_batch_context;
 	uint64_t *vector_qual_result;
 
-	DecompressChunkColumnState columns[FLEXIBLE_ARRAY_MEMBER];
+	DecompressChunkColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
 typedef struct DecompressChunkState
@@ -103,9 +96,10 @@ typedef struct DecompressChunkState
 	CustomScanState csstate;
 	List *decompression_map;
 	List *is_segmentby_column;
-	int num_columns;
+	int num_total_columns;
+	int num_compressed_columns;
 
-	DecompressChunkColumnState *template_columns;
+	DecompressChunkColumnDescription *template_columns;
 
 	bool reverse;
 	int hypertable_id;

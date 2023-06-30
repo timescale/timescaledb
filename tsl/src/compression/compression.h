@@ -165,7 +165,7 @@ typedef enum
 } CompressionStorage;
 
 typedef ArrowArray *(*DecompressAllFunction)(Datum compressed, Oid element_type,
-												   MemoryContext dest_mctx);
+											 MemoryContext dest_mctx);
 
 typedef struct CompressionAlgorithmDefinition
 {
