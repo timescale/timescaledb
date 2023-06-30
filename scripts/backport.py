@@ -409,6 +409,21 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         report_backport_not_done(original_pr, "cherry-pick failed", details)
         continue
 
+    # We don't have the permission to modify workflows
+    changed_files = {file.filename for file in original_pr.get_files()}
+    changed_workflow_files = {
+        filename
+        for filename in changed_files
+        if filename.startswith(".github/workflows/")
+    }
+    if changed_workflow_files:
+        details = (
+            f"The PR touches a workflow file '{list(changed_workflow_files)[0]}' "
+            " and cannot be backported automatically"
+        )
+        report_backport_not_done(original_pr, "backport failed", details)
+        continue
+
     # Push the backport branch.
     git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")
 
@@ -423,7 +438,6 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     # Do not merge the PR automatically if it changes some particularly
     # conflict-prone files that are better to review manually. Also mention this
     # in the description.
-    changed_files = {file.filename for file in original_pr.get_files()}
     stopper_files = changed_files.intersection(
         ["sql/updates/latest-dev.sql", "sql/updates/reverse-dev.sql"]
     )
