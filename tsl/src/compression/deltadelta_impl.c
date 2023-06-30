@@ -41,6 +41,10 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 		nulls = simple8brle_bitmap_decompress(nulls_compressed);
 	}
 
+	/*
+	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
+	 * can work in 64-byte blocks.
+	 */
 	const uint16 n_total = has_nulls ? nulls.num_elements : num_deltas;
 	const uint16 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
@@ -54,7 +58,13 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 
 	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
-	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
+
+	/*
+	 * We need additional padding at the end of buffer, because the code that
+	 * converts the elements to postres Datum always reads in 8 bytes.
+	 */
+	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
+	ELEMENT_TYPE *restrict decompressed_values = palloc(buffer_bytes);
 
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;

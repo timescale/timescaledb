@@ -90,13 +90,13 @@ typedef struct DecompressBatchState
 	TupleTableSlot *decompressed_slot_projected; /* The result slot with the final tuples */
 	TupleTableSlot *decompressed_slot_scan;		 /* A slot for the decompressed data */
 	TupleTableSlot *compressed_slot;			 /* A slot for compressed data */
-	DecompressChunkColumnState *columns;
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
 	MemoryContext arrow_context;
+	uint64_t *vector_qual_result;
 
-	uint64_t *proj_result;
+	DecompressChunkColumnState columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
 typedef struct DecompressChunkState
@@ -106,14 +106,22 @@ typedef struct DecompressChunkState
 	List *is_segmentby_column;
 	int num_columns;
 
+	DecompressChunkColumnState *template_columns;
+
 	bool reverse;
 	int hypertable_id;
 	Oid chunk_relid;
 
 	/* Batch states */
-	int n_batch_states;					/* Number of batch states */
-	DecompressBatchState *batch_states; /* The batch states */
-	Bitmapset *unused_batch_states;		/* The unused batch states */
+	int n_batch_states; /* Number of batch states */
+	/*
+	 * The batch states. It's void* because they have a variable length
+	 * column array, so normal indexing can't be used. Use the get_batch_state
+	 * accessor instead.
+	 */
+	void *batch_states;
+	int n_batch_state_bytes;
+	Bitmapset *unused_batch_states; /* The unused batch states */
 
 	bool sorted_merge_append;	   /* Merge append optimization enabled */
 	int most_recent_batch;		   /* The batch state with the most recent value */
@@ -137,6 +145,13 @@ typedef struct DecompressChunkState
 	TupleDesc decompressed_slot_scan_tdesc;
 	TupleDesc compressed_slot_tdesc;
 } DecompressChunkState;
+
+inline static DecompressBatchState *
+get_batch_state(DecompressChunkState *chunk_state, int batch_id)
+{
+	return (DecompressBatchState *) ((char *) chunk_state->batch_states +
+									 chunk_state->n_batch_state_bytes * batch_id);
+}
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);
 

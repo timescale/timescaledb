@@ -20,9 +20,20 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		has_nulls ? gorilla_data->nulls->num_elements : gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
+	/*
+	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
+	 * can work in 64-byte blocks.
+	 */
 	const uint16 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
+
+	/*
+	 * We need additional padding at the end of buffer, because the code that
+	 * converts the elements to postres Datum always reads in 8 bytes.
+	 */
+	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
+	ELEMENT_TYPE *restrict decompressed_values = palloc(buffer_bytes);
 
 	const uint16 n_notnull = gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total >= n_notnull);
@@ -79,7 +90,6 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * having a fast path for stretches of tag1 == 0.
 	 */
 	ELEMENT_TYPE prev = 0;
-	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
 	for (uint16 i = 0; i < n_different; i++)
 	{
 		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];

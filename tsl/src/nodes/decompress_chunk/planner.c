@@ -418,11 +418,12 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 	FormData_hypertable_compression *column_compression =
 		path->uncompressed_chunk_attno_to_compression_info[var->varattno];
 
-	if (column_compression == NULL)
-	{
-		/* Not a compressed or segmentby column. */
-		return false;
-	}
+	/*
+	 * If it's not a compressed or segmentby column, it must be a metadata column?
+	 * We shouldn't see them in scan quals for the decompressed scan, but
+	 * let's not segfault.
+	 */
+	Ensure(column_compression != NULL, "unexpected metadata var %d/%d", var->varno, var->varattno);
 
 	if (column_compression->segmentby_column_index != 0)
 	{

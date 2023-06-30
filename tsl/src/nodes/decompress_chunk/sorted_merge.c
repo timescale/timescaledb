@@ -59,8 +59,8 @@ decompress_binaryheap_compare_heap_pos(Datum a, Datum b, void *arg)
 	DecompressSlotNumber batchB = DatumGetInt32(b);
 	Assert(batchB <= chunk_state->n_batch_states);
 
-	TupleTableSlot *tupleA = chunk_state->batch_states[batchA].decompressed_slot_projected;
-	TupleTableSlot *tupleB = chunk_state->batch_states[batchB].decompressed_slot_projected;
+	TupleTableSlot *tupleA = get_batch_state(chunk_state, batchA)->decompressed_slot_projected;
+	TupleTableSlot *tupleB = get_batch_state(chunk_state, batchB)->decompressed_slot_projected;
 
 	return decompress_binaryheap_compare_slots(tupleA, tupleB, chunk_state);
 }
@@ -104,7 +104,7 @@ decompress_batch_open_next_batch(DecompressChunkState *chunk_state)
 		}
 
 		DecompressSlotNumber batch_state_id = decompress_get_free_batch_state_id(chunk_state);
-		DecompressBatchState *batch_state = &chunk_state->batch_states[batch_state_id];
+		DecompressBatchState *batch_state = get_batch_state(chunk_state, batch_state_id);
 
 		decompress_initialize_batch(chunk_state, batch_state, subslot);
 
@@ -143,7 +143,7 @@ decompress_sorted_merge_remove_top_tuple_and_decompress_next(DecompressChunkStat
 {
 	DecompressSlotNumber i = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
 
-	DecompressBatchState *batch_state = &chunk_state->batch_states[i];
+	DecompressBatchState *batch_state = get_batch_state(chunk_state, i);
 	Assert(batch_state != NULL);
 
 #ifdef USE_ASSERT_CHECKING
@@ -175,7 +175,7 @@ decompress_sorted_merge_remove_top_tuple_and_decompress_next(DecompressChunkStat
 	if (!binaryheap_empty(chunk_state->merge_heap))
 	{
 		DecompressSlotNumber next_tuple = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
-		DecompressBatchState *next_batch_state = &chunk_state->batch_states[next_tuple];
+		DecompressBatchState *next_batch_state = get_batch_state(chunk_state, next_tuple);
 
 		/* Assert that the intended sorting is produced. */
 		Assert(decompress_binaryheap_compare_slots(last_returned_tuple,
@@ -238,7 +238,7 @@ decompress_sorted_merge_get_next_tuple(DecompressChunkState *chunk_state)
 	/* Fetch tuple the top tuple from the heap */
 	DecompressSlotNumber slot_number = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
 	TupleTableSlot *decompressed_slot_projected =
-		chunk_state->batch_states[slot_number].decompressed_slot_projected;
+		get_batch_state(chunk_state, slot_number)->decompressed_slot_projected;
 
 	Assert(decompressed_slot_projected != NULL);
 	Assert(!TupIsNull(decompressed_slot_projected));
