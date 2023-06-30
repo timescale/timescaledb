@@ -218,10 +218,6 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 		ExecClearTuple(batch_state->decompressed_slot_scan);
 
 	MemoryContextReset(batch_state->per_batch_context);
-	if (batch_state->bulk_decompression_context)
-	{
-		MemoryContextReset(batch_state->bulk_decompression_context);
-	}
 
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
 }
@@ -267,9 +263,6 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
 														   "DecompressChunk per_batch",
 														   ALLOCSET_DEFAULT_SIZES);
-	/* Initialized on demand to save memory. */
-	batch_state->bulk_decompression_context = NULL;
-
 	batch_state->initialized = false;
 
 	/* The slots will be created on first usage of the batch state */
@@ -782,23 +775,17 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 				/* Decompress the entire batch if it is supported. */
 				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 
+				/*
+				 * For now we disable bulk decompression for batch sorted
+				 * merge plans. They involve keeping many open batches at
+				 * the same time, so the memory usage might increase greatly.
+				 */
 				ArrowArray *arrow = NULL;
 				if (!chunk_state->sorted_merge_append && ts_guc_enable_bulk_decompression)
 				{
-					/*
-					 * In principle, we could do this for reverse decompression
-					 * as well, but have to figure out how to do the batch
-					 * Arrow->Datum conversion while respecting the paddings.
-					 * Maybe have to allocate the output array at offset so that the
-					 * padding is at the beginning.
-					 *
-					 * For now we also disable bulk decompression for batch sorted
-					 * merge plans. They involve keeping many open batches at
-					 * the same time, so the memory usage might increase greatly.
-					 */
-					if (batch_state->bulk_decompression_context == NULL)
+					if (chunk_state->bulk_decompression_context == NULL)
 					{
-						batch_state->bulk_decompression_context =
+						chunk_state->bulk_decompression_context =
 							AllocSetContextCreate(MemoryContextGetParent(
 													  batch_state->per_batch_context),
 												  "bulk decompression",
@@ -812,13 +799,13 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					if (decompress_all)
 					{
 						MemoryContext context_before_decompression =
-							MemoryContextSwitchTo(batch_state->bulk_decompression_context);
+							MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
 
 						arrow = decompress_all(PointerGetDatum(header),
 											   column->typid,
 											   batch_state->per_batch_context);
 
-						MemoryContextReset(batch_state->bulk_decompression_context);
+						MemoryContextReset(chunk_state->bulk_decompression_context);
 
 						MemoryContextSwitchTo(context_before_decompression);
 					}
