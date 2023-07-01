@@ -582,6 +582,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 * than a single worker per chunk
 	 */
 	int parallel_workers = 1;
+	parallel_workers = 1;
 	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, info, root->query_pathkeys);
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
