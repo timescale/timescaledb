@@ -583,6 +583,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 */
 	int parallel_workers = compute_parallel_worker(chunk_rel, chunk_rel->pages, -1, max_parallel_workers_per_gather);
 	parallel_workers = Max(1, parallel_workers);
+	
 	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, info, root->query_pathkeys);
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
