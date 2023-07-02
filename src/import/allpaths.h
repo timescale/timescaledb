@@ -11,7 +11,6 @@
 
 #include "export.h"
 
-extern TSDLLEXPORT void ts_create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel);
 extern void ts_set_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 extern void ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
 									   RangeTblEntry *rte);

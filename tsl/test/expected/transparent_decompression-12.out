@@ -8515,7 +8515,6 @@ GROUP BY fleet;
 SET max_parallel_workers_per_gather TO 4;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
-SET min_parallel_table_scan_size TO '0';
 EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
                                QUERY PLAN                               
 ------------------------------------------------------------------------
@@ -8573,7 +8572,6 @@ EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
                ->  Parallel Seq Scan on _hyper_2_12_chunk
 (19 rows)
 
-RESET min_parallel_table_scan_size;
 RESET parallel_setup_cost;
 RESET parallel_tuple_cost;
 SET enable_seqscan TO false;
