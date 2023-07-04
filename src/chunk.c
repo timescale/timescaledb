@@ -15,6 +15,7 @@
 #include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_opfamily.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
@@ -139,6 +140,9 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
 static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
+static Chunk *get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
+		const char* caller_name, MemoryContext mctx, uint64 *num_chunks_returned,
+		ScanTupLock *tupLock);
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -2141,6 +2145,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		int64 older_than = PG_INT64_MAX;
 		int64 newer_than = PG_INT64_MIN;
 		Oid time_type;
+		Oid arg_type;
 
 		hcache = ts_hypertable_cache_pin();
 		ht = find_hypertable_from_table_or_cagg(hcache, relid, true);
@@ -2152,24 +2157,46 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		else
 			time_type = InvalidOid;
 
+		arg_type = InvalidOid;
 		if (!PG_ARGISNULL(1))
+		{
+			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 			older_than = ts_time_value_from_arg(PG_GETARG_DATUM(1),
-												get_fn_expr_argtype(fcinfo->flinfo, 1),
-												time_type);
+												arg_type,
+												time_type,
+												false);
+		}
 
 		if (!PG_ARGISNULL(2))
+		{
+			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 			newer_than = ts_time_value_from_arg(PG_GETARG_DATUM(2),
-												get_fn_expr_argtype(fcinfo->flinfo, 2),
-												time_type);
+												arg_type,
+												time_type,
+												false);
+		}
 
 		funcctx = SRF_FIRSTCALL_INIT();
-		funcctx->user_fctx = get_chunks_in_time_range(ht,
-													  older_than,
-													  newer_than,
-													  "show_chunks",
-													  funcctx->multi_call_memory_ctx,
-													  &funcctx->max_calls,
-													  NULL);
+		/*
+		 * Get the chunks either on creation time range (INTEGER columns) or the range specified for
+		 * the open dimension.
+		 */
+		if (IS_INTEGER_TYPE(time_type) && arg_type == INTERVALOID)
+			funcctx->user_fctx = get_chunks_in_creation_time_range(ht,
+																   older_than,
+																   newer_than,
+																   "show_chunks",
+																   funcctx->multi_call_memory_ctx,
+																   &funcctx->max_calls,
+																   NULL);
+		else
+			funcctx->user_fctx = get_chunks_in_time_range(ht,
+														  older_than,
+														  newer_than,
+														  "show_chunks",
+														  funcctx->multi_call_memory_ctx,
+														  &funcctx->max_calls,
+														  NULL);
 		ts_cache_release(hcache);
 	}
 
@@ -3834,7 +3861,7 @@ lock_referenced_tables(Oid table_relid)
 
 List *
 ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int32 log_level,
-						List **affected_data_nodes)
+						List **affected_data_nodes, Oid time_type, Oid arg_type)
 
 {
 	uint64 num_chunks = 0;
@@ -3883,13 +3910,22 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 
 	PG_TRY();
 	{
-		chunks = get_chunks_in_time_range(ht,
-										  older_than,
-										  newer_than,
-										  DROP_CHUNKS_FUNCNAME,
-										  CurrentMemoryContext,
-										  &num_chunks,
-										  &tuplock);
+		if (IS_INTEGER_TYPE(time_type) && arg_type == INTERVALOID)
+			chunks = get_chunks_in_creation_time_range(ht,
+													   older_than,
+													   newer_than,
+													   DROP_CHUNKS_FUNCNAME,
+													   CurrentMemoryContext,
+													   &num_chunks,
+													   &tuplock);
+		else
+			chunks = get_chunks_in_time_range(ht,
+											  older_than,
+											  newer_than,
+											  DROP_CHUNKS_FUNCNAME,
+											  CurrentMemoryContext,
+											  &num_chunks,
+											  &tuplock);
 	}
 	PG_CATCH();
 	{
@@ -4156,8 +4192,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	const Dimension *time_dim;
 	Oid time_type;
+	Oid arg_type;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+	arg_type = InvalidOid;
 
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
@@ -4195,14 +4233,22 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	time_type = ts_dimension_get_partition_type(time_dim);
 
 	if (!PG_ARGISNULL(1))
+	{
+		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 		older_than = ts_time_value_from_arg(PG_GETARG_DATUM(1),
-											get_fn_expr_argtype(fcinfo->flinfo, 1),
-											time_type);
+											arg_type,
+											time_type,
+											false);
+	}
 
 	if (!PG_ARGISNULL(2))
+	{
+		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 		newer_than = ts_time_value_from_arg(PG_GETARG_DATUM(2),
-											get_fn_expr_argtype(fcinfo->flinfo, 2),
-											time_type);
+											arg_type,
+											time_type,
+											false);
+	}
 
 	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	elevel = verbose ? INFO : DEBUG2;
@@ -4215,7 +4261,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	PG_TRY();
 	{
-		dc_temp = ts_chunk_do_drop_chunks(ht, older_than, newer_than, elevel, &data_node_oids);
+		dc_temp = ts_chunk_do_drop_chunks(ht, older_than, newer_than, elevel, &data_node_oids,
+				time_type, arg_type);
 	}
 	PG_CATCH();
 	{
@@ -4876,8 +4923,199 @@ ts_chunk_get_osm_chunk_id(int hypertable_id)
 	return chunk_id;
 }
 
-TimestampTz
-ts_chunk_get_creation_time(Oid chunk_oid)
+/*
+ * Initialization and access method for ChunkVec. This needs to be extended to support additional
+ * operations.
+ */
+static ChunkVec*
+chunk_vec_expand(ChunkVec *chunks, uint32 new_capacity)
 {
-	return GetCurrentTimestamp();
+	if (chunks != NULL && chunks->capacity > new_capacity)
+		return chunks;
+
+	if (chunks == NULL)
+		chunks = palloc(CHUNK_VEC_SIZE(new_capacity));
+	else
+		chunks = repalloc(chunks, CHUNK_VEC_SIZE(new_capacity));
+
+	chunks->capacity = new_capacity;
+
+	return chunks;
+
+}
+
+ChunkVec*
+ts_chunk_vec_create(int32 num_chunks)
+{
+	ChunkVec *chunks = chunk_vec_expand(NULL, num_chunks);
+
+	chunks->num_chunks = 0;
+	return chunks;
+}
+
+ChunkVec* ts_chunk_vec_sort(ChunkVec **chunks)
+{
+	ChunkVec *vec = *chunks;
+
+	if (vec->num_chunks > 1)
+		qsort(vec->chunks, vec->num_chunks, CHUNK_VEC_SIZE(CHUNK), chunk_cmp);
+
+	return vec;
+}
+
+ChunkVec*
+ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
+{
+	Chunk *chunkptr = NULL;
+	ChunkVec *vec;
+	int num_constraints_hint;
+	ScanIterator it;
+
+	vec = *chunks;
+	num_constraints_hint = 2;
+
+	if (vec->num_chunks + 1 > vec->capacity)
+		*chunks = vec = chunk_vec_expand(vec, vec->capacity + 10);
+
+	chunkptr = &vec->chunks[vec->num_chunks++];
+	ts_chunk_formdata_fill(&chunkptr->fd, ti);
+
+	/*
+	 * Get the chunk constraints, hypercube slices and relation details.
+	 */
+	chunkptr->constraints =
+		ts_chunk_constraint_scan_by_chunk_id(chunkptr->fd.id, num_constraints_hint, ti->mctx);
+
+	it = ts_dimension_slice_scan_iterator_create(NULL, ti->mctx);
+	chunkptr->cube = ts_hypercube_from_constraints(chunkptr->constraints, &it);
+	ts_scan_iterator_close(&it);
+
+	chunkptr->table_id =
+		ts_get_relation_relid(NameStr(chunkptr->fd.schema_name), NameStr(chunkptr->fd.table_name),
+				true);
+	chunkptr->hypertable_relid = ts_hypertable_id_to_relid(chunkptr->fd.hypertable_id);
+	chunkptr->relkind = get_rel_relkind(chunkptr->table_id);
+	chunkptr->data_nodes = NIL;
+
+	return vec;
+}
+
+/*
+ * Prepare for an index scan for all the chunks matching the given hypertable_id and range criteria.
+ */
+static int
+chunk_creation_time_set_range(ScanIterator *it, Oid hypertable_id, StrategyNumber start_strategy,
+		int64 start_value, StrategyNumber end_strategy, int64 end_value)
+{
+	it->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK,
+			CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX);
+	ts_scan_iterator_scan_key_reset(it);
+
+	ts_scan_iterator_scan_key_init(it,
+			Anum_chunk_hypertable_id_creation_time_idx_hypertable_id,
+			BTEqualStrategyNumber,
+			F_INT4EQ,
+			Int32GetDatum(hypertable_id));
+
+	/* Set ranges based on input criteria */
+	if (start_strategy != InvalidStrategy)
+	{
+		Oid opno = get_opfamily_member(INTEGER_BTREE_FAM_OID, INT8OID, INT8OID, start_strategy);
+		Oid proc = get_opcode(opno);
+
+		Assert(OidIsValid(proc));
+
+		ts_scan_iterator_scan_key_init(it,
+				Anum_chunk_hypertable_id_creation_time_idx_creation_time,
+				start_strategy,
+				proc,
+				Int64GetDatum(start_value));
+	}
+	if (end_strategy != InvalidStrategy)
+	{
+		Oid opno = get_opfamily_member(INTEGER_BTREE_FAM_OID, INT8OID, INT8OID, end_strategy);
+		Oid proc = get_opcode(opno);
+
+		Assert(OidIsValid(proc));
+
+		ts_scan_iterator_scan_key_init(it,
+				Anum_chunk_hypertable_id_creation_time_idx_creation_time,
+				end_strategy,
+				proc,
+				Int64GetDatum(end_value));
+	}
+
+	return it->ctx.nkeys;
+}
+
+/*
+ * Perform an index scan for given hypertable_id and chunk creation time range.
+ *
+ * Returns an array of chunks using ChunkVec the encloses all the chunks satisfying the range
+ * criteria.
+ */
+static Chunk *
+get_chunks_in_creation_time_range_limit(Hypertable *ht, StrategyNumber start_strategy,
+		int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit,
+		uint64 *num_chunks, ScanTupLock *tupLock)
+{
+	ScanIterator it;
+	ChunkVec *chunk_vec = NULL;
+
+	it = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
+	it.ctx.tuplock = tupLock;
+
+	chunk_creation_time_set_range(&it, ht->fd.id, start_strategy, start_value, end_strategy,
+			end_value);
+	it.ctx.limit = limit;
+
+	chunk_vec = ts_chunk_vec_create(limit > 0 ? limit : DEFAULT_CHUNK_VEC_SIZE);
+
+	ts_scanner_foreach(&it)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&it);
+		ts_chunk_vec_add_from_tuple(&chunk_vec, ti);
+	}
+
+	ts_scan_iterator_close(&it);
+
+	*num_chunks = chunk_vec->num_chunks;
+
+	return chunk_vec->chunks;
+}
+
+Chunk *
+get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
+		const char* caller_name, MemoryContext mctx, uint64 *num_chunks_returned,
+		ScanTupLock *tupLock)
+{
+	MemoryContext oldcontext;
+	Chunk *chunks = NULL;
+	StrategyNumber start_strategy;
+	StrategyNumber end_strategy;
+	uint64 num_chunks = 0;
+
+	if (older_than <= newer_than)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid chunk creation time range"),
+				 errhint("The start of the time range must be before the end.")));
+
+	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterStrategyNumber;
+	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
+
+	oldcontext = MemoryContextSwitchTo(mctx);
+	chunks = get_chunks_in_creation_time_range_limit(ht,
+													 start_strategy,
+													 newer_than,
+													 end_strategy,
+													 older_than,
+													 -1,
+													 &num_chunks,
+													 tupLock);
+	MemoryContextSwitchTo(oldcontext);
+	*num_chunks_returned = num_chunks;
+
+	return chunks;
 }

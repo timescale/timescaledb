@@ -99,6 +99,21 @@ policy_retention_get_drop_after_interval(const Jsonb *config)
 	return interval;
 }
 
+Oid
+policy_retention_get_window_type(const Jsonb *config)
+{
+	bool found;
+	Oid window_type;
+
+	window_type = ts_jsonb_get_int32_field(config, POL_RETENTION_CONF_KEY_WINDOW_TYPE, &found);
+
+	if (!found)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_WINDOW_TYPE)));
+	return window_type;
+}
+
 static Hypertable *
 validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 {
@@ -219,11 +234,9 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	}
 
 	if (IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(window_type))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
-				 errhint("Integer time duration is required for hypertables"
-						 " with integer time dimension.")));
+		ereport(NOTICE,
+				 errmsg("Interval type specified in retention policy for Integer dimension."),
+				 errdetail("Chunks are retained based on creation time."));
 
 	if (IS_TIMESTAMP_TYPE(partitioning_type) && window_type != INTERVALOID)
 		ereport(ERROR,
@@ -243,21 +256,25 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 			ts_jsonb_add_interval(parse_state,
 								  POL_RETENTION_CONF_KEY_DROP_AFTER,
 								  DatumGetIntervalP(window_datum));
+			ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_WINDOW_TYPE, INTERVALOID);
 			break;
 		case INT2OID:
 			ts_jsonb_add_int64(parse_state,
 							   POL_RETENTION_CONF_KEY_DROP_AFTER,
 							   DatumGetInt16(window_datum));
+			ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_WINDOW_TYPE, INT2OID);
 			break;
 		case INT4OID:
 			ts_jsonb_add_int64(parse_state,
 							   POL_RETENTION_CONF_KEY_DROP_AFTER,
 							   DatumGetInt32(window_datum));
+			ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_WINDOW_TYPE, INT4OID);
 			break;
 		case INT8OID:
 			ts_jsonb_add_int64(parse_state,
 							   POL_RETENTION_CONF_KEY_DROP_AFTER,
 							   DatumGetInt64(window_datum));
+			ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_WINDOW_TYPE, INT8OID);
 			break;
 		default:
 			ereport(ERROR,

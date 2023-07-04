@@ -1000,13 +1000,18 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(interval '1 minute');
 ERROR:  function drop_chunks(interval) does not exist at character 8
-SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
-ERROR:  can only use an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
 SELECT drop_chunks('drop_chunk_test_ts', (now()-interval '1 minute'));
 ERROR:  invalid time argument type "timestamp with time zone"
 SELECT drop_chunks('drop_chunk_test3', verbose => true);
 ERROR:  invalid time range for dropping chunks
 \set ON_ERROR_STOP 1
+-- Interval boundary for INTEGER type columns. It uses chunk creation
+-- time to identify the affected chunks.
+SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
+ drop_chunks 
+-------------
+(0 rows)
+
 \dt "_timescaledb_internal"._hyper*
                            List of relations
         Schema         |       Name        | Type  |       Owner       

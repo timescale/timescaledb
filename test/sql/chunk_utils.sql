@@ -373,10 +373,13 @@ ROLLBACK;
 
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(interval '1 minute');
-SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
 SELECT drop_chunks('drop_chunk_test_ts', (now()-interval '1 minute'));
 SELECT drop_chunks('drop_chunk_test3', verbose => true);
 \set ON_ERROR_STOP 1
+
+-- Interval boundary for INTEGER type columns. It uses chunk creation
+-- time to identify the affected chunks.
+SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
 
 \dt "_timescaledb_internal"._hyper*
 

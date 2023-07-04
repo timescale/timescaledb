@@ -143,6 +143,24 @@ typedef struct DisplayKeyData
 	const char *(*as_string)(Datum);
 } DisplayKeyData;
 
+/*
+ * Chunk vector is collection of chunks for a given hypertable_id.
+ */
+typedef struct ChunkVec
+{
+	uint32	capacity;
+	uint32	num_chunks;
+
+	Chunk	chunks[FLEXIBLE_ARRAY_MEMBER];
+} ChunkVec;
+
+extern ChunkVec* ts_chunk_vec_create(int32 num_chunks);
+extern ChunkVec* ts_chunk_vec_sort(ChunkVec **chunks);
+extern ChunkVec* ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti);
+
+#define CHUNK_VEC_SIZE(num_chunks) (sizeof(ChunkVec) + sizeof(Chunk) * num_chunks)
+#define DEFAULT_CHUNK_VEC_SIZE 10
+
 extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
 extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p);
 extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found,
@@ -198,7 +216,8 @@ extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior,
 extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
-												 int32 log_level, List **affected_data_nodes);
+												 int32 log_level, List** affected_data_nodes,
+												 Oid time_type, Oid arg_type);
 extern TSDLLEXPORT Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created);

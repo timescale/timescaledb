@@ -351,11 +351,21 @@ WARNING:  unexpected interval: smaller than one second
  (4,public,test_table_perm,t)
 (1 row)
 
-\set ON_ERROR_STOP 0
--- we cannot add a drop_chunks policy on a table whose open dimension is not time and no now_func is set
+-- we can drop_chunks policy on a table whose open dimension is not time and no now_func is set
+-- by using chunk creation time.
 select add_retention_policy('test_table_int', INTERVAL '4 months', true);
-ERROR:  invalid value for parameter drop_after
-\set ON_ERROR_STOP 1
+NOTICE:  Interval type specified in retention policy for Integer dimension.
+ add_retention_policy 
+----------------------
+                 1003
+(1 row)
+
+select remove_retention_policy('test_table_int');
+ remove_retention_policy 
+-------------------------
+ 
+(1 row)
+
 INSERT INTO test_table_int VALUES (-2, -2), (-1, -1), (0,0), (1, 1), (2, 2), (3, 3);
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE USER unprivileged;
@@ -660,7 +670,7 @@ select add_retention_policy('test_strict', drop_after => interval '2 days', if_n
 select add_retention_policy('test_strict', interval '2 days', schedule_interval => NULL);
  add_retention_policy 
 ----------------------
-                 1006
+                 1007
 (1 row)
 
 -- test compression with null arguments
@@ -686,7 +696,7 @@ select add_compression_policy('test_strict', INTERVAL '2 weeks', if_not_exists =
 select add_compression_policy('test_strict', INTERVAL '2 weeks', schedule_interval => NULL);
  add_compression_policy 
 ------------------------
-                   1007
+                   1008
 (1 row)
 
 -- test that we get the default schedule_interval if nothing is specified
@@ -714,11 +724,11 @@ select create_hypertable('test_missing_schedint_integer', 'time', chunk_time_int
 alter table test_missing_schedint_integer set (timescaledb.compress);
 select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
 select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
-  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |        owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |     check_schema      |        check_name        | timezone 
-------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+---------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+-----------------------+--------------------------+----------
- 1008 | Retention Policy [1008]   | @ 1 day            | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention   | default_perm_user_2 | t         | f              |               |             8 | {"drop_after": "@ 14 days", "hypertable_id": 8}     | _timescaledb_internal | policy_retention_check   | 
- 1009 | Compression Policy [1009] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         | f              |               |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"} | _timescaledb_internal | policy_compression_check | 
- 1010 | Compression Policy [1010] | @ 1 day            | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         | f              |               |            10 | {"hypertable_id": 10, "compress_after": 600000}     | _timescaledb_internal | policy_compression_check | 
+  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |        owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                config                                |     check_schema      |        check_name        | timezone 
+------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+---------------------+-----------+----------------+---------------+---------------+----------------------------------------------------------------------+-----------------------+--------------------------+----------
+ 1009 | Retention Policy [1009]   | @ 1 day            | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention   | default_perm_user_2 | t         | f              |               |             8 | {"drop_after": "@ 14 days", "window_type": 1186, "hypertable_id": 8} | _timescaledb_internal | policy_retention_check   | 
+ 1010 | Compression Policy [1010] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         | f              |               |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"}                  | _timescaledb_internal | policy_compression_check | 
+ 1011 | Compression Policy [1011] | @ 1 day            | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         | f              |               |            10 | {"hypertable_id": 10, "compress_after": 600000}                      | _timescaledb_internal | policy_compression_check | 
 (3 rows)
 
 -- test policy check functions with NULL args

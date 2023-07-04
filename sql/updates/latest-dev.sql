@@ -5,6 +5,8 @@ UPDATE _timescaledb_catalog.chunk SET creation_time = now();
 ALTER TABLE _timescaledb_catalog.chunk
   ALTER COLUMN creation_time SET NOT NULL;
 
+CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk(hypertable_id, creation_time);
+
 -- update chunk view
 DROP VIEW IF EXISTS timescaledb_information.chunks;
 

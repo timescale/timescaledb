@@ -31,6 +31,7 @@
 #define POLICY_RETENTION_CHECK_NAME "policy_retention_check"
 #define POL_RETENTION_CONF_KEY_HYPERTABLE_ID "hypertable_id"
 #define POL_RETENTION_CONF_KEY_DROP_AFTER "drop_after"
+#define POL_RETENTION_CONF_KEY_WINDOW_TYPE "window_type"
 
 #define SHOW_POLICY_KEY_HYPERTABLE_ID "hypertable_id"
 #define SHOW_POLICY_KEY_POLICY_NAME "policy_name"

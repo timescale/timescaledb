@@ -130,6 +130,49 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 }
 
 /*
+ * This is a temporary function until we integrate creation time metadata changes for compression
+ * policy.
+ *
+ * returns now() - window as partitioning type datum
+ */
+static Datum
+get_retention_window_boundary(const Dimension *dim, const Jsonb *config,
+		int64 (*int_getter)(const Jsonb *), Interval *(*interval_getter)(const Jsonb *) )
+{
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+	Oid window_type = policy_retention_get_window_type(config);
+
+	if (IS_INTEGER_TYPE(partitioning_type) && IS_INTEGER_TYPE(window_type))
+	{
+		int64 res, lag = int_getter(config);
+		Oid now_func = ts_get_integer_now_func(dim);
+
+		Assert(now_func);
+
+		res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
+		return Int64GetDatum(res);
+	}
+	else if (IS_INTEGER_TYPE(partitioning_type) && window_type == INTERVALOID)
+	{
+		/*
+		 * Chunk retention is based on chunk creation time. The interval value
+		 * can be returned without type casting it and subtracting it from
+		 * now(). The subsequent call to "drop_chunks" function will take care
+		 * of calculating the window boundary.
+		 * TODO: This should be moved outside of this function as this function
+		 * is specific to window boundary calculation.
+		 */
+		Interval *lag = interval_getter(config);
+		return IntervalPGetDatum(lag);
+	}
+	else
+	{
+		Interval *lag = interval_getter(config);
+		return subtract_interval_from_now(lag, partitioning_type);
+	}
+}
+
+/*
  * returns now() - window as partitioning type datum
  */
 static Datum
@@ -297,17 +340,37 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	const Dimension *open_dim;
 	Datum boundary;
 	Datum boundary_type;
+	Oid window_type;
+	Oid partition_type;
 	ContinuousAgg *cagg;
 
 	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config));
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
-	open_dim = get_open_dimension_for_hypertable(hypertable);
 
-	boundary = get_window_boundary(open_dim,
-								   config,
-								   policy_retention_get_drop_after_int,
-								   policy_retention_get_drop_after_interval);
-	boundary_type = ts_dimension_get_partition_type(open_dim);
+	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
+	partition_type = ts_dimension_get_partition_type(open_dim);
+
+	/*
+	 * Retention policy can be created based on chunk creation time for integer
+	 * columns. This means that the widnow_type for a policy may be different
+	 * from the dimension type, specially in case of INTEGER columns. This
+	 * requires us to store window_type in config to identify the type of
+	 * retention policy created on table.
+	 */
+	window_type = policy_retention_get_window_type(config);
+
+	if (IS_INTEGER_TYPE(partition_type) && window_type == INTERVALOID)
+		boundary_type = INTERVALOID;
+	else
+	{
+		open_dim = get_open_dimension_for_hypertable(hypertable);
+		boundary_type = partition_type;
+	}
+
+	boundary = get_retention_window_boundary(open_dim,
+											 config,
+											 policy_retention_get_drop_after_int,
+											 policy_retention_get_drop_after_interval);
 
 	/* We need to do a reverse lookup here since the given hypertable might be
 	   a materialized hypertable, and thus need to call drop_chunks on the

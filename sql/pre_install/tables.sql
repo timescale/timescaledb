@@ -207,6 +207,8 @@ CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compre
 --operations only work on varbit datatype and not integer datatype.
 CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
 
+CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk(hypertable_id, creation_time);
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
 

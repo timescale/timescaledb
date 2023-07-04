@@ -194,10 +194,10 @@ create or replace function overflow_now() returns SMALLINT LANGUAGE SQL IMMUTABL
 CREATE TABLE test_table_perm(time timestamp PRIMARY KEY);
 SELECT create_hypertable('test_table_perm', 'time', chunk_time_interval => 1);
 
-\set ON_ERROR_STOP 0
--- we cannot add a drop_chunks policy on a table whose open dimension is not time and no now_func is set
+-- we can drop_chunks policy on a table whose open dimension is not time and no now_func is set
+-- by using chunk creation time.
 select add_retention_policy('test_table_int', INTERVAL '4 months', true);
-\set ON_ERROR_STOP 1
+select remove_retention_policy('test_table_int');
 
 INSERT INTO test_table_int VALUES (-2, -2), (-1, -1), (0,0), (1, 1), (2, 2), (3, 3);
 \c :TEST_DBNAME :ROLE_SUPERUSER;

@@ -114,22 +114,40 @@ ts_time_datum_convert_arg(Datum arg, Oid *argtype, Oid timetype)
  * string, then there will be an error raised.
  */
 int64
-ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype)
+ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype, bool validate_now_func)
 {
 	/* If no explicit cast was done by the user, try to convert the argument
 	 * to the time type used by the continuous aggregate. */
 	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
 
+	/*
+	 * TODO: The decision to validate integer_now_func should be done outside this function by the
+	 * caller? The validation should be moved outside this function and this function should stick
+	 * to boundary calculation and type casting the input argument.
+	 */
 	if (argtype == INTERVALOID)
 	{
-		if (IS_INTEGER_TYPE(timetype))
+		if (IS_INTEGER_TYPE(timetype) && validate_now_func)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg(
 						 "can only use an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types")));
 
-		arg = subtract_interval_from_now(timetype, DatumGetIntervalP(arg));
-		argtype = timetype;
+		if (IS_INTEGER_TYPE(timetype))
+		{
+			/*
+			 * The argument type is defined as INTERVAL for INTEGER column this signifies that
+			 * chunks are retained based on chunk creation time. Chunk creation time is represented
+			 * as TIMESTAMPTZ, the input argument should be type casted to TIMESTAMPTZ.
+			 */
+			arg = subtract_interval_from_now(TIMESTAMPTZOID, DatumGetIntervalP(arg));
+			return Int64GetDatum(arg);
+		}
+		else
+		{
+			arg = subtract_interval_from_now(timetype, DatumGetIntervalP(arg));
+			argtype = timetype;
+		}
 	}
 	else if (argtype != timetype && !can_coerce_type(1, &argtype, &timetype, COERCION_IMPLICIT))
 		ereport(ERROR,

@@ -18,6 +18,7 @@ extern Datum policy_retention_remove(PG_FUNCTION_ARGS);
 int32 policy_retention_get_hypertable_id(const Jsonb *config);
 int64 policy_retention_get_drop_after_int(const Jsonb *config);
 Interval *policy_retention_get_drop_after_interval(const Jsonb *config);
+Oid policy_retention_get_window_type(const Jsonb *config);
 
 Datum policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 									Interval default_schedule_interval, bool if_not_exists,
