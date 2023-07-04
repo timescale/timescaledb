@@ -24,9 +24,9 @@ void (*get_vector_const_predicate(Oid pg_predicate))(const ArrowArray *, const D
 {
 	switch (pg_predicate)
 	{
-#define GENERATE_DISPATCH
+#define GENERATE_DISPATCH_TABLE
 #include "vector_const_all_predicates.c"
-#undef GENERATE_DISPATCH
+#undef GENERATE_DISPATCH_TABLE
 	}
 	return NULL;
 }

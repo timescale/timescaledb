@@ -521,6 +521,16 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	arrow->buffers[0] = &with_buffers->nulls_buffer;
 	arrow->buffers[1] = &with_buffers->values_buffer;
 
+	if (isnull)
+	{
+		/*
+		 * The validity bitmap was initialized to invalid on allocation, and
+		 * the Datum might be invalid if the value is null (important on i386
+		 * where it might be pass-by-reference), so don't read it.
+		 */
+		return arrow;
+	}
+
 #define FOR_TYPE(PGTYPE, CTYPE, FROMDATUM)                                                         \
 	case PGTYPE:                                                                                   \
 		*((CTYPE *) &with_buffers->values_buffer) = FROMDATUM(datum);                              \
@@ -541,7 +551,7 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 			pg_unreachable();
 	}
 
-	arrow_set_row_validity(&with_buffers->nulls_buffer, 0, !isnull);
+	arrow_set_row_validity(&with_buffers->nulls_buffer, 0, true);
 
 	return arrow;
 }
