@@ -860,3 +860,36 @@ SELECT sum(cpu) FROM f_sensor_data;
 
 :explain
 SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+
+RESET enable_seqscan;
+RESET enable_indexscan;
+RESET min_parallel_index_scan_size;
+RESET min_parallel_table_scan_size;
+RESET min_parallel_table_scan_size;
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
+RESET max_parallel_workers_per_gather;
+
+-- Test partially compressed chunks
+-- Ensure partial paths always created
+
+-- This test case is partially copied from tsbench
+
+CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
+SELECT create_hypertable('ht_metrics_partially_compressed','time',create_default_indexes:=false);
+ALTER TABLE ht_metrics_partially_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+-- Insert data in compressed chunks
+-- and in uncompressed chunks
+
+INSERT INTO ht_metrics_partially_compressed
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-01'::timestamptz,'2020-01-02'::timestamptz, INTERVAL '1 m') g(time), LATERAL (SELECT generate_series(1,2) AS device) g2;
+
+SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
+
+INSERT INTO ht_metrics_partially_compressed
+VALUES ('2020-01-01'::timestamptz, 1, 0.1);
+
+:explain
+SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1;

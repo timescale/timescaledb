@@ -26,7 +26,6 @@
 #include "debug_assert.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
-#include "import/allpaths.h"
 #include "compression/create.h"
 #include "nodes/decompress_chunk/sorted_merge.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
@@ -1535,6 +1534,21 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	return path;
 }
 
+/* partially copied from allpaths.c */
+static void
+create_plain_partial_paths_for_decompression(PlannerInfo *root, RelOptInfo *rel)
+{
+	int parallel_workers;
+
+	parallel_workers =
+		compute_parallel_worker(rel, rel->pages, -1, max_parallel_workers_per_gather);
+
+	parallel_workers = Max(1, parallel_workers);
+
+	/* Add an unordered partial path based on a parallel sequential scan. */
+	add_partial_path(rel, create_seqscan_path(root, rel, NULL, parallel_workers));
+}
+
 /* NOTE: this needs to be called strictly after all restrictinfos have been added
  *       to the compressed rel
  */
@@ -1557,7 +1571,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 
 	/* create parallel scan path */
 	if (compressed_rel->consider_parallel)
-		ts_create_plain_partial_paths(root, compressed_rel);
+		create_plain_partial_paths_for_decompression(root, compressed_rel);
 
 	/*
 	 * We set enable_bitmapscan to false here to ensure any pathes with bitmapscan do not
