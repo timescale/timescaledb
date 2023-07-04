@@ -237,6 +237,285 @@ SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
                      ->  Seq Scan on _hyper_1_2_chunk
 (13 rows)
 
+:PREFIX SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
+                           ->  Result
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                       Filter: (i > 1)
+                           ->  Result
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk
+                                       Filter: (i > 1)
+(16 rows)
+
+SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
+ count 
+-------
+ 99999
+(1 row)
+
+-- test parallel ChunkAppend with only work done in the parallel workers
+SET parallel_leader_participation = off;
+SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
+ count 
+-------
+ 99999
+(1 row)
+
+RESET parallel_leader_participation;
+-- Test parallel chunk append is used
+SET parallel_tuple_cost = 0;
+:PREFIX SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: test.i, _hyper_1_1_chunk.i
+   ->  Hash Right Join
+         Hash Cond: (_hyper_1_1_chunk.i = test.i)
+         ->  Limit
+               ->  Gather
+                     Workers Planned: 2
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                           Filter: (i < 500000)
+         ->  Hash
+               ->  Limit
+                     ->  Gather
+                           Workers Planned: 2
+                           ->  Result
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Custom Scan (ChunkAppend) on test
+                                       Chunks excluded during startup: 0
+                                       ->  Result
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                       ->  Result
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_2_chunk
+(23 rows)
+
+SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
+ i  |  j   |             ts              | i  |  j   |             ts              
+----+------+-----------------------------+----+------+-----------------------------
+  0 |  0.1 | Wed Dec 31 16:00:00 1969    |  0 |  0.1 | Wed Dec 31 16:00:00 1969
+ 10 | 10.1 | Wed Dec 31 16:00:00.01 1969 | 10 | 10.1 | Wed Dec 31 16:00:00.01 1969
+ 20 | 20.1 | Wed Dec 31 16:00:00.02 1969 | 20 | 20.1 | Wed Dec 31 16:00:00.02 1969
+ 30 | 30.1 | Wed Dec 31 16:00:00.03 1969 | 30 | 30.1 | Wed Dec 31 16:00:00.03 1969
+ 40 | 40.1 | Wed Dec 31 16:00:00.04 1969 | 40 | 40.1 | Wed Dec 31 16:00:00.04 1969
+ 50 | 50.1 | Wed Dec 31 16:00:00.05 1969 | 50 | 50.1 | Wed Dec 31 16:00:00.05 1969
+ 60 | 60.1 | Wed Dec 31 16:00:00.06 1969 | 60 | 60.1 | Wed Dec 31 16:00:00.06 1969
+ 70 | 70.1 | Wed Dec 31 16:00:00.07 1969 | 70 | 70.1 | Wed Dec 31 16:00:00.07 1969
+ 80 | 80.1 | Wed Dec 31 16:00:00.08 1969 | 80 | 80.1 | Wed Dec 31 16:00:00.08 1969
+ 90 | 90.1 | Wed Dec 31 16:00:00.09 1969 | 90 | 90.1 | Wed Dec 31 16:00:00.09 1969
+(10 rows)
+
+-- Test normal chunk append can be used in a parallel worker
+:PREFIX SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SELECT * FROM "test" WHERE i >= 400000 ORDER BY i) AS t2 ON (TRUE) ORDER BY t1.i, t2.i LIMIT 10;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Gather
+   Workers Planned: 1
+   Single Copy: true
+   ->  Limit
+         ->  Incremental Sort
+               Sort Key: _hyper_1_2_chunk.i, test.i
+               Presorted Key: _hyper_1_2_chunk.i
+               ->  Nested Loop
+                     ->  Index Scan Backward using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk
+                           Index Cond: (i >= 999000)
+                     ->  Materialize
+                           ->  Custom Scan (ChunkAppend) on test
+                                 Order: test.i
+                                 ->  Index Scan Backward using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk
+                                       Index Cond: (i >= 400000)
+                                 ->  Index Scan Backward using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                                       Index Cond: (i >= 400000)
+(17 rows)
+
+SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SELECT * FROM "test" WHERE i >= 400000 ORDER BY i) AS t2 ON (TRUE) ORDER BY t1.i, t2.i LIMIT 10;
+   i    |    j     |            ts            |   i    |    j     |             ts              
+--------+----------+--------------------------+--------+----------+-----------------------------
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400000 | 400000.1 | Wed Dec 31 16:06:40 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400010 | 400010.1 | Wed Dec 31 16:06:40.01 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400020 | 400020.1 | Wed Dec 31 16:06:40.02 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400030 | 400030.1 | Wed Dec 31 16:06:40.03 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400040 | 400040.1 | Wed Dec 31 16:06:40.04 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400050 | 400050.1 | Wed Dec 31 16:06:40.05 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400060 | 400060.1 | Wed Dec 31 16:06:40.06 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400070 | 400070.1 | Wed Dec 31 16:06:40.07 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400080 | 400080.1 | Wed Dec 31 16:06:40.08 1969
+ 999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400090 | 400090.1 | Wed Dec 31 16:06:40.09 1969
+(10 rows)
+
+-- Test parallel ChunkAppend reinit
+SET enable_material = off;
+SET min_parallel_table_scan_size = 0;
+SET min_parallel_index_scan_size = 0;
+SET enable_hashjoin = 'off';
+SET enable_nestloop = 'off';
+CREATE TABLE sensor_data(
+      time timestamptz NOT NULL,
+      sensor_id integer NOT NULL);
+SELECT FROM create_hypertable(relation=>'sensor_data', time_column_name=> 'time');
+--
+(1 row)
+
+-- Sensors 1 and 2
+INSERT INTO sensor_data
+SELECT time, sensor_id
+FROM
+generate_series('2000-01-01 00:00:30', '2022-01-01 00:00:30', INTERVAL '3 months') AS g1(time),
+generate_series(1, 2, 1) AS g2(sensor_id)
+ORDER BY time;
+-- Sensor 100
+INSERT INTO sensor_data
+SELECT time, 100 as sensor_id
+FROM
+generate_series('2000-01-01 00:00:30', '2022-01-01 00:00:30', INTERVAL '1 year') AS g1(time)
+ORDER BY time;
+:PREFIX SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather Merge
+   Workers Planned: 4
+   ->  Sort
+         Sort Key: s2."time", s1."time", s1.sensor_id, s2.sensor_id
+         ->  Nested Loop
+               ->  Parallel Custom Scan (ChunkAppend) on sensor_data s1
+                     Chunks excluded during startup: 80
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_83_chunk s1_1
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_83_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_84_chunk s1_2
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_84_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_85_chunk s1_3
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_85_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_86_chunk s1_4
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_86_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_87_chunk s1_5
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_87_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_88_chunk s1_6
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_88_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_89_chunk s1_7
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_89_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_90_chunk s1_8
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_90_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_91_chunk s1_9
+                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                           Filter: (sensor_id > 50)
+                           ->  Bitmap Index Scan on _hyper_2_91_chunk_sensor_data_time_idx
+                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+               ->  Custom Scan (ChunkAppend) on sensor_data s2
+                     Order: s2."time"
+                     ->  Index Scan Backward using _hyper_2_83_chunk_sensor_data_time_idx on _hyper_2_83_chunk s2_1
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_2_84_chunk_sensor_data_time_idx on _hyper_2_84_chunk s2_2
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_2_85_chunk_sensor_data_time_idx on _hyper_2_85_chunk s2_3
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_2_86_chunk_sensor_data_time_idx on _hyper_2_86_chunk s2_4
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_2_87_chunk_sensor_data_time_idx on _hyper_2_87_chunk s2_5
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+(64 rows)
+
+-- Check query result
+SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+             time             | sensor_id |             time             | sensor_id 
+------------------------------+-----------+------------------------------+-----------
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
+ Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+(12 rows)
+
+-- Ensure the same result is produced if only the parallel workers have to produce them (i.e., the pstate is reinitialized properly)
+SET parallel_leader_participation = off;
+SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+             time             | sensor_id |             time             | sensor_id 
+------------------------------+-----------+------------------------------+-----------
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
+ Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+(12 rows)
+
+RESET parallel_leader_participation;
+-- Ensure the same query result is produced by a sequencial query
+SET max_parallel_workers_per_gather TO 0;
+SET force_parallel_mode = 'off';
+SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+             time             | sensor_id |             time             | sensor_id 
+------------------------------+-----------+------------------------------+-----------
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
+ Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
+ Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+ Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
+ Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+(12 rows)
+
+RESET enable_material;
+RESET min_parallel_table_scan_size;
+RESET min_parallel_index_scan_size;
+RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET parallel_tuple_cost;
+SET force_parallel_mode = 'on';
 -- test worker assignment
 -- first chunk should have 1 worker and second chunk should have 2
 SET max_parallel_workers_per_gather TO 2;
