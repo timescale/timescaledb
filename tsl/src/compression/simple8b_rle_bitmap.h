@@ -152,6 +152,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			 */
 			CheckCompressedData(decompressed_index + 64 < num_elements_padded);
 
+#ifdef HAVE__BUILTIN_POPCOUNT
 			for (uint16 i = 0; i < 64; i++)
 			{
 				const uint16 word_prefix_sum =
@@ -159,6 +160,17 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 				prefix_sums[decompressed_index + i] = current_prefix_sum + word_prefix_sum;
 			}
 			current_prefix_sum += __builtin_popcountll(block_data);
+#else
+			/*
+			 * Unfortunatly, we have to have this fallback for Windows.
+			 */
+			for (uint16 i = 0; i < 64; i++)
+			{
+				const uint16 this_bit = (block_data >> i) & 1;
+				current_prefix_sum += this_bit;
+				prefix_sums[decompressed_index + i] = current_prefix_sum;
+			}
+#endif
 			decompressed_index += 64;
 		}
 	}
