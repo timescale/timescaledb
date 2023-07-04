@@ -86,7 +86,7 @@ typedef struct DecompressBatchState
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
-	uint64_t *vector_qual_result;
+	uint64 *vector_qual_result;
 
 	DecompressChunkColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
