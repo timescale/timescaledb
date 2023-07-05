@@ -70,3 +70,4 @@ DROP TABLE IF EXISTS conditions CASCADE;
     INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
     INSERT INTO conditions ("time", temperature, device_id) VALUES (5, 20, 3);
 \endif
+

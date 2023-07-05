@@ -583,20 +583,23 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 		case INTERVALOID:
 		{
 			/*
+			 * Original interval should not be changed, hence create a local copy
+			 * for this check.
+			 */
+			Interval interval = *bucket_info.interval;
+
+			/*
 			 * epoch will treat year as 365.25 days. This leads to the unexpected
 			 * result that year is not multiple of day or month, which is perceived
 			 * as a bug. For that reason, we treat all months as 30 days regardless of year
 			 */
-			if (bucket_info.interval->month && !bucket_info.interval->day &&
-				!bucket_info.interval->time)
+			if (interval.month && !interval.day && !interval.time)
 			{
-				bucket_info.interval->day = bucket_info.interval->month * DAYS_PER_MONTH;
-				bucket_info.interval->month = 0;
+				interval.day = interval.month * DAYS_PER_MONTH;
+				interval.month = 0;
 			}
-
 			/* Convert Interval to int64 */
-			width =
-				ts_interval_value_to_internal(IntervalPGetDatum(bucket_info.interval), INTERVALOID);
+			width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
 			break;
 		}
 		default:

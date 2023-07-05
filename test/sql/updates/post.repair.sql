@@ -20,6 +20,7 @@ WHERE extname = 'timescaledb' \gset
 
 \if :test_repair_cagg_joins
 --Check if the repaired cagg with joins work alright now
-\ir post.repair.cagg_joins.sql
+    \ir post.repair.cagg_joins.sql
+    \ir post.repair.hierarchical_cagg.sql
 \endif
 

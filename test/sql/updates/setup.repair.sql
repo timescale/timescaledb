@@ -189,7 +189,7 @@ DROP VIEW slices;
 \endif
 
 \ir setup.repair.cagg.sql
-
 \if :has_cagg_joins
+     \ir setup.repair.hierarchical_cagg.sql
      \ir setup.repair.cagg_joins.sql
 \endif

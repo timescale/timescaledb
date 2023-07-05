@@ -10,6 +10,7 @@
 \set DATA_NODE_1 :TEST_DBNAME _1
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
+\set INTERVAL_TEST FALSE
 
 \ir include/remote_exec.sql
 
