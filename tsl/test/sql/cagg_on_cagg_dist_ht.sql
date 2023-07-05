@@ -10,6 +10,7 @@
 \set DATA_NODE_1 :TEST_DBNAME _1
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
+\set INTERVAL_TEST FALSE
 
 \ir include/remote_exec.sql
 
@@ -33,6 +34,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 -- Current test variables
 \set IS_TIME_DIMENSION FALSE
 \set TIME_DIMENSION_DATATYPE INTEGER
+\set INTERVAL_TEST FALSE
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2_5
 \set CAGG_NAME_3TH_LEVEL conditions_summary_3_10
@@ -234,6 +236,14 @@ SET timezone TO 'UTC';
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
 
+--#Bugfix 5734 #1
+\set INTERVAL_TEST TRUE
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_3TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
+
 --
 -- Variable bucket size with different timezones
 --
@@ -243,6 +253,14 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
+
+--#Bugfix 5734 #2
+\set INTERVAL_TEST TRUE
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_3TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
 
 --
 -- TZ bucket on top of non-TZ bucket
@@ -255,6 +273,14 @@ SET timezone TO 'UTC';
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
 
+--#Bugfix 5734 #3
+\set INTERVAL_TEST TRUE
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_3TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
+
 --
 -- non-TZ bucket on top of TZ bucket
 --
@@ -265,6 +291,7 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
 
 -- bug report 5231
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 day\''
