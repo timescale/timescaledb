@@ -1604,8 +1604,11 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 														true,
 														false,
 														false,
+														false,
+														false,
 														ctx->root->qual_security_level,
 														relids,
+														NULL,
 														NULL,
 														NULL);
 				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
