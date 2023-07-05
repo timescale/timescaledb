@@ -3103,7 +3103,6 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 	index_rescan(scan, index_scankeys, num_index_scankeys, NULL, 0);
 	while (index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
-		bool valid = false;
 		TM_Result result;
 		/* Deconstruct the tuple */
 		slot_getallattrs(slot);
@@ -3114,11 +3113,19 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 		if (num_scankeys)
 		{
 			/* filter tuple based on compress_orderby columns */
+			bool valid = false;
+#if PG16_LT
 			HeapKeyTest(compressed_tuple,
 						RelationGetDescr(decompressor->in_rel),
 						num_scankeys,
 						scankeys,
 						valid);
+#else
+			valid = HeapKeyTest(compressed_tuple,
+								RelationGetDescr(decompressor->in_rel),
+								num_scankeys,
+								scankeys);
+#endif
 			if (!valid)
 			{
 				num_orderby_filtered_rows++;
