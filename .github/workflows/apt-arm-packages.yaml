@@ -16,9 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Debian images:  10 (buster), 11 (bullseye)
-        # Ubuntu images:  20.04 LTS (focal), 22.04 (jammy)
-        image: [ "debian:10-slim","debian:11-slim","ubuntu:focal", "ubuntu:jammy"]
+        image: [ "debian:10-slim", "debian:11-slim","debian:12-slim","ubuntu:20.04", "ubuntu:22.04", "ubuntu:23.04"]
         pg: [ 12, 13, 14, 15 ]
 
     steps:
