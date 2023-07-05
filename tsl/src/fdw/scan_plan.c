@@ -878,8 +878,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 											 true,
 											 false,
 											 false,
+											 false,
+											 false,
 											 root->qual_security_level,
 											 grouped_rel->relids,
+											 NULL,
 											 NULL,
 											 NULL);
 			if (ts_is_foreign_expr(root, grouped_rel, expr))

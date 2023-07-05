@@ -135,38 +135,89 @@
  *
  * PG16 removed outerjoin_delayed, nullable_relids arguments from make_restrictinfo
  * https://github.com/postgres/postgres/commit/b448f1c8d8
+ *
+ * PG16 adds three new parameter - has_clone, is_clone and incompatible_relids, as a
+ * part of fixing the filtering of "cloned" outer-join quals
+ * https://github.com/postgres/postgres/commit/991a3df227
+ *
  */
 
 #if PG14_LT
 #define pull_varnos_compat(root, expr) pull_varnos_new(root, expr)
 #define make_simple_restrictinfo_compat(root, expr)                                                \
 	make_restrictinfo_new(root, expr, true, false, false, 0, NULL, NULL, NULL)
-#define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
-	make_restrictinfo_new(root, a, b, c, d, e, f, g, h)
 #else
 #define pull_varnos_compat(root, expr) pull_varnos(root, expr)
 #define make_simple_restrictinfo_compat(root, clause) make_simple_restrictinfo(root, clause)
-#if PG16_LT
-#define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
-	make_restrictinfo(root, a, b, c, d, e, f, g, h)
-#else
+#endif
+
+#if PG14_LT
 #define make_restrictinfo_compat(root,                                                             \
 								 clause,                                                           \
 								 is_pushed_down,                                                   \
+								 has_clone,                                                        \
+								 is_clone,                                                         \
 								 outerjoin_delayed,                                                \
 								 pseudoconstant,                                                   \
 								 security_level,                                                   \
 								 required_relids,                                                  \
+								 incompatible_relids,                                              \
+								 outer_relids,                                                     \
+								 nullable_relids)                                                  \
+	make_restrictinfo_new(root,                                                                    \
+						  clause,                                                                  \
+						  is_pushed_down,                                                          \
+						  outerjoin_delayed,                                                       \
+						  pseudoconstant,                                                          \
+						  security_level,                                                          \
+						  required_relids,                                                         \
+						  outer_relids,                                                            \
+						  nullable_relids)
+#elif PG16_LT
+#define make_restrictinfo_compat(root,                                                             \
+								 clause,                                                           \
+								 is_pushed_down,                                                   \
+								 has_clone,                                                        \
+								 is_clone,                                                         \
+								 outerjoin_delayed,                                                \
+								 pseudoconstant,                                                   \
+								 security_level,                                                   \
+								 required_relids,                                                  \
+								 incompatible_relids,                                              \
 								 outer_relids,                                                     \
 								 nullable_relids)                                                  \
 	make_restrictinfo(root,                                                                        \
 					  clause,                                                                      \
 					  is_pushed_down,                                                              \
+					  outerjoin_delayed,                                                           \
 					  pseudoconstant,                                                              \
 					  security_level,                                                              \
 					  required_relids,                                                             \
+					  outer_relids,                                                                \
+					  nullable_relids)
+#else
+#define make_restrictinfo_compat(root,                                                             \
+								 clause,                                                           \
+								 is_pushed_down,                                                   \
+								 has_clone,                                                        \
+								 is_clone,                                                         \
+								 outerjoin_delayed,                                                \
+								 pseudoconstant,                                                   \
+								 security_level,                                                   \
+								 required_relids,                                                  \
+								 incompatible_relids,                                              \
+								 outer_relids,                                                     \
+								 nullable_relids)                                                  \
+	make_restrictinfo(root,                                                                        \
+					  clause,                                                                      \
+					  is_pushed_down,                                                              \
+					  has_clone,                                                                   \
+					  is_clone,                                                                    \
+					  pseudoconstant,                                                              \
+					  security_level,                                                              \
+					  required_relids,                                                             \
+					  incompatible_relids,                                                         \
 					  outer_relids)
-#endif
 #endif
 
 /* PG14 renames predefined roles

@@ -197,13 +197,26 @@ adjust_data_node_rel_attrs(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptI
 				root->hasPseudoConstantQuals = true;
 			}
 			/* reconstitute RestrictInfo with appropriate properties */
+			bool hasClone = false;
+			bool isClone = false;
+#if PG16_LT
+			/* both has_clone and is_clone are unused in versions less than PG16 */
+			(void) hasClone;
+			(void) isClone;
+#else
+			hasClone = rinfo->has_clone;
+			isClone = rinfo->is_clone;
+#endif
 			nodequals = lappend(nodequals,
 								make_restrictinfo_compat(root,
 														 (Expr *) onecq,
 														 rinfo->is_pushed_down,
+														 hasClone,
+														 isClone,
 														 rinfo->outerjoin_delayed,
 														 pseudoconstant,
 														 rinfo->security_level,
+														 NULL,
 														 NULL,
 														 NULL,
 														 NULL));
