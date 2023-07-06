@@ -793,7 +793,7 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
 	ContinuousAggHypertableStatus status;
-	memset(&status,0,sizeof(ContinuousAggHypertableStatus));
+	memset(&status, 0, sizeof(ContinuousAggHypertableStatus));
 
 	ts_scanner_foreach(&iterator)
 	{
