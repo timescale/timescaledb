@@ -21,7 +21,7 @@
 
 #include "export.h"
 
-#define PG_MAJOR_MIN 12
+#define PG_MAJOR_MIN 13
 
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 #define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
@@ -34,9 +34,8 @@
  * To compile with PG16, use -DEXPERIMENTAL=ON with cmake.
  */
 #define is_supported_pg_version(version)                                                           \
-	(is_supported_pg_version_12(version) || is_supported_pg_version_13(version) ||                 \
-	 is_supported_pg_version_14(version) || is_supported_pg_version_15(version) ||                 \
-	 is_supported_pg_version_16(version))
+	(is_supported_pg_version_13(version) || is_supported_pg_version_14(version) ||                 \
+	 is_supported_pg_version_15(version) || is_supported_pg_version_16(version))
 
 #define PG12 is_supported_pg_version_12(PG_VERSION_NUM)
 #define PG13 is_supported_pg_version_13(PG_VERSION_NUM)
