@@ -126,7 +126,7 @@ ALTER TABLE metrics SET (timescaledb.compress);
 INSERT INTO metrics SELECT '2000-01-01' FROM generate_series(1,10);
 
 -- create custom compression job without recompress boolean
-SELECT add_job('_timescaledb_internal.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb) AS "JOB_COMPRESS" \gset
+SELECT add_job('_timescaledb_internal.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS "JOB_COMPRESS" \gset
 
 -- first call should compress
 CALL run_job(:JOB_COMPRESS);

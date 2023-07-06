@@ -43,4 +43,6 @@ extern TimestampTz ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job,
 											  int32 consecutive_failed_launches);
 extern TSDLLEXPORT void ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id);
 
+extern TSDLLEXPORT TimestampTz ts_get_next_scheduled_execution_slot(BgwJob *job,
+																	TimestampTz finish_time);
 #endif /* BGW_JOB_STAT_H */

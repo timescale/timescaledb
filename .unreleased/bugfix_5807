@@ -1,1 +1,0 @@
-Fixes: #5807 Copy job config JSONB structure into current MemoryContext

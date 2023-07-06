@@ -40,17 +40,17 @@ select * from _timescaledb_config.bgw_job where id = :compressjob_id;
 (1 row)
 
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
- job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                  
---------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+------------------------------------------------
-   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 1, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_internal.policy_compression_check
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                  | fixed_schedule | initial_start | timezone 
+--------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+------------------------------------------------+----------------+---------------+----------
+   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 1, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_internal.policy_compression_check | f              |               | 
 (1 row)
 
 --enable maxchunks to 1 so that only 1 chunk is compressed by the job
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                                         alter_job                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 1, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check)
+                                                                                           alter_job                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 1, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check,f,,)
 (1 row)
 
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
@@ -330,16 +330,16 @@ SELECT add_compression_policy AS job_id
 -- job compresses only 1 chunk at a time --
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                                          alter_job                                                                                          
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check)
+                                                                                            alter_job                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check,f,,)
 (1 row)
 
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                                                     alter_job                                                                                                      
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check)
+                                                                                                       alter_job                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check,f,,)
 (1 row)
 
 set client_min_messages TO LOG;
@@ -524,7 +524,7 @@ ALTER TABLE metrics SET (timescaledb.compress);
 -- create chunk with some data and compress
 INSERT INTO metrics SELECT '2000-01-01' FROM generate_series(1,10);
 -- create custom compression job without recompress boolean
-SELECT add_job('_timescaledb_internal.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb) AS "JOB_COMPRESS" \gset
+SELECT add_job('_timescaledb_internal.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS "JOB_COMPRESS" \gset
 -- first call should compress
 CALL run_job(:JOB_COMPRESS);
 -- 2nd call should do nothing
@@ -556,9 +556,9 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 -- disable recompress in compress job
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
-                                                                         alter_job                                                                          
-------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": false, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",)
+                                                                                          alter_job                                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": false, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",)
 (1 row)
 
 -- nothing to do
@@ -590,9 +590,9 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 -- reenable recompress in compress job
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','true'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
-                                                                         alter_job                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": true, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",)
+                                                                                          alter_job                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": true, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",)
 (1 row)
 
 -- should recompress now

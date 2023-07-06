@@ -240,7 +240,7 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 	uint8 num_bits_from_next_bucket;
 	uint64 value = 0;
 	uint64 value_from_next_bucket;
-	Assert(num_bits <= 64);
+	CheckCompressedData(num_bits <= 64);
 	if (num_bits == 0)
 		return 0;
 

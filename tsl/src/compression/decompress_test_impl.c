@@ -48,9 +48,19 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	}
 
 	/*
-	 * For normal testing, as opposed to the fuzzing code path above, run
-	 * row-by-row decompression first, so that it's not masked by the more
-	 * strict correctness checks of bulk decompression.
+	 * Test bulk decompression. This might hide some errors in the row-by-row
+	 * decompression, but testing both is significantly more complicated, and
+	 * the row-by-row is old and stable.
+	 */
+	ArrowArray *arrow = NULL;
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo);
+	if (decompress_all)
+	{
+		arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
+	}
+
+	/*
+	 * Test row-by-row decompression.
 	 */
 	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, PGTYPE);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
@@ -63,14 +73,6 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 		}
 
 		results[n++] = r;
-	}
-
-	/* Test bulk decompression. */
-	ArrowArray *arrow = NULL;
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo);
-	if (decompress_all)
-	{
-		arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
 	}
 
 	/* Check that both ways of decompression match. */

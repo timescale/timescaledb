@@ -665,9 +665,9 @@ select * from _timescaledb_config.bgw_job where id = :compressjob_id;
 (1 row)
 
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
- job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                  
---------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+------------------------------------------------
-   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 2, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_internal.policy_compression_check
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                  | fixed_schedule | initial_start | timezone 
+--------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+------------------------------------------------+----------------+---------------+----------
+   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 2, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_internal.policy_compression_check | f              |               | 
 (1 row)
 
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
@@ -679,9 +679,9 @@ select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
 -- we want only 1 chunk to be compressed --
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
 FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                                         alter_job                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 2, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check)
+                                                                                           alter_job                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 2, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_internal.policy_compression_check,f,,)
 (1 row)
 
 insert into conditions

@@ -169,7 +169,7 @@ ts_flags_are_set_32(uint32 bitmap, uint32 flags)
 	return (bitmap & flags) == flags;
 }
 
-static inline uint32
+static inline pg_nodiscard uint32
 ts_set_flags_32(uint32 bitmap, uint32 flags)
 {
 	return bitmap | flags;

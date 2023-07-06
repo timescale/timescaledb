@@ -132,17 +132,17 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_BIT_LENGTH[selector_value] == 1);
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
-			/* Have to zero out the unused bits, so that the popcnt works properly. */
-			const uint16 elements_this_block =
-				Min(64U, (uint16) (num_elements - decompressed_index));
-			Assert(elements_this_block <= 64);
-
 			/*
 			 * We should require at least one element from the block. Previous
 			 * blocks might have had incorrect lengths, so this is not an
 			 * assertion.
 			 */
-			CheckCompressedData(elements_this_block > 0);
+			CheckCompressedData(decompressed_index < num_elements);
+
+			/* Have to zero out the unused bits, so that the popcnt works properly. */
+			const int elements_this_block = Min(64, num_elements - decompressed_index);
+			Assert(elements_this_block <= 64);
+			Assert(elements_this_block > 0);
 			block_data &= (-1ULL) >> (64 - elements_this_block);
 
 			/*
@@ -166,7 +166,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			 */
 			for (uint16 i = 0; i < 64; i++)
 			{
-				const uint16 this_bit = (block_data >> i) & 1;
+				const bool this_bit = (block_data >> i) & 1;
 				current_prefix_sum += this_bit;
 				prefix_sums[decompressed_index + i] = current_prefix_sum;
 			}
@@ -218,7 +218,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	const uint16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
 	const uint16 num_blocks = compressed->num_blocks;
 
-	bool *restrict bitmap_bools_ = palloc(num_elements_padded);
+	bool *restrict bitmap_bools_ = palloc(sizeof(bool) * num_elements_padded);
 	uint16 decompressed_index = 0;
 	for (uint16 block_index = 0; block_index < num_blocks; block_index++)
 	{
@@ -286,16 +286,17 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			Assert(SIMPLE8B_BIT_LENGTH[selector_value] == 1);
 			Assert(SIMPLE8B_NUM_ELEMENTS[selector_value] == 64);
 
-			/* Have to zero out the unused bits, so that the popcnt works properly. */
-			const uint16 elements_this_block =
-				Min(64U, (uint16) (num_elements - decompressed_index));
-			Assert(elements_this_block <= 64);
 			/*
 			 * We should require at least one element from the block. Previous
 			 * blocks might have had incorrect lengths, so this is not an
 			 * assertion.
 			 */
-			CheckCompressedData(elements_this_block > 0);
+			CheckCompressedData(decompressed_index < num_elements);
+
+			/* Have to zero out the unused bits, so that the popcnt works properly. */
+			const int elements_this_block = Min(64, num_elements - decompressed_index);
+			Assert(elements_this_block <= 64);
+			Assert(elements_this_block > 0);
 			block_data &= (-1ULL) >> (64 - elements_this_block);
 
 			/*

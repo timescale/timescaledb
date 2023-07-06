@@ -30,7 +30,7 @@
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
-#define ALTER_JOB_NUM_COLS 10
+#define ALTER_JOB_NUM_COLS 13
 
 /*
  * This function ensures that the check function has the required signature
@@ -282,6 +282,9 @@ job_run(PG_FUNCTION_ARGS)
  * 7    next_start TIMESTAMPTZ = NULL
  * 8    if_exists BOOL = FALSE,
  * 9    check_config REGPROC = NULL
+ * 10   fixed_schedule BOOL = NULL,
+ * 11   initial_start TIMESTAMPTZ = NULL
+ * 12   timezone TEXT = NULL
  * ) RETURNS TABLE (
  *      job_id INTEGER,
  *      schedule_interval INTERVAL,
@@ -292,6 +295,9 @@ job_run(PG_FUNCTION_ARGS)
  *      config JSONB,
  *      next_start TIMESTAMPTZ
  *      check_config TEXT
+ *      fixed_schedule BOOL
+ *      initial_start TIMESTAMPTZ
+ *      timezone TEXT
  * )
  */
 Datum
@@ -313,6 +319,12 @@ job_alter(PG_FUNCTION_ARGS)
 	/* Added space for period and NULL */
 	char schema_qualified_check_name[2 * NAMEDATALEN + 2] = { 0 };
 	bool unregister_check = (!PG_ARGISNULL(9) && !OidIsValid(check));
+	TimestampTz initial_start = PG_ARGISNULL(11) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(11);
+	text *timezone = PG_ARGISNULL(12) ? NULL : PG_GETARG_TEXT_PP(12);
+	char *valid_timezone = NULL;
+	/* verify it's a valid timezone */
+	if (timezone != NULL)
+		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(12));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -387,7 +399,86 @@ job_alter(PG_FUNCTION_ARGS)
 		namestrcpy(&job->fd.check_schema, NameStr(empty_namedata));
 		namestrcpy(&job->fd.check_name, NameStr(empty_namedata));
 	}
+
+	if (!PG_ARGISNULL(10))
+	{
+		bool fixed_schedule = PG_GETARG_BOOL(10);
+		/*
+		 * initial_start is a required argument for fixed schedules
+		 * so we use the current timestamp if it's not provided
+		 */
+		if (fixed_schedule)
+		{
+			if (TIMESTAMP_NOT_FINITE(initial_start))
+			{
+				initial_start = ts_timer_get_current_timestamp();
+				elog(NOTICE,
+					 "Using current time [%s] as initial start for job %d",
+					 DatumGetCString(
+						 DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(initial_start))),
+					 job->fd.id);
+				job->fd.initial_start = initial_start;
+			}
+		}
+		job->fd.fixed_schedule = fixed_schedule;
+	}
+	if (!PG_ARGISNULL(11))
+	{
+		/* user provided +- infinity as initial_start, this is not acceptable */
+		if (TIMESTAMP_NOT_FINITE(initial_start))
+		{
+			initial_start = ts_timer_get_current_timestamp();
+			elog(NOTICE,
+				 "Using current time [%s] as initial start for job %d",
+				 DatumGetCString(
+					 DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(initial_start))),
+				 job->fd.id);
+		}
+		job->fd.initial_start = initial_start;
+	}
+
+	if (valid_timezone != NULL)
+		job->fd.timezone = cstring_to_text(valid_timezone);
+	else
+		job->fd.timezone = NULL;
+	/* it's also possible to alter the fields initial_start and timezone without
+	 * specifying fixed_schedule. In that case, update them and also update the
+	 * next_start accordingly.
+	 * If the job is not on a fixed schedule, then this has no effect on the next_start,
+	 * so maybe print a message to the user
+	 * that these changes are not really doing anything */
+
+	/* this function will also update the next_start if the schedule interval is changed,
+	but I'm not going to rely on this to change stuff */
 	ts_bgw_job_update_by_id(job_id, job);
+	/* one of the fields below changing necessitates a next_start update */
+	if (!PG_ARGISNULL(10) || !TIMESTAMP_NOT_FINITE(initial_start) || (valid_timezone != NULL))
+	{
+		TimestampTz next_start_calculated;
+		if (job->fd.fixed_schedule)
+		{
+			next_start_calculated =
+				ts_get_next_scheduled_execution_slot(job, ts_timer_get_current_timestamp());
+			ts_bgw_job_stat_update_next_start(job->fd.id, next_start_calculated, false);
+		}
+		else
+		{
+			/* last finish time plus schedule interval */
+			BgwJobStat *stat = ts_bgw_job_stat_find(job->fd.id);
+
+			if (stat != NULL)
+			{
+				next_start_calculated = DatumGetTimestampTz(
+					DirectFunctionCall2(timestamptz_pl_interval,
+										TimestampTzGetDatum(stat->fd.last_finish),
+										IntervalPGetDatum(&job->fd.schedule_interval)));
+				/* allow DT_NOBEGIN for next_start here through allow_unset=true in the case that
+				 * last_finish is DT_NOBEGIN,
+				 * This means the value is counted as unset which is what we want */
+				ts_bgw_job_stat_update_next_start(job->fd.id, next_start_calculated, true);
+			}
+		}
+	}
 
 	if (!PG_ARGISNULL(7))
 		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(7));
@@ -419,6 +510,21 @@ job_alter(PG_FUNCTION_ARGS)
 		values[8] = CStringGetTextDatum(schema_qualified_check_name);
 	else
 		nulls[8] = true;
+
+	/* values/nulls[9]: fixed_schedule */
+	values[9] = job->fd.fixed_schedule;
+	/* values/nulls[10]: initial_start */
+	if (TIMESTAMP_NOT_FINITE(job->fd.initial_start))
+	{
+		nulls[10] = true;
+	}
+	else
+		values[10] = TimestampTzGetDatum(job->fd.initial_start);
+	/* values/nulls[11]: timezone */
+	if (valid_timezone)
+		values[11] = CStringGetTextDatum(valid_timezone);
+	else
+		nulls[11] = true;
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);
