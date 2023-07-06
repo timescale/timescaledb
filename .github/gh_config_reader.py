@@ -4,6 +4,13 @@
 #  Please see the included NOTICE for copyright information and
 #  LICENSE-APACHE for a copy of the license.
 
+# We hash the .github directory to understand whether our Postgres build cache
+# can still be used, and the __pycache__ files interfere with that, so don't
+# create them.
+import sys
+
+sys.dont_write_bytecode = True
+
 import ci_settings
 import json
 import os

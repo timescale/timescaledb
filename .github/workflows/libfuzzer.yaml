@@ -4,12 +4,18 @@ name: Libfuzzer
     branches:
       - main
       - prerelease_test
+      - trigger/libfuzzer
   pull_request:
     paths: .github/workflows/libfuzzer.yaml
 
 jobs:
   fuzz:
-    name: Fuzz decompression
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [ { algo: gorilla, type: float8 }, { algo: deltadelta, type: int8 } ]
+
+    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.type }}
     runs-on: ubuntu-22.04
     env:
       PG_SRC_DIR: pgbuild
@@ -22,14 +28,14 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install clang lld llvm flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl
+          libtest-most-perl tree
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
 
     - name: Read configuration
       id: config
-      run: python .github/gh_config_reader.py
+      run: python -B .github/gh_config_reader.py
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -87,17 +93,45 @@ jobs:
 
         make -C build -j$(nproc) install
 
-    - name: Run libfuzzer for compression
+    - name: initdb
       run: |
+        # Have to do this before initializing the corpus, or initdb will complain.
         set -xeu
 
-        mkdir db
         export PGDATA=db
         export PGPORT=5432
         export PGDATABASE=postgres
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         initdb
         echo "shared_preload_libraries = 'timescaledb'" >> $PGDATA/postgresql.conf
+
+    - name: Restore the cached fuzzing corpus
+      id: restore-corpus-cache
+      uses: actions/cache/restore@v3
+      with:
+        path: db/corpus
+        # If the initial corpus changes, probably it was updated by hand with
+        # some important examples, and it makes sense to start anew from it.
+        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.type }}-\
+          ${{ hashFiles(format('tsl/test/fuzzing/compression/{0}-{1}', matrix.case.algo, matrix.case.type)) }}"
+
+    - name: Initialize the fuzzing corpus
+      # cache-hit is only true for exact key matches, and we use prefix matches.
+      if: steps.restore-corpus-cache.outputs.cache-matched-key == ''
+      run: |
+        # Copy the intial corpus files from the repository. The github actions
+        # cache doesn't follow symlinks.
+        mkdir -p db/corpus
+        find "tsl/test/fuzzing/compression/${{ matrix.case.algo }}-${{ matrix.case.type }}" -type f -exec cp -t db/corpus {} +
+
+    - name: Run libfuzzer for compression
+      run: |
+        set -xeu
+
+        export PGDATA=db
+        export PGPORT=5432
+        export PGDATABASE=postgres
+        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         pg_ctl -l postmaster.log start
 
         psql -c "create extension timescaledb;"
@@ -106,12 +140,17 @@ jobs:
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         psql -a -c "create or replace function fuzz(algo cstring, type regtype, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
-        # Symlink the corpus directory to the database directory.
-        ln -sf $(readlink -e tsl/test/fuzzing/compression/gorilla-float8) $PGDATA/corpus
+        # Start more fuzzing processes in the background. We won't even monitor
+        # their progress, because the server will panic if they find an error.
+        for x in {2..$(nproc)}
+        do
+          psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}', '${{ matrix.case.type }}', 100000000);" &
+        done
 
+        # Start the one fuzzing process that we will monitor, in foreground.
         # The LLVM fuzzing driver calls exit(), so we expect to lose the connection.
         ret=0
-        psql -v ON_ERROR_STOP=1 -c "select fuzz('gorilla', 'float8', 100000000);" || ret=$?
+        psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}', '${{ matrix.case.type }}', 100000000);" || ret=$?
         if ! [ $ret -eq 2 ]
         then
             >&2 echo "Unexpected psql exit code $ret"
@@ -120,7 +159,6 @@ jobs:
 
         # Check that the server is still alive.
         psql -c "select 1"
-
 
     - name: Collect the logs
       if: always()
@@ -137,15 +175,27 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: PostgreSQL log
+        name: PostgreSQL log for ${{ matrix.case.algo }} ${{ matrix.case.type }}
         path: postgres.log
 
-    - name: Save fuzzer-generated cases
+    - name: Save fuzzer-generated crash cases
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: Fuzzer-generated cases
+        name: Crash cases for ${{ matrix.case.algo }} ${{ matrix.case.type }}
         path: db/crash-*
+
+    # We use separate restore/save actions, because the default action won't
+    # save the updated folder after the cache hit. We also can't overwrite the
+    # existing cache, so we add a unique suffix. The cache is matched by key
+    # prefix, not exact key, and picks the newest matching item, so this works.
+    - name: Save fuzzer corpus
+      uses: actions/cache/save@v3
+      with:
+        path: db/corpus
+        key: "${{ format('{0}-{1}-{2}',
+            steps.restore-corpus-cache.outputs.cache-primary-key,
+            github.run_id, github.run_attempt) }}"
 
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -171,5 +221,5 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Coredumps
+        name: Coredumps for ${{ matrix.case.algo }} ${{ matrix.case.type }}
         path: coredumps
