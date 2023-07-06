@@ -43,7 +43,8 @@ delta_delta_decompression_iterator_from_datum_reverse(Datum deltadelta_compresse
 extern DecompressResult
 delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter);
 
-extern ArrowArray *delta_delta_decompress_all(Datum compressed_data, Oid element_type);
+extern ArrowArray *delta_delta_decompress_all(Datum compressed_data, Oid element_type,
+											  MemoryContext dest_mctx);
 
 extern DecompressResult
 delta_delta_decompression_iterator_try_next_reverse(DecompressionIterator *iter);
