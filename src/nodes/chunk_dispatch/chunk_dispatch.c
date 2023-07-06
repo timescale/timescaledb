@@ -325,17 +325,8 @@ on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 	state->rri = cis->result_relation_info;
 }
 
-
 static TupleTableSlot *
-chunk_dispatch_exec1(CustomScanState *node);
-
-static TupleTableSlot *
-chunk_dispatch_exec(CustomScanState *node) {
-	return chunk_dispatch_exec1(node);
-}
-
-static TupleTableSlot *
-chunk_dispatch_exec1(CustomScanState *node)
+chunk_dispatch_exec(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	PlanState *substate = linitial(node->custom_ps);
