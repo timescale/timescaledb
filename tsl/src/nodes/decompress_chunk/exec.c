@@ -215,10 +215,6 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 		ExecClearTuple(batch_state->decompressed_slot_scan);
 
 	MemoryContextReset(batch_state->per_batch_context);
-	if (batch_state->arrow_context)
-	{
-		MemoryContextReset(batch_state->arrow_context);
-	}
 
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
 }
@@ -265,12 +261,8 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	}
 
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
-														   "DecompressChunk batch",
-														   /* minContextSize = */ 0,
-														   /* initBlockSize = */ 64 * 1024,
-														   /* maxBlockSize = */ 64 * 1024);
-	/* Initialized on demand to save memory. */
-	batch_state->arrow_context = NULL;
+														   "DecompressChunk per_batch",
+														   ALLOCSET_DEFAULT_SIZES);
 
 	batch_state->columns =
 		palloc0(list_length(chunk_state->decompression_map) * sizeof(DecompressChunkColumnState));
@@ -442,78 +434,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 }
 
-/*
- * Convert Arrow array to an array of Postgres Datum's.
- */
-static void
-convert_arrow_to_data(DecompressChunkColumnState *column, ArrowArray *arrow)
-{
-	const int n = arrow->length;
-	Assert(n > 0);
-
-/* Unroll the conversion loop to generate more efficient code. */
-#define INNER_LOOP_SIZE 8
-	const int n_padded = ((n + INNER_LOOP_SIZE - 1) / INNER_LOOP_SIZE) * (INNER_LOOP_SIZE);
-
-	const int arrow_bitmap_elements = (n + 64 - 1) / 64;
-	const int n_nulls_padded = arrow_bitmap_elements * 64;
-
-	/* Convert Arrow to Data/nulls arrays. */
-	const uint64 *restrict validity_bitmap = arrow->buffers[0];
-	const void *restrict arrow_values = arrow->buffers[1];
-	Datum *restrict datums = palloc(sizeof(Datum) * n_padded);
-	bool *restrict nulls = palloc(sizeof(bool) * n_nulls_padded);
-
-/*
- * Specialize the conversion loop for the particular Arrow and Postgres type, to
- * generate more efficient code.
- */
-#define CONVERSION_LOOP(OID, CTYPE, CONVERSION)                                                    \
-	case OID:                                                                                      \
-		for (int outer = 0; outer < n_padded; outer += INNER_LOOP_SIZE)                            \
-		{                                                                                          \
-			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)                                  \
-			{                                                                                      \
-				const int row = outer + inner;                                                     \
-				datums[row] = CONVERSION(((CTYPE *) arrow_values)[row]);                           \
-				Assert(row >= 0);                                                                  \
-				Assert(row < n_padded);                                                            \
-			}                                                                                      \
-		}                                                                                          \
-		break
-
-	switch (column->typid)
-	{
-		CONVERSION_LOOP(INT2OID, int16, Int16GetDatum);
-		CONVERSION_LOOP(INT4OID, int32, Int32GetDatum);
-		CONVERSION_LOOP(INT8OID, int64, Int64GetDatum);
-		CONVERSION_LOOP(FLOAT4OID, float4, Float4GetDatum);
-		CONVERSION_LOOP(FLOAT8OID, float8, Float8GetDatum);
-		CONVERSION_LOOP(DATEOID, int32, DateADTGetDatum);
-		CONVERSION_LOOP(TIMESTAMPOID, int64, TimestampGetDatum);
-		CONVERSION_LOOP(TIMESTAMPTZOID, int64, TimestampTzGetDatum);
-		default:
-			Assert(false);
-	}
-#undef CONVERSION_LOOP
-#undef INNER_LOOP_SIZE
-
-	for (int outer = 0; outer < arrow_bitmap_elements; outer++)
-	{
-		const uint64 element = validity_bitmap[outer];
-		for (int inner = 0; inner < 64; inner++)
-		{
-			const int row = outer * 64 + inner;
-			nulls[row] = ((element >> inner) & 1) ? false : true;
-			Assert(row >= 0);
-			Assert(row < n_nulls_padded);
-		}
-	}
-	column->compressed.iterator = NULL;
-	column->compressed.datums = datums;
-	column->compressed.nulls = nulls;
-}
-
 void
 decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchState *batch_state,
 							TupleTableSlot *subslot)
@@ -616,8 +536,9 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		{
 			case COMPRESSED_COLUMN:
 			{
-				column->compressed.datums = NULL;
 				column->compressed.iterator = NULL;
+				column->compressed.arrow = NULL;
+				column->compressed.value_bytes = -1;
 				value = slot_getattr(batch_state->compressed_slot,
 									 column->compressed_scan_attno,
 									 &isnull);
@@ -627,7 +548,6 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					 * The column will have a default value for the entire batch,
 					 * set it now.
 					 */
-					column->compressed.iterator = NULL;
 					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
 					batch_state->decompressed_slot_scan->tts_values[attr] =
@@ -640,49 +560,44 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 				/* Decompress the entire batch if it is supported. */
 				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 
+				/*
+				 * For now we disable bulk decompression for batch sorted
+				 * merge plans. They involve keeping many open batches at
+				 * the same time, so the memory usage might increase greatly.
+				 */
 				ArrowArray *arrow = NULL;
-				if (!chunk_state->reverse && !chunk_state->sorted_merge_append &&
-					ts_guc_enable_bulk_decompression)
+				if (!chunk_state->sorted_merge_append && ts_guc_enable_bulk_decompression)
 				{
-					/*
-					 * In principle, we could do this for reverse decompression
-					 * as well, but have to figure out how to do the batch
-					 * Arrow->Datum conversion while respecting the paddings.
-					 * Maybe have to allocate the output array at offset so that the
-					 * padding is at the beginning.
-					 *
-					 * For now we also disable bulk decompression for batch sorted
-					 * merge plans. They involve keeping many open batches at
-					 * the same time, so the memory usage might increase greatly.
-					 */
-					if (batch_state->arrow_context == NULL)
+					if (chunk_state->bulk_decompression_context == NULL)
 					{
-						batch_state->arrow_context =
+						chunk_state->bulk_decompression_context =
 							AllocSetContextCreate(MemoryContextGetParent(
 													  batch_state->per_batch_context),
-												  "DecompressChunk Arrow arrays",
+												  "bulk decompression",
 												  /* minContextSize = */ 0,
 												  /* initBlockSize = */ 64 * 1024,
 												  /* maxBlockSize = */ 64 * 1024);
 					}
 
-					MemoryContext context_before_decompression =
-						MemoryContextSwitchTo(batch_state->arrow_context);
+					DecompressAllFunction decompress_all =
+						tsl_get_decompress_all_function(header->compression_algorithm);
+					if (decompress_all)
+					{
+						MemoryContext context_before_decompression =
+							MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
 
-					arrow = tsl_try_decompress_all(header->compression_algorithm,
-												   PointerGetDatum(header),
-												   column->typid);
-					MemoryContextSwitchTo(context_before_decompression);
+						arrow = decompress_all(PointerGetDatum(header),
+											   column->typid,
+											   batch_state->per_batch_context);
+
+						MemoryContextReset(chunk_state->bulk_decompression_context);
+
+						MemoryContextSwitchTo(context_before_decompression);
+					}
 				}
 
 				if (arrow)
 				{
-					/*
-					 * Currently we're going to convert the Arrow arrays to postgres
-					 * Data right away, but in the future we will perform vectorized
-					 * operations on Arrow arrays directly before that.
-					 */
-
 					if (batch_state->total_batch_rows == 0)
 					{
 						batch_state->total_batch_rows = arrow->length;
@@ -692,15 +607,15 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 						elog(ERROR, "compressed column out of sync with batch counter");
 					}
 
-					convert_arrow_to_data(column, arrow);
-
-					MemoryContextReset(batch_state->arrow_context);
+					column->compressed.arrow = arrow;
 
 					/*
 					 * Note the fact that we are using bulk decompression, for
 					 * EXPLAIN ANALYZE.
 					 */
 					chunk_state->using_bulk_decompression = true;
+
+					column->compressed.value_bytes = get_typlen(column->typid);
 
 					break;
 				}
@@ -970,6 +885,11 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 		Assert(batch_state->total_batch_rows > 0);
 		Assert(batch_state->current_batch_row < batch_state->total_batch_rows);
 
+		const int output_row = batch_state->current_batch_row++;
+		const size_t arrow_row = unlikely(chunk_state->reverse) ?
+									 batch_state->total_batch_rows - 1 - output_row :
+									 output_row;
+
 		for (int i = 0; i < chunk_state->num_columns; i++)
 		{
 			DecompressChunkColumnState *column = &batch_state->columns[i];
@@ -993,16 +913,43 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 				decompressed_slot_scan->tts_isnull[attr] = result.is_null;
 				decompressed_slot_scan->tts_values[attr] = result.val;
 			}
-			else if (column->compressed.datums != NULL)
+			else if (column->compressed.arrow != NULL)
 			{
+				const char *src = column->compressed.arrow->buffers[1];
+				Assert(column->compressed.value_bytes > 0);
+
+				/*
+				 * The conversion of Datum to more narrow types will truncate
+				 * the higher bytes, so we don't care if we read some garbage
+				 * into them. These are unaligned reads, so technically we have
+				 * to do memcpy.
+				 */
+				uint64 value;
+				memcpy(&value, &src[column->compressed.value_bytes * arrow_row], 8);
+
+#ifdef USE_FLOAT8_BYVAL
+				Datum datum = Int64GetDatum(value);
+#else
+				/*
+				 * On 32-bit systems, the data larger than 4 bytes go by
+				 * reference, so we have to jump through these hoops.
+				 */
+				Datum datum;
+				if (column->compressed.value_bytes <= 4)
+				{
+					datum = Int32GetDatum((uint32) value);
+				}
+				else
+				{
+					datum = Int64GetDatum(value);
+				}
+#endif
+				const AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
+				decompressed_slot_scan->tts_values[attr] = datum;
 				decompressed_slot_scan->tts_isnull[attr] =
-					column->compressed.nulls[batch_state->current_batch_row];
-				decompressed_slot_scan->tts_values[attr] =
-					column->compressed.datums[batch_state->current_batch_row];
+					!arrow_row_is_valid(column->compressed.arrow->buffers[0], arrow_row);
 			}
 		}
-
-		batch_state->current_batch_row++;
 
 		/*
 		 * It's a virtual tuple slot, so no point in clearing/storing it

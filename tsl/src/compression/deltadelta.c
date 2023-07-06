@@ -588,19 +588,19 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 #undef ELEMENT_TYPE
 
 ArrowArray *
-delta_delta_decompress_all(Datum compressed_data, Oid element_type)
+delta_delta_decompress_all(Datum compressed_data, Oid element_type, MemoryContext dest_mctx)
 {
 	switch (element_type)
 	{
 		case INT8OID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-			return delta_delta_decompress_all_uint64(compressed_data);
+			return delta_delta_decompress_all_uint64(compressed_data, dest_mctx);
 		case INT4OID:
 		case DATEOID:
-			return delta_delta_decompress_all_uint32(compressed_data);
+			return delta_delta_decompress_all_uint32(compressed_data, dest_mctx);
 		case INT2OID:
-			return delta_delta_decompress_all_uint16(compressed_data);
+			return delta_delta_decompress_all_uint16(compressed_data, dest_mctx);
 		default:
 			elog(ERROR,
 				 "type '%s' is not supported for deltadelta decompression",

@@ -13,7 +13,7 @@
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
 static ArrowArray *
-FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
+FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, MemoryContext dest_mctx)
 {
 	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
@@ -23,8 +23,14 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
 
-	/* Can't use element type here because of zig-zag encoding. */
-	int16 num_deltas;
+	/*
+	 * Can't use element type here because of zig-zag encoding. The deltas are
+	 * computed in uint64, so we can get a delta that is actually larger than
+	 * the element type. We can't just truncate the delta either, because it
+	 * will lead to broken decompression results. The test case is in
+	 * test_delta4().
+	 */
+	uint16 num_deltas;
 	const uint64 *restrict deltas_zigzag =
 		simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
 
@@ -35,11 +41,15 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 		nulls = simple8brle_bitmap_decompress(nulls_compressed);
 	}
 
-	const int n_total = has_nulls ? nulls.num_elements : num_deltas;
-	const int n_total_padded =
+	/*
+	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
+	 * can work in 64-byte blocks.
+	 */
+	const uint16 n_total = has_nulls ? nulls.num_elements : num_deltas;
+	const uint16 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const int n_notnull = num_deltas;
-	const int n_notnull_padded =
+	const uint16 n_notnull = num_deltas;
+	const uint16 n_notnull_padded =
 		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
@@ -47,8 +57,14 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-	uint64 *restrict validity_bitmap = palloc(validity_bitmap_bytes);
-	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_total_padded);
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+
+	/*
+	 * We need additional padding at the end of buffer, because the code that
+	 * converts the elements to postres Datum always reads in 8 bytes.
+	 */
+	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
+	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
 
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;
@@ -62,9 +78,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	 */
 #define INNER_LOOP_SIZE 8
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
-	for (int outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
+	for (uint16 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
 	{
-		for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)
+		for (uint16 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
 			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
 			current_element += current_delta;
@@ -107,19 +123,27 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed)
 	else
 	{
 		/*
-		 * The validity bitmap is padded at the end to a multiple of 64 bytes.
-		 * Fill the padding with zeros, because the elements corresponding to
-		 * the padding bits are not valid.
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
 		 */
-		for (int i = n_total; i < validity_bitmap_bytes * 8; i++)
+		if (n_total % 64)
 		{
-			arrow_set_row_validity(validity_bitmap, i, false);
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+
+#ifdef USE_ASSERT_CHECKING
+			for (int i = 0; i < 64; i++)
+			{
+				Assert(arrow_row_is_valid(validity_bitmap, (n_total / 64) * 64 + i) ==
+					   (i < n_total % 64));
+			}
+#endif
 		}
 	}
 
 	/* Return the result. */
-	ArrowArray *result = palloc0(sizeof(ArrowArray));
-	const void **buffers = palloc(sizeof(void *) * 2);
+	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	const void **buffers = (const void **) &result[1];
 	buffers[0] = validity_bitmap;
 	buffers[1] = decompressed_values;
 	result->n_buffers = 2;

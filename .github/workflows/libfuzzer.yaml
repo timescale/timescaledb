@@ -1,5 +1,8 @@
 name: Libfuzzer
 "on":
+  schedule:
+    # run daily 1:00 on main branch
+    - cron: '0 1 * * *'
   push:
     branches:
       - main
