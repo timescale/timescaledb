@@ -13,6 +13,7 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 #include <catalog/pg_type.h>
+#include <debug_assert.h>
 
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
@@ -526,3 +527,71 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	state->mtstate = mtstate;
 	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }
+
+
+#include <time.h>
+
+typedef struct ProfileEntry
+{
+	void *fn;
+	clock_t enter_time;
+} ProfileEntry;
+
+#define N_PROFILE_ENTRY 128
+typedef struct
+{
+	ProfileEntry entry[N_PROFILE_ENTRY];
+	int depth;
+	int active;
+} ProfileState;
+
+ProfileState profile_state = {
+	.depth = 0,
+	.active = 0,
+};
+
+#define _depth profile_state.depth
+#define _active profile_state.active
+#define _curr_entry profile_state.entry[_depth]
+
+void __attribute__((no_instrument_function))
+__cyg_profile_func_enter(void *this_fn, void *call_site)
+{
+	if (this_fn == &chunk_dispatch_exec)
+	{
+		_active = 1;
+		_depth = 0;
+	}
+	if (!_active)
+		return;
+	if (_depth >= N_PROFILE_ENTRY)
+	{
+		_active = 0;
+		elog(NOTICE, "not enough entries => switching off");
+		return;
+	}
+	Ensure(_depth < N_PROFILE_ENTRY, "not enough profile slots");
+	_curr_entry.enter_time = clock();
+	_curr_entry.fn = this_fn;
+	_depth++;
+}
+
+
+void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_fn, void *call_site)
+{
+	if (!_active)
+		return;
+
+	--_depth;
+	if (_depth < 0 || _curr_entry.fn != this_fn)
+	{
+		_active = 0;
+		elog(NOTICE, "enter/exit mismatch => switching off");
+		return;
+	}
+	clock_t diff = clock() - _curr_entry.enter_time;
+	elog(NOTICE, "%p %ld",this_fn,diff);
+}
+#undef _depth
+#undef _curr_entry
+
