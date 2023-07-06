@@ -14,11 +14,9 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg12_earliest: ${{ steps.config.outputs.pg12_abi_min }}
       pg13_earliest: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_earliest: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_earliest: ${{ steps.config.outputs.pg15_abi_min }}
-      pg12_latest: ${{ steps.config.outputs.pg12_latest }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
@@ -38,14 +36,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        test: [ "12min", "12max", "13min", "13max", "14min", "14max", "15min", "15max" ]
+        test: [ "13min", "13max", "14min", "14max", "15min", "15max" ]
         include:
-          - test: 12min
-            pg: 12
-            pkg_version: ${{ fromJson(needs.config.outputs.pg12_earliest) }}.1
-          - test: 12max
-            pg: 12
-            pkg_version: ${{ fromJson(needs.config.outputs.pg12_latest) }}
           - test: 13min
             pg: 13
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_earliest) }}.1

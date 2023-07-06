@@ -19,7 +19,7 @@ jobs:
         # Debian images:  10 (buster), 11 (bullseye)
         # Ubuntu images:  20.04 LTS (focal), 22.04 (jammy)
         image: [ "debian:10-slim","debian:11-slim","ubuntu:focal", "ubuntu:jammy"]
-        pg: [ 12, 13, 14, 15 ]
+        pg: [ 13, 14, 15 ]
 
     steps:
     - name: Setup emulation
