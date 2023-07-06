@@ -15,10 +15,16 @@
 # only by navigating into the individual jobs would it be visible
 # if a job was actually run.
 
+# We hash the .github directory to understand whether our Postgres build cache
+# can still be used, and the __pycache__ files interfere with that, so don't
+# create them.
+import sys
+
+sys.dont_write_bytecode = True
+
 import json
 import os
 import subprocess
-import sys
 from ci_settings import (
     PG12_EARLIEST,
     PG12_LATEST,
