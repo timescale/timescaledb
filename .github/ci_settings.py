@@ -10,10 +10,6 @@
 # LATEST is the maximum postgres version that is supported
 # ABI_MIN is the minimum postgres version required when the extension was build against LATEST
 
-PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.15"
-PG12_ABI_MIN = "12.8"
-
 PG13_EARLIEST = "13.2"
 PG13_LATEST = "13.11"
 PG13_ABI_MIN = "13.5"
@@ -26,4 +22,4 @@ PG15_EARLIEST = "15.0"
 PG15_LATEST = "15.3"
 PG15_ABI_MIN = "15.0"
 
-PG_LATEST = [PG12_LATEST, PG13_LATEST, PG14_LATEST, PG15_LATEST]
+PG_LATEST = [PG13_LATEST, PG14_LATEST, PG15_LATEST]
