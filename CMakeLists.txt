@@ -198,6 +198,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
 
   # These flags are supported on all compilers.
   add_compile_options(
+    -finstrument-functions
     -Wempty-body
     -Wvla
     -Wall
