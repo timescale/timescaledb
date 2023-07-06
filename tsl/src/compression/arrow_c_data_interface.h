@@ -109,7 +109,7 @@ typedef struct ArrowArray
 
 /*
  * We don't use the schema but have to define it for completeness because we're
- * defining ARROW_C_DATA_INTERFACE macro.
+ * defining the ARROW_C_DATA_INTERFACE macro.
  */
 struct ArrowSchema
 {
@@ -135,22 +135,22 @@ struct ArrowSchema
 #endif
 
 static pg_attribute_always_inline bool
-arrow_row_is_valid(const uint64 *bitmap, int row_number)
+arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
 {
-	const int qword_index = row_number / 64;
-	const int bit_index = row_number % 64;
+	const size_t qword_index = row_number / 64;
+	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
-	return (bitmap[qword_index] & mask) ? 1 : 0;
+	return bitmap[qword_index] & mask;
 }
 
 static pg_attribute_always_inline void
-arrow_set_row_validity(uint64 *bitmap, int row_number, bool value)
+arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 {
-	const int qword_index = row_number / 64;
-	const int bit_index = row_number % 64;
+	const size_t qword_index = row_number / 64;
+	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
 
-	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | (((uint64) !!value) << bit_index);
+	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | ((-(uint64) value) & mask);
 
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }

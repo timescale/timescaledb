@@ -65,8 +65,8 @@ typedef struct DecompressChunkColumnState
 			DecompressionIterator *iterator;
 
 			/* For entire batch decompression, mutually exclusive with the above. */
-			Datum *datums;
-			bool *nulls;
+			ArrowArray *arrow;
+			int value_bytes;
 		} compressed;
 	};
 } DecompressChunkColumnState;
@@ -84,7 +84,6 @@ typedef struct DecompressBatchState
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
-	MemoryContext arrow_context;
 } DecompressBatchState;
 
 typedef struct DecompressChunkState
@@ -110,6 +109,12 @@ typedef struct DecompressChunkState
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
 
 	bool using_bulk_decompression; /* For EXPLAIN ANALYZE. */
+
+	/*
+	 * Scratch space for bulk decompression which might need a lot of temporary
+	 * data.
+	 */
+	MemoryContext bulk_decompression_context;
 
 	/*
 	 * Make non-refcounted copies of the tupdesc for reuse across all batch states

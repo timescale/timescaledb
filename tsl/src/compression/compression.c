@@ -90,18 +90,13 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 		return definitions[algorithm].iterator_init_forward;
 }
 
-ArrowArray *
-tsl_try_decompress_all(CompressionAlgorithms algorithm, Datum compressed_data, Oid element_type)
+DecompressAllFunction
+tsl_get_decompress_all_function(CompressionAlgorithms algorithm)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 
-	if (definitions[algorithm].decompress_all)
-	{
-		return definitions[algorithm].decompress_all(compressed_data, element_type);
-	}
-
-	return NULL;
+	return definitions[algorithm].decompress_all;
 }
 
 static Tuplesortstate *compress_chunk_sort_relation(Relation in_rel, int n_keys,

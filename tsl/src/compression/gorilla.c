@@ -826,13 +826,15 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 								 iter_base->element_type);
 }
 
-#define MAX_NUM_LEADING_ZEROS_PADDED (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
+#define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
+
+int16 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
 
 /*
  * Decompress packed 6bit values in lanes that contain a round number of both
  * packed and unpacked bytes -- 4 6-bit values are packed into 3 8-bit values.
  */
-pg_attribute_always_inline static int16
+int16
 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 {
 #define LANE_INPUTS 3
@@ -851,7 +853,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 	const int16 n_bytes_packed = bitarray->buckets.num_elements * sizeof(uint64);
 	const int16 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
 	const int16 n_outputs = n_lanes * LANE_OUTPUTS;
-	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED);
+	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
 	for (int lane = 0; lane < n_lanes; lane++)
 	{
@@ -894,7 +896,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 #undef ELEMENT_TYPE
 
 ArrowArray *
-gorilla_decompress_all(Datum datum, Oid element_type)
+gorilla_decompress_all(Datum datum, Oid element_type, MemoryContext dest_mctx)
 {
 	CompressedGorillaData gorilla_data;
 	compressed_gorilla_data_init_from_datum(&gorilla_data, datum);
@@ -902,9 +904,9 @@ gorilla_decompress_all(Datum datum, Oid element_type)
 	switch (element_type)
 	{
 		case FLOAT8OID:
-			return gorilla_decompress_all_uint64(&gorilla_data);
+			return gorilla_decompress_all_uint64(&gorilla_data, dest_mctx);
 		case FLOAT4OID:
-			return gorilla_decompress_all_uint32(&gorilla_data);
+			return gorilla_decompress_all_uint32(&gorilla_data, dest_mctx);
 		default:
 			elog(ERROR,
 				 "type '%s' is not supported for gorilla decompression",
