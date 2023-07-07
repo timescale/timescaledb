@@ -453,9 +453,7 @@ get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_sc
 	Relation chunk_rel = table_open(chunk_rte->relid, AccessShareLock);
 	bool found_wholerow;
 	TupleConversionMap *map =
-		convert_tuples_by_name_compat(RelationGetDescr(chunk_rel),
-									  RelationGetDescr(ht_rel),
-									  gettext_noop("could not convert row type"));
+		convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(ht_rel));
 
 	/* attno mapping necessary */
 	if (map)

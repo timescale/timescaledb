@@ -281,7 +281,7 @@ REINDEX (VERBOSE) TABLE reindex_test;
 
 \set ON_ERROR_STOP 0
 
--- REINDEX TABLE CONCURRENTLY is not supported on PG11 (but blocked on PG12+)
+-- REINDEX TABLE CONCURRENTLY on hypertables is not supported
 REINDEX TABLE CONCURRENTLY reindex_test;
 
 -- this one currently doesn't recurse to chunks and instead gives an

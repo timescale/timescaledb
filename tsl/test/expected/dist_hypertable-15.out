@@ -4651,8 +4651,6 @@ relname|reloptions
  
 (1 row)
 
--- WITH OIDS and WITHOUT OIDS are tested in a separate test since those
--- options were dropped in PG12
 DROP TABLE disttable_with_relopts_1;
 DROP TABLE disttable_with_relopts_2;
 DROP TABLE disttable_with_relopts_3;

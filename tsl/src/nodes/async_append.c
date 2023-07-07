@@ -445,7 +445,7 @@ path_process(PlannerInfo *root, Path **path)
 		return;
 
 	/* AsyncAppend only makes sense when there are multiple children that we'd
-	 * like to asynchronously scan. Also note that PG12 will remove append
+	 * like to asynchronously scan. Also note that postgres will remove append
 	 * nodes when there's a single child and this will confuse AsyncAppend. */
 	if (list_length(children) <= 1)
 		return;

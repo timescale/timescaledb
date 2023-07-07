@@ -55,12 +55,8 @@ ORDER BY chunk_id, dimension_slice_id;
 DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 1;
 SELECT * FROM missing_slices;
 
--- Setting level to ERROR since warnings are printed in different
--- order on PG11 and PG12.
-SET client_min_messages TO error;
 TRUNCATE TABLE chunk_test_int;
 DROP TABLE chunk_test_int;
-RESET client_min_messages;
 
 CREATE TABLE chunk_test_int(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test_int', 'time', 'tag', 2, chunk_time_interval => 3);
@@ -86,8 +82,4 @@ ORDER BY chunk_id, dimension_slice_id;
 DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 5;
 SELECT * FROM missing_slices;
 
--- Setting level to ERROR since warnings are printed in different
--- order on PG11 and PG12.
-SET client_min_messages TO error;
 DROP TABLE chunk_test_int;
-RESET client_min_messages;

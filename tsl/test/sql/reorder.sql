@@ -229,14 +229,6 @@ SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_4_chunk ORDER BY time
 -- SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_3_chunk ORDER BY time;
 -- SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_4_chunk ORDER BY time;
 
--- we do not allow reordering tables with OIDs, note that tables with OIDs are not allowed in PG12
-\set ON_ERROR_STOP 0
-CREATE table coids (time INTEGER) WITH (OIDS);
-SELECT create_hypertable('coids', 'time', chunk_time_interval => 5);
-INSERT INTO coids VALUES (1);
-SELECT reorder_chunk('_timescaledb_internal._hyper_3_5_chunk', 'coids_time_idx', verbose => TRUE);
-\set ON_ERROR_STOP 1
-
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
 WHERE indisclustered = true ORDER BY 1;

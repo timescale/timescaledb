@@ -410,9 +410,8 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 		Assert(map->outdesc == RelationGetDescr(chunk_rel));
 
 		if (!chunk_map)
-			chunk_map = convert_tuples_by_name_compat(RelationGetDescr(chunk_rel),
-													  RelationGetDescr(hyper_rel),
-													  gettext_noop("could not convert row type"));
+			chunk_map =
+				convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(hyper_rel));
 
 		onconflset = translate_clause(onconflset,
 									  chunk_map,
@@ -544,9 +543,8 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 		 * to have the hypertable_desc in the out spot for map_variable_attnos
 		 * to work correctly in mapping hypertable attnos->chunk attnos.
 		 */
-		chunk_map = convert_tuples_by_name_compat(RelationGetDescr(chunk_rel),
-												  RelationGetDescr(hyper_rel),
-												  gettext_noop("could not convert row type"));
+		chunk_map =
+			convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(hyper_rel));
 
 		chunk_rri->ri_projectReturning =
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
@@ -637,9 +635,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	 * data nodes for insert on that node's local hypertable. */
 	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 		state->hyper_to_chunk_map =
-			convert_tuples_by_name_compat(RelationGetDescr(parent_rel),
-										  RelationGetDescr(rel),
-										  gettext_noop("could not convert row type"));
+			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 

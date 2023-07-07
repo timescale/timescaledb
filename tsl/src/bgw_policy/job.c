@@ -610,7 +610,7 @@ job_execute(BgwJob *job)
 		PortalContext = portal->portalContext;
 
 		StartTransactionCommand();
-#if (PG12 && PG_VERSION_NUM >= 120008) || (PG13 && PG_VERSION_NUM >= 130004) || PG14_GE
+#if (PG13 && PG_VERSION_NUM >= 130004) || PG14_GE
 		EnsurePortalSnapshotExists();
 #else
 		PushActiveSnapshot(GetTransactionSnapshot());

@@ -4,8 +4,6 @@ PGOPTIONS='--client-min-messages=warning'
 
 export PGOPTIONS
 
-# PG12 changed client logging so NOTICE messages are now warning.
-# We adopt this also for older PG versions to make tests compatible.
-${PG_BINDIR}/pg_dump -h ${PGHOST} -U ${TEST_ROLE_SUPERUSER} -Fc ${TEST_DBNAME} > /dev/null 2>&1 -f ${DUMPFILE} | sed 's/NOTICE/warning/g'
+${PG_BINDIR}/pg_dump -h ${PGHOST} -U ${TEST_ROLE_SUPERUSER} -Fc ${TEST_DBNAME} > /dev/null 2>&1 -f ${DUMPFILE}
 ${PG_BINDIR}/dropdb -h ${PGHOST} -U ${TEST_ROLE_SUPERUSER} ${TEST_DBNAME}
 ${PG_BINDIR}/createdb -h ${PGHOST} -U ${TEST_ROLE_SUPERUSER} ${TEST_DBNAME}

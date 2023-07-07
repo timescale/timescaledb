@@ -14,6 +14,7 @@ set(TEST_FILES
     create_table.sql
     constraint.sql
     copy.sql
+    copy_where.sql
     ddl_errors.sql
     drop_extension.sql
     drop_hypertable.sql
@@ -33,7 +34,6 @@ set(TEST_FILES
     insert_single.sql
     insert_returning.sql
     lateral.sql
-    misc.sql
     null_exclusion.sql
     partition.sql
     partitioning.sql

@@ -44,15 +44,10 @@ typedef struct BgwParams
 } BgwParams;
 
 /**
- * Compile-time check that the size of BgwParams fit into the bgw_extra field
- * of BackgroundWorker. Relies on the fact that you cannot have arrays with
- * negative size.
- *
- * We cannot use StaticAssertDecl (yet) since it does not exist in PG12 and
- * not checking this for PG12 could potentially generate hard-to-find
- * problems.
+ * Compile-time check to ensure that the size of BgwParams fit into the bgw_extra field
+ * of BackgroundWorker.
  */
-static char length_check[sizeof(((BackgroundWorker *) 0)->bgw_extra) -
-						 sizeof(BgwParams)] pg_attribute_unused();
+StaticAssertDecl(sizeof(BgwParams) <= sizeof(((BackgroundWorker *) 0)->bgw_extra),
+				 "sizeof(BgwParams) exceeds sizeof(bgw_extra) field of BackgroundWorker");
 
 #endif /* BGW_WORKER_H */

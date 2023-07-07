@@ -10,9 +10,8 @@ timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'
 timescaledb.last_tuned_version='0.0.1'
 timescaledb_telemetry.cloud='ci'
 log_line_prefix='%m %u [%p] %d '
-# PG12 changed the default rounding behavior of floating point
-# numbers. Setting extra_float_digits=0 retains the old behavior which
-# is needed to make our tests work for multiple PostgreSQL versions.
+# Set extra_float_digits=0 to retain the pre PG12 rounding behaviour
+# of floating point numbers, which are needed to make our tests work.
 extra_float_digits=0
 timescaledb.passfile='@TEST_PASSFILE@'
 hba_file='@TEST_PG_HBA_FILE@'

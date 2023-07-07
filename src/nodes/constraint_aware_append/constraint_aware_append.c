@@ -559,9 +559,9 @@ ts_constraint_aware_append_possible(Path *path)
 			return false;
 	}
 
-	/* Never use constraint-aware append with only one child, since PG12 will
-	 * later prune the (Merge)Append node from such plans, leaving us with an
-	 * unexpected child node. */
+	/* Never use constraint-aware append with only one child, since PostgreSQL
+	 * will later prune the (Merge)Append node from such plans, leaving us with
+	 * an unexpected child node. */
 	if (num_children <= 1)
 		return false;
 
