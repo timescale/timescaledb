@@ -1,3 +1,4 @@
+
 /*
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
@@ -5,52 +6,47 @@
  */
 
 /*
- * This is a specialization of Simple8bRLE decoder for bitmaps, i.e. where the
- * elements are only 0 and 1. It also counts the number of ones.
+ * This file implements calculation of prefix sums of a Simple8bRLE-encoded
+ * bitmap. Used for gorilla decompression.
  */
 
 #pragma once
 
 #include "compression/simple8b_rle.h"
 
-typedef struct Simple8bRleBitmap
+typedef struct Simple8bRlePrefixSum
 {
 	uint16 num_elements;
-	uint16 num_ones;
-
 	/*
 	 * Pad to next multiple of 64 bytes on the right, so that we can simplify the
 	 * decompression loop and the get() function. Note that for get() we need at
 	 * least one byte of padding, hence the next multiple.
 	 */
 #define BITMAP_NUM_ELEMENTS (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64 + 1) * 64)
-	bool data[BITMAP_NUM_ELEMENTS];
+	uint16 data[BITMAP_NUM_ELEMENTS];
 #undef BITMAP_NUM_ELEMENTS
-} Simple8bRleBitmap;
+} Simple8bRlePrefixSum;
 
-pg_attribute_always_inline static bool
-simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, uint16 i)
+pg_attribute_always_inline static uint16
+simple8brle_prefix_sum_get_at(Simple8bRlePrefixSum *sums, uint16 i)
 {
-	/* We have some padding on the right but we shouldn't overrun it. */
-	Assert(i < ((bitmap->num_elements + 63) / 64 + 1) * 64);
-
-	return bitmap->data[i];
+	Assert(i < ((sums->num_elements + 63) / 64 + 1) * 64);
+	return sums->data[i];
 }
 
 pg_attribute_always_inline static uint16
-simple8brle_bitmap_num_ones(Simple8bRleBitmap *bitmap)
+simple8brle_prefix_sum_total(Simple8bRlePrefixSum *sums)
 {
-	return bitmap->num_ones;
+	return sums->data[sums->num_elements - 1];
 }
 
 static void
-simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed, Simple8bRleBitmap *result)
+simple8brle_prefix_sums(Simple8bRleSerialized *compressed, Simple8bRlePrefixSum *result)
 {
 	CheckCompressedData(compressed->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	CheckCompressedData(compressed->num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	const uint16 num_elements = compressed->num_elements;
-	uint16 num_ones = 0;
 
 	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
@@ -64,7 +60,9 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed, Simple8bRleBitm
 	const uint16 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
 	const uint16 num_blocks = compressed->num_blocks;
 
-	bool *restrict bitmap_bools_ = result->data;
+	uint16 *restrict prefix_sums = result->data;
+
+	uint16 current_prefix_sum = 0;
 	uint16 decompressed_index = 0;
 	for (uint16 block_index = 0; block_index < num_blocks; block_index++)
 	{
@@ -83,36 +81,26 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed, Simple8bRleBitm
 			/*
 			 * RLE block.
 			 */
-			const uint16 n_block_values = simple8brle_rledata_repeatcount(block_data);
+			const size_t n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-			/*
-			 * We might get an incorrect value from the corrupt data. Explicitly
-			 * truncate it to 0/1 in case the bool is not a standard bool type
-			 * which would have done it for us.
-			 */
-			const bool repeated_value = simple8brle_rledata_value(block_data) & 1;
+			const bool repeated_value = simple8brle_rledata_value(block_data);
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
-			/*
-			 * Write out the loop for both true and false, so that it becomes a
-			 * simple memset.
-			 */
 			if (repeated_value)
 			{
 				for (uint16 i = 0; i < n_block_values; i++)
 				{
-					bitmap_bools_[decompressed_index + i] = true;
+					prefix_sums[decompressed_index + i] = current_prefix_sum + i + 1;
 				}
-
-				num_ones += n_block_values;
+				current_prefix_sum += n_block_values;
 			}
 			else
 			{
 				for (uint16 i = 0; i < n_block_values; i++)
 				{
-					bitmap_bools_[decompressed_index + i] = false;
+					prefix_sums[decompressed_index + i] = current_prefix_sum;
 				}
 			}
 
@@ -153,16 +141,24 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed, Simple8bRleBitm
 			CheckCompressedData(decompressed_index + 64 < num_elements_padded);
 
 #ifdef HAVE__BUILTIN_POPCOUNT
-			num_ones += __builtin_popcountll(block_data);
-#endif
 			for (uint16 i = 0; i < 64; i++)
 			{
-				const uint64 value = (block_data >> i) & 1;
-				bitmap_bools_[decompressed_index + i] = value;
-#ifndef HAVE__BUILTIN_POPCOUNT
-				num_ones += value;
-#endif
+				const uint16 word_prefix_sum =
+					__builtin_popcountll(block_data & (-1ULL >> (63 - i)));
+				prefix_sums[decompressed_index + i] = current_prefix_sum + word_prefix_sum;
 			}
+			current_prefix_sum += __builtin_popcountll(block_data);
+#else
+			/*
+			 * Unfortunatly, we have to have this fallback for Windows.
+			 */
+			for (uint16 i = 0; i < 64; i++)
+			{
+				const bool this_bit = (block_data >> i) & 1;
+				current_prefix_sum += this_bit;
+				prefix_sums[decompressed_index + i] = current_prefix_sum;
+			}
+#endif
 			decompressed_index += 64;
 		}
 	}
@@ -178,18 +174,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed, Simple8bRleBitm
 	 * Might happen if we have stray ones in the higher unused bits of the last
 	 * block.
 	 */
-	CheckCompressedData(num_ones <= num_elements);
+	CheckCompressedData(current_prefix_sum <= num_elements);
 
 	result->num_elements = num_elements;
-	result->num_ones = num_ones;
-
-	/* Sanity check. */
-#ifdef USE_ASSERT_CHECKING
-	int num_ones_2 = 0;
-	for (int i = 0; i < num_elements; i++)
-	{
-		num_ones_2 += simple8brle_bitmap_get_at(result, i);
-	}
-	Assert(num_ones_2 == num_ones);
-#endif
 }
