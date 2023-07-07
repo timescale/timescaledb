@@ -109,31 +109,36 @@ Node *
 decompress_chunk_state_create(CustomScan *cscan)
 {
 	DecompressChunkState *chunk_state;
-	List *settings;
 
 	chunk_state = (DecompressChunkState *) newNode(sizeof(DecompressChunkState), T_CustomScanState);
 
 	chunk_state->csstate.methods = &decompress_chunk_state_methods;
 
-	settings = linitial(cscan->custom_private);
+	Assert(IsA(cscan->custom_private, List));
+	Assert(list_length(cscan->custom_private) == 5);
+	List *settings = linitial(cscan->custom_private);
+	chunk_state->decompression_map = lsecond(cscan->custom_private);
+	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
+	chunk_state->bulk_decompression_column = lfourth(cscan->custom_private);
+	List *sortinfo = lfifth(cscan->custom_private);
 
-	Assert(list_length(settings) == 4);
-
+	Assert(IsA(settings, IntList));
+	Assert(list_length(settings) == 5);
 	chunk_state->hypertable_id = linitial_int(settings);
 	chunk_state->chunk_relid = lsecond_int(settings);
 	chunk_state->reverse = lthird_int(settings);
 	chunk_state->sorted_merge_append = lfourth_int(settings);
-	chunk_state->decompression_map = lsecond(cscan->custom_private);
-	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
-	chunk_state->vectorized_quals = linitial(cscan->custom_exprs);
+	chunk_state->enable_bulk_decompression = lfifth_int(settings);
 
 	/* Extract sort info */
-	List *sortinfo = lfourth(cscan->custom_private);
 	build_batch_sorted_merge_info(chunk_state, sortinfo);
-
 	/* Sort keys should only be present when sorted_merge_append is used */
 	Assert(chunk_state->sorted_merge_append == true || chunk_state->n_sortkeys == 0);
 	Assert(chunk_state->n_sortkeys == 0 || chunk_state->sortkeys != NULL);
+
+	Assert(IsA(cscan->custom_exprs, List));
+	Assert(list_length(cscan->custom_exprs) == 1);
+	chunk_state->vectorized_quals = linitial(cscan->custom_exprs);
 
 	return (Node *) chunk_state;
 }
@@ -266,7 +271,9 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
 														   "DecompressChunk per_batch",
-														   ALLOCSET_DEFAULT_SIZES);
+														   0,
+														   chunk_state->batch_memory_context_bytes,
+														   chunk_state->batch_memory_context_bytes);
 	batch_state->initialized = false;
 
 	/* The slots will be created on first usage of the batch state */
@@ -427,70 +434,63 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 */
 	int current_compressed = 0;
 	int current_not_compressed = num_compressed;
-	AttrNumber next_compressed_scan_attno = 0;
-	forboth (dest_cell,
-			 chunk_state->decompression_map,
-			 is_segmentby_cell,
-			 chunk_state->is_segmentby_column)
+	for (int compressed_index = 0; compressed_index < list_length(chunk_state->decompression_map);
+		 compressed_index++)
 	{
-		next_compressed_scan_attno++;
+		DecompressChunkColumnDescription column = {
+			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
+			.output_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
+			.bulk_decompression_supported =
+				list_nth_int(chunk_state->bulk_decompression_column, compressed_index)
+		};
 
-		const AttrNumber output_attno = lfirst_int(dest_cell);
-		if (output_attno == 0)
+		if (column.output_attno == 0)
 		{
 			/* We are asked not to decompress this column, skip it. */
 			continue;
 		}
 
-		Oid typid = InvalidOid;
-		DecompressChunkColumnType column_type;
-		if (output_attno > 0)
+		if (column.output_attno > 0)
 		{
 			/* normal column that is also present in decompressed chunk */
 			Form_pg_attribute attribute =
-				TupleDescAttr(desc, AttrNumberGetAttrOffset(output_attno));
+				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
 
-			typid = attribute->atttypid;
+			column.typid = attribute->atttypid;
+			column.value_bytes = get_typlen(column.typid);
 
-			if (lfirst_int(is_segmentby_cell))
-				column_type = SEGMENTBY_COLUMN;
+			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
+				column.type = SEGMENTBY_COLUMN;
 			else
-				column_type = COMPRESSED_COLUMN;
+				column.type = COMPRESSED_COLUMN;
 		}
 		else
 		{
 			/* metadata columns */
-			switch (output_attno)
+			switch (column.output_attno)
 			{
 				case DECOMPRESS_CHUNK_COUNT_ID:
-					column_type = COUNT_COLUMN;
+					column.type = COUNT_COLUMN;
 					break;
 				case DECOMPRESS_CHUNK_SEQUENCE_NUM_ID:
-					column_type = SEQUENCE_NUM_COLUMN;
+					column.type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
-					elog(ERROR, "Invalid column attno \"%d\"", output_attno);
+					elog(ERROR, "Invalid column attno \"%d\"", column.output_attno);
 					break;
 			}
 		}
 
-		DecompressChunkColumnDescription *column;
-
-		if (column_type == COMPRESSED_COLUMN)
+		if (column.type == COMPRESSED_COLUMN)
 		{
 			Assert(current_compressed < num_total);
-			column = &chunk_state->template_columns[current_compressed++];
+			chunk_state->template_columns[current_compressed++] = column;
 		}
 		else
 		{
 			Assert(current_not_compressed < num_total);
-			column = &chunk_state->template_columns[current_not_compressed++];
+			chunk_state->template_columns[current_not_compressed++] = column;
 		}
-
-		column->output_attno = output_attno;
-		column->compressed_scan_attno = next_compressed_scan_attno;
-		column->typid = typid;
-		column->type = column_type;
 	}
 
 	Assert(current_compressed == num_compressed);
@@ -498,7 +498,46 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	chunk_state->n_batch_state_bytes =
 		sizeof(DecompressBatchState) +
-		sizeof(DecompressChunkColumnValues) * chunk_state->num_compressed_columns;
+		sizeof(CompressedColumnValues) * chunk_state->num_compressed_columns;
+
+	/*
+	 * Calculate the desired size of the batch memory context. Especially if we
+	 * use bulk decompression, the results should fit into the first page of the
+	 * context, otherwise it's going to do malloc/free on every
+	 * MemoryContextReset.
+	 *
+	 * Start with the default size.
+	 */
+	chunk_state->batch_memory_context_bytes = 8192;
+	if (chunk_state->enable_bulk_decompression)
+	{
+		for (int i = 0; i < num_total; i++)
+		{
+			DecompressChunkColumnDescription *column = &chunk_state->template_columns[i];
+			if (column->bulk_decompression_supported)
+			{
+				/* Values array, with 64 element padding (actually we have less). */
+				chunk_state->batch_memory_context_bytes +=
+					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) * column->value_bytes;
+				/* Also nulls bitmap. */
+				chunk_state->batch_memory_context_bytes +=
+					GLOBAL_MAX_ROWS_PER_COMPRESSION / (64 * sizeof(uint64));
+				/* Arrow data structure. */
+				chunk_state->batch_memory_context_bytes +=
+					sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
+				/* Memory context header overhead for the above parts. */
+				chunk_state->batch_memory_context_bytes += sizeof(void *) * 3;
+			}
+		}
+	}
+
+	/* Round up to even number of 4k pages. */
+	chunk_state->batch_memory_context_bytes =
+		((chunk_state->batch_memory_context_bytes + 4095) / 4096) * 4096;
+
+	/* As a precaution, limit it to 1MB. */
+	chunk_state->batch_memory_context_bytes =
+		Min(chunk_state->batch_memory_context_bytes, 1 * 1024 * 1024);
 }
 
 static ArrowArray *
@@ -598,7 +637,7 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 			   "only compressed columns are supported in vectorized quals");
 		Assert(column_index < chunk_state->num_compressed_columns);
 
-		DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[column_index];
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
 		Ensure(column_values->iterator == NULL,
 			   "only arrow columns are supported in vectorized quals");
 
@@ -769,7 +808,7 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 			case COMPRESSED_COLUMN:
 			{
 				Assert(i < chunk_state->num_compressed_columns);
-				DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->iterator = NULL;
 				column_values->arrow = NULL;
 				column_values->value_bytes = -1;
@@ -848,12 +887,6 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 					column_values->arrow = arrow;
 					column_values->arrow_values = arrow->buffers[1];
 					column_values->arrow_validity = arrow->buffers[0];
-
-					/*
-					 * Note the fact that we are using bulk decompression, for
-					 * EXPLAIN ANALYZE.
-					 */
-					chunk_state->using_bulk_decompression = true;
 
 					column_values->value_bytes = get_typlen(column_description->typid);
 
@@ -1090,7 +1123,7 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 
 		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
 		{
-			ExplainPropertyBool("Bulk Decompression", chunk_state->using_bulk_decompression, es);
+			ExplainPropertyBool("Bulk Decompression", chunk_state->enable_bulk_decompression, es);
 		}
 	}
 }
@@ -1125,7 +1158,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			batch_state->initialized = false;
 			for (int i = 0; i < num_compressed_columns; i++)
 			{
-				DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				if (column_values->iterator)
 				{
 					DecompressResult result =
@@ -1160,7 +1193,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			 */
 			for (int i = 0; i < num_compressed_columns; i++)
 			{
-				DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				if (column_values->iterator)
 				{
 					column_values->iterator->try_next(column_values->iterator);
@@ -1172,7 +1205,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 
 		for (int i = 0; i < num_compressed_columns; i++)
 		{
-			DecompressChunkColumnValues *column_values = &batch_state->compressed_columns[i];
+			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 
 			if (column_values->iterator != NULL)
 			{

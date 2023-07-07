@@ -121,12 +121,14 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	}
 
 	path->uncompressed_chunk_attno_to_compression_info =
-		palloc0(sizeof(void *) * (path->info->chunk_rel->max_attr + 1));
+		palloc0(sizeof(*path->uncompressed_chunk_attno_to_compression_info) *
+				(path->info->chunk_rel->max_attr + 1));
 
 	/*
 	 * Go over the scan targetlist and determine to which output column each
-	 * scan column goes.
+	 * scan column goes, saving other additional info as we do that.
 	 */
+	path->have_bulk_decompression_columns = false;
 	path->decompression_map = NIL;
 	foreach (lc, scan_tlist)
 	{
@@ -240,10 +242,19 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 			lappend_int(path->is_segmentby_column,
 						compression_info && compression_info->segmentby_column_index != 0);
 
+		const bool bulk_decompression_possible =
+			destination_attno_in_uncompressed_chunk > 0 && compression_info &&
+			tsl_get_decompress_all_function(compression_info->algo_id) != NULL;
+		path->have_bulk_decompression_columns |= bulk_decompression_possible;
+		path->bulk_decompression_column =
+			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
+
 		if (destination_attno_in_uncompressed_chunk > 0)
 		{
 			path->uncompressed_chunk_attno_to_compression_info
-				[destination_attno_in_uncompressed_chunk] = compression_info;
+				[destination_attno_in_uncompressed_chunk] = (DecompressChunkColumnCompression){
+				.fd = *compression_info, .bulk_decompression_possible = bulk_decompression_possible
+			};
 		}
 	}
 
@@ -415,26 +426,11 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 
 	Var *var = castNode(Var, linitial(o->args));
 	Assert((Index) var->varno == path->info->chunk_rel->relid);
-	FormData_hypertable_compression *column_compression =
-		path->uncompressed_chunk_attno_to_compression_info[var->varattno];
 
-	/*
-	 * If it's not a compressed or segmentby column, it must be a metadata column?
-	 * We shouldn't see them in scan quals for the decompressed scan, but
-	 * let's not segfault.
-	 */
-	Ensure(column_compression != NULL, "unexpected metadata var %d/%d", var->varno, var->varattno);
-
-	if (column_compression->segmentby_column_index != 0)
+	if (!path->uncompressed_chunk_attno_to_compression_info[var->varattno]
+			 .bulk_decompression_possible)
 	{
-		/* A segmentby column. */
-		return false;
-	}
-
-	if (column_compression->algo_id != COMPRESSION_ALGORITHM_GORILLA &&
-		column_compression->algo_id != COMPRESSION_ALGORITHM_DELTADELTA)
-	{
-		/* Doesn't support bulk decompression. */
+		/* This column doesn't support bulk decompression. */
 		return false;
 	}
 
@@ -725,8 +721,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
+	const bool enable_bulk_decompression = !dcpath->sorted_merge_append &&
+										   ts_guc_enable_bulk_decompression &&
+										   dcpath->have_bulk_decompression_columns;
+
 	List *vectorized_quals = NIL;
-	if (!dcpath->sorted_merge_append && ts_guc_enable_bulk_decompression)
+	if (enable_bulk_decompression)
 	{
 		List *nonvectorized = NIL;
 		split_qual(dcpath, decompress_plan->scan.plan.qual, &vectorized_quals, &nonvectorized);
@@ -734,14 +734,18 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		decompress_plan->scan.plan.qual = nonvectorized;
 	}
 
-	settings = list_make4_int(dcpath->info->hypertable_id,
+	settings = list_make5_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
-							  dcpath->sorted_merge_append);
+							  dcpath->sorted_merge_append,
+							  enable_bulk_decompression);
 
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
-	decompress_plan->custom_private =
-		list_make4(settings, dcpath->decompression_map, dcpath->is_segmentby_column, sort_options);
+	decompress_plan->custom_private = list_make5(settings,
+												 dcpath->decompression_map,
+												 dcpath->is_segmentby_column,
+												 dcpath->bulk_decompression_column,
+												 sort_options);
 
 	return &decompress_plan->scan.plan;
 }

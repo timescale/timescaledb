@@ -36,6 +36,7 @@ typedef struct DecompressChunkColumnDescription
 {
 	DecompressChunkColumnType type;
 	Oid typid;
+	int value_bytes;
 
 	/*
 	 * Attno of the decompressed column in the output of DecompressChunk node.
@@ -49,12 +50,12 @@ typedef struct DecompressChunkColumnDescription
 	 * Attno of the compressed column in the input compressed chunk scan.
 	 */
 	AttrNumber compressed_scan_attno;
+
+	bool bulk_decompression_supported;
 } DecompressChunkColumnDescription;
 
-typedef struct DecompressChunkColumnValues
+typedef struct CompressedColumnValues
 {
-	/* The below fields are only for compressed columns. */
-
 	/* For row-by-row decompression. */
 	DecompressionIterator *iterator;
 
@@ -70,9 +71,13 @@ typedef struct DecompressChunkColumnValues
 	 */
 	const void *arrow_validity;
 	const void *arrow_values;
+
+	/*
+	 * The following fields are copied here for better data locality.
+	 */
 	int value_bytes;
-	AttrNumber output_attno; /* Copied here for better data locality. */
-} DecompressChunkColumnValues;
+	AttrNumber output_attno;
+} CompressedColumnValues;
 
 /*
  * All the needed information to decompress a batch
@@ -88,7 +93,7 @@ typedef struct DecompressBatchState
 	MemoryContext per_batch_context;
 	uint64 *vector_qual_result;
 
-	DecompressChunkColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
+	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
 typedef struct DecompressChunkState
@@ -96,6 +101,7 @@ typedef struct DecompressChunkState
 	CustomScanState csstate;
 	List *decompression_map;
 	List *is_segmentby_column;
+	List *bulk_decompression_column;
 	int num_total_columns;
 	int num_compressed_columns;
 
@@ -115,6 +121,7 @@ typedef struct DecompressChunkState
 	void *batch_states;
 	int n_batch_state_bytes;
 	Bitmapset *unused_batch_states; /* The unused batch states */
+	int batch_memory_context_bytes;
 
 	bool sorted_merge_append;	   /* Merge append optimization enabled */
 	int most_recent_batch;		   /* The batch state with the most recent value */
@@ -122,7 +129,7 @@ typedef struct DecompressChunkState
 	int n_sortkeys;				   /* Number of sort keys for heap compare function */
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
 
-	bool using_bulk_decompression; /* For EXPLAIN ANALYZE. */
+	bool enable_bulk_decompression;
 
 	/*
 	 * Scratch space for bulk decompression which might need a lot of temporary
