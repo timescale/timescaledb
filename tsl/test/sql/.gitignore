@@ -5,7 +5,6 @@
 /cagg_query-*.sql
 /cagg_union_view-*.sql
 /compression_sorted_merge-*.sql
-/compression_insert-*.sql
 /compression_permissions-*.sql
 /continuous_aggs-*.sql
 /continuous_aggs_deprecated-*.sql
@@ -22,8 +21,6 @@
 /modify_exclusion-*.sql
 /plan_skip_scan-*.sql
 /remote-copy-*sv
-/remote_copy-*.sql
 /telemetry_stats-*.sql
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
-/cagg_joins-*.sql
