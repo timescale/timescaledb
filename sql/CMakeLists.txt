@@ -9,19 +9,6 @@ include(ScriptFiles)
 # There still needs to be an entry here to build an update script for that
 # version. Thus, for every new release, an entry should be added here.
 set(MOD_FILES
-    updates/1.7.0--1.7.1.sql
-    updates/1.7.1--1.7.2.sql
-    updates/1.7.2--1.7.3.sql
-    updates/1.7.3--1.7.4.sql
-    updates/1.7.4--1.7.5.sql
-    updates/1.7.5--2.0.0-rc1.sql
-    updates/2.0.0-rc1--2.0.0-rc2.sql
-    updates/2.0.0-rc2--2.0.0-rc3.sql
-    updates/2.0.0-rc3--2.0.0-rc4.sql
-    updates/2.0.0-rc4--2.0.0.sql
-    updates/2.0.0--2.0.1.sql
-    updates/2.0.1--2.0.2.sql
-    updates/2.0.2--2.1.0.sql
     updates/2.1.0--2.1.1.sql
     updates/2.1.1--2.2.0.sql
     updates/2.2.0--2.2.1.sql
