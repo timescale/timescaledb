@@ -85,7 +85,6 @@ typedef struct CompressedColumnValues
 typedef struct DecompressBatchState
 {
 	bool initialized;
-	TupleTableSlot *decompressed_slot_projected; /* The result slot with the final tuples */
 	TupleTableSlot *decompressed_slot_scan;		 /* A slot for the decompressed data */
 	TupleTableSlot *compressed_slot;			 /* A slot for compressed data */
 	int total_batch_rows;
@@ -123,6 +122,7 @@ typedef struct DecompressChunkState
 	Bitmapset *unused_batch_states; /* The unused batch states */
 	int batch_memory_context_bytes;
 
+	List *sortinfo;
 	bool sorted_merge_append;	   /* Merge append optimization enabled */
 	int most_recent_batch;		   /* The batch state with the most recent value */
 	struct binaryheap *merge_heap; /* Binary heap of slot indices */
@@ -147,7 +147,6 @@ typedef struct DecompressChunkState
 	 * reference to ResourceOwner, which is not very efficient for a large number of
 	 * references.
 	 */
-	TupleDesc decompressed_slot_projected_tdesc;
 	TupleDesc decompressed_slot_scan_tdesc;
 	TupleDesc compressed_slot_tdesc;
 } DecompressChunkState;

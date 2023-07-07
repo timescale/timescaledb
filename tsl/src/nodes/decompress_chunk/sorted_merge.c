@@ -59,8 +59,8 @@ decompress_binaryheap_compare_heap_pos(Datum a, Datum b, void *arg)
 	DecompressSlotNumber batchB = DatumGetInt32(b);
 	Assert(batchB <= chunk_state->n_batch_states);
 
-	TupleTableSlot *tupleA = get_batch_state(chunk_state, batchA)->decompressed_slot_projected;
-	TupleTableSlot *tupleB = get_batch_state(chunk_state, batchB)->decompressed_slot_projected;
+	TupleTableSlot *tupleA = get_batch_state(chunk_state, batchA)->decompressed_slot_scan;
+	TupleTableSlot *tupleB = get_batch_state(chunk_state, batchB)->decompressed_slot_scan;
 
 	return decompress_binaryheap_compare_slots(tupleA, tupleB, chunk_state);
 }
@@ -110,7 +110,7 @@ decompress_batch_open_next_batch(DecompressChunkState *chunk_state)
 
 		bool first_tuple_returned = decompress_get_next_tuple_from_batch(chunk_state, batch_state);
 
-		if (!TupIsNull(batch_state->decompressed_slot_projected))
+		if (!TupIsNull(batch_state->decompressed_slot_scan))
 		{
 			chunk_state->merge_heap =
 				binaryheap_add_unordered_autoresize(chunk_state->merge_heap,
@@ -146,20 +146,10 @@ decompress_sorted_merge_remove_top_tuple_and_decompress_next(DecompressChunkStat
 	DecompressBatchState *batch_state = get_batch_state(chunk_state, i);
 	Assert(batch_state != NULL);
 
-#ifdef USE_ASSERT_CHECKING
-	/* Prepare an assert on the tuple sort between the last returned tuple and the intended next
-	 * tuple. The last returned tuple will be changed during this function. So, store a copy for
-	 * later comparison. */
-	TupleTableSlot *last_returned_tuple =
-		MakeSingleTupleTableSlot(batch_state->decompressed_slot_projected->tts_tupleDescriptor,
-								 batch_state->decompressed_slot_projected->tts_ops);
-	ExecCopySlot(last_returned_tuple, batch_state->decompressed_slot_projected);
-#endif
-
 	/* Decompress the next tuple from segment */
 	decompress_get_next_tuple_from_batch(chunk_state, batch_state);
 
-	if (TupIsNull(batch_state->decompressed_slot_projected))
+	if (TupIsNull(batch_state->decompressed_slot_scan))
 	{
 		/* Batch is exhausted, recycle batch_state */
 		(void) binaryheap_remove_first(chunk_state->merge_heap);
@@ -170,21 +160,6 @@ decompress_sorted_merge_remove_top_tuple_and_decompress_next(DecompressChunkStat
 		/* Put the next tuple from this batch on the heap */
 		binaryheap_replace_first(chunk_state->merge_heap, Int32GetDatum(i));
 	}
-
-#ifdef USE_ASSERT_CHECKING
-	if (!binaryheap_empty(chunk_state->merge_heap))
-	{
-		DecompressSlotNumber next_tuple = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
-		DecompressBatchState *next_batch_state = get_batch_state(chunk_state, next_tuple);
-
-		/* Assert that the intended sorting is produced. */
-		Assert(decompress_binaryheap_compare_slots(last_returned_tuple,
-												   next_batch_state->decompressed_slot_projected,
-												   chunk_state) >= 0);
-	}
-	ExecDropSingleTupleTableSlot(last_returned_tuple);
-	last_returned_tuple = NULL;
-#endif
 }
 
 /*
@@ -237,11 +212,11 @@ decompress_sorted_merge_get_next_tuple(DecompressChunkState *chunk_state)
 
 	/* Fetch tuple the top tuple from the heap */
 	DecompressSlotNumber slot_number = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
-	TupleTableSlot *decompressed_slot_projected =
-		get_batch_state(chunk_state, slot_number)->decompressed_slot_projected;
+	TupleTableSlot *decompressed_slot_scan =
+		get_batch_state(chunk_state, slot_number)->decompressed_slot_scan;
 
-	Assert(decompressed_slot_projected != NULL);
-	Assert(!TupIsNull(decompressed_slot_projected));
+	Assert(decompressed_slot_scan != NULL);
+	Assert(!TupIsNull(decompressed_slot_scan));
 
-	return decompressed_slot_projected;
+	return decompressed_slot_scan;
 }

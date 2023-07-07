@@ -46,7 +46,7 @@ typedef struct ColumnCompressionInfo
 
 typedef struct DecompressChunkPath
 {
-	CustomPath cpath;
+	CustomPath custom_path;
 	CompressionInfo *info;
 	/*
 	 * decompression_map maps targetlist entries of the compressed scan to tuple

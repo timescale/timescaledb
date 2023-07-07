@@ -57,8 +57,9 @@ static CustomExecMethods decompress_chunk_state_methods = {
  * binary heap used for sorted merge append.
  */
 static void
-build_batch_sorted_merge_info(DecompressChunkState *chunk_state, List *sortinfo)
+build_batch_sorted_merge_info(DecompressChunkState *chunk_state)
 {
+	List *sortinfo = chunk_state->sortinfo;
 	if (sortinfo == NIL)
 	{
 		chunk_state->n_sortkeys = 0;
@@ -83,6 +84,11 @@ build_batch_sorted_merge_info(DecompressChunkState *chunk_state, List *sortinfo)
 	/* Inspired by nodeMergeAppend.c */
 	for (int i = 0; i < chunk_state->n_sortkeys; i++)
 	{
+//		int targetlist_index = AttrNumberGetAttrOffset(list_nth_oid(sort_col_idx, i));
+//		TargetEntry *entry = list_nth(chunk_state->csstate.ss.ps.plan->targetlist, targetlist_index);
+//		Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used as sort key for compressed batch sorted merge");
+//		Var *var = castNode(Var, entry->expr);
+
 		SortSupportData *sortKey = &sortkeys[i];
 
 		sortKey->ssup_cxt = CurrentMemoryContext;
@@ -120,7 +126,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->decompression_map = lsecond(cscan->custom_private);
 	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
 	chunk_state->bulk_decompression_column = lfourth(cscan->custom_private);
-	List *sortinfo = lfifth(cscan->custom_private);
+	chunk_state->sortinfo = lfifth(cscan->custom_private);
 
 	Assert(IsA(settings, IntList));
 	Assert(list_length(settings) == 5);
@@ -129,12 +135,6 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->reverse = lthird_int(settings);
 	chunk_state->sorted_merge_append = lfourth_int(settings);
 	chunk_state->enable_bulk_decompression = lfifth_int(settings);
-
-	/* Extract sort info */
-	build_batch_sorted_merge_info(chunk_state, sortinfo);
-	/* Sort keys should only be present when sorted_merge_append is used */
-	Assert(chunk_state->sorted_merge_append == true || chunk_state->n_sortkeys == 0);
-	Assert(chunk_state->n_sortkeys == 0 || chunk_state->sortkeys != NULL);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
@@ -220,12 +220,6 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 	if (batch_state->compressed_slot != NULL)
 		ExecClearTuple(batch_state->compressed_slot);
 
-	if (batch_state->decompressed_slot_projected != NULL)
-		ExecClearTuple(batch_state->decompressed_slot_projected);
-
-	if (batch_state->decompressed_slot_scan != NULL)
-		ExecClearTuple(batch_state->decompressed_slot_scan);
-
 	MemoryContextReset(batch_state->per_batch_context);
 
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
@@ -277,7 +271,6 @@ decompress_initialize_batch_state(DecompressChunkState *chunk_state,
 	batch_state->initialized = false;
 
 	/* The slots will be created on first usage of the batch state */
-	batch_state->decompressed_slot_projected = NULL;
 	batch_state->decompressed_slot_scan = NULL;
 	batch_state->compressed_slot = NULL;
 	batch_state->vector_qual_result = NULL;
@@ -382,6 +375,15 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
+	/* Extract sort info */
+	build_batch_sorted_merge_info(chunk_state);
+	/* Sort keys should only be present when sorted_merge_append is used */
+	Assert(chunk_state->sorted_merge_append == true || chunk_state->n_sortkeys == 0);
+	Assert(chunk_state->n_sortkeys == 0 || chunk_state->sortkeys != NULL);
+
+	/*
+	 * Init the underlying compressed scan.
+	 */
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 
 	/*
@@ -762,35 +764,6 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 	 * column) and these attributes need to be set to null. */
 	ExecStoreAllNullTuple(batch_state->decompressed_slot_scan);
 
-	if (batch_state->decompressed_slot_projected == NULL)
-	{
-		if (chunk_state->csstate.ss.ps.ps_ProjInfo != NULL)
-		{
-			TupleTableSlot *slot = chunk_state->csstate.ss.ps.ps_ProjInfo->pi_state.resultslot;
-
-			/* Create a non ref-counted copy of the tuple descriptor */
-			if (chunk_state->decompressed_slot_projected_tdesc == NULL)
-				chunk_state->decompressed_slot_projected_tdesc =
-					CreateTupleDescCopyConstr(slot->tts_tupleDescriptor);
-			Assert(chunk_state->decompressed_slot_projected_tdesc->tdrefcount == -1);
-
-			batch_state->decompressed_slot_projected =
-				MakeSingleTupleTableSlot(chunk_state->decompressed_slot_projected_tdesc,
-										 slot->tts_ops);
-		}
-		else
-		{
-			/* If we don't have any projection info, set decompressed_slot_scan to
-			 * decompressed_slot_projected. So, we don't need to copy the content after the
-			 * scan to the output slot in decompress_chunk_perform_select_project() */
-			batch_state->decompressed_slot_projected = batch_state->decompressed_slot_scan;
-		}
-	}
-	else
-	{
-		ExecClearTuple(batch_state->decompressed_slot_projected);
-	}
-
 	Assert(!TTS_EMPTY(batch_state->compressed_slot));
 
 	batch_state->total_batch_rows = 0;
@@ -959,9 +932,8 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 
 /* Perform the projection and selection of the decompressed tuple */
 static bool pg_nodiscard
-decompress_chunk_perform_select_project(CustomScanState *node,
-										TupleTableSlot *decompressed_slot_scan,
-										TupleTableSlot *decompressed_slot_projected)
+decompress_chunk_perform_select(CustomScanState *node,
+										TupleTableSlot *decompressed_slot_scan)
 {
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 
@@ -981,12 +953,6 @@ decompress_chunk_perform_select_project(CustomScanState *node,
 		return false;
 	}
 
-	if (node->ss.ps.ps_ProjInfo)
-	{
-		TupleTableSlot *projected = ExecProject(node->ss.ps.ps_ProjInfo);
-		ExecCopySlot(decompressed_slot_projected, projected);
-	}
-
 	return true;
 }
 
@@ -1002,6 +968,7 @@ decompress_chunk_exec(CustomScanState *node)
 	 * query order_by do match. Therefore, we use a binary heap to decompress the compressed
 	 * segments and merge the tuples.
 	 */
+	TupleTableSlot *result_slot;
 	if (chunk_state->sorted_merge_append)
 	{
 		/* Create the heap on the first call. */
@@ -1020,7 +987,7 @@ decompress_chunk_exec(CustomScanState *node)
 			decompress_sorted_merge_remove_top_tuple_and_decompress_next(chunk_state);
 		}
 
-		return decompress_sorted_merge_get_next_tuple(chunk_state);
+		result_slot = decompress_sorted_merge_get_next_tuple(chunk_state);
 	}
 	else
 	{
@@ -1030,8 +997,22 @@ decompress_chunk_exec(CustomScanState *node)
 		DecompressBatchState *batch_state = get_batch_state(chunk_state, 0);
 		decompress_chunk_create_tuple(chunk_state, batch_state);
 
-		return batch_state->decompressed_slot_projected;
+		result_slot = batch_state->decompressed_slot_scan;
 	}
+
+	if (TupIsNull(result_slot))
+	{
+		return NULL;
+	}
+
+	if (node->ss.ps.ps_ProjInfo)
+	{
+		ExprContext *econtext = node->ss.ps.ps_ExprContext;
+		econtext->ecxt_scantuple = result_slot;
+		return ExecProject(node->ss.ps.ps_ProjInfo);
+	}
+
+	return result_slot;
 }
 
 static void
@@ -1079,12 +1060,6 @@ decompress_chunk_end(CustomScanState *node)
 		if (batch_state->decompressed_slot_scan != NULL)
 			ExecDropSingleTupleTableSlot(batch_state->decompressed_slot_scan);
 
-		/* If we dont have any projection info decompressed_slot_scan and
-		 * decompressed_slot_projected can be equal */
-		if (batch_state->decompressed_slot_projected != NULL &&
-			batch_state->decompressed_slot_scan != batch_state->decompressed_slot_projected)
-			ExecDropSingleTupleTableSlot(batch_state->decompressed_slot_projected);
-
 		batch_state = NULL;
 	}
 
@@ -1130,7 +1105,7 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 
 /*
  * Decompress the next tuple from the batch indicated by batch state. The result is stored
- * in batch_state->decompressed_slot_projected. The slot will be empty if the batch
+ * in batch_state->decompressed_slot_scan. The slot will be empty if the batch
  * is entirely processed.
  */
 bool
@@ -1139,10 +1114,8 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 {
 	bool first_tuple_returned = true;
 	TupleTableSlot *decompressed_slot_scan = batch_state->decompressed_slot_scan;
-	TupleTableSlot *decompressed_slot_projected = batch_state->decompressed_slot_projected;
 
 	Assert(decompressed_slot_scan != NULL);
-	Assert(decompressed_slot_projected != NULL);
 
 	const int num_compressed_columns = chunk_state->num_compressed_columns;
 	const bool reverse = chunk_state->reverse;
@@ -1171,7 +1144,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			}
 
 			/* Clear old slot state */
-			ExecClearTuple(decompressed_slot_projected);
+			ExecClearTuple(decompressed_slot_scan);
 
 			return first_tuple_returned;
 		}
@@ -1275,14 +1248,13 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 		}
 
 		/* Perform selection and projection if needed */
-		bool is_valid_tuple = decompress_chunk_perform_select_project(&chunk_state->csstate,
-																	  decompressed_slot_scan,
-																	  decompressed_slot_projected);
+		bool is_valid_tuple = decompress_chunk_perform_select(&chunk_state->csstate,
+																	  decompressed_slot_scan);
 
 		/* Non empty result, return it */
 		if (is_valid_tuple)
 		{
-			Assert(!TTS_EMPTY(decompressed_slot_projected));
+			Assert(!TTS_EMPTY(decompressed_slot_scan));
 			return first_tuple_returned;
 		}
 
@@ -1306,7 +1278,7 @@ decompress_chunk_create_tuple(DecompressChunkState *chunk_state, DecompressBatch
 
 			if (TupIsNull(subslot))
 			{
-				Assert(TupIsNull(batch_state->decompressed_slot_projected));
+				Assert(TupIsNull(batch_state->decompressed_slot_scan));
 				return;
 			}
 
@@ -1316,7 +1288,7 @@ decompress_chunk_create_tuple(DecompressChunkState *chunk_state, DecompressBatch
 		/* Decompress next tuple from batch */
 		decompress_get_next_tuple_from_batch(chunk_state, batch_state);
 
-		if (!TupIsNull(batch_state->decompressed_slot_projected))
+		if (!TupIsNull(batch_state->decompressed_slot_scan))
 			return;
 
 		batch_state->initialized = false;
