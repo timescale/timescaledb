@@ -4,18 +4,18 @@ set(TEST_FILES_SHARED
     constify_timestamptz_op_interval.sql
     constraint_aware_append.sql
     constraint_exclusion_prepared.sql
+    decompress_join.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
     dist_distinct_pushdown.sql
     dist_gapfill.sql
     dist_insert.sql
     extension.sql
+    gapfill.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
-    decompress_join.sql.in
     dist_fetcher_type.sql.in
-    gapfill.sql.in
     generated_columns.sql.in
     ordered_append.sql.in
     ordered_append_join.sql.in
