@@ -23,7 +23,6 @@
 
 #define PG_MAJOR_MIN 13
 
-#define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 #define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
 #define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
 #define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
@@ -37,7 +36,6 @@
 	(is_supported_pg_version_13(version) || is_supported_pg_version_14(version) ||                 \
 	 is_supported_pg_version_15(version) || is_supported_pg_version_16(version))
 
-#define PG12 is_supported_pg_version_12(PG_VERSION_NUM)
 #define PG13 is_supported_pg_version_13(PG_VERSION_NUM)
 #define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
@@ -76,10 +74,7 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
-#if PG12
-#define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
-	ExecComputeStoredGenerated(estate, slot)
-#elif PG13
+#if PG13
 #define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
 	ExecComputeStoredGenerated(estate, slot, cmd_type)
 #else
@@ -108,25 +103,19 @@
 #endif
 
 /* PG14 fixes a bug in miscomputation of relids set in pull_varnos. The bugfix
- * got backported to PG12 and PG13 but changes the signature of pull_varnos,
+ * got backported to PG13 but changes the signature of pull_varnos,
  * make_simple_restrictinfo and make_restrictinfo. To not break existing code
- * the modified functions get added under different name in PG12 and PG13.
- * We add a compatibility macro that uses the modified functions when compiling
- * against a postgres version that has them available.
+ * the modified functions get added under different name in PG13. We add a
+ * compatibility macro that uses the modified functions when compiling against
+ * a postgres version that has them available.
  * PG14 also adds PlannerInfo as argument to make_restrictinfo,
  * make_simple_restrictinfo and pull_varnos.
  *
- * https://github.com/postgres/postgres/commit/1cce024fd2
  * https://github.com/postgres/postgres/commit/73fc2e5bab
  * https://github.com/postgres/postgres/commit/55dc86eca7
  */
 
-#if (PG12 && PG_VERSION_NUM < 120006) || (PG13 && PG_VERSION_NUM < 130002)
-#define pull_varnos_compat(root, expr) pull_varnos(expr)
-#define make_simple_restrictinfo_compat(root, expr) make_simple_restrictinfo(expr)
-#define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
-	make_restrictinfo(a, b, c, d, e, f, g, h)
-#elif PG14_LT
+#if PG14_LT
 #define pull_varnos_compat(root, expr) pull_varnos_new(root, expr)
 #define make_simple_restrictinfo_compat(root, expr)                                                \
 	make_restrictinfo_new(root, expr, true, false, false, 0, NULL, NULL, NULL)
@@ -194,10 +183,9 @@
 static inline int
 get_vacuum_options(const VacuumStmt *stmt)
 {
-	/* In PG12, the vacuum options is a list of DefElems and require
-	 * parsing. Here we only parse the options we might be interested in since
-	 * PostgreSQL itself will parse the options fully when it executes the
-	 * vacuum. */
+	/* The vacuum options is a list of DefElems and require parsing. Here
+	 * we only parse the options we might be interested in since PostgreSQL
+	 * itself will parse the options fully when it executes the vacuum. */
 	ListCell *lc;
 	bool analyze = false;
 	bool verbose = false;
@@ -380,13 +368,6 @@ get_reindex_options(ReindexStmt *stmt)
 	map_variable_attnos((node), (varno), (sublevels_up), (map), (rowtype), (found_wholerow))
 #endif
 
-/* PG13 removes msg parameter from convert_tuples_by_name */
-#if PG12
-#define convert_tuples_by_name_compat(in, out, msg) convert_tuples_by_name(in, out, msg)
-#else
-#define convert_tuples_by_name_compat(in, out, msg) convert_tuples_by_name(in, out)
-#endif
-
 /* PG14 adds estinfo parameter to estimate_num_groups for additional context
  * about the estimation
  * https://github.com/postgres/postgres/commit/ed934d4fa3
@@ -483,24 +464,12 @@ get_reindex_options(ReindexStmt *stmt)
 #endif
 
 /* find_em_expr_for_rel was in postgres_fdw in PG12 but got
- * moved out of contrib in PG13. So we map to our own function
- * for PG12 only and use postgres implementation when it is
- * available. PG15 removed the function again from postgres
- * core code so for PG15+ we fall back to our own implementation.
+ * moved out of contrib and into core in PG13. PG15 removed
+ * the function again from postgres core code so for PG15+
+ * we fall back to our own implementation.
  */
-#if PG12 || PG15_GE
+#if PG15_GE
 #define find_em_expr_for_rel ts_find_em_expr_for_rel
-#endif
-
-/* PG13 added macros for typalign and typstorage constants
- *
- * https://github.com/postgres/postgres/commit/3ed2005ff59
- */
-#if PG12
-#define TYPALIGN_CHAR 'c'	/* char alignment (i.e. unaligned) */
-#define TYPALIGN_SHORT 's'	/* short alignment (typically 2 bytes) */
-#define TYPALIGN_INT 'i'	/* int alignment (typically 4 bytes) */
-#define TYPALIGN_DOUBLE 'd' /* double alignment (often 8 bytes) */
 #endif
 
 /*
@@ -762,8 +731,7 @@ pg_strtoint64(const char *str)
 						 is_crosspart_update)
 #endif
 
-#if (PG12 && PG_VERSION_NUM < 120014) || (PG13 && PG_VERSION_NUM < 130010) ||                      \
-	(PG14 && PG_VERSION_NUM < 140007)
+#if (PG13 && PG_VERSION_NUM < 130010) || (PG14 && PG_VERSION_NUM < 140007)
 #include <storage/smgr.h>
 /*
  * RelationGetSmgr

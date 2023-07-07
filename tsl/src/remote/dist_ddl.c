@@ -850,11 +850,7 @@ dist_ddl_process_create_trigger(const ProcessUtilityArgs *args)
 
 	if (stmt->funcname != NIL)
 	{
-		Oid funcargtypes[1];
-		Oid funcid = LookupFuncName(stmt->funcname,
-									0 /* nargs */,
-									funcargtypes /* passing NULL is not allowed in PG12 */,
-									false /* missing ok */);
+		Oid funcid = LookupFuncName(stmt->funcname, 0 /* nargs */, NULL, false /* missing ok */);
 		Datum datum;
 
 		Assert(OidIsValid(funcid));

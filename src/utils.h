@@ -116,7 +116,7 @@ extern TSDLLEXPORT void *ts_create_struct_from_slot(TupleTableSlot *slot, Memory
 extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti,
 													   bool missing_ok);
 
-#if PG12 || PG15_GE
+#if PG15_GE
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 #endif
 

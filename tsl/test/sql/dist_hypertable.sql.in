@@ -1393,9 +1393,6 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     ORDER BY relname;
 $$);
 
--- WITH OIDS and WITHOUT OIDS are tested in a separate test since those
--- options were dropped in PG12
-
 DROP TABLE disttable_with_relopts_1;
 DROP TABLE disttable_with_relopts_2;
 DROP TABLE disttable_with_relopts_3;

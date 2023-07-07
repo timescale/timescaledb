@@ -1120,7 +1120,7 @@ remote_connection_exec_timeout(TSConnection *conn, const char *cmd, TimestampTz 
 			/*
 			 * Read all results, but return only one in order to recreate the
 			 * behavior of the blocking PQexec() call. We need to handle
-			 * PG12,13 differently to be compatible across all versions of
+			 * PG13 differently to be compatible across all versions of
 			 * PostgreSQL. In libpq's PQexec() errors from all the results are
 			 * concactinated, but that is not possible here due to lack of
 			 * access to internals. PG14 handles that automatically, however.

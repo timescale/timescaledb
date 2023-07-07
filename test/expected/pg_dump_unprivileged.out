@@ -9,7 +9,6 @@ CREATE USER dump_unprivileged CREATEDB;
 \c template1 dump_unprivileged
 CREATE database dump_unprivileged;
 \! utils/pg_dump_unprivileged.sh
-Database dumped successfully
 \c template1 :ROLE_SUPERUSER
 DROP EXTENSION timescaledb;
 DROP DATABASE dump_unprivileged;

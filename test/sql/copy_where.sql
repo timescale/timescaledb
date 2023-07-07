@@ -2,8 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- This file contains tests for functionality introduced in PG12
-
 ------- TEST 1: Restrictive copy from file
 CREATE TABLE "copy_golden" (
     "time" bigint NOT NULL,

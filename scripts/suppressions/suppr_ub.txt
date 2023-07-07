@@ -18,10 +18,6 @@ nonnull-attribute:_copyAppendRelInfo
 #PG13.3-copyfuncs.c:1190:2: runtime error: null pointer passed as argument 2, which is declared to never be null
 nonnull-attribute:_copyLimit
 nonnull-attribute:*/src/backend/nodes/copyfuncs.c
-#PG12.7-relcache.c:5960:6: runtime error: null pointer passed as argument 1, which is declared to never be null
-#in write_item postgresql-12.6/src/backend/utils/cache/relcache.c:5960
-#looks like a real postgresql bug
-nonnull-attribute:write_item
 #division by 0, looks like a real postgres ug
 float-divide-by-zero:_bt_vacuum_needs_cleanup
 

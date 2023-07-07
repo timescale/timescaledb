@@ -1494,7 +1494,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	ts_add_append_rel_infos(root, appinfos);
 
-	/* In pg12 postgres will not set up the child rels for use, due to the games
+	/* PostgreSQL will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
@@ -1617,7 +1617,7 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 														NULL);
 				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
 				/*
-				 * since hypertable expansion happens later in PG12 the propagated
+				 * since hypertable expansion happens later, the propagated
 				 * constraints will not be pushed down to the actual scans but stay
 				 * as join filter. So we add them either as join filter or to
 				 * baserestrictinfo depending on whether they reference only
