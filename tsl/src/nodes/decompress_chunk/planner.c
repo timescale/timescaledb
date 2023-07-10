@@ -733,9 +733,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		//			sort_col_idx = lappend_oid(sort_col_idx, sortColIdx[i]);
 		//			/*
 		//			TargetEntry *entry = list_nth(decompress_plan->scan.plan.targetlist,
-		//sortColIdx[i]); 			Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used as
-		//sort key for compressed batch sorted merge"); 			Var *var = castNode(Var, entry->expr);
-		//			sort_col_idx = lappend_oid(sort_col_idx, AttrNumberGetAttrOffset, );
+		// sortColIdx[i]); 			Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry
+		// used as sort key for compressed batch sorted merge"); 			Var *var = castNode(Var,
+		// entry->expr); 			sort_col_idx = lappend_oid(sort_col_idx, AttrNumberGetAttrOffset, );
 		//			*/
 		//		}
 

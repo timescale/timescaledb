@@ -86,8 +86,9 @@ build_batch_sorted_merge_info(DecompressChunkState *chunk_state)
 	{
 		//		int targetlist_index = AttrNumberGetAttrOffset(list_nth_oid(sort_col_idx, i));
 		//		TargetEntry *entry = list_nth(chunk_state->csstate.ss.ps.plan->targetlist,
-		//targetlist_index); 		Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used
-		//as sort key for compressed batch sorted merge"); 		Var *var = castNode(Var, entry->expr);
+		// targetlist_index); 		Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry
+		// used as sort key for compressed batch sorted merge"); 		Var *var = castNode(Var,
+		// entry->expr);
 
 		SortSupportData *sortKey = &sortkeys[i];
 
