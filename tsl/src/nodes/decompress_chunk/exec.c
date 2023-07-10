@@ -220,6 +220,9 @@ decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batc
 	if (batch_state->compressed_slot != NULL)
 		ExecClearTuple(batch_state->compressed_slot);
 
+	if (batch_state->decompressed_slot_scan != NULL)
+		ExecClearTuple(batch_state->decompressed_slot_scan);
+
 	MemoryContextReset(batch_state->per_batch_context);
 
 	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
@@ -754,15 +757,12 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 		batch_state->decompressed_slot_scan =
 			MakeSingleTupleTableSlot(chunk_state->decompressed_slot_scan_tdesc, slot->tts_ops);
 	}
-	else
-	{
-		ExecClearTuple(batch_state->decompressed_slot_scan);
-	}
 
 	/* Ensure that all fields are empty. Calling ExecClearTuple is not enough
 	 * because some attributes might not be populated (e.g., due to a dropped
 	 * column) and these attributes need to be set to null. */
 	ExecStoreAllNullTuple(batch_state->decompressed_slot_scan);
+	ExecClearTuple(batch_state->decompressed_slot_scan);
 
 	Assert(!TTS_EMPTY(batch_state->compressed_slot));
 
@@ -1291,6 +1291,6 @@ decompress_chunk_create_tuple(DecompressChunkState *chunk_state, DecompressBatch
 		if (!TupIsNull(batch_state->decompressed_slot_scan))
 			return;
 
-		batch_state->initialized = false;
+		Assert(!batch_state->initialized);
 	}
 }
