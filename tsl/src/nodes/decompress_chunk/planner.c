@@ -663,7 +663,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		foreach (lc, dcpath->custom_path.path.pathkeys)
 		{
 			PathKey *pk = lfirst(lc);
-			my_print(pk);
+			//my_print(pk);
 
 			EquivalenceClass *ec = pk->pk_eclass;
 
