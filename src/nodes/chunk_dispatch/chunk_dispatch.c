@@ -611,21 +611,22 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 	}
 	clock_t diff = clock() - _curr_entry.enter_time;
 	const char *name = name_of(this_fn);
-	if (false)
+	if (true)
 	{
 		elog(NOTICE, "FLAMEGRAPH: %d %s@%p %ld", _depth, name, this_fn, diff);
 	}
 	else
 	{
-		FILE *fptr;
-		fptr = fopen("/tmp/flame_out", "a");
+		// FILE *fptr;
+		// fptr = fopen("/tmp/flame_out", "a");
 
-		if (fptr == NULL)
-		{
-			return;
-		}
-		fprintf(fptr, "%d %s@%p %ld\n", _depth, name, this_fn, diff);
-		fclose(fptr);
+		// if (fptr == NULL)
+		// {
+		// 	return;
+		// }
+		// char str[1000];
+		// sprintf(str, "%d %s@%p %ld\n", _depth, name, this_fn, diff);
+		// fclose(fptr);
 	}
 }
 #undef _depth
