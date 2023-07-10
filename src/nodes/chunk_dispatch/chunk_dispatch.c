@@ -531,7 +531,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 
 
 #include <time.h>
-// #include <dlfcn.h>
+#include <utils/memutils.h>
 
 typedef struct ProfileEntry
 {
@@ -591,6 +591,7 @@ const char*  __attribute__((no_instrument_function))  name_of(void *fn) {
 	return "(unknown)";
 }
 
+
 void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_fn, void *call_site)
 {
 	if (!_active)
@@ -609,9 +610,23 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 		return;
 	}
 	clock_t diff = clock() - _curr_entry.enter_time;
-	const char*name=name_of(this_fn);
-	elog(NOTICE,"%p",name);
-	elog(NOTICE, "%d %s	%p %ld",_depth,name,this_fn,diff);
+	const char *name = name_of(this_fn);
+	if (false)
+	{
+		elog(NOTICE, "FLAMEGRAPH: %d %s@%p %ld", _depth, name, this_fn, diff);
+	}
+	else
+	{
+		FILE *fptr;
+		fptr = fopen("/tmp/flame_out", "a");
+
+		if (fptr == NULL)
+		{
+			return;
+		}
+		fprintf(fptr, "%d %s@%p %ld\n", _depth, name, this_fn, diff);
+		fclose(fptr);
+	}
 }
 #undef _depth
 #undef _active
