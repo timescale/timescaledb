@@ -85,8 +85,8 @@ typedef struct CompressedColumnValues
 typedef struct DecompressBatchState
 {
 	bool initialized;
-	TupleTableSlot *decompressed_slot_scan;		 /* A slot for the decompressed data */
-	TupleTableSlot *compressed_slot;			 /* A slot for compressed data */
+	TupleTableSlot *decompressed_slot_scan; /* A slot for the decompressed data */
+	TupleTableSlot *compressed_slot;		/* A slot for compressed data */
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;

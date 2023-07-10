@@ -613,41 +613,41 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		 * For the heap we need a compare function that determines the heap order. This
 		 * function is constructed here.
 		 */
-//		AttrNumber *sortColIdx = NULL;
-//		Oid *sortOperators = NULL;
-//		Oid *collations = NULL;
-//		bool *nullsFirst = NULL;
+		//		AttrNumber *sortColIdx = NULL;
+		//		Oid *sortOperators = NULL;
+		//		Oid *collations = NULL;
+		//		bool *nullsFirst = NULL;
 
 		/* We need a targetlist at this point to build the sort info below. If the target list is
 		 * not populated by PostgreSQL already, populate it here.
 		 */
-//		fprintf(stderr, "original targetlist:\n");
-//		if (decompress_plan->scan.plan.targetlist == NIL)
-//		{
-//			decompress_plan->scan.plan.targetlist = ts_build_path_tlist(root, &dcpath->custom_path.path);
-//			fprintf(stderr, "built\n");
-//		}
-//		my_print(decompress_plan->scan.plan.targetlist);
-//
-//		Assert(decompress_plan->scan.plan.targetlist != NIL);
-//		Assert(dcpath->custom_path.path.pathkeys != NIL);
-//
-////		decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
-////		fprintf(stderr, "custom!\n");
-////		my_print(decompress_plan->custom_scan_tlist);
+		//		fprintf(stderr, "original targetlist:\n");
+		//		if (decompress_plan->scan.plan.targetlist == NIL)
+		//		{
+		//			decompress_plan->scan.plan.targetlist = ts_build_path_tlist(root,
+		//&dcpath->custom_path.path); 			fprintf(stderr, "built\n");
+		//		}
+		//		my_print(decompress_plan->scan.plan.targetlist);
+		//
+		//		Assert(decompress_plan->scan.plan.targetlist != NIL);
+		//		Assert(dcpath->custom_path.path.pathkeys != NIL);
+		//
+		////		decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
+		////		fprintf(stderr, "custom!\n");
+		////		my_print(decompress_plan->custom_scan_tlist);
 
 		int numsortkeys = list_length(dcpath->custom_path.path.pathkeys);
 
-//		ts_prepare_sort_from_pathkeys(&decompress_plan->scan.plan,
-//									  dcpath->custom_path.path.pathkeys,
-//									  bms_make_singleton(dcpath->info->chunk_rel->relid),
-//									  NULL,
-//									  false,
-//									  &numsortkeys,
-//									  &sortColIdx,
-//									  &sortOperators,
-//									  &collations,
-//									  &nullsFirst);
+		//		ts_prepare_sort_from_pathkeys(&decompress_plan->scan.plan,
+		//									  dcpath->custom_path.path.pathkeys,
+		//									  bms_make_singleton(dcpath->info->chunk_rel->relid),
+		//									  NULL,
+		//									  false,
+		//									  &numsortkeys,
+		//									  &sortColIdx,
+		//									  &sortOperators,
+		//									  &collations,
+		//									  &nullsFirst);
 
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
@@ -663,12 +663,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		foreach (lc, dcpath->custom_path.path.pathkeys)
 		{
 			PathKey *pk = lfirst(lc);
-			//my_print(pk);
+			// my_print(pk);
 
 			EquivalenceClass *ec = pk->pk_eclass;
 
 			ListCell *membercell = NULL;
-			foreach(membercell, ec->ec_members)
+			foreach (membercell, ec->ec_members)
 			{
 				EquivalenceMember *em = lfirst(membercell);
 
@@ -688,7 +688,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 					continue;
 				}
 
-				Ensure(IsA(em->em_expr, Var), "non-Var pathkey not expected for compressed batch sorted mege");
+				Ensure(IsA(em->em_expr, Var),
+					   "non-Var pathkey not expected for compressed batch sorted mege");
 
 				Var *var = castNode(Var, em->em_expr);
 				Assert((Index) var->varno == em_relid);
@@ -698,9 +699,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				 * abstracted representation.
 				 */
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
-											 var->vartype,
-											 var->vartype,
-											 pk->pk_strategy);
+												 var->vartype,
+												 var->vartype,
+												 pk->pk_strategy);
 				if (!OidIsValid(sortop)) /* should not happen */
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
@@ -708,7 +709,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 						 var->vartype,
 						 var->vartype,
 						 pk->pk_opfamily);
-
 
 				sort_col_idx = lappend_oid(sort_col_idx, var->varattno);
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
@@ -718,25 +718,26 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				break;
 			}
 
-			Ensure(membercell != NULL, "could not find matching decompressed chunk column for batch sorted merge pathkey");
+			Ensure(membercell != NULL,
+				   "could not find matching decompressed chunk column for batch sorted merge "
+				   "pathkey");
 		}
 
-
-//		/* Since we have to keep the sort info in custom_private, we store the information
-//		 * in copyable lists */
-//		for (int i = 0; i < numsortkeys; i++)
-//		{
-//			sort_ops = lappend_oid(sort_ops, sortOperators[i]);
-//			sort_collations = lappend_oid(sort_collations, collations[i]);
-//			sort_nulls = lappend_oid(sort_nulls, nullsFirst[i]);
-//			sort_col_idx = lappend_oid(sort_col_idx, sortColIdx[i]);
-//			/*
-//			TargetEntry *entry = list_nth(decompress_plan->scan.plan.targetlist, sortColIdx[i]);
-//			Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used as sort key for compressed batch sorted merge");
-//			Var *var = castNode(Var, entry->expr);
-//			sort_col_idx = lappend_oid(sort_col_idx, AttrNumberGetAttrOffset, );
-//			*/
-//		}
+		//		/* Since we have to keep the sort info in custom_private, we store the information
+		//		 * in copyable lists */
+		//		for (int i = 0; i < numsortkeys; i++)
+		//		{
+		//			sort_ops = lappend_oid(sort_ops, sortOperators[i]);
+		//			sort_collations = lappend_oid(sort_collations, collations[i]);
+		//			sort_nulls = lappend_oid(sort_nulls, nullsFirst[i]);
+		//			sort_col_idx = lappend_oid(sort_col_idx, sortColIdx[i]);
+		//			/*
+		//			TargetEntry *entry = list_nth(decompress_plan->scan.plan.targetlist,
+		//sortColIdx[i]); 			Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used as
+		//sort key for compressed batch sorted merge"); 			Var *var = castNode(Var, entry->expr);
+		//			sort_col_idx = lappend_oid(sort_col_idx, AttrNumberGetAttrOffset, );
+		//			*/
+		//		}
 
 		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
 
@@ -752,11 +753,14 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		{
 			Oid opfamily, opcintype;
 			int16 strategy;
-			//AttrNumber sortcolattno = list_nth_oid(sort_col_idx, i);
+			// AttrNumber sortcolattno = list_nth_oid(sort_col_idx, i);
 			Oid sortop = list_nth_oid(sort_ops, i);
 
 			/* Find the operator in pg_amop --- failure shouldn't happen */
-			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i), &opfamily, &opcintype, &strategy))
+			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
+											&opfamily,
+											&opcintype,
+											&strategy))
 				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
 
 			/*

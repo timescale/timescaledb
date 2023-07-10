@@ -84,10 +84,10 @@ build_batch_sorted_merge_info(DecompressChunkState *chunk_state)
 	/* Inspired by nodeMergeAppend.c */
 	for (int i = 0; i < chunk_state->n_sortkeys; i++)
 	{
-//		int targetlist_index = AttrNumberGetAttrOffset(list_nth_oid(sort_col_idx, i));
-//		TargetEntry *entry = list_nth(chunk_state->csstate.ss.ps.plan->targetlist, targetlist_index);
-//		Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used as sort key for compressed batch sorted merge");
-//		Var *var = castNode(Var, entry->expr);
+		//		int targetlist_index = AttrNumberGetAttrOffset(list_nth_oid(sort_col_idx, i));
+		//		TargetEntry *entry = list_nth(chunk_state->csstate.ss.ps.plan->targetlist,
+		//targetlist_index); 		Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist entry used
+		//as sort key for compressed batch sorted merge"); 		Var *var = castNode(Var, entry->expr);
 
 		SortSupportData *sortKey = &sortkeys[i];
 
@@ -1156,8 +1156,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 
 			if (column_values.iterator != NULL)
 			{
-				DecompressResult result =
-					column_values.iterator->try_next(column_values.iterator);
+				DecompressResult result = column_values.iterator->try_next(column_values.iterator);
 
 				if (result.is_done)
 				{
