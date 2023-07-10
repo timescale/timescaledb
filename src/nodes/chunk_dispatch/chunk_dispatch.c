@@ -24,6 +24,7 @@
 #include "guc.h"
 #include "nodes/hypertable_modify.h"
 #include "ts_catalog/chunk_data_node.h"
+#include "ts_catalog/hypertable_compression.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
@@ -530,6 +531,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 
 
 #include <time.h>
+// #include <dlfcn.h>
 
 typedef struct ProfileEntry
 {
@@ -557,7 +559,7 @@ ProfileState profile_state = {
 void __attribute__((no_instrument_function))
 __cyg_profile_func_enter(void *this_fn, void *call_site)
 {
-	if (this_fn == &chunk_dispatch_exec)
+	if (!_active && this_fn == &chunk_dispatch_exec)
 	{
 		_active = 1;
 		_depth = 0;
@@ -576,22 +578,42 @@ __cyg_profile_func_enter(void *this_fn, void *call_site)
 	_depth++;
 }
 
+const char*  __attribute__((no_instrument_function))  name_of(void *fn) ;
+
+const char*  __attribute__((no_instrument_function))  name_of(void *fn) {
+	
+	// Dl_info info;
+	// dladdr(fn, &info);
+#define A(F) if(fn == &F) return #F;
+	A(chunk_dispatch_exec)
+	A(ts_hypertable_compression_get_by_pkey)
+#undef A
+	return "(unknown)";
+}
 
 void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_fn, void *call_site)
 {
 	if (!_active)
 		return;
 
-	--_depth;
-	if (_depth < 0 || _curr_entry.fn != this_fn)
+	while (--_depth>= 0 && _curr_entry.fn != this_fn)
 	{
+		elog(NOTICE, "fn ptr mismtach => throw away");
+	}
+	if(_depth == 0 ) {
+		_active=0;
+	}
+	if(_depth<0) {
 		_active = 0;
-		elog(NOTICE, "enter/exit mismatch => switching off");
+		elog(NOTICE, "no more functions => switching off");
 		return;
 	}
 	clock_t diff = clock() - _curr_entry.enter_time;
-	elog(NOTICE, "%p %ld",this_fn,diff);
+	const char*name=name_of(this_fn);
+	elog(NOTICE,"%p",name);
+	elog(NOTICE, "%d %s	%p %ld",_depth,name,this_fn,diff);
 }
 #undef _depth
+#undef _active
 #undef _curr_entry
 
