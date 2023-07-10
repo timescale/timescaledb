@@ -721,7 +721,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				batch_merge_path = copy_decompress_chunk_path((DecompressChunkPath *) path);
 
 				batch_merge_path->reverse = (merge_result != SCAN_FORWARD);
-				batch_merge_path->sorted_merge_append = true;
+				batch_merge_path->batch_sorted_merge = true;
 
 				/* The segment by optimization is only enabled if it can deliver the tuples in the
 				 * same order as the query requested it. So, we can just copy the pathkeys of the
@@ -1517,7 +1517,7 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &decompress_chunk_path_methods;
-	path->sorted_merge_append = false;
+	path->batch_sorted_merge = false;
 
 	/* To prevent a non-parallel path with this node appearing
 	 * in a parallel plan we only set parallel_safe to true

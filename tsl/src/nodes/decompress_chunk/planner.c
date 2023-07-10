@@ -606,48 +606,19 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/* Build heap sort info for sorted_merge_append */
 	List *sort_options = NIL;
 
-	if (dcpath->sorted_merge_append)
+	if (dcpath->batch_sorted_merge)
 	{
-		/* sorted_merge_append is used when the 'order by' of the query and the
-		 * 'order by' of the segments do match, we use a heap to merge the segments.
-		 * For the heap we need a compare function that determines the heap order. This
-		 * function is constructed here.
+		/*
+		 * 'order by' of the query and the 'order by' of the compressed  batches
+		 * match, so we will we use a heap to merge the batches. For the heap we
+		 * need a compare function that determines the heap order. This function
+		 * is constructed here.
+		 *
+		 * Batch sorted merge is done over the decompressed chunk scan tuple, so
+		 * we must match the pathkeys to the decompressed chunk tupdesc.
 		 */
-		//		AttrNumber *sortColIdx = NULL;
-		//		Oid *sortOperators = NULL;
-		//		Oid *collations = NULL;
-		//		bool *nullsFirst = NULL;
-
-		/* We need a targetlist at this point to build the sort info below. If the target list is
-		 * not populated by PostgreSQL already, populate it here.
-		 */
-		//		fprintf(stderr, "original targetlist:\n");
-		//		if (decompress_plan->scan.plan.targetlist == NIL)
-		//		{
-		//			decompress_plan->scan.plan.targetlist = ts_build_path_tlist(root,
-		//&dcpath->custom_path.path); 			fprintf(stderr, "built\n");
-		//		}
-		//		my_print(decompress_plan->scan.plan.targetlist);
-		//
-		//		Assert(decompress_plan->scan.plan.targetlist != NIL);
-		//		Assert(dcpath->custom_path.path.pathkeys != NIL);
-		//
-		////		decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
-		////		fprintf(stderr, "custom!\n");
-		////		my_print(decompress_plan->custom_scan_tlist);
 
 		int numsortkeys = list_length(dcpath->custom_path.path.pathkeys);
-
-		//		ts_prepare_sort_from_pathkeys(&decompress_plan->scan.plan,
-		//									  dcpath->custom_path.path.pathkeys,
-		//									  bms_make_singleton(dcpath->info->chunk_rel->relid),
-		//									  NULL,
-		//									  false,
-		//									  &numsortkeys,
-		//									  &sortColIdx,
-		//									  &sortOperators,
-		//									  &collations,
-		//									  &nullsFirst);
 
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
@@ -655,18 +626,16 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		List *sort_nulls = NIL;
 
 		/*
-		 * Batch sorted merge is done over the decompressed chunk scan tuple, so
-		 * we must match the pathkeys to the decompressed chunk tupdesc.
-		 * Not even match, we just literally take the attribute numbers.
 		 */
 		ListCell *lc;
 		foreach (lc, dcpath->custom_path.path.pathkeys)
 		{
 			PathKey *pk = lfirst(lc);
-			// my_print(pk);
-
 			EquivalenceClass *ec = pk->pk_eclass;
 
+			/*
+			 * Find the equivalence member that belongs to decompressed relation.
+			 */
 			ListCell *membercell = NULL;
 			foreach (membercell, ec->ec_members)
 			{
@@ -691,6 +660,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				Ensure(IsA(em->em_expr, Var),
 					   "non-Var pathkey not expected for compressed batch sorted mege");
 
+				/*
+				 * We found a Var equivalence member that belongs to the
+				 * decompressed relation. We can use its varattno directly for
+				 * the comparison operator, because it operates on the
+				 * decompressed scan tuple.
+				 */
 				Var *var = castNode(Var, em->em_expr);
 				Assert((Index) var->varno == em_relid);
 
@@ -723,41 +698,26 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				   "pathkey");
 		}
 
-		//		/* Since we have to keep the sort info in custom_private, we store the information
-		//		 * in copyable lists */
-		//		for (int i = 0; i < numsortkeys; i++)
-		//		{
-		//			sort_ops = lappend_oid(sort_ops, sortOperators[i]);
-		//			sort_collations = lappend_oid(sort_collations, collations[i]);
-		//			sort_nulls = lappend_oid(sort_nulls, nullsFirst[i]);
-		//			sort_col_idx = lappend_oid(sort_col_idx, sortColIdx[i]);
-		//			/*
-		//			TargetEntry *entry = list_nth(decompress_plan->scan.plan.targetlist,
-		// sortColIdx[i]); 			Ensure(IsA(entry->expr, Var), "unexpected non-var targetlist
-		// entry used as sort key for compressed batch sorted merge"); 			Var *var =
-		// castNode(Var, entry->expr); 			sort_col_idx = lappend_oid(sort_col_idx,
-		// AttrNumberGetAttrOffset, );
-		//			*/
-		//		}
-
 		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
 
-		/* Build a sort node for the compressed batches. The sort function is derived from the sort
-		 * function of the pathkeys, except that it refers to the min and max elements of the
-		 * batches. We have already verified that the pathkeys match the compression order_by, so
-		 * this mapping can be done here. */
+		/*
+		 * Build a sort node for the compressed batches. The sort function is
+		 * derived from the sort function of the pathkeys, except that it refers
+		 * to the min and max metadata columns of the batches. We have already
+		 * verified that the pathkeys match the compression order_by, so this
+		 * mapping is possible.
+		 */
 		AttrNumber *sortColIdx = palloc(sizeof(AttrNumber) * numsortkeys);
 		Oid *sortOperators = palloc(sizeof(Oid) * numsortkeys);
 		Oid *collations = palloc(sizeof(Oid) * numsortkeys);
 		bool *nullsFirst = palloc(sizeof(bool) * numsortkeys);
 		for (int i = 0; i < numsortkeys; i++)
 		{
-			Oid opfamily, opcintype;
-			int16 strategy;
-			// AttrNumber sortcolattno = list_nth_oid(sort_col_idx, i);
 			Oid sortop = list_nth_oid(sort_ops, i);
 
 			/* Find the operator in pg_amop --- failure shouldn't happen */
+			Oid opfamily, opcintype;
+			int16 strategy;
 			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
 											&opfamily,
 											&opcintype,
@@ -765,8 +725,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
 
 			/*
-			 * FIXME this way to determine the matching metadata column is very
-			 * very wrong.
+			 * This way to determine the matching metadata column works, because
+			 * we have already verified that the pathkeys match the compression
+			 * orderby.
 			 */
 			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
 			char *meta_col_name = strategy == BTLessStrategyNumber ?
@@ -779,8 +740,10 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 			if (attr_position == InvalidAttrNumber)
 				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
 
-			/* If the the target list is not based on the layout of the uncompressed chunk,
-			 * (see comment for physical_tlist above), adjust the position of the attribute.
+			/*
+			 * If the the compressed target list is not based on the layout of
+			 * the uncompressed chunk (see comment for physical_tlist above),
+			 * adjust the position of the attribute.
 			 */
 			if (target_list_compressed_is_physical)
 				sortColIdx[i] = attr_position;
@@ -824,7 +787,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
-	const bool enable_bulk_decompression = !dcpath->sorted_merge_append &&
+	const bool enable_bulk_decompression = !dcpath->batch_sorted_merge &&
 										   ts_guc_enable_bulk_decompression &&
 										   dcpath->have_bulk_decompression_columns;
 
@@ -840,7 +803,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	settings = list_make5_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
-							  dcpath->sorted_merge_append,
+							  dcpath->batch_sorted_merge,
 							  enable_bulk_decompression);
 
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
