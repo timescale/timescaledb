@@ -930,32 +930,6 @@ decompress_initialize_batch(DecompressChunkState *chunk_state, DecompressBatchSt
 	MemoryContextSwitchTo(old_context);
 }
 
-/* Perform the projection and selection of the decompressed tuple */
-static bool pg_nodiscard
-decompress_chunk_perform_select(CustomScanState *node,
-										TupleTableSlot *decompressed_slot_scan)
-{
-	ExprContext *econtext = node->ss.ps.ps_ExprContext;
-
-	/*
-	 * Reset expression memory context to clean out any cruft from
-	 * previous batch. Our batches are 1000 rows max, and this memory
-	 * context is used by ExecProject and ExecQual, which shouldn't
-	 * leak too much. So we only do this per batch and not per tuple to
-	 * save some CPU.
-	 */
-	econtext->ecxt_scantuple = decompressed_slot_scan;
-	ResetExprContext(econtext);
-
-	if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext))
-	{
-		InstrCountFiltered1(node, 1);
-		return false;
-	}
-
-	return true;
-}
-
 static TupleTableSlot *
 decompress_chunk_exec(CustomScanState *node)
 {
@@ -1178,35 +1152,35 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 
 		for (int i = 0; i < num_compressed_columns; i++)
 		{
-			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+			CompressedColumnValues column_values = batch_state->compressed_columns[i];
 
-			if (column_values->iterator != NULL)
+			if (column_values.iterator != NULL)
 			{
 				DecompressResult result =
-					column_values->iterator->try_next(column_values->iterator);
+					column_values.iterator->try_next(column_values.iterator);
 
 				if (result.is_done)
 				{
 					elog(ERROR, "compressed column out of sync with batch counter");
 				}
 
-				const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
+				const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
 				decompressed_slot_scan->tts_isnull[attr] = result.is_null;
 				decompressed_slot_scan->tts_values[attr] = result.val;
 			}
-			else if (column_values->arrow_values != NULL)
+			else if (column_values.arrow_values != NULL)
 			{
-				const char *src = column_values->arrow_values;
-				Assert(column_values->value_bytes > 0);
+				const char *restrict src = column_values.arrow_values;
+				Assert(column_values.value_bytes > 0);
 
 				/*
 				 * The conversion of Datum to more narrow types will truncate
 				 * the higher bytes, so we don't care if we read some garbage
-				 * into them. These are unaligned reads, so technically we have
-				 * to do memcpy.
+				 * into them, and can always read 8 bytes. These are unaligned
+				 * reads, so technically we have to do memcpy.
 				 */
 				uint64 value;
-				memcpy(&value, &src[column_values->value_bytes * arrow_row], 8);
+				memcpy(&value, &src[column_values.value_bytes * arrow_row], 8);
 
 #ifdef USE_FLOAT8_BYVAL
 				Datum datum = Int64GetDatum(value);
@@ -1216,7 +1190,7 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 				 * reference, so we have to jump through these hoops.
 				 */
 				Datum datum;
-				if (column_values->value_bytes <= 4)
+				if (column_values.value_bytes <= 4)
 				{
 					datum = Int32GetDatum((uint32) value);
 				}
@@ -1225,10 +1199,10 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 					datum = Int64GetDatum(value);
 				}
 #endif
-				const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
+				const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
 				decompressed_slot_scan->tts_values[attr] = datum;
 				decompressed_slot_scan->tts_isnull[attr] =
-					!arrow_row_is_valid(column_values->arrow_validity, arrow_row);
+					!arrow_row_is_valid(column_values.arrow_validity, arrow_row);
 			}
 		}
 
@@ -1247,19 +1221,28 @@ decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
 			ExecStoreVirtualTuple(decompressed_slot_scan);
 		}
 
-		/* Perform selection and projection if needed */
-		bool is_valid_tuple = decompress_chunk_perform_select(&chunk_state->csstate,
-																	  decompressed_slot_scan);
-
-		/* Non empty result, return it */
-		if (is_valid_tuple)
+		/* Perform the usual Postgres selection. */
+		bool qual_passed = true;
+		if (chunk_state->csstate.ss.ps.qual)
 		{
+			ExprContext *econtext = chunk_state->csstate.ss.ps.ps_ExprContext;
+			econtext->ecxt_scantuple = decompressed_slot_scan;
+			ResetExprContext(econtext);
+			qual_passed = ExecQual(chunk_state->csstate.ss.ps.qual, econtext);
+		}
+
+		if (qual_passed)
+		{
+			/* Non empty result, return it. */
 			Assert(!TTS_EMPTY(decompressed_slot_scan));
 			return first_tuple_returned;
 		}
+		else
+		{
+			InstrCountFiltered1(&chunk_state->csstate, 1);
+		}
 
 		first_tuple_returned = false;
-
 		/* Otherwise fetch the next tuple in the next iteration */
 	}
 }

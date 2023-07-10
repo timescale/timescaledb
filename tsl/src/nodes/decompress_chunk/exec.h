@@ -75,8 +75,8 @@ typedef struct CompressedColumnValues
 	/*
 	 * The following fields are copied here for better data locality.
 	 */
-	int value_bytes;
 	AttrNumber output_attno;
+	int8 value_bytes;
 } CompressedColumnValues;
 
 /*
