@@ -33,8 +33,8 @@
 /* int8... functions. */
 #define VECTOR_CTYPE int64
 #define CONST_CTYPE int64
-#define PG_PREDICATE(X) F_INT8##X: case F_TIMESTAMPTZ_##X: case F_TIMESTAMP_##X
 #define CONST_CONVERSION(X) DatumGetInt64(X)
+#define PG_PREDICATE(X) F_INT8##X: case F_TIMESTAMPTZ_##X: case F_TIMESTAMP_##X
 
 #include "vector_const_one_type.c"
 
@@ -65,7 +65,7 @@
 /* int48... functions. */
 #define VECTOR_CTYPE int32
 #define CONST_CTYPE int64
-#define CONST_CONVERSION(X) DatumGetInt32(X)
+#define CONST_CONVERSION(X) DatumGetInt64(X)
 #define PG_PREDICATE(X) F_INT48##X
 
 #include "vector_const_one_type.c"
