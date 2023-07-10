@@ -536,7 +536,8 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 typedef struct ProfileEntry
 {
 	void *fn;
-	clock_t enter_time;
+	struct timespec enter_time;
+	uint64_t	measured;
 } ProfileEntry;
 
 #define N_PROFILE_ENTRY 128
@@ -556,6 +557,7 @@ ProfileState profile_state = {
 #define _active profile_state.active
 #define _curr_entry profile_state.entry[_depth]
 
+
 void __attribute__((no_instrument_function))
 __cyg_profile_func_enter(void *this_fn, void *call_site)
 {
@@ -573,8 +575,9 @@ __cyg_profile_func_enter(void *this_fn, void *call_site)
 		return;
 	}
 	Ensure(_depth < N_PROFILE_ENTRY, "not enough profile slots");
-	_curr_entry.enter_time = clock();
+	clock_gettime(CLOCK_MONOTONIC, &_curr_entry.enter_time);
 	_curr_entry.fn = this_fn;
+	_curr_entry.measured = 0;
 	_depth++;
 }
 
@@ -591,11 +594,19 @@ const char*  __attribute__((no_instrument_function))  name_of(void *fn) {
 	return "(unknown)";
 }
 
+uint64_t  __attribute__((no_instrument_function))  time_diff(struct timespec st, struct timespec ed) ;
+uint64_t  __attribute__((no_instrument_function))  time_diff(struct timespec st, struct timespec ed) {
+    return (ed.tv_sec - st.tv_sec) * 1000000000l + (ed.tv_nsec - st.tv_nsec);
+}
+
+
 
 void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_fn, void *call_site)
 {
 	if (!_active)
 		return;
+	struct timespec end_time;
+	clock_gettime(CLOCK_MONOTONIC, &end_time);
 
 	while (--_depth>= 0 && _curr_entry.fn != this_fn)
 	{
@@ -609,11 +620,14 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 		elog(NOTICE, "no more functions => switching off");
 		return;
 	}
-	clock_t diff = clock() - _curr_entry.enter_time;
+
+    uint64_t time_taken = time_diff(_curr_entry.enter_time, end_time);
+
+	// clock_t diff = clock() - _curr_entry.enter_time;
 	const char *name = name_of(this_fn);
 	if (true)
 	{
-		elog(NOTICE, "FLAMEGRAPH: %d %s@%p %ld", _depth, name, this_fn, diff);
+		elog(NOTICE, "FLAMEGRAPH: %d %s@%p	%ld	%ld", _depth, name, this_fn, _curr_entry.measured, time_taken - _curr_entry.measured);
 	}
 	else
 	{
@@ -628,6 +642,19 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 		// sprintf(str, "%d %s@%p %ld\n", _depth, name, this_fn, diff);
 		// fclose(fptr);
 	}
+
+	if(_depth>0)
+	{
+		// total time + overhead should be substracted from caller
+		struct timespec end_time;
+		clock_gettime(CLOCK_MONOTONIC, &end_time);
+		uint64_t time_taken = time_diff(_curr_entry.enter_time, end_time);
+		_depth--;
+		_curr_entry.measured += time_taken;
+		_depth++;
+	}
+	
+
 }
 #undef _depth
 #undef _active
