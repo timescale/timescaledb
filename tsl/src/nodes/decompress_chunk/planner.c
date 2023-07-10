@@ -691,7 +691,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				Ensure(IsA(em->em_expr, Var), "non-Var pathkey not expected for compressed batch sorted mege");
 
 				Var *var = castNode(Var, em->em_expr);
-				Assert(var->varno == em_relid);
+				Assert((Index) var->varno == em_relid);
 
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly
