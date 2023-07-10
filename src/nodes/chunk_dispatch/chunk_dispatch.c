@@ -581,15 +581,34 @@ __cyg_profile_func_enter(void *this_fn, void *call_site)
 	_depth++;
 }
 
+#include "indexing.h"
+// #include "backtrace.h"
+// #include "execinfo.h"
 const char*  __attribute__((no_instrument_function))  name_of(void *fn) ;
 
 const char*  __attribute__((no_instrument_function))  name_of(void *fn) {
+	
 	
 	// Dl_info info;
 	// dladdr(fn, &info);
 #define A(F) if(fn == &F) return #F;
 	A(chunk_dispatch_exec)
+	A(ts_hyperspace_calculate_point)
 	A(ts_hypertable_compression_get_by_pkey)
+	A(ts_scan_iterator_scan_key_init)
+	A(ts_scanner_start_scan)
+	A(ts_scanner_next)
+	A(ts_chunk_dispatch_get_chunk_insert_state)
+	A(ts_subspace_store_get)
+	A(ts_hypertable_find_chunk_for_point)
+	A(ts_chunk_data_node_scan_by_chunk_id_filter)
+	A(ts_chunk_insert_state_create)
+	A(ts_chunk_get_by_id)
+	A(ts_catalog_close_indexes)
+	A(ts_indexing_relation_has_primary_or_unique_index)
+	A(ts_catalog_get)
+	A(ts_scanner_scan)
+	A(ts_scanner_start_scan)
 #undef A
 	return "(unknown)";
 }
@@ -623,11 +642,19 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 
     uint64_t time_taken = time_diff(_curr_entry.enter_time, end_time);
 
-	// clock_t diff = clock() - _curr_entry.enter_time;
-	const char *name = name_of(this_fn);
 	if (true)
 	{
-		elog(NOTICE, "FLAMEGRAPH: %d %s@%p	%ld	%ld", _depth, name, this_fn, _curr_entry.measured, time_taken - _curr_entry.measured);
+		char	tmp[32768];
+		int	off=0;
+		for(int i=0;i<=_depth;i++) {
+			void*fn=profile_state.entry[i].fn;
+			const char *name = name_of(fn);
+				off += sprintf(tmp + off, "%s@%p;", name,fn);
+		}
+		tmp[--off]=0;
+
+		elog(NOTICE, "FLAMEGRAPH:	%s %ld", tmp, time_taken - _curr_entry.measured);
+		// elog(NOTICE, "FLAMEGRAPH: %d %s@%p	%ld	%ld", _depth, name, this_fn, _curr_entry.measured, time_taken - _curr_entry.measured);
 	}
 	else
 	{
