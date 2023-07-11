@@ -563,7 +563,7 @@ __cyg_profile_func_enter(void *this_fn, void *call_site)
 {
 	if (!_active && this_fn == &chunk_dispatch_exec)
 	{
-		_active = 1;
+		_active = ts_guc_enable_trace;
 		_depth = 0;
 	}
 	if (!_active)
@@ -655,19 +655,6 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 
 		elog(NOTICE, "FLAMEGRAPH:	%s %ld", tmp, time_taken - _curr_entry.measured);
 		// elog(NOTICE, "FLAMEGRAPH: %d %s@%p	%ld	%ld", _depth, name, this_fn, _curr_entry.measured, time_taken - _curr_entry.measured);
-	}
-	else
-	{
-		// FILE *fptr;
-		// fptr = fopen("/tmp/flame_out", "a");
-
-		// if (fptr == NULL)
-		// {
-		// 	return;
-		// }
-		// char str[1000];
-		// sprintf(str, "%d %s@%p %ld\n", _depth, name, this_fn, diff);
-		// fclose(fptr);
 	}
 
 	if(_depth>0)

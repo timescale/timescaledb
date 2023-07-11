@@ -105,6 +105,7 @@ TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
 TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
 TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
+TSDLLEXPORT bool ts_guc_enable_trace = 0;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -661,6 +662,16 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+	DefineCustomBoolVariable("timescaledb.enable_trace",
+							 "trace",
+							 "tr",
+							 &ts_guc_enable_trace,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 	gucs_are_initialized = true;
 

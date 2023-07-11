@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -e
+psql tsdb -v ON_ERROR_STOP=1 -f dataset.pgsql
+
+psql tsdb -v ON_ERROR_STOP=1 -f _r.sql  2>&1 | tee _log
+grep -A999999999 PLAN _log | grep FLAMEG |cut -f 2- > _fg
+../FlameGraph/flamegraph.pl _fg > g1.svg
+
+firefox ../perf.svg  g1.svg 

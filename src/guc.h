@@ -36,6 +36,7 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
+extern TSDLLEXPORT bool ts_guc_enable_trace ;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
