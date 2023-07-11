@@ -5,18 +5,20 @@
  */
 
 #include <postgres.h>
+
 #include <nodes/bitmapset.h>
-#include <utils/date.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
+#include <utils/timestamp.h>
 
 #include "nodes/decompress_chunk/compressed_batch.h"
 
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "debug_assert.h"
 #include "guc.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "vector_predicates.h"
-#include "debug_assert.h"
 
 /*
  * initialize column chunk_state
