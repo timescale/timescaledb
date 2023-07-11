@@ -1,0 +1,1 @@
+Implements: #5868 Allows ALTER TABLE ... REPLICA IDENTITY (FULL|INDEX) on materialized hypertables (continuoues aggregates)
