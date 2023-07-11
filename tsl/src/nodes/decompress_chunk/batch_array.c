@@ -102,7 +102,6 @@ batch_array_free_at(DecompressChunkState *chunk_state, int batch_id)
 	DecompressBatchState *batch_state = batch_array_get_at(chunk_state, batch_id);
 
 	/* Reset batch state */
-	batch_state->initialized = false;
 	batch_state->total_batch_rows = 0;
 	batch_state->current_batch_row = 0;
 	batch_state->vector_qual_result = NULL;
@@ -133,7 +132,7 @@ batch_array_get_free_slot(DecompressChunkState *chunk_state)
 
 	Assert(next_free_batch >= 0);
 	Assert(next_free_batch < chunk_state->n_batch_states);
-	Assert(batch_array_get_at(chunk_state, next_free_batch)->initialized == false);
+	Assert(TupIsNull(batch_array_get_at(chunk_state, next_free_batch)->decompressed_scan_slot));
 
 	bms_del_member(chunk_state->unused_batch_states, next_free_batch);
 

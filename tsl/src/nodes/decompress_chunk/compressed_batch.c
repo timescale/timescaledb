@@ -38,8 +38,6 @@ compressed_batch_init(DecompressChunkState *chunk_state, DecompressBatchState *b
 														   0,
 														   chunk_state->batch_memory_context_bytes,
 														   chunk_state->batch_memory_context_bytes);
-	batch_state->initialized = false;
-
 	/* The slots will be created on first usage of the batch state */
 	batch_state->decompressed_scan_slot = NULL;
 	batch_state->compressed_slot = NULL;
@@ -215,7 +213,7 @@ void
 compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 									  DecompressBatchState *batch_state, TupleTableSlot *subslot)
 {
-	Assert(batch_state->initialized == false);
+	Assert(TupIsNull(batch_state->decompressed_scan_slot));
 
 	/* Batch states can be re-used skip tuple slot creation in that case */
 	if (batch_state->compressed_slot == NULL)
@@ -422,7 +420,6 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 				break;
 		}
 	}
-	batch_state->initialized = true;
 
 	apply_vector_quals(chunk_state, batch_state);
 
@@ -452,7 +449,6 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 			 * Reached end of batch. Check that the columns that we're decompressing
 			 * row-by-row have also ended.
 			 */
-			batch_state->initialized = false;
 			for (int i = 0; i < num_compressed_columns; i++)
 			{
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
@@ -473,7 +469,6 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 			return;
 		}
 
-		Assert(batch_state->initialized);
 		Assert(batch_state->total_batch_rows > 0);
 		Assert(batch_state->current_batch_row < batch_state->total_batch_rows);
 

@@ -37,13 +37,17 @@ typedef struct CompressedColumnValues
 } CompressedColumnValues;
 
 /*
- * All the needed information to decompress a batch
+ * All the information needed to decompress a batch.
  */
 typedef struct DecompressBatchState
 {
-	bool initialized;
 	TupleTableSlot *decompressed_scan_slot; /* A slot for the decompressed data */
-	TupleTableSlot *compressed_slot;		/* A slot for compressed data */
+	/*
+	 * Compressed target slot. We have to keep a local copy when doing batch
+	 * sorted merge, because the segmentby column values might reference the
+	 * original tuple, and a batch outlives its source tuple.
+	 */
+	TupleTableSlot *compressed_slot;
 	int total_batch_rows;
 	int current_batch_row;
 	MemoryContext per_batch_context;
