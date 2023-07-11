@@ -12,18 +12,6 @@
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
 
-/* Initial amount of batch states */
-#define INITIAL_BATCH_CAPACITY 16
-
-/*
- * From nodeMergeAppend.c
- *
- * We have one slot for each item in the heap array.  We use DecompressSlotNumber
- * to store slot indexes.  This doesn't actually provide any formal
- * type-safety, but it makes the code more self-documenting.
- */
-typedef int32 DecompressSlotNumber;
-
 typedef enum DecompressChunkColumnType
 {
 	SEGMENTBY_COLUMN,
@@ -54,47 +42,6 @@ typedef struct DecompressChunkColumnDescription
 	bool bulk_decompression_supported;
 } DecompressChunkColumnDescription;
 
-typedef struct CompressedColumnValues
-{
-	/* For row-by-row decompression. */
-	DecompressionIterator *iterator;
-
-	/*
-	 * For bulk decompression and vectorized filters, mutually exclusive
-	 * with the above.
-	 */
-	ArrowArray *arrow;
-
-	/*
-	 * These are the arrow buffers cached here to reduce the amount of
-	 * indirections (we have about three there, so it matters).
-	 */
-	const void *arrow_validity;
-	const void *arrow_values;
-
-	/*
-	 * The following fields are copied here for better data locality.
-	 */
-	AttrNumber output_attno;
-	int8 value_bytes;
-} CompressedColumnValues;
-
-/*
- * All the needed information to decompress a batch
- */
-typedef struct DecompressBatchState
-{
-	bool initialized;
-	TupleTableSlot *decompressed_slot_scan; /* A slot for the decompressed data */
-	TupleTableSlot *compressed_slot;		/* A slot for compressed data */
-	int total_batch_rows;
-	int current_batch_row;
-	MemoryContext per_batch_context;
-	uint64 *vector_qual_result;
-
-	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
-} DecompressBatchState;
-
 typedef struct DecompressChunkState
 {
 	CustomScanState csstate;
@@ -114,7 +61,7 @@ typedef struct DecompressChunkState
 	int n_batch_states; /* Number of batch states */
 	/*
 	 * The batch states. It's void* because they have a variable length
-	 * column array, so normal indexing can't be used. Use the get_batch_state
+	 * column array, so normal indexing can't be used. Use the batch_array_get_at
 	 * accessor instead.
 	 */
 	void *batch_states;
@@ -122,9 +69,11 @@ typedef struct DecompressChunkState
 	Bitmapset *unused_batch_states; /* The unused batch states */
 	int batch_memory_context_bytes;
 
+	const struct BatchQueueFunctions *queue;
+
+	bool batch_sorted_merge; /* Merge append optimization enabled */
 	List *sortinfo;
-	bool sorted_merge_append;	   /* Merge append optimization enabled */
-	int most_recent_batch;		   /* The batch state with the most recent value */
+	int last_added_batch;		   /* The batch state with the most recent value */
 	struct binaryheap *merge_heap; /* Binary heap of slot indices */
 	int n_sortkeys;				   /* Number of sort keys for heap compare function */
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
@@ -151,23 +100,6 @@ typedef struct DecompressChunkState
 	TupleDesc compressed_slot_tdesc;
 } DecompressChunkState;
 
-inline static DecompressBatchState *
-get_batch_state(DecompressChunkState *chunk_state, int batch_id)
-{
-	return (DecompressBatchState *) ((char *) chunk_state->batch_states +
-									 chunk_state->n_batch_state_bytes * batch_id);
-}
-
 extern Node *decompress_chunk_state_create(CustomScan *cscan);
-
-extern DecompressSlotNumber decompress_get_free_batch_state_id(DecompressChunkState *chunk_state);
-
-extern void decompress_initialize_batch(DecompressChunkState *chunk_state,
-										DecompressBatchState *batch_state, TupleTableSlot *subslot);
-
-extern bool decompress_get_next_tuple_from_batch(DecompressChunkState *chunk_state,
-												 DecompressBatchState *batch_state);
-
-extern void decompress_set_batch_state_to_unused(DecompressChunkState *chunk_state, int batch_id);
 
 #endif /* TIMESCALEDB_DECOMPRESS_CHUNK_EXEC_H */

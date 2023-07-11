@@ -28,7 +28,7 @@
 #include "import/planner.h"
 #include "import/allpaths.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/sorted_merge.h"
+#include "nodes/decompress_chunk/batch_queue_heap.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
@@ -37,6 +37,12 @@
 #define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01
 
 #define DECOMPRESS_CHUNK_BATCH_SIZE 1000
+
+/* We have to decompress the compressed batches in parallel. Therefore, we need a high
+ * amount of memory. Set the tuple cost for this algorithm a very high value to prevent
+ * that this algorithm is chosen when a lot of batches needs to be merged. For more details,
+ * see the discussion in cost_decompress_sorted_merge_append(). */
+#define DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST 0.8
 
 static CustomPathMethods decompress_chunk_path_methods = {
 	.CustomName = "DecompressChunk",
