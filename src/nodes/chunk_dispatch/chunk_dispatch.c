@@ -561,7 +561,7 @@ ProfileState profile_state = {
 void __attribute__((no_instrument_function))
 __cyg_profile_func_enter(void *this_fn, void *call_site)
 {
-	if (!_active && this_fn == &chunk_dispatch_exec)
+	if (!_active) //&& this_fn == &chunk_dispatch_exec)
 	{
 		_active = ts_guc_enable_trace;
 		_depth = 0;
@@ -642,7 +642,7 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 
     uint64_t time_taken = time_diff(_curr_entry.enter_time, end_time);
 
-	if (true)
+	if (time_taken > 100)
 	{
 		char	tmp[32768];
 		int	off=0;
@@ -655,6 +655,9 @@ void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_
 
 		elog(NOTICE, "FLAMEGRAPH:	%s %ld", tmp, time_taken - _curr_entry.measured);
 		// elog(NOTICE, "FLAMEGRAPH: %d %s@%p	%ld	%ld", _depth, name, this_fn, _curr_entry.measured, time_taken - _curr_entry.measured);
+	} else {
+		// ignoring; taking up overhead as exec time
+		return;
 	}
 
 	if(_depth>0)
