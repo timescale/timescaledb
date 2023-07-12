@@ -30,6 +30,11 @@ SELECT * FROM hypertable_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_nam
            0 |        8192 |        8192 |       16384 | 
 (1 row)
 
+SELECT * FROM chunks_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
 SELECT * FROM hypertable_size('hypersize_cagg');
  hypertable_size 
 -----------------
@@ -41,6 +46,11 @@ SELECT * FROM hypertable_detailed_size('hypersize_cagg') ORDER BY node_name;
 -------------+-------------+-------------+-------------+-----------
            0 |        8192 |        8192 |       16384 | 
 (1 row)
+
+SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
 
 -- Test size functions on non-empty countinuous aggregate
 CALL refresh_continuous_aggregate('hypersize_cagg', NULL, NULL);
@@ -56,6 +66,12 @@ SELECT * FROM hypertable_detailed_size('hypersize_cagg') ORDER BY node_name;
         8192 |       24576 |       16384 |       49152 | 
 (1 row)
 
+SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_2_2_chunk |        8192 |       16384 |        8192 |       32768 | 
+(1 row)
+
 SELECT * FROM hypertable_size(:'MAT_HYPERTABLE_NAME');
  hypertable_size 
 -----------------
@@ -66,5 +82,11 @@ SELECT * FROM hypertable_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_nam
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
         8192 |       24576 |       16384 |       49152 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_2_2_chunk |        8192 |       16384 |        8192 |       32768 | 
 (1 row)
 
