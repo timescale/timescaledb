@@ -94,12 +94,12 @@ batch_array_enlarge(DecompressChunkState *chunk_state, int nbatches)
  * Mark a DecompressBatchState as unused
  */
 void
-batch_array_free_at(DecompressChunkState *chunk_state, int batch_id)
+batch_array_free_at(DecompressChunkState *chunk_state, int batch_index)
 {
-	Assert(batch_id >= 0);
-	Assert(batch_id < chunk_state->n_batch_states);
+	Assert(batch_index >= 0);
+	Assert(batch_index < chunk_state->n_batch_states);
 
-	DecompressBatchState *batch_state = batch_array_get_at(chunk_state, batch_id);
+	DecompressBatchState *batch_state = batch_array_get_at(chunk_state, batch_index);
 
 	/* Reset batch state */
 	batch_state->total_batch_rows = 0;
@@ -114,7 +114,7 @@ batch_array_free_at(DecompressChunkState *chunk_state, int batch_id)
 
 	MemoryContextReset(batch_state->per_batch_context);
 
-	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_id);
+	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_index);
 }
 
 /*

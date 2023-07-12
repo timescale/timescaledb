@@ -23,10 +23,10 @@ void batch_array_destroy(DecompressChunkState *chunk_state);
 extern int batch_array_get_free_slot(DecompressChunkState *chunk_state);
 
 inline static DecompressBatchState *
-batch_array_get_at(DecompressChunkState *chunk_state, int batch_id)
+batch_array_get_at(DecompressChunkState *chunk_state, int batch_index)
 {
-	return (DecompressBatchState *) ((char *) chunk_state->batch_states +
-									 chunk_state->n_batch_state_bytes * batch_id);
+	return (DecompressBatchState *) ((char *restrict) chunk_state->batch_states +
+									 chunk_state->n_batch_state_bytes * batch_index);
 }
 
-extern void batch_array_free_at(DecompressChunkState *chunk_state, int batch_id);
+extern void batch_array_free_at(DecompressChunkState *chunk_state, int batch_index);

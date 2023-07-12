@@ -106,14 +106,14 @@ batch_queue_heap_pop(DecompressChunkState *chunk_state)
 
 	if (TupIsNull(top_batch->decompressed_scan_slot))
 	{
-		//fprintf(stderr, "[%d] top batch exhausted\n", top_batch_index);
+		// fprintf(stderr, "[%d] top batch exhausted\n", top_batch_index);
 		/* Batch is exhausted, recycle batch_state */
 		(void) binaryheap_remove_first(chunk_state->merge_heap);
 		batch_array_free_at(chunk_state, top_batch_index);
 	}
 	else
 	{
-		//fprintf(stderr, "[%d] top batch reused\n", top_batch_index);
+		// fprintf(stderr, "[%d] top batch reused\n", top_batch_index);
 		/* Put the next tuple from this batch on the heap */
 		binaryheap_replace_first(chunk_state->merge_heap, Int32GetDatum(top_batch_index));
 	}

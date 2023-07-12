@@ -35,6 +35,11 @@ compressed_batch_init(DecompressChunkState *chunk_state, DecompressBatchState *b
 		elog(ERROR, "no columns specified to decompress");
 	}
 
+	/*
+	 * FIXME do this on demand? Might be good for LIMIT 1 batch sorted merge
+	 * queries than happen to be satisfied w/ fewer batches than our initial
+	 * number.
+	 */
 	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
 														   "DecompressChunk per_batch",
 														   0,
@@ -312,6 +317,10 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 				 * For now we disable bulk decompression for batch sorted
 				 * merge plans. They involve keeping many open batches at
 				 * the same time, so the memory usage might increase greatly.
+				 *
+				 * FIXME use chunk_state->enable_bulk_decompression and
+				 * column->bulk_decompression_supported (maybe?... looks like it's
+				 * accessible here anyway).
 				 */
 				ArrowArray *arrow = NULL;
 				if (!chunk_state->batch_sorted_merge && ts_guc_enable_bulk_decompression)

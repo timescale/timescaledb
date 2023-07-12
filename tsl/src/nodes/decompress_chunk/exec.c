@@ -56,7 +56,7 @@ struct BatchQueueFunctions
 	TupleTableSlot *(*top_tuple)(DecompressChunkState *);
 };
 
-static const struct BatchQueueFunctions BatchQueueFifoFunctions = {
+static const struct BatchQueueFunctions BatchQueueFunctionsFifo = {
 	.create = batch_queue_fifo_create,
 	.free = batch_queue_fifo_free,
 	.needs_next_batch = batch_queue_fifo_needs_next_batch,
@@ -66,7 +66,7 @@ static const struct BatchQueueFunctions BatchQueueFifoFunctions = {
 	.top_tuple = batch_queue_fifo_top_tuple,
 };
 
-static const struct BatchQueueFunctions BatchQueueHeapFunctions = {
+static const struct BatchQueueFunctions BatchQueueFunctionsHeap = {
 	.create = batch_queue_heap_create,
 	.free = batch_queue_heap_free,
 	.needs_next_batch = batch_queue_heap_needs_next_batch,
@@ -436,11 +436,11 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	if (chunk_state->batch_sorted_merge)
 	{
-		chunk_state->queue = &BatchQueueHeapFunctions;
+		chunk_state->queue = &BatchQueueFunctionsHeap;
 	}
 	else
 	{
-		chunk_state->queue = &BatchQueueFifoFunctions;
+		chunk_state->queue = &BatchQueueFunctionsFifo;
 	}
 
 	chunk_state->queue->create(chunk_state);
@@ -452,7 +452,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
  */
 pg_attribute_always_inline static TupleTableSlot *
 decompress_chunk_queue_get_next(DecompressChunkState *chunk_state,
-	const struct BatchQueueFunctions *queue)
+								const struct BatchQueueFunctions *queue)
 {
 	queue->pop(chunk_state);
 	while (queue->needs_next_batch(chunk_state))
@@ -479,11 +479,11 @@ decompress_chunk_exec(CustomScanState *node)
 	TupleTableSlot *result_slot;
 	if (chunk_state->batch_sorted_merge)
 	{
-		result_slot = decompress_chunk_queue_get_next(chunk_state, &BatchQueueHeapFunctions);
+		result_slot = decompress_chunk_queue_get_next(chunk_state, &BatchQueueFunctionsHeap);
 	}
 	else
 	{
-		result_slot = decompress_chunk_queue_get_next(chunk_state, &BatchQueueFifoFunctions);
+		result_slot = decompress_chunk_queue_get_next(chunk_state, &BatchQueueFunctionsFifo);
 	}
 
 	if (TupIsNull(result_slot))
@@ -495,6 +495,7 @@ decompress_chunk_exec(CustomScanState *node)
 	{
 		ExprContext *econtext = node->ss.ps.ps_ExprContext;
 		econtext->ecxt_scantuple = result_slot;
+		/* FIXME maybe inline this? */
 		return ExecProject(node->ss.ps.ps_ProjInfo);
 	}
 
