@@ -888,3 +888,24 @@ SELECT count(*) FROM :chunk_name;
 ANALYZE :chunk_name;
 
 SELECT count(*) FROM :chunk_name;
+
+
+-- Test that parallel plans are chosen even if partial and small chunks are involved
+RESET min_parallel_index_scan_size;
+RESET min_parallel_table_scan_size;
+
+CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
+SELECT create_hypertable('ht_metrics_partially_compressed','time',create_default_indexes:=false);
+ALTER TABLE ht_metrics_partially_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+INSERT INTO ht_metrics_partially_compressed
+SELECT time, device, device * 0.1 FROM
+   generate_series('2020-01-01'::timestamptz,'2020-01-02'::timestamptz, INTERVAL '1 m') g(time),
+   LATERAL (SELECT generate_series(1,2) AS device) g2;
+
+SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
+
+INSERT INTO ht_metrics_partially_compressed VALUES ('2020-01-01'::timestamptz, 1, 0.1);
+
+:explain
+SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1;

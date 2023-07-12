@@ -1578,7 +1578,26 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 
 	/* create parallel scan path */
 	if (compressed_rel->consider_parallel)
-		ts_create_plain_partial_paths(root, compressed_rel);
+	{
+		/* Almost the same functionality as ts_create_plain_partial_paths.
+		 *
+		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose a
+		 * parallel plan for decompression. If no partial path is present for a single chunk,
+		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a non-parallel
+		 * plan (even if there are a few bigger chunks).
+		 */
+		int parallel_workers = compute_parallel_worker(compressed_rel,
+													   compressed_rel->pages,
+													   -1,
+													   max_parallel_workers_per_gather);
+
+		/* Use at least one worker */
+		parallel_workers = Max(parallel_workers, 1);
+
+		/* Add an unordered partial path based on a parallel sequential scan. */
+		add_partial_path(compressed_rel,
+						 create_seqscan_path(root, compressed_rel, NULL, parallel_workers));
+	}
 
 	/*
 	 * We set enable_bitmapscan to false here to ensure any pathes with bitmapscan do not
