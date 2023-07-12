@@ -90,7 +90,7 @@ set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *
 }
 
 /* copied from allpaths.c */
-void
+static void
 ts_create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel)
 {
 	int parallel_workers;

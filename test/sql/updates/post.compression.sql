@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SELECT * FROM compress ORDER BY time DESC, small_cardinality;
+SELECT * FROM compress ORDER BY time DESC, small_cardinality, large_cardinality, some_double, some_int, some_custom, some_bool;
 
 INSERT INTO compress
 SELECT g, 'QW', g::text, 2, 0, (100,4)::custom_type_for_compression, false
@@ -17,7 +17,7 @@ WHERE
   hypertable.table_name = 'compress'
   AND chunk.compressed_chunk_id IS NULL;
 
-SELECT * FROM compress ORDER BY time DESC, small_cardinality;
+SELECT * FROM compress ORDER BY time DESC, small_cardinality, large_cardinality, some_double, some_int, some_custom, some_bool;
 
 \x on
 WITH hypertables AS (
