@@ -860,3 +860,31 @@ SELECT sum(cpu) FROM f_sensor_data;
 
 :explain
 SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+
+
+-- Test non-partial paths below append are not executed multiple times
+CREATE TABLE ts_device_table(time INTEGER, device INTEGER, location INTEGER, value INTEGER);
+CREATE UNIQUE INDEX device_time_idx on ts_device_table(time, device);
+SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 1000);
+INSERT INTO ts_device_table SELECT generate_series(0,999,1), 1, 100, 20;
+ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
+SELECT compress_chunk(i) AS chunk_name FROM show_chunks('ts_device_table') i \gset
+
+SELECT count(*) FROM ts_device_table;
+SELECT count(*) FROM :chunk_name;
+
+INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+
+SELECT count(*) FROM :chunk_name;
+
+SET parallel_setup_cost TO '0';
+SET parallel_tuple_cost TO '0';
+SET min_parallel_table_scan_size TO '8';
+SET min_parallel_index_scan_size TO '8';
+SET random_page_cost TO '0';
+
+SELECT count(*) FROM :chunk_name;
+
+ANALYZE :chunk_name;
+
+SELECT count(*) FROM :chunk_name;

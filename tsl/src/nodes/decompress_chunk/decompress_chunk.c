@@ -874,6 +874,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			{
 				Bitmapset *req_outer = PATH_REQ_OUTER(path);
 				Path *uncompressed_path = NULL;
+				bool uncompressed_path_is_partial = true;
 
 				if (initial_partial_pathlist)
 					uncompressed_path = get_cheapest_path_for_pathkeys(initial_partial_pathlist,
@@ -883,11 +884,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 																	   true);
 
 				if (!uncompressed_path)
+				{
 					uncompressed_path = get_cheapest_path_for_pathkeys(initial_pathlist,
 																	   NIL,
 																	   req_outer,
 																	   TOTAL_COST,
 																	   true);
+					uncompressed_path_is_partial = false;
+				}
 
 				/*
 				 * All children of an append path are required to have the same parameterization
@@ -903,15 +907,26 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						continue;
 				}
 
+				/* uncompressed_path can be a partial or a non-partial path. Categorize the path
+				 * and add it to the proper list of the append path. */
+				List *partial_path_list = list_make1(path);
+				List *path_list = NIL;
+
+				if (uncompressed_path_is_partial)
+					partial_path_list = lappend(partial_path_list, uncompressed_path);
+				else
+					path_list = list_make1(uncompressed_path);
+
+				/* Use a parallel aware append to handle non-partial paths properly */
 				path = (Path *) create_append_path_compat(root,
 														  chunk_rel,
-														  NIL,
-														  list_make2(path, uncompressed_path),
+														  path_list,
+														  partial_path_list,
 														  NIL /* pathkeys */,
 														  req_outer,
 														  Max(path->parallel_workers,
 															  uncompressed_path->parallel_workers),
-														  false,
+														  true, /* parallel aware */
 														  NIL,
 														  path->rows + uncompressed_path->rows);
 			}
