@@ -1265,7 +1265,7 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("hypertable cannot be NULL")));
 
-	ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_NONE);
+	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, table_relid, true);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
 	if (PG_ARGISNULL(1))

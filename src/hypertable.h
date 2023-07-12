@@ -14,6 +14,7 @@
 #include "chunk_adaptive.h"
 #include "dimension.h"
 #include "export.h"
+#include "hypertable_cache.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "ts_catalog/tablespace.h"
@@ -109,6 +110,8 @@ extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid u
 
 extern TSDLLEXPORT void ts_hypertable_permissions_check_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_from_tupleinfo(const TupleInfo *ti);
+extern Hypertable *ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid,
+															bool allow_matht);
 extern int ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 												  tuple_found_func tuple_found, void *data,
 												  LOCKMODE lockmode, bool tuplock,
