@@ -1892,3 +1892,53 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
                Index Cond: (_hyper_37_71_chunk.sensor_id > 100)
 (13 rows)
 
+-- Test non-partial paths below append are not executed multiple times
+CREATE TABLE ts_device_table(time INTEGER, device INTEGER, location INTEGER, value INTEGER);
+CREATE UNIQUE INDEX device_time_idx on ts_device_table(time, device);
+SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 1000);
+NOTICE:  adding not-null constraint to column "time"
+       create_hypertable       
+-------------------------------
+ (39,public,ts_device_table,t)
+(1 row)
+
+INSERT INTO ts_device_table SELECT generate_series(0,999,1), 1, 100, 20;
+ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
+SELECT compress_chunk(i) AS chunk_name FROM show_chunks('ts_device_table') i \gset
+SELECT count(*) FROM ts_device_table;
+ count 
+-------
+  1000
+(1 row)
+
+SELECT count(*) FROM :chunk_name;
+ count 
+-------
+  1000
+(1 row)
+
+INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+SELECT count(*) FROM :chunk_name;
+ count 
+-------
+  1000
+(1 row)
+
+SET parallel_setup_cost TO '0';
+SET parallel_tuple_cost TO '0';
+SET min_parallel_table_scan_size TO '8';
+SET min_parallel_index_scan_size TO '8';
+SET random_page_cost TO '0';
+SELECT count(*) FROM :chunk_name;
+ count 
+-------
+  1000
+(1 row)
+
+ANALYZE :chunk_name;
+SELECT count(*) FROM :chunk_name;
+ count 
+-------
+  1000
+(1 row)
+
