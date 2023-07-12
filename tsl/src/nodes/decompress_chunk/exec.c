@@ -31,7 +31,6 @@
 #include "nodes/decompress_chunk/planner.h"
 #include "ts_catalog/hypertable_compression.h"
 
-static TupleTableSlot *decompress_chunk_exec(CustomScanState *node);
 static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
 static void decompress_chunk_end(CustomScanState *node);
 static void decompress_chunk_rescan(CustomScanState *node);
@@ -39,7 +38,7 @@ static void decompress_chunk_explain(CustomScanState *node, List *ancestors, Exp
 
 static CustomExecMethods decompress_chunk_state_methods = {
 	.BeginCustomScan = decompress_chunk_begin,
-	.ExecCustomScan = decompress_chunk_exec,
+	.ExecCustomScan = NULL, /* To be determined later. */
 	.EndCustomScan = decompress_chunk_end,
 	.ReScanCustomScan = decompress_chunk_rescan,
 	.ExplainCustomScan = decompress_chunk_explain,
@@ -144,7 +143,8 @@ decompress_chunk_state_create(CustomScan *cscan)
 
 	chunk_state = (DecompressChunkState *) newNode(sizeof(DecompressChunkState), T_CustomScanState);
 
-	chunk_state->csstate.methods = &decompress_chunk_state_methods;
+	chunk_state->exec_methods = decompress_chunk_state_methods;
+	chunk_state->csstate.methods = &chunk_state->exec_methods;
 
 	Assert(IsA(cscan->custom_private, List));
 	Assert(list_length(cscan->custom_private) == 5);
@@ -225,6 +225,26 @@ constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
 	}
 
 	return node;
+}
+
+pg_attribute_always_inline static TupleTableSlot *
+decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
+						   const struct BatchQueueFunctions *queue);
+
+static TupleTableSlot *
+decompress_chunk_exec_fifo(CustomScanState *node)
+{
+	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	Assert(!chunk_state->batch_sorted_merge);
+	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
+}
+
+static TupleTableSlot *
+decompress_chunk_exec_heap(CustomScanState *node)
+{
+	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	Assert(chunk_state->batch_sorted_merge);
+	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
 
 /*
@@ -436,23 +456,32 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	if (chunk_state->batch_sorted_merge)
 	{
-		chunk_state->queue = &BatchQueueFunctionsHeap;
+		chunk_state->batch_queue = &BatchQueueFunctionsHeap;
+		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_heap;
 	}
 	else
 	{
-		chunk_state->queue = &BatchQueueFunctionsFifo;
+		chunk_state->batch_queue = &BatchQueueFunctionsFifo;
+		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
-	chunk_state->queue->create(chunk_state);
+	chunk_state->batch_queue->create(chunk_state);
+
+	if (ts_guc_debug_require_batch_sorted_merge && !chunk_state->batch_sorted_merge)
+	{
+		elog(ERROR, "debug: batch sorted merge is required but not used");
+	}
 }
 
 /*
- * This function is a micro-optimization: in case of FIFO batch queue, we want
- * all functions to be inlined because this is a relatively hot loop.
+ * The exec function for the DecompressChunk node. It takes the explicit queue
+ * functions pointer as a micro-optimization, to allow these functions to be
+ * inlined in the FIFO case. This is important because this is a part of a
+ * relatively hot loop.
  */
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_queue_get_next(DecompressChunkState *chunk_state,
-								const struct BatchQueueFunctions *queue)
+decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
+						   const struct BatchQueueFunctions *queue)
 {
 	queue->pop(chunk_state);
 	while (queue->needs_next_batch(chunk_state))
@@ -466,37 +495,18 @@ decompress_chunk_queue_get_next(DecompressChunkState *chunk_state,
 
 		queue->push_batch(chunk_state, subslot);
 	}
-	return queue->top_tuple(chunk_state);
-}
-
-static TupleTableSlot *
-decompress_chunk_exec(CustomScanState *node)
-{
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
-
-	Assert(node->custom_ps != NIL);
-
-	TupleTableSlot *result_slot;
-	if (chunk_state->batch_sorted_merge)
-	{
-		result_slot = decompress_chunk_queue_get_next(chunk_state, &BatchQueueFunctionsHeap);
-	}
-	else
-	{
-		result_slot = decompress_chunk_queue_get_next(chunk_state, &BatchQueueFunctionsFifo);
-	}
+	TupleTableSlot *result_slot = queue->top_tuple(chunk_state);
 
 	if (TupIsNull(result_slot))
 	{
 		return NULL;
 	}
 
-	if (node->ss.ps.ps_ProjInfo)
+	if (chunk_state->csstate.ss.ps.ps_ProjInfo)
 	{
-		ExprContext *econtext = node->ss.ps.ps_ExprContext;
+		ExprContext *econtext = chunk_state->csstate.ss.ps.ps_ExprContext;
 		econtext->ecxt_scantuple = result_slot;
-		/* FIXME maybe inline this? */
-		return ExecProject(node->ss.ps.ps_ProjInfo);
+		return ExecProject(chunk_state->csstate.ss.ps.ps_ProjInfo);
 	}
 
 	return result_slot;
@@ -507,7 +517,7 @@ decompress_chunk_rescan(CustomScanState *node)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
 
-	chunk_state->queue->reset(chunk_state);
+	chunk_state->batch_queue->reset(chunk_state);
 
 	for (int i = 0; i < chunk_state->n_batch_states; i++)
 	{
@@ -525,7 +535,7 @@ decompress_chunk_end(CustomScanState *node)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
 
-	chunk_state->queue->free(chunk_state);
+	chunk_state->batch_queue->free(chunk_state);
 
 	ExecEndNode(linitial(node->custom_ps));
 }

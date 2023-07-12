@@ -138,6 +138,21 @@ batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
 	DecompressBatchState *last_batch =
 		batch_array_get_at(chunk_state, chunk_state->last_added_batch);
 
+	/* The current row should be ready in the decompressed scan slot. */
+	Assert(last_batch->next_batch_row > 0);
+
+	if (last_batch->next_batch_row > 1)
+	{
+		/*
+		 * We have already returned or filtered out the first row of the batch,
+		 * so we can't use it as a proxy for the minimum value of the batch.
+		 * Since we don't know the minimum value of the last added batch, we
+		 * don't know whether we already need the next batch, so we have to say
+		 * we need it, for correctness. This might be suboptimal.
+		 */
+		return true;
+	}
+
 	if (TupIsNull(last_batch->decompressed_scan_slot))
 	{
 		/*
@@ -162,7 +177,7 @@ batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
 	Assert(comparison_result >= 0);
 
 	/*
-	 * If the current top tuple compares equal to the first tuple from the last
+	 * If the current top tuple compares equal to the min tuple from the last
 	 * added batch, it means we have to add more batches. The next batch might
 	 * compare equal as well, we have to continue until we find one that
 	 * compares greater.

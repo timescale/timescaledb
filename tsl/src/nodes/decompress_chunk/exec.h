@@ -9,6 +9,8 @@
 
 #include <postgres.h>
 
+#include <nodes/extensible.h>
+
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
 
@@ -69,7 +71,8 @@ typedef struct DecompressChunkState
 	Bitmapset *unused_batch_states; /* The unused batch states */
 	int batch_memory_context_bytes;
 
-	const struct BatchQueueFunctions *queue;
+	const struct BatchQueueFunctions *batch_queue;
+	CustomExecMethods exec_methods;
 
 	bool batch_sorted_merge; /* Merge append optimization enabled */
 	List *sortinfo;

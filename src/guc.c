@@ -106,6 +106,8 @@ TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
 TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
 TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
+bool ts_guc_debug_require_batch_sorted_merge = false;
+
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
@@ -653,6 +655,17 @@ _guc_init(void)
 							 /* valueAddr= */ (int *) &ts_guc_debug_enable_vector_qual,
 							 /* bootValue= */ EVQ_On,
 							 /* options = */ enable_vector_qual_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_require_batch_sorted_merge",
+							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ &ts_guc_debug_require_batch_sorted_merge,
+							 /* bootValue= */ false,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,

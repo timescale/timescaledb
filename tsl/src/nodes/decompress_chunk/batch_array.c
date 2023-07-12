@@ -20,17 +20,7 @@ batch_array_create(DecompressChunkState *chunk_state, int nbatches)
 	Assert(nbatches >= 0);
 
 	chunk_state->n_batch_states = nbatches;
-	/*
-	 * Don't use palloc0 to have the same initialization guarantees (that is,
-	 * none) with the later repalloc.
-	 */
-	chunk_state->batch_states = palloc(chunk_state->n_batch_state_bytes * nbatches);
-
-	for (int segment = 0; segment < nbatches; segment++)
-	{
-		DecompressBatchState *batch_state = batch_array_get_at(chunk_state, segment);
-		compressed_batch_init(chunk_state, batch_state);
-	}
+	chunk_state->batch_states = palloc0(chunk_state->n_batch_state_bytes * nbatches);
 
 	chunk_state->unused_batch_states = bms_add_range(NULL, 0, nbatches - 1);
 
@@ -63,31 +53,30 @@ batch_array_destroy(DecompressChunkState *chunk_state)
  * Enhance the capacity of existing batch states
  */
 static void
-batch_array_enlarge(DecompressChunkState *chunk_state, int nbatches)
+batch_array_enlarge(DecompressChunkState *chunk_state, int new_number)
 {
-	Assert(nbatches > chunk_state->n_batch_states);
+	Assert(new_number > chunk_state->n_batch_states);
 
 	/* Request additional memory */
 	chunk_state->batch_states =
-		repalloc(chunk_state->batch_states, chunk_state->n_batch_state_bytes * nbatches);
+		repalloc(chunk_state->batch_states, chunk_state->n_batch_state_bytes * new_number);
 
-	/* Init new batch states (lazy initialization, expensive data structures
-	 * like TupleTableSlot are created on demand) */
-	for (int segment = chunk_state->n_batch_states; segment < nbatches; segment++)
-	{
-		DecompressBatchState *batch_state = batch_array_get_at(chunk_state, segment);
-		compressed_batch_init(chunk_state, batch_state);
-	}
+	/* Zero out the tail. The batch states are initialized on first use. */
+	memset(((char *) chunk_state->batch_states) +
+			   chunk_state->n_batch_state_bytes * chunk_state->n_batch_states,
+		   0x0,
+		   chunk_state->n_batch_state_bytes * (new_number - chunk_state->n_batch_states));
 
 	/* Register the new states as unused */
-	chunk_state->unused_batch_states =
-		bms_add_range(chunk_state->unused_batch_states, chunk_state->n_batch_states, nbatches - 1);
+	chunk_state->unused_batch_states = bms_add_range(chunk_state->unused_batch_states,
+													 chunk_state->n_batch_states,
+													 new_number - 1);
 
 	Assert(bms_num_members(chunk_state->unused_batch_states) ==
-		   nbatches - chunk_state->n_batch_states);
+		   new_number - chunk_state->n_batch_states);
 
 	/* Update number of available batch states */
-	chunk_state->n_batch_states = nbatches;
+	chunk_state->n_batch_states = new_number;
 }
 
 /*
@@ -103,18 +92,18 @@ batch_array_free_at(DecompressChunkState *chunk_state, int batch_index)
 
 	/* Reset batch state */
 	batch_state->total_batch_rows = 0;
-	batch_state->current_batch_row = 0;
+	batch_state->next_batch_row = 0;
 	batch_state->vector_qual_result = NULL;
 
-	if (batch_state->compressed_slot != NULL)
+	if (batch_state->per_batch_context != NULL)
+	{
 		ExecClearTuple(batch_state->compressed_slot);
-
-	if (batch_state->decompressed_scan_slot != NULL)
 		ExecClearTuple(batch_state->decompressed_scan_slot);
+		MemoryContextReset(batch_state->per_batch_context);
+	}
 
-	MemoryContextReset(batch_state->per_batch_context);
-
-	chunk_state->unused_batch_states = bms_add_member(chunk_state->unused_batch_states, batch_index);
+	chunk_state->unused_batch_states =
+		bms_add_member(chunk_state->unused_batch_states, batch_index);
 }
 
 /*

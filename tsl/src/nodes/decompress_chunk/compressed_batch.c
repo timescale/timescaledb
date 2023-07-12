@@ -20,37 +20,6 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "vector_predicates.h"
 
-/*
- * initialize column chunk_state
- *
- * the column chunk_state indexes are based on the index
- * of the columns of the decompressed chunk because
- * that is the tuple layout we are creating
- */
-void
-compressed_batch_init(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
-{
-	if (list_length(chunk_state->decompression_map) == 0)
-	{
-		elog(ERROR, "no columns specified to decompress");
-	}
-
-	/*
-	 * FIXME do this on demand? Might be good for LIMIT 1 batch sorted merge
-	 * queries than happen to be satisfied w/ fewer batches than our initial
-	 * number.
-	 */
-	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
-														   "DecompressChunk per_batch",
-														   0,
-														   chunk_state->batch_memory_context_bytes,
-														   chunk_state->batch_memory_context_bytes);
-	/* The slots will be created on first usage of the batch state */
-	batch_state->decompressed_scan_slot = NULL;
-	batch_state->compressed_slot = NULL;
-	batch_state->vector_qual_result = NULL;
-}
-
 static ArrowArray *
 make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 {
@@ -222,9 +191,21 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 {
 	Assert(TupIsNull(batch_state->decompressed_scan_slot));
 
-	/* Batch states can be re-used skip tuple slot creation in that case */
-	if (batch_state->compressed_slot == NULL)
+	/*
+	 * The batch states are initialized on demand, because creating the memory
+	 * context and the tuple table slots is expensive.
+	 */
+	if (batch_state->per_batch_context == NULL)
 	{
+		batch_state->per_batch_context =
+			AllocSetContextCreate(CurrentMemoryContext,
+								  "DecompressChunk per_batch",
+								  0,
+								  chunk_state->batch_memory_context_bytes,
+								  chunk_state->batch_memory_context_bytes);
+
+		Assert(batch_state->compressed_slot == NULL);
+
 		/* Create a non ref-counted copy of the tuple descriptor */
 		if (chunk_state->compressed_slot_tdesc == NULL)
 			chunk_state->compressed_slot_tdesc =
@@ -233,20 +214,9 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 
 		batch_state->compressed_slot =
 			MakeSingleTupleTableSlot(chunk_state->compressed_slot_tdesc, subslot->tts_ops);
-	}
-	else
-	{
-		ExecClearTuple(batch_state->compressed_slot);
-	}
 
-	ExecCopySlot(batch_state->compressed_slot, subslot);
-	Assert(!TupIsNull(batch_state->compressed_slot));
+		Assert(batch_state->decompressed_scan_slot == NULL);
 
-	/* DecompressBatchState can be re-used. The expensive TupleTableSlot are created on demand as
-	 * soon as this state is used for the first time.
-	 */
-	if (batch_state->decompressed_scan_slot == NULL)
-	{
 		/* Get a reference the the output TupleTableSlot */
 		TupleTableSlot *slot = chunk_state->csstate.ss.ss_ScanTupleSlot;
 
@@ -258,18 +228,24 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 
 		batch_state->decompressed_scan_slot =
 			MakeSingleTupleTableSlot(chunk_state->decompressed_slot_scan_tdesc, slot->tts_ops);
+
+		/* Ensure that all fields are empty. Calling ExecClearTuple is not enough
+		 * because some attributes might not be populated (e.g., due to a dropped
+		 * column) and these attributes need to be set to null. */
+		ExecStoreAllNullTuple(batch_state->decompressed_scan_slot);
+		ExecClearTuple(batch_state->decompressed_scan_slot);
+	}
+	else
+	{
+		Assert(batch_state->compressed_slot != NULL);
+		Assert(batch_state->decompressed_scan_slot != NULL);
 	}
 
-	/* Ensure that all fields are empty. Calling ExecClearTuple is not enough
-	 * because some attributes might not be populated (e.g., due to a dropped
-	 * column) and these attributes need to be set to null. */
-	ExecStoreAllNullTuple(batch_state->decompressed_scan_slot);
-	ExecClearTuple(batch_state->decompressed_scan_slot);
-
-	Assert(!TTS_EMPTY(batch_state->compressed_slot));
+	ExecCopySlot(batch_state->compressed_slot, subslot);
+	Assert(!TupIsNull(batch_state->compressed_slot));
 
 	batch_state->total_batch_rows = 0;
-	batch_state->current_batch_row = 0;
+	batch_state->next_batch_row = 0;
 
 	MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
 	MemoryContextReset(batch_state->per_batch_context);
@@ -312,18 +288,9 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 
 				/* Decompress the entire batch if it is supported. */
 				CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
-
-				/*
-				 * For now we disable bulk decompression for batch sorted
-				 * merge plans. They involve keeping many open batches at
-				 * the same time, so the memory usage might increase greatly.
-				 *
-				 * FIXME use chunk_state->enable_bulk_decompression and
-				 * column->bulk_decompression_supported (maybe?... looks like it's
-				 * accessible here anyway).
-				 */
 				ArrowArray *arrow = NULL;
-				if (!chunk_state->batch_sorted_merge && ts_guc_enable_bulk_decompression)
+				if (chunk_state->enable_bulk_decompression &&
+					column_description->bulk_decompression_supported)
 				{
 					if (chunk_state->bulk_decompression_context == NULL)
 					{
@@ -338,19 +305,18 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 
 					DecompressAllFunction decompress_all =
 						tsl_get_decompress_all_function(header->compression_algorithm);
-					if (decompress_all)
-					{
-						MemoryContext context_before_decompression =
-							MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
+					Assert(decompress_all != NULL);
 
-						arrow = decompress_all(PointerGetDatum(header),
-											   column_description->typid,
-											   batch_state->per_batch_context);
+					MemoryContext context_before_decompression =
+						MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
 
-						MemoryContextReset(chunk_state->bulk_decompression_context);
+					arrow = decompress_all(PointerGetDatum(header),
+										   column_description->typid,
+										   batch_state->per_batch_context);
 
-						MemoryContextSwitchTo(context_before_decompression);
-					}
+					MemoryContextReset(chunk_state->bulk_decompression_context);
+
+					MemoryContextSwitchTo(context_before_decompression);
 				}
 
 				if (arrow)
@@ -454,7 +420,7 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 
 	while (true)
 	{
-		if (batch_state->current_batch_row >= batch_state->total_batch_rows)
+		if (batch_state->next_batch_row >= batch_state->total_batch_rows)
 		{
 			/*
 			 * Reached end of batch. Check that the columns that we're decompressing
@@ -481,9 +447,9 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 		}
 
 		Assert(batch_state->total_batch_rows > 0);
-		Assert(batch_state->current_batch_row < batch_state->total_batch_rows);
+		Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
-		const int output_row = batch_state->current_batch_row++;
+		const int output_row = batch_state->next_batch_row++;
 		const size_t arrow_row =
 			unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 

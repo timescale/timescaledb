@@ -49,15 +49,12 @@ typedef struct DecompressBatchState
 	 */
 	TupleTableSlot *compressed_slot;
 	int total_batch_rows;
-	int current_batch_row;
+	int next_batch_row;
 	MemoryContext per_batch_context;
 	uint64 *vector_qual_result;
 
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
-
-extern void compressed_batch_init(DecompressChunkState *chunk_state,
-								  DecompressBatchState *batch_state);
 
 extern void compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 												  DecompressBatchState *batch_state,

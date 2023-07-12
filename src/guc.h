@@ -110,6 +110,7 @@ typedef enum DebugEnableVectorQual
 } DebugEnableVectorQual;
 
 extern TSDLLEXPORT DebugEnableVectorQual ts_guc_debug_enable_vector_qual;
+extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 void _guc_init(void);
 void _guc_fini(void);
