@@ -1971,6 +1971,8 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
+	// ts_hypertable_find_chunk_for_point
+	// cis->compressed_ht
 	Chunk *comp = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
 
