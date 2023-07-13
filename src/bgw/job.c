@@ -25,6 +25,7 @@
 #include <utils/acl.h>
 #include <utils/elog.h>
 #include <executor/execdebug.h>
+#include <executor/instrument.h>
 #include <utils/jsonb.h>
 #include <utils/snapmgr.h>
 #include <unistd.h>
@@ -1175,6 +1176,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	BgwJob *job;
 	JobResult res = JOB_FAILURE;
 	bool got_lock;
+	instr_time start;
+	instr_time duration;
 
 	memcpy(&params, MyBgworkerEntry->bgw_extra, sizeof(BgwParams));
 	Ensure(params.user_oid != 0 && params.job_id != 0,
@@ -1195,6 +1198,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	ts_license_enable_module_loading();
+
+	INSTR_TIME_SET_CURRENT(start);
 
 	StartTransactionCommand();
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
@@ -1316,16 +1321,21 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	CommitTransactionCommand();
 
+	INSTR_TIME_SET_CURRENT(duration);
+	INSTR_TIME_SUBTRACT(duration, start);
+
+	elog(LOG,
+		 "job %d (%s) exiting with %s: execution time %.2f ms",
+		 params.job_id,
+		 NameStr(job->fd.application_name),
+		 (res == JOB_SUCCESS ? "success" : "failure"),
+		 INSTR_TIME_GET_MILLISEC(duration));
+
 	if (job != NULL)
 	{
 		pfree(job);
 		job = NULL;
 	}
-
-	elog(DEBUG1,
-		 "exiting job %d with %s",
-		 params.job_id,
-		 (res == JOB_SUCCESS ? "success" : "failure"));
 
 	PG_RETURN_VOID();
 }

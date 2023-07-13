@@ -83,7 +83,11 @@ CREATE TABLE public.bgw_log(
     msg TEXT
 );
 CREATE VIEW sorted_bgw_log AS
-    SELECT * FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+    SELECT msg_no,
+    	   mock_time,
+    	   application_name,
+    	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
+	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -111,12 +115,12 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
 GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
-psql:include/cagg_bgw_common.sql:72: WARNING:  no privileges were granted for "public"
+psql:include/cagg_bgw_common.sql:76: WARNING:  no privileges were granted for "public"
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test_continuous_agg_table(time int, data int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10, replication_factor => 2);
-psql:include/cagg_bgw_common.sql:76: NOTICE:  adding not-null constraint to column "time"
+psql:include/cagg_bgw_common.sql:80: NOTICE:  adding not-null constraint to column "time"
      create_distributed_hypertable      
 ----------------------------------------
  (1,public,test_continuous_agg_table,t)
@@ -192,12 +196,15 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                                           msg                                           
---------+-----------+--------------------------------------------+-----------------------------------------------------------------------------------------
+ msg_no | mock_time |              application_name              |                                                  msg                                                   
+--------+-----------+--------------------------------------------+--------------------------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 |         0 | Refresh Continuous Aggregate Policy [1000] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -2147483648, 6 ]
-(3 rows)
+      1 |         0 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      2 |         0 | Refresh Continuous Aggregate Policy [1000] | inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+      3 |         0 | Refresh Continuous Aggregate Policy [1000] | job 1000 (Refresh Continuous Aggregate Policy [1000]) exiting with success: execution time (RANDOM) ms
+(6 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
   id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                             config                              |     check_schema      |                check_name                 | timezone 
@@ -403,7 +410,7 @@ SELECT ts_bgw_params_reset_time();
 (1 row)
 
 DROP MATERIALIZED VIEW test_continuous_agg_view;
-psql:include/cagg_bgw_common.sql:230: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
+psql:include/cagg_bgw_common.sql:234: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
         timescaledb.materialized_only=true)
@@ -425,12 +432,15 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                                       msg                                        
---------+-----------+--------------------------------------------+----------------------------------------------------------------------------------
+ msg_no | mock_time |              application_name              |                                                  msg                                                   
+--------+-----------+--------------------------------------------+--------------------------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 |         0 | Refresh Continuous Aggregate Policy [1001] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -90, 12 ]
-(3 rows)
+      1 |         0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      3 |         0 | Refresh Continuous Aggregate Policy [1001] | job 1001 (Refresh Continuous Aggregate Policy [1001]) exiting with success: execution time (RANDOM) ms
+(6 rows)
 
 -- job ran once, successfully
 SELECT job_id, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -470,15 +480,21 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no |  mock_time  |              application_name              |                                       msg                                        
---------+-------------+--------------------------------------------+----------------------------------------------------------------------------------
+ msg_no |  mock_time  |              application_name              |                                                  msg                                                   
+--------+-------------+--------------------------------------------+--------------------------------------------------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      1 |           0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 |           0 | Refresh Continuous Aggregate Policy [1001] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -90, 12 ]
+      1 |           0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      3 |           0 | Refresh Continuous Aggregate Policy [1001] | job 1001 (Refresh Continuous Aggregate Policy [1001]) exiting with success: execution time (RANDOM) ms
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
+      1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -90, 12 ]
-(6 rows)
+      1 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      3 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | job 1001 (Refresh Continuous Aggregate Policy [1001]) exiting with success: execution time (RANDOM) ms
+(12 rows)
 
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
@@ -530,7 +546,7 @@ last_run_duration |
 
 \x off
 DROP MATERIALIZED VIEW test_continuous_agg_view;
-psql:include/cagg_bgw_common.sql:290: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
+psql:include/cagg_bgw_common.sql:294: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 --create a view with a function that it has no permission to execute
 CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
@@ -594,7 +610,7 @@ SELECT ts_bgw_params_reset_time();
 CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10, replication_factor => 2);
-psql:include/cagg_bgw_common.sql:326: NOTICE:  adding not-null constraint to column "time"
+psql:include/cagg_bgw_common.sql:330: NOTICE:  adding not-null constraint to column "time"
          create_distributed_hypertable          
 ------------------------------------------------
  (5,public,test_continuous_agg_table_w_grant,t)
@@ -698,16 +714,19 @@ SELECT * FROM test_continuous_agg_view_user_2;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * from sorted_bgw_log;
- msg_no |  mock_time  |              application_name              |                                              msg                                               
---------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------------
+ msg_no |  mock_time  |              application_name              |                                                  msg                                                   
+--------+-------------+--------------------------------------------+--------------------------------------------------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      1 |           0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 |           0 | Refresh Continuous Aggregate Policy [1003] | refreshing continuous aggregate "test_continuous_agg_view_user_2" in window [ -2147483648, 2 ]
+      1 |           0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_6"
+      2 |           0 | Refresh Continuous Aggregate Policy [1003] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_6"
+      3 |           0 | Refresh Continuous Aggregate Policy [1003] | job 1003 (Refresh Continuous Aggregate Policy [1003]) exiting with success: execution time (RANDOM) ms
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
+      1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | job 1003 threw an error
       1 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | permission denied for table test_continuous_agg_table_w_grant
-(7 rows)
+(10 rows)
 
 -- Count the number of continuous aggregate policies
 SELECT count(*) FROM _timescaledb_config.bgw_job

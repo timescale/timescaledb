@@ -34,11 +34,8 @@ CREATE VIEW sorted_bgw_log AS
 SELECT msg_no,
   mock_time,
   application_name,
-  CASE WHEN length(msg) > 80 THEN
-    substring(msg, 1, 80) || '...'
-  ELSE
-    msg
-  END AS msg
+  regexp_replace(CASE WHEN length(msg) > 80 THEN substring(msg, 1, 80) || '...' ELSE msg END,
+  		 '(execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g') AS msg
 FROM bgw_log
 ORDER BY mock_time,
   application_name COLLATE "C",
@@ -131,11 +128,12 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                    msg                     
---------+-----------+------------------+--------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-(2 rows)
+ msg_no | mock_time |   application_name    |                                        msg                                        
+--------+-----------+-----------------------+-----------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler          | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+(3 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
  job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | fixed_schedule |                              config                               |          next_start          | initial_start | hypertable_schema |  hypertable_name   |     check_schema      |      check_name      
@@ -169,13 +167,15 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                     msg                      
---------+-----------+------------------+----------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
-(4 rows)
+ msg_no | mock_time |   application_name    |                                        msg                                        
+--------+-----------+-----------------------+-----------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler          | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     25000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     25000 | DB Scheduler          | [TESTING] Wait until 50000, started at 25000
+      0 |     25000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+(6 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
  job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | fixed_schedule |                              config                               |            next_start            | initial_start | hypertable_schema |  hypertable_name   |     check_schema      |      check_name      
@@ -211,15 +211,18 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 
 -- job info is gone
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                      msg                      
---------+-----------+------------------+-----------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
-      0 |     50000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     50000 | DB Scheduler     | [TESTING] Wait until 100000, started at 50000
-(6 rows)
+ msg_no | mock_time |   application_name    |                                        msg                                        
+--------+-----------+-----------------------+-----------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler          | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     25000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     25000 | DB Scheduler          | [TESTING] Wait until 50000, started at 25000
+      0 |     25000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     50000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     50000 | DB Scheduler          | [TESTING] Wait until 100000, started at 50000
+      0 |     50000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+(9 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
  job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | fixed_schedule |                              config                               |           next_start            | initial_start | hypertable_schema |  hypertable_name   |     check_schema      |      check_name      
@@ -254,16 +257,19 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                      msg                       
---------+-----------+------------------+------------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
-      0 |     50000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     50000 | DB Scheduler     | [TESTING] Wait until 100000, started at 50000
-      0 |    100000 | DB Scheduler     | [TESTING] Wait until 200000, started at 100000
-(7 rows)
+ msg_no | mock_time |   application_name    |                                        msg                                        
+--------+-----------+-----------------------+-----------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler          | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     25000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     25000 | DB Scheduler          | [TESTING] Wait until 50000, started at 25000
+      0 |     25000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     50000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     50000 | DB Scheduler          | [TESTING] Wait until 100000, started at 50000
+      0 |     50000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |    100000 | DB Scheduler          | [TESTING] Wait until 200000, started at 100000
+(10 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
  job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | fixed_schedule |                              config                               |           next_start            | initial_start | hypertable_schema |  hypertable_name   |     check_schema      |      check_name      
@@ -323,17 +329,20 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                      msg                       
---------+-----------+------------------+------------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
-      0 |     50000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     50000 | DB Scheduler     | [TESTING] Wait until 100000, started at 50000
-      0 |    100000 | DB Scheduler     | [TESTING] Wait until 200000, started at 100000
-      0 |    200000 | DB Scheduler     | [TESTING] Wait until 325000, started at 200000
-(8 rows)
+ msg_no | mock_time |   application_name    |                                        msg                                        
+--------+-----------+-----------------------+-----------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler          | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     25000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     25000 | DB Scheduler          | [TESTING] Wait until 50000, started at 25000
+      0 |     25000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |     50000 | DB Scheduler          | [TESTING] Registered new background worker
+      1 |     50000 | DB Scheduler          | [TESTING] Wait until 100000, started at 50000
+      0 |     50000 | Reorder Policy [1000] | job 1000 (Reorder Policy [1000]) exiting with success: execution time (RANDOM) ms
+      0 |    100000 | DB Scheduler          | [TESTING] Wait until 200000, started at 100000
+      0 |    200000 | DB Scheduler          | [TESTING] Wait until 325000, started at 200000
+(11 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
  job_id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | config | next_start | initial_start | hypertable_schema | hypertable_name | check_schema | check_name 
@@ -447,11 +456,12 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                    msg                     
---------+-----------+------------------+--------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-(2 rows)
+ msg_no | mock_time |    application_name     |                                         msg                                         
+--------+-----------+-------------------------+-------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler            | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler            | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Retention Policy [1001] | job 1001 (Retention Policy [1001]) exiting with success: execution time (RANDOM) ms
+(3 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
  job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule |                     config                     |          next_start          | initial_start | hypertable_schema |    hypertable_name     |     check_schema      |       check_name       
@@ -485,12 +495,13 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                     msg                      
---------+-----------+------------------+----------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
-(3 rows)
+ msg_no | mock_time |    application_name     |                                         msg                                         
+--------+-----------+-------------------------+-------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler            | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler            | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Retention Policy [1001] | job 1001 (Retention Policy [1001]) exiting with success: execution time (RANDOM) ms
+      0 |     25000 | DB Scheduler            | [TESTING] Wait until 50000, started at 25000
+(4 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
  job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule |                     config                     |          next_start          | initial_start | hypertable_schema |    hypertable_name     |     check_schema      |       check_name       
@@ -534,15 +545,17 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                        msg                        
---------+-----------+------------------+---------------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
-      0 |     50000 | DB Scheduler     | [TESTING] Wait until 1000000, started at 50000
-      1 |   1000000 | DB Scheduler     | [TESTING] Registered new background worker
-      2 |   1000000 | DB Scheduler     | [TESTING] Wait until 10050000, started at 1000000
-(6 rows)
+ msg_no | mock_time |    application_name     |                                         msg                                         
+--------+-----------+-------------------------+-------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler            | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler            | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Retention Policy [1001] | job 1001 (Retention Policy [1001]) exiting with success: execution time (RANDOM) ms
+      0 |     25000 | DB Scheduler            | [TESTING] Wait until 50000, started at 25000
+      0 |     50000 | DB Scheduler            | [TESTING] Wait until 1000000, started at 50000
+      1 |   1000000 | DB Scheduler            | [TESTING] Registered new background worker
+      2 |   1000000 | DB Scheduler            | [TESTING] Wait until 10050000, started at 1000000
+      0 |   1000000 | Retention Policy [1001] | job 1001 (Retention Policy [1001]) exiting with success: execution time (RANDOM) ms
+(8 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
  job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | fixed_schedule |                     config                     |          next_start          | initial_start | hypertable_schema |    hypertable_name     |     check_schema      |       check_name       
@@ -655,9 +668,11 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | DB Scheduler            | [TESTING] Registered new background worker
       2 |         0 | DB Scheduler            | [TESTING] Wait until 1000000, started at 0
       0 |         0 | Retention Policy [1002] | applying retention policy to hypertable "test_drop_chunks_table_date": dropping ...
+      1 |         0 | Retention Policy [1002] | job 1002 (Retention Policy [1002]) exiting with success: execution time (RANDOM) ms
       0 |         0 | Retention Policy [1003] | applying retention policy to hypertable "test_drop_chunks_table_tsntz": dropping...
+      1 |         0 | Retention Policy [1003] | job 1003 (Retention Policy [1003]) exiting with success: execution time (RANDOM) ms
       0 |   1000000 | DB Scheduler            | [TESTING] Wait until 2000000, started at 1000000
-(6 rows)
+(8 rows)
 
 -- test the schedule_interval parameter for policies
 CREATE TABLE test_schedint(time timestamptz, a int, b int);
