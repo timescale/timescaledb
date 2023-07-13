@@ -2906,11 +2906,7 @@ typedef enum ChunkDeleteResult
 	/* Deleted a live chunk */
 	CHUNK_DELETED,
 	/* Deleted a chunk previously marked "dropped" */
-	CHUNK_DELETED_DROPPED,
-	/* Marked a chunk as dropped instead of deleting */
-	CHUNK_MARKED_DROPPED,
-	/* Tried to mark a chunk as dropped when it was already marked */
-	CHUNK_ALREADY_MARKED_DROPPED,
+	CHUNK_DELETED_DROPPED
 } ChunkDeleteResult;
 
 /* Delete the chunk tuple.
@@ -2931,7 +2927,7 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
@@ -2941,69 +2937,62 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	ts_chunk_formdata_fill(&form, ti);
 
-	if (preserve_chunk_catalog_row && form.dropped)
-		return CHUNK_ALREADY_MARKED_DROPPED;
-
 	/* if only marking as deleted, keep the constraints and dimension info */
-	if (!preserve_chunk_catalog_row)
+	ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
+
+	/* Check for dimension slices that are orphaned by the chunk deletion */
+	for (i = 0; i < ccs->num_constraints; i++)
 	{
-		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
-
-		/* Check for dimension slices that are orphaned by the chunk deletion */
-		for (i = 0; i < ccs->num_constraints; i++)
+		ChunkConstraint *cc = &ccs->constraints[i];
+		/*
+		 * Delete the dimension slice if there are no remaining constraints
+		 * referencing it
+		 */
+		if (is_dimension_constraint(cc))
 		{
-			ChunkConstraint *cc = &ccs->constraints[i];
-
 			/*
-			 * Delete the dimension slice if there are no remaining constraints
-			 * referencing it
+			 * Dimension slices are shared between chunk constraints and
+			 * subsequently between chunks as well. Since different chunks
+			 * can reference the same dimension slice (through the chunk
+			 * constraint), we must lock the dimension slice in FOR UPDATE
+			 * mode *prior* to scanning the chunk constraints table. If we
+			 * do not do that, we can have the following scenario:
+			 *
+			 * - T1: Prepares to create a chunk that uses an existing dimension slice X
+			 * - T2: Deletes a chunk and dimension slice X because it is not
+			 *   references by a chunk constraint.
+			 * - T1: Adds a chunk constraint referencing dimension
+			 *   slice X (which is about to be deleted by T2).
 			 */
-			if (is_dimension_constraint(cc))
+			ScanTupLock tuplock = {
+				.lockmode = LockTupleExclusive,
+				.waitpolicy = LockWaitBlock,
+			};
+			DimensionSlice *slice =
+				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
+													   &tuplock,
+													   CurrentMemoryContext);
+			/* If the slice is not found in the scan above, the table is
+			 * broken so we do not delete the slice. We proceed
+			 * anyway since users need to be able to drop broken tables or
+			 * remove broken chunks. */
+			if (!slice)
 			{
-				/*
-				 * Dimension slices are shared between chunk constraints and
-				 * subsequently between chunks as well. Since different chunks
-				 * can reference the same dimension slice (through the chunk
-				 * constraint), we must lock the dimension slice in FOR UPDATE
-				 * mode *prior* to scanning the chunk constraints table. If we
-				 * do not do that, we can have the following scenario:
-				 *
-				 * - T1: Prepares to create a chunk that uses an existing dimension slice X
-				 * - T2: Deletes a chunk and dimension slice X because it is not
-				 *   references by a chunk constraint.
-				 * - T1: Adds a chunk constraint referencing dimension
-				 *   slice X (which is about to be deleted by T2).
-				 */
-				ScanTupLock tuplock = {
-					.lockmode = LockTupleExclusive,
-					.waitpolicy = LockWaitBlock,
-				};
-				DimensionSlice *slice =
-					ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-														   &tuplock,
-														   CurrentMemoryContext);
-				/* If the slice is not found in the scan above, the table is
-				 * broken so we do not delete the slice. We proceed
-				 * anyway since users need to be able to drop broken tables or
-				 * remove broken chunks. */
-				if (!slice)
-				{
-					const Hypertable *const ht = ts_hypertable_get_by_id(form.hypertable_id);
-					ereport(WARNING,
-							(errmsg("unexpected state for chunk %s.%s, dropping anyway",
-									quote_identifier(NameStr(form.schema_name)),
-									quote_identifier(NameStr(form.table_name))),
-							 errdetail("The integrity of hypertable %s.%s might be "
-									   "compromised "
-									   "since one of its chunks lacked a dimension slice.",
-									   quote_identifier(NameStr(ht->fd.schema_name)),
-									   quote_identifier(NameStr(ht->fd.table_name)))));
-				}
-				else if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
-																		NULL,
-																		CurrentMemoryContext) == 0)
-					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+				const Hypertable *const ht = ts_hypertable_get_by_id(form.hypertable_id);
+				ereport(WARNING,
+						(errmsg("unexpected state for chunk %s.%s, dropping anyway",
+								quote_identifier(NameStr(form.schema_name)),
+								quote_identifier(NameStr(form.table_name))),
+						 errdetail("The integrity of hypertable %s.%s might be "
+								   "compromised "
+								   "since one of its chunks lacked a dimension slice.",
+								   quote_identifier(NameStr(ht->fd.schema_name)),
+								   quote_identifier(NameStr(ht->fd.table_name)))));
 			}
+			else if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
+																	NULL,
+																	CurrentMemoryContext) == 0)
+				ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
 		}
 	}
 
@@ -3027,30 +3016,12 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
-	if (!preserve_chunk_catalog_row)
-	{
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
-		if (form.dropped)
-			res = CHUNK_DELETED_DROPPED;
-		else
-			res = CHUNK_DELETED;
-	}
+	if (form.dropped)
+		res = CHUNK_DELETED_DROPPED;
 	else
-	{
-		HeapTuple new_tuple;
-
-		Assert(!form.dropped);
-
-		form.compressed_chunk_id = INVALID_CHUNK_ID;
-		form.dropped = true;
-		form.status = CHUNK_STATUS_DEFAULT;
-		new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-		heap_freetuple(new_tuple);
-		res = CHUNK_MARKED_DROPPED;
-	}
-
+		res = CHUNK_DELETED;
 	ts_catalog_restore_user(&sec_ctx);
 
 	return res;
@@ -3074,7 +3045,7 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 }
 
 static int
-chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_delete(ScanIterator *iterator, DropBehavior behavior)
 {
 	int count = 0;
 
@@ -3082,17 +3053,13 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 	{
 		ChunkDeleteResult res;
 
-		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
-								 behavior,
-								 preserve_chunk_catalog_row);
+		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator), behavior);
 
 		switch (res)
 		{
 			case CHUNK_DELETED:
-			case CHUNK_MARKED_DROPPED:
 				count++;
 				break;
-			case CHUNK_ALREADY_MARKED_DROPPED:
 			case CHUNK_DELETED_DROPPED:
 				break;
 		}
@@ -3102,14 +3069,13 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 }
 
 static int
-ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior,
-								 bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, behavior);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3121,19 +3087,18 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBeha
 int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
-	return ts_chunk_delete_by_name_internal(schema, table, behavior, false);
+	return ts_chunk_delete_by_name_internal(schema, table, behavior);
 }
 
 static int
-ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior)
 {
 	if (!OidIsValid(relid))
 		return 0;
 
 	return ts_chunk_delete_by_name_internal(get_namespace_name(get_rel_namespace(relid)),
 											get_rel_name(relid),
-											behavior,
-											preserve_chunk_catalog_row);
+											behavior);
 }
 
 static void
@@ -3154,7 +3119,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, DROP_RESTRICT);
 }
 
 bool
@@ -3817,8 +3782,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 static void
-ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_level,
-					   bool preserve_catalog_row)
+ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	ObjectAddress objaddr = {
 		.classId = RelationRelationId,
@@ -3832,7 +3796,7 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 			 chunk->fd.table_name.data);
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid(chunk->table_id, behavior, preserve_catalog_row);
+	ts_chunk_delete_by_relid(chunk->table_id, behavior);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
@@ -3841,13 +3805,7 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 void
 ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
-	ts_chunk_drop_internal(chunk, behavior, log_level, false);
-}
-
-void
-ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, int32 log_level)
-{
-	ts_chunk_drop_internal(chunk, behavior, log_level, true);
+	ts_chunk_drop_internal(chunk, behavior, log_level);
 }
 
 static void
@@ -4008,10 +3966,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		if (has_continuous_aggs)
-			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
-		else
-			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
+		ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 
 		/* Collect a list of affected data nodes so that we know which data
 		 * nodes we need to drop chunks on */

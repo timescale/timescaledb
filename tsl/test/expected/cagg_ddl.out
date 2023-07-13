@@ -623,12 +623,9 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 --we see the chunks row with the dropped flags set;
 SELECT * FROM _timescaledb_catalog.chunk where dropped;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
- 13 |            10 | _timescaledb_internal | _hyper_10_13_chunk |                     | t       |      0 | f
- 14 |            10 | _timescaledb_internal | _hyper_10_14_chunk |                     | t       |      0 | f
- 15 |            10 | _timescaledb_internal | _hyper_10_15_chunk |                     | t       |      0 | f
-(3 rows)
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+---------+--------+-----------
+(0 rows)
 
 --still see data in the view
 SELECT * FROM drop_chunks_view WHERE time_bucket < (integer_now_test2()-9) ORDER BY time_bucket DESC;
@@ -682,9 +679,9 @@ WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY range_start_integer;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_14_chunk |                  10 |                20
- _hyper_10_15_chunk |                  20 |                30
+ _hyper_10_18_chunk |                   0 |                10
+ _hyper_10_19_chunk |                  10 |                20
+ _hyper_10_20_chunk |                  20 |                30
  _hyper_10_16_chunk |                  30 |                40
 (4 rows)
 
@@ -729,7 +726,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
- _hyper_11_20_chunk |                   0 |               100
+ _hyper_11_23_chunk |                   0 |               100
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -750,12 +747,12 @@ WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY 2,3;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_14_chunk |                  10 |                20
- _hyper_10_15_chunk |                  20 |                30
+ _hyper_10_18_chunk |                   0 |                10
+ _hyper_10_19_chunk |                  10 |                20
+ _hyper_10_20_chunk |                  20 |                30
  _hyper_10_16_chunk |                  30 |                40
- _hyper_10_18_chunk |                  40 |                50
- _hyper_10_19_chunk |                  50 |                60
+ _hyper_10_21_chunk |                  40 |                50
+ _hyper_10_22_chunk |                  50 |                60
 (6 rows)
 
 -- Pick the second chunk as the one to drop
@@ -822,11 +819,11 @@ WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY 2,3;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_15_chunk |                  20 |                30
+ _hyper_10_18_chunk |                   0 |                10
+ _hyper_10_20_chunk |                  20 |                30
  _hyper_10_16_chunk |                  30 |                40
- _hyper_10_18_chunk |                  40 |                50
- _hyper_10_19_chunk |                  50 |                60
+ _hyper_10_21_chunk |                  40 |                50
+ _hyper_10_22_chunk |                  50 |                60
 (5 rows)
 
 -- Data is no longer in the table but still in the view
@@ -855,8 +852,8 @@ CALL refresh_continuous_aggregate('drop_chunks_view', NULL, 30);
 SELECT drop_chunks('drop_chunks_table', older_than=>30);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_10_13_chunk
- _timescaledb_internal._hyper_10_15_chunk
+ _timescaledb_internal._hyper_10_18_chunk
+ _timescaledb_internal._hyper_10_20_chunk
 (2 rows)
 
 -- Verify that the chunks are dropped
@@ -867,8 +864,8 @@ ORDER BY 2,3;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
  _hyper_10_16_chunk |                  30 |                40
- _hyper_10_18_chunk |                  40 |                50
- _hyper_10_19_chunk |                  50 |                60
+ _hyper_10_21_chunk |                  40 |                50
+ _hyper_10_22_chunk |                  50 |                60
 (3 rows)
 
 -- The continuous aggregate should be refreshed in the regions covered
@@ -968,8 +965,8 @@ SELECT user_view,
    AND user_view::text LIKE 'whatever_view%';
     user_view    |          mat_table          | mat_tablespace |     chunk_name     | chunk_tablespace 
 -----------------+-----------------------------+----------------+--------------------+------------------
- whatever_view_1 | _materialized_hypertable_13 |                | _hyper_13_24_chunk | 
- whatever_view_2 | _materialized_hypertable_14 | tablespace1    | _hyper_14_25_chunk | tablespace1
+ whatever_view_1 | _materialized_hypertable_13 |                | _hyper_13_27_chunk | 
+ whatever_view_2 | _materialized_hypertable_14 | tablespace1    | _hyper_14_28_chunk | tablespace1
 (2 rows)
 
 ALTER MATERIALIZED VIEW whatever_view_1 SET TABLESPACE tablespace2;
@@ -983,14 +980,14 @@ SELECT user_view,
    AND user_view::text LIKE 'whatever_view%';
     user_view    |          mat_table          | mat_tablespace |     chunk_name     | chunk_tablespace 
 -----------------+-----------------------------+----------------+--------------------+------------------
- whatever_view_1 | _materialized_hypertable_13 | tablespace2    | _hyper_13_24_chunk | tablespace2
- whatever_view_2 | _materialized_hypertable_14 | tablespace1    | _hyper_14_25_chunk | tablespace1
+ whatever_view_1 | _materialized_hypertable_13 | tablespace2    | _hyper_13_27_chunk | tablespace2
+ whatever_view_2 | _materialized_hypertable_14 | tablespace1    | _hyper_14_28_chunk | tablespace1
 (2 rows)
 
 DROP MATERIALIZED VIEW whatever_view_1;
-psql:include/cagg_ddl_common.sql:644: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_24_chunk
+psql:include/cagg_ddl_common.sql:644: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_27_chunk
 DROP MATERIALIZED VIEW whatever_view_2;
-psql:include/cagg_ddl_common.sql:645: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_25_chunk
+psql:include/cagg_ddl_common.sql:645: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_28_chunk
 -- test bucket width expressions on integer hypertables
 CREATE TABLE metrics_int2 (
   time int2 NOT NULL,
@@ -1244,7 +1241,7 @@ SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
 psql:include/cagg_ddl_common.sql:874: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 DROP materialized view conditionsnm_4;
-psql:include/cagg_ddl_common.sql:876: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_37_chunk
+psql:include/cagg_ddl_common.sql:876: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_40_chunk
 -- Case 2: DROP CASCADE should have similar behaviour as DROP
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -1254,7 +1251,7 @@ SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
 psql:include/cagg_ddl_common.sql:884: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 DROP materialized view conditionsnm_4 CASCADE;
-psql:include/cagg_ddl_common.sql:886: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_38_chunk
+psql:include/cagg_ddl_common.sql:886: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_41_chunk
 -- Case 3: require CASCADE in case of dependent object
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -1271,7 +1268,7 @@ psql:include/cagg_ddl_common.sql:898: ERROR:  cannot drop view conditionsnm_4 be
 -- Case 4: DROP CASCADE with dependency
 DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
 psql:include/cagg_ddl_common.sql:902: NOTICE:  drop cascades to view see_cagg
-psql:include/cagg_ddl_common.sql:902: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_39_chunk
+psql:include/cagg_ddl_common.sql:902: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_42_chunk
 -- Test DROP SCHEMA CASCADE with continuous aggregates
 --
 -- Issue: #2350
@@ -1716,7 +1713,7 @@ DELETE FROM test_setting WHERE val = 20;
 --TEST test with multiple settings on continuous aggregates with real time aggregates turned off initially --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
 DROP MATERIALIZED VIEW test_setting_cagg;
-psql:include/cagg_ddl_common.sql:1174: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
+psql:include/cagg_ddl_common.sql:1174: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_50_chunk
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only = true)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
 psql:include/cagg_ddl_common.sql:1177: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
@@ -1910,8 +1907,8 @@ Indexes:
     "_materialized_hypertable_47_bucket_idx" btree (bucket DESC)
 Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_47 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
-Child tables: _timescaledb_internal._hyper_47_52_chunk,
-              _timescaledb_internal._hyper_47_53_chunk
+Child tables: _timescaledb_internal._hyper_47_55_chunk,
+              _timescaledb_internal._hyper_47_56_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"
