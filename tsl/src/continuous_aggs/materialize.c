@@ -271,7 +271,16 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 	res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
 
 	if (res < 0)
-		elog(ERROR, "could not delete old values from materialization table");
+		elog(ERROR,
+			 "could not delete old values from materialization table \"%s.%s\"",
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
+	else
+		elog(LOG,
+			 "deleted " UINT64_FORMAT " row(s) from materialization table \"%s.%s\"",
+			 SPI_processed,
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
 }
 
 static void
@@ -306,7 +315,16 @@ spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 	res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
 
 	if (res < 0)
-		elog(ERROR, "could not materialize values into the materialization table");
+		elog(ERROR,
+			 "could not materialize values into the materialization table \"%s.%s\"",
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
+	else
+		elog(LOG,
+			 "inserted " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
+			 SPI_processed,
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
 
 	/* Get the max(time_dimension) of the materialized data */
 	if (SPI_processed > 0)

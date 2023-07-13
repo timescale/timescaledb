@@ -125,6 +125,8 @@ LOG:  statement: CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '
 DEBUG:  refreshing continuous aggregate "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sun May 03 17:00:00 2020 PDT ]
 DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 1588723200000000 1588550400000000
 DEBUG:  invalidation refresh on "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sat May 02 17:00:00 2020 PDT ]
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+LOG:  inserted 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 DEBUG:  hypertable 2 existing watermark >= new watermark 1588723200000000 1588464000000000
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;

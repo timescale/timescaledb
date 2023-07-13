@@ -45,11 +45,8 @@ CREATE VIEW sorted_bgw_log AS
 SELECT msg_no,
   mock_time,
   application_name,
-  CASE WHEN length(msg) > 80 THEN
-    substring(msg, 1, 80) || '...'
-  ELSE
-    msg
-  END AS msg
+  regexp_replace(CASE WHEN length(msg) > 80 THEN substring(msg, 1, 80) || '...' ELSE msg END,
+  		 '(execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g') AS msg
 FROM bgw_log
 ORDER BY mock_time,
   application_name COLLATE "C",
