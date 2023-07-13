@@ -72,6 +72,7 @@ select :t+30 as t \gset
 -- (1688626805+:t, 169+:off, 'OV1', 0, 33.33);
 -- select :t+10 as t \gset
 
+
 set timescaledb.enable_trace=false;
 
 explain analyze insert into logdata (timestamp, idSite, code, instance, valuefloat)
@@ -99,3 +100,5 @@ values
 (1688626820+:t, 168+:off, 'OV1', 0, 33.33),
 (1688626821+:t, 169+:off, 'OV1', 0, 33.33);
 select :t+30 as t \gset
+
+select 11;
