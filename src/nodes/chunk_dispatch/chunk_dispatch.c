@@ -79,7 +79,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
-
 	/*
 	 * The chunk search functions may leak memory, so switch to a temporary
 	 * memory context.
@@ -301,8 +300,8 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 												 &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	ts_hypertable_compression_load(ht,ts_cache_memory_ctx(hypertable_cache));
-	
+	ts_hypertable_compression_load(ht, ts_cache_memory_ctx(hypertable_cache));
+
 	state->dispatch = ts_chunk_dispatch_create(ht, estate, eflags);
 	state->dispatch->dispatch_state = state;
 	node->custom_ps = list_make1(ps);

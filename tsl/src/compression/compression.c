@@ -1815,9 +1815,8 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
  * columns of the uncompressed chunk.
  */
 static ScanKeyData *
-build_scankeys(Hypertable*ht, RowDecompressor decompressor,
-			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
-			   int *num_scankeys)
+build_scankeys(Hypertable *ht, RowDecompressor decompressor, Bitmapset *key_columns,
+			   Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;

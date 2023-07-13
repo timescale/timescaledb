@@ -169,9 +169,9 @@ ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname)
 }
 
 void
-ts_hypertable_compression_load(Hypertable*ht,MemoryContext mcxt)
+ts_hypertable_compression_load(Hypertable *ht, MemoryContext mcxt)
 {
-	int32 htid=ht->fd.id;
+	int32 htid = ht->fd.id;
 	ScanIterator iterator =
 		ts_scan_iterator_create(HYPERTABLE_COMPRESSION, AccessShareLock, CurrentMemoryContext);
 	iterator.ctx.index =
@@ -183,19 +183,19 @@ ts_hypertable_compression_load(Hypertable*ht,MemoryContext mcxt)
 								   Int32GetDatum(htid));
 
 	ts_scanner_start_scan(&iterator.ctx);
-	TupleInfo *ti=0;
-	List*li=0;
+	TupleInfo *ti = 0;
+	List *li = 0;
 	MemoryContext oldmctx = MemoryContextSwitchTo(mcxt);
 	while ((ti = ts_scanner_next(&iterator.ctx)))
 	{
 		FormData_hypertable_compression *colfd = NULL;
 		colfd = palloc0(sizeof(FormData_hypertable_compression));
 		hypertable_compression_fill_from_tuple(colfd, ti);
-		li=lappend(li,colfd)		;
+		li = lappend(li, colfd);
 	}
 	ts_scan_iterator_close(&iterator);
-	ht->compression_keys=li;
-	ht->compression_keys_loaded=true;
+	ht->compression_keys = li;
+	ht->compression_keys_loaded = true;
 	MemoryContextSwitchTo(oldmctx);
 }
 
@@ -204,15 +204,16 @@ ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname)
 {
 	ListCell *lc;
 
-
-	if (!ht->compression_keys_loaded) {
-	elog(ERROR, "compression_keys not loaded");
-
+	if (!ht->compression_keys_loaded)
+	{
+		elog(ERROR, "compression_keys not loaded");
 	}
 
-	foreach(lc, ht->compression_keys) {
-		FormData_hypertable_compression *ent=lfirst(lc);
-		if(namestrcmp(&ent->attname,attname) == 0) {
+	foreach (lc, ht->compression_keys)
+	{
+		FormData_hypertable_compression *ent = lfirst(lc);
+		if (namestrcmp(&ent->attname, attname) == 0)
+		{
 			return ent;
 		}
 	}
