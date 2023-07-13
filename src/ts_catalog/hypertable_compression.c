@@ -169,8 +169,9 @@ ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname)
 }
 
 static List *
-ts_hypertable_compression_get_all(int32 htid)
+ts_hypertable_compression_get_all(Hypertable*ht)
 {
+	int32 htid=ht->fd.id;
 	ScanIterator iterator =
 		ts_scan_iterator_create(HYPERTABLE_COMPRESSION, AccessShareLock, CurrentMemoryContext);
 	iterator.ctx.index =
@@ -184,15 +185,16 @@ ts_hypertable_compression_get_all(int32 htid)
 	ts_scanner_start_scan(&iterator.ctx);
 	TupleInfo *ti=0;
 	List*li;
-	while ((ti = ts_scanner_next(&iterator.ctx) )) {
+	// MemoryContext oldmctx = MemoryContextSwitchTo(ht->chunk_cache->mcxt);
+	while ((ti = ts_scanner_next(&iterator.ctx)))
+	{
 		FormData_hypertable_compression *colfd = NULL;
 		colfd = palloc0(sizeof(FormData_hypertable_compression));
 		hypertable_compression_fill_from_tuple(colfd, ti);
 		li=lappend(li,colfd)		;
-
 	}
 	ts_scan_iterator_close(&iterator);
-
+	// MemoryContextSwitchTo(oldmctx);
 	return li;
 }
 
@@ -201,8 +203,12 @@ ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname)
 {
 	ListCell *lc;
 
+	// elog(NOTICE, "live %p %s", ht,attname);
+
 	if (!ht->compression_keys)
-		ht->compression_keys = ts_hypertable_compression_get_all(ht->fd.id);
+		ht->compression_keys = ts_hypertable_compression_get_all(ht);
+
+	// elog(NOTICE, "loaded %p %s", ht,attname);
 
 	foreach(lc, ht->compression_keys) {
 		FormData_hypertable_compression *ent=lfirst(lc);
