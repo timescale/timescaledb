@@ -59,8 +59,6 @@ typedef struct Hypertable
 	 * use all available data nodes.
 	 */
 	List *data_nodes;
-	List *compression_keys;
-	bool compression_keys_loaded;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */

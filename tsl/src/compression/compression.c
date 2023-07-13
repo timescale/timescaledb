@@ -1815,7 +1815,7 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
  * columns of the uncompressed chunk.
  */
 static ScanKeyData *
-build_scankeys(Hypertable*ht, RowDecompressor decompressor,
+build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decompressor,
 			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
 			   int *num_scankeys)
 {
@@ -1831,9 +1831,9 @@ build_scankeys(Hypertable*ht, RowDecompressor decompressor,
 			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 			char *attname = get_attname(decompressor.out_rel->rd_id, attno, false);
 			FormData_hypertable_compression *fd =
-				ts_hypertable_compression_get_by_pkey2(ht, attname);
+				ts_hypertable_compression_get_by_pkey(hypertable_id, attname);
 			bool isnull;
-			AttrNumber ht_attno = get_attnum(ht->main_table_relid, attname);
+			AttrNumber ht_attno = get_attnum(hypertable_relid, attname);
 			Datum value = slot_getattr(slot, ht_attno, &isnull);
 			/*
 			 * There are 3 possible scenarios we have to consider
@@ -1971,8 +1971,6 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-	// ts_hypertable_find_chunk_for_point
-	// cis->compressed_ht
 	Chunk *comp = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
 
@@ -1981,7 +1979,8 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
-	ScanKeyData *scankeys = build_scankeys(cis->hypertable,
+	ScanKeyData *scankeys = build_scankeys(chunk->fd.hypertable_id,
+										   chunk->hypertable_relid,
 										   decompressor,
 										   key_columns,
 										   &null_columns,
