@@ -29,7 +29,6 @@ typedef struct ChunkDispatch
 	/* Link to the executor state for INSERTs. This is not set for COPY path. */
 	const struct ChunkDispatchState *dispatch_state;
 	Hypertable *hypertable;
-	Hypertable *compressed_hypertable;
 	SubspaceStore *cache;
 	EState *estate;
 	int eflags;
@@ -84,8 +83,7 @@ typedef struct Point Point;
 
 typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
 
-extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht,Hypertable *compressed_ht, EState *estate, int eflags);
-
+extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, TupleTableSlot *slot,

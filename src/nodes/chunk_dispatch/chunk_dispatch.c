@@ -29,12 +29,11 @@
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
 ChunkDispatch *
-ts_chunk_dispatch_create(Hypertable *ht,Hypertable *compressed_ht, EState *estate, int eflags)
+ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
 {
 	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
 	cd->hypertable = ht;
-	cd->compressed_hypertable = compressed_ht;
 	cd->estate = estate;
 	cd->eflags = eflags;
 	cd->hypertable_result_rel_info = NULL;
@@ -71,7 +70,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	bool cis_changed = true;
 	bool found = true;
 	Chunk *chunk = NULL;
-	
+
 	/* Direct inserts into internal compressed hypertable is not supported.
 	 * For compression chunks are created explicitly by compress_chunk and
 	 * inserted into directly so we should never end up in this code path
@@ -295,22 +294,15 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	Hypertable *ht;
-	Hypertable * compressed_ht =0;
 	Cache *hypertable_cache;
 	PlanState *ps;
 
 	ht = ts_hypertable_cache_get_cache_and_entry(state->hypertable_relid,
 												 CACHE_FLAG_NONE,
 												 &hypertable_cache);
-		
-	if(ht && ht->fd.compressed_hypertable_id ) {
-		compressed_ht = ts_hypertable_cache_get_cache_and_entry(ht->fd.compressed_hypertable_id,
-													 CACHE_FLAG_NONE,
-													 &hypertable_cache);
-	}
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = ts_chunk_dispatch_create(ht, compressed_ht, estate, eflags);
+	state->dispatch = ts_chunk_dispatch_create(ht, estate, eflags);
 	state->dispatch->dispatch_state = state;
 	node->custom_ps = list_make1(ps);
 }
@@ -617,7 +609,6 @@ const char*  __attribute__((no_instrument_function))  name_of(void *fn) {
 	A(ts_catalog_get)
 	A(ts_scanner_scan)
 	A(ts_scanner_start_scan)
-
 #undef A
 	return "(unknown)";
 }
