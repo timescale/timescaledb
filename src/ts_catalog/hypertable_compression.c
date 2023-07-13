@@ -168,9 +168,7 @@ ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname)
 	return colfd;
 }
 
-TSDLLEXPORT List *
-ts_hypertable_compression_get_all(int32 htid);
-TSDLLEXPORT List *
+static List *
 ts_hypertable_compression_get_all(int32 htid)
 {
 	ScanIterator iterator =
@@ -199,9 +197,6 @@ ts_hypertable_compression_get_all(int32 htid)
 }
 
 TSDLLEXPORT FormData_hypertable_compression *
-ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname);
-
-TSDLLEXPORT FormData_hypertable_compression *
 ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname)
 {
 	ListCell *lc;
@@ -217,9 +212,6 @@ ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname)
 	}
 	return NULL;
 }
-
-
-
 
 TSDLLEXPORT bool
 ts_hypertable_compression_delete_by_hypertable_id(int32 htid)
