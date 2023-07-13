@@ -16,4 +16,4 @@ function measure() {
 measure comp_0 -v compress=0
 measure comp_1 -v compress=1
 
-firefox uncomp.svg perf.svg comp_0.svg comp_1.svg
+firefox uncomp.svg perf.svg comp_0.svg comp_1.svg some/comp_0.svg some/comp_1.svg
