@@ -1831,7 +1831,7 @@ build_scankeys(Hypertable*ht, RowDecompressor decompressor,
 			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 			char *attname = get_attname(decompressor.out_rel->rd_id, attno, false);
 			FormData_hypertable_compression *fd =
-				ts_hypertable_compression_get_by_pkey(ht->fd.id, attname);
+				ts_hypertable_compression_get_by_pkey2(ht, attname);
 			bool isnull;
 			AttrNumber ht_attno = get_attnum(ht->main_table_relid, attname);
 			Datum value = slot_getattr(slot, ht_attno, &isnull);
