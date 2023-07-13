@@ -60,6 +60,8 @@ typedef struct ChunkInsertState
 	/* for tracking compressed chunks */
 	bool chunk_compressed;
 	bool chunk_partial;
+	Hypertable	*ht;
+	Hypertable	*compressed_ht;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
