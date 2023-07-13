@@ -23,6 +23,7 @@
 #include "guc.h"
 #include "nodes/hypertable_modify.h"
 #include "ts_catalog/chunk_data_node.h"
+#include "ts_catalog/hypertable_compression.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
@@ -300,6 +301,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 												 &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
+	
 	ts_hypertable_compression_load(ht, ts_cache_memory_ctx(hypertable_cache));
 
 	state->dispatch = ts_chunk_dispatch_create(ht, estate, eflags);
