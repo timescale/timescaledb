@@ -1981,7 +1981,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
-	ScanKeyData *scankeys = build_scankeys(cis->ht,
+	ScanKeyData *scankeys = build_scankeys(cis->hypertable,
 										   decompressor,
 										   key_columns,
 										   &null_columns,
