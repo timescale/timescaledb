@@ -14,6 +14,7 @@
 extern TSDLLEXPORT List *ts_hypertable_compression_get(int32 htid);
 extern TSDLLEXPORT FormData_hypertable_compression *
 ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname);
+extern TSDLLEXPORT void ts_hypertable_compression_load(Hypertable *ht, MemoryContext mcxt);
 extern TSDLLEXPORT FormData_hypertable_compression *ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname);
 
 extern TSDLLEXPORT void

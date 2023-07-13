@@ -60,6 +60,7 @@ typedef struct Hypertable
 	 */
 	List *data_nodes;
 	List *compression_keys;
+	bool compression_keys_loaded;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */

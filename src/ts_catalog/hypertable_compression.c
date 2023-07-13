@@ -168,8 +168,8 @@ ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname)
 	return colfd;
 }
 
-static List *
-ts_hypertable_compression_get_all(Hypertable*ht)
+void
+ts_hypertable_compression_load(Hypertable*ht,MemoryContext mcxt)
 {
 	int32 htid=ht->fd.id;
 	ScanIterator iterator =
@@ -184,8 +184,8 @@ ts_hypertable_compression_get_all(Hypertable*ht)
 
 	ts_scanner_start_scan(&iterator.ctx);
 	TupleInfo *ti=0;
-	List*li;
-	// MemoryContext oldmctx = MemoryContextSwitchTo(ht->chunk_cache->mcxt);
+	List*li=0;
+	MemoryContext oldmctx = MemoryContextSwitchTo(mcxt);
 	while ((ti = ts_scanner_next(&iterator.ctx)))
 	{
 		FormData_hypertable_compression *colfd = NULL;
@@ -194,8 +194,9 @@ ts_hypertable_compression_get_all(Hypertable*ht)
 		li=lappend(li,colfd)		;
 	}
 	ts_scan_iterator_close(&iterator);
-	// MemoryContextSwitchTo(oldmctx);
-	return li;
+	ht->compression_keys=li;
+	ht->compression_keys_loaded=true;
+	MemoryContextSwitchTo(oldmctx);
 }
 
 TSDLLEXPORT FormData_hypertable_compression *
@@ -203,12 +204,11 @@ ts_hypertable_compression_get_by_pkey2(Hypertable *ht, const char *attname)
 {
 	ListCell *lc;
 
-	// elog(NOTICE, "live %p %s", ht,attname);
 
-	if (!ht->compression_keys)
-		ht->compression_keys = ts_hypertable_compression_get_all(ht);
+	if (!ht->compression_keys_loaded) {
+	elog(ERROR, "compression_keys not loaded");
 
-	// elog(NOTICE, "loaded %p %s", ht,attname);
+	}
 
 	foreach(lc, ht->compression_keys) {
 		FormData_hypertable_compression *ent=lfirst(lc);
