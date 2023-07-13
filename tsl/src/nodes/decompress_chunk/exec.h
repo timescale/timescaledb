@@ -76,10 +76,10 @@ typedef struct DecompressChunkState
 
 	bool batch_sorted_merge; /* Merge append optimization enabled */
 	List *sortinfo;
-	int last_added_batch;		   /* The batch state with the most recent value */
 	struct binaryheap *merge_heap; /* Binary heap of slot indices */
 	int n_sortkeys;				   /* Number of sort keys for heap compare function */
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
+	TupleTableSlot *last_batch_first_tuple;
 
 	bool enable_bulk_decompression;
 

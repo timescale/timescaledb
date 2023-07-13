@@ -404,6 +404,134 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 }
 
 /*
+ * Construct the next tuple in the decompressed scan slot.
+ * Doesn't check the quals.
+ */
+static void
+compressed_batch_make_next_tuple(DecompressChunkState *chunk_state,
+								 DecompressBatchState *batch_state)
+{
+	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
+	Assert(decompressed_scan_slot != NULL);
+
+	Assert(batch_state->total_batch_rows > 0);
+	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
+
+	const int output_row = batch_state->next_batch_row;
+	const size_t arrow_row = unlikely(chunk_state->reverse) ?
+								 batch_state->total_batch_rows - 1 - output_row :
+								 output_row;
+
+	const int num_compressed_columns = chunk_state->num_compressed_columns;
+	for (int i = 0; i < num_compressed_columns; i++)
+	{
+		CompressedColumnValues column_values = batch_state->compressed_columns[i];
+
+		if (column_values.iterator != NULL)
+		{
+			DecompressResult result = column_values.iterator->try_next(column_values.iterator);
+
+			if (result.is_done)
+			{
+				elog(ERROR, "compressed column out of sync with batch counter");
+			}
+
+			const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
+			decompressed_scan_slot->tts_isnull[attr] = result.is_null;
+			decompressed_scan_slot->tts_values[attr] = result.val;
+		}
+		else if (column_values.arrow_values != NULL)
+		{
+			const char *restrict src = column_values.arrow_values;
+			Assert(column_values.value_bytes > 0);
+
+			/*
+			 * The conversion of Datum to more narrow types will truncate
+			 * the higher bytes, so we don't care if we read some garbage
+			 * into them, and can always read 8 bytes. These are unaligned
+			 * reads, so technically we have to do memcpy.
+			 */
+			uint64 value;
+			memcpy(&value, &src[column_values.value_bytes * arrow_row], 8);
+
+#ifdef USE_FLOAT8_BYVAL
+			Datum datum = Int64GetDatum(value);
+#else
+			/*
+			 * On 32-bit systems, the data larger than 4 bytes go by
+			 * reference, so we have to jump through these hoops.
+			 */
+			Datum datum;
+			if (column_values.value_bytes <= 4)
+			{
+				datum = Int32GetDatum((uint32) value);
+			}
+			else
+			{
+				datum = Int64GetDatum(value);
+			}
+#endif
+			const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
+			decompressed_scan_slot->tts_values[attr] = datum;
+			decompressed_scan_slot->tts_isnull[attr] =
+				!arrow_row_is_valid(column_values.arrow_validity, arrow_row);
+		}
+	}
+
+	/*
+	 * It's a virtual tuple slot, so no point in clearing/storing it
+	 * per each row, we can just update the values in-place. This saves
+	 * some CPU. We have to store it after ExecQual returns false (the tuple
+	 * didn't pass the filter), or after a new batch. The standard protocol
+	 * is to clear and set the tuple slot for each row, but our output tuple
+	 * slots are read-only, and the memory is owned by this node, so it is
+	 * safe to violate this protocol.
+	 */
+	Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
+	if (TTS_EMPTY(decompressed_scan_slot))
+	{
+		ExecStoreVirtualTuple(decompressed_scan_slot);
+	}
+}
+
+static bool
+compressed_batch_vector_qual(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+{
+	Assert(batch_state->total_batch_rows > 0);
+	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
+
+	const int output_row = batch_state->next_batch_row;
+	const size_t arrow_row = unlikely(chunk_state->reverse) ?
+								 batch_state->total_batch_rows - 1 - output_row :
+								 output_row;
+
+	if (!batch_state->vector_qual_result)
+	{
+		return true;
+	}
+
+	return arrow_row_is_valid(batch_state->vector_qual_result, arrow_row);
+}
+
+static bool
+compressed_batch_postgres_qual(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+{
+	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
+	Assert(!TupIsNull(decompressed_scan_slot));
+
+	if (!chunk_state->csstate.ss.ps.qual)
+	{
+		return true;
+	}
+
+	/* Perform the usual Postgres selection. */
+	ExprContext *econtext = chunk_state->csstate.ss.ps.ps_ExprContext;
+	econtext->ecxt_scantuple = decompressed_scan_slot;
+	ResetExprContext(econtext);
+	return ExecQual(chunk_state->csstate.ss.ps.qual, econtext);
+}
+
+/*
  * Decompress the next tuple from the batch indicated by batch state. The result is stored
  * in batch_state->decompressed_scan_slot. The slot will be empty if the batch
  * is entirely processed.
@@ -411,50 +539,17 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 void
 compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
-	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
+	Assert(batch_state->total_batch_rows > 0);
 
+	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
 	Assert(decompressed_scan_slot != NULL);
 
 	const int num_compressed_columns = chunk_state->num_compressed_columns;
-	const bool reverse = chunk_state->reverse;
 
-	while (true)
+	for (; batch_state->next_batch_row < batch_state->total_batch_rows;
+		 batch_state->next_batch_row++)
 	{
-		if (batch_state->next_batch_row >= batch_state->total_batch_rows)
-		{
-			/*
-			 * Reached end of batch. Check that the columns that we're decompressing
-			 * row-by-row have also ended.
-			 */
-			for (int i = 0; i < num_compressed_columns; i++)
-			{
-				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-				if (column_values->iterator)
-				{
-					DecompressResult result =
-						column_values->iterator->try_next(column_values->iterator);
-					if (!result.is_done)
-					{
-						elog(ERROR, "compressed column out of sync with batch counter");
-					}
-				}
-			}
-
-			/* Clear old slot state */
-			ExecClearTuple(decompressed_scan_slot);
-
-			return;
-		}
-
-		Assert(batch_state->total_batch_rows > 0);
-		Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
-
-		const int output_row = batch_state->next_batch_row++;
-		const size_t arrow_row =
-			unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
-
-		if (batch_state->vector_qual_result &&
-			!arrow_row_is_valid(batch_state->vector_qual_result, arrow_row))
+		if (!compressed_batch_vector_qual(chunk_state, batch_state))
 		{
 			/*
 			 * This row doesn't pass the vectorized quals. Advance the iterated
@@ -472,97 +567,69 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 			continue;
 		}
 
-		for (int i = 0; i < num_compressed_columns; i++)
+		compressed_batch_make_next_tuple(chunk_state, batch_state);
+
+		if (!compressed_batch_postgres_qual(chunk_state, batch_state))
 		{
-			CompressedColumnValues column_values = batch_state->compressed_columns[i];
-
-			if (column_values.iterator != NULL)
-			{
-				DecompressResult result = column_values.iterator->try_next(column_values.iterator);
-
-				if (result.is_done)
-				{
-					elog(ERROR, "compressed column out of sync with batch counter");
-				}
-
-				const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
-				decompressed_scan_slot->tts_isnull[attr] = result.is_null;
-				decompressed_scan_slot->tts_values[attr] = result.val;
-			}
-			else if (column_values.arrow_values != NULL)
-			{
-				const char *restrict src = column_values.arrow_values;
-				Assert(column_values.value_bytes > 0);
-
-				/*
-				 * The conversion of Datum to more narrow types will truncate
-				 * the higher bytes, so we don't care if we read some garbage
-				 * into them, and can always read 8 bytes. These are unaligned
-				 * reads, so technically we have to do memcpy.
-				 */
-				uint64 value;
-				memcpy(&value, &src[column_values.value_bytes * arrow_row], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-				Datum datum = Int64GetDatum(value);
-#else
-				/*
-				 * On 32-bit systems, the data larger than 4 bytes go by
-				 * reference, so we have to jump through these hoops.
-				 */
-				Datum datum;
-				if (column_values.value_bytes <= 4)
-				{
-					datum = Int32GetDatum((uint32) value);
-				}
-				else
-				{
-					datum = Int64GetDatum(value);
-				}
-#endif
-				const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
-				decompressed_scan_slot->tts_values[attr] = datum;
-				decompressed_scan_slot->tts_isnull[attr] =
-					!arrow_row_is_valid(column_values.arrow_validity, arrow_row);
-			}
-		}
-
-		/*
-		 * It's a virtual tuple slot, so no point in clearing/storing it
-		 * per each row, we can just update the values in-place. This saves
-		 * some CPU. We have to store it after ExecQual returns false (the tuple
-		 * didn't pass the filter), or after a new batch. The standard protocol
-		 * is to clear and set the tuple slot for each row, but our output tuple
-		 * slots are read-only, and the memory is owned by this node, so it is
-		 * safe to violate this protocol.
-		 */
-		Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
-		if (TTS_EMPTY(decompressed_scan_slot))
-		{
-			ExecStoreVirtualTuple(decompressed_scan_slot);
-		}
-
-		/* Perform the usual Postgres selection. */
-		bool qual_passed = true;
-		if (chunk_state->csstate.ss.ps.qual)
-		{
-			ExprContext *econtext = chunk_state->csstate.ss.ps.ps_ExprContext;
-			econtext->ecxt_scantuple = decompressed_scan_slot;
-			ResetExprContext(econtext);
-			qual_passed = ExecQual(chunk_state->csstate.ss.ps.qual, econtext);
-		}
-
-		if (qual_passed)
-		{
-			/* Non empty result, return it. */
-			Assert(!TTS_EMPTY(decompressed_scan_slot));
-			return;
-		}
-		else
-		{
+			/*
+			 * The tuple didn't pass the qual, fetch the next one in the next
+			 * iteration.
+			 */
 			InstrCountFiltered1(&chunk_state->csstate, 1);
+			continue;
 		}
 
-		/* Otherwise fetch the next tuple in the next iteration */
+		/* The tuple passed the qual. */
+		batch_state->next_batch_row++;
+		return;
+	}
+
+	/*
+	 * Reached end of batch. Check that the columns that we're decompressing
+	 * row-by-row have also ended.
+	 */
+	Assert(batch_state->next_batch_row == batch_state->total_batch_rows);
+	for (int i = 0; i < num_compressed_columns; i++)
+	{
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		if (column_values->iterator)
+		{
+			DecompressResult result = column_values->iterator->try_next(column_values->iterator);
+			if (!result.is_done)
+			{
+				elog(ERROR, "compressed column out of sync with batch counter");
+			}
+		}
+	}
+
+	/* Clear old slot state */
+	ExecClearTuple(decompressed_scan_slot);
+}
+
+/*
+ * Before loading the first matching tuple from the batch, also save the very
+ * first one into the given slot, even if it doesn't pass the quals. This is
+ * needed for batch merge append.
+ */
+void
+compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
+								  DecompressBatchState *batch_state,
+								  TupleTableSlot *first_tuple_slot)
+{
+	Assert(batch_state->next_batch_row == 0);
+	Assert(batch_state->total_batch_rows > 0);
+	Assert(TupIsNull(batch_state->decompressed_scan_slot));
+
+	compressed_batch_make_next_tuple(chunk_state, batch_state);
+	ExecCopySlot(first_tuple_slot, batch_state->decompressed_scan_slot);
+
+	const bool qual_passed = compressed_batch_vector_qual(chunk_state, batch_state) &&
+							 compressed_batch_postgres_qual(chunk_state, batch_state);
+	batch_state->next_batch_row++;
+
+	if (!qual_passed)
+	{
+		InstrCountFiltered1(&chunk_state->csstate, 1);
+		compressed_batch_advance(chunk_state, batch_state);
 	}
 }

@@ -62,3 +62,7 @@ extern void compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_st
 
 extern void compressed_batch_advance(DecompressChunkState *chunk_state,
 									 DecompressBatchState *batch_state);
+
+extern void compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
+											  DecompressBatchState *batch_state,
+											  TupleTableSlot *first_tuple_slot);

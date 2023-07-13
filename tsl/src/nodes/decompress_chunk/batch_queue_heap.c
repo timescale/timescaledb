@@ -106,14 +106,12 @@ batch_queue_heap_pop(DecompressChunkState *chunk_state)
 
 	if (TupIsNull(top_batch->decompressed_scan_slot))
 	{
-		// fprintf(stderr, "[%d] top batch exhausted\n", top_batch_index);
 		/* Batch is exhausted, recycle batch_state */
 		(void) binaryheap_remove_first(chunk_state->merge_heap);
 		batch_array_free_at(chunk_state, top_batch_index);
 	}
 	else
 	{
-		// fprintf(stderr, "[%d] top batch reused\n", top_batch_index);
 		/* Put the next tuple from this batch on the heap */
 		binaryheap_replace_first(chunk_state->merge_heap, Int32GetDatum(top_batch_index));
 	}
@@ -127,62 +125,26 @@ batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
 		return true;
 	}
 
-	if (chunk_state->last_added_batch == INVALID_BATCH_ID)
-	{
-		return true;
-	}
-
 	const int top_batch_index = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(chunk_state, top_batch_index);
 
-	DecompressBatchState *last_batch =
-		batch_array_get_at(chunk_state, chunk_state->last_added_batch);
-
-	/* The current row should be ready in the decompressed scan slot. */
-	Assert(last_batch->next_batch_row > 0);
-
-	if (last_batch->next_batch_row > 1)
-	{
-		/*
-		 * We have already returned or filtered out the first row of the batch,
-		 * so we can't use it as a proxy for the minimum value of the batch.
-		 * Since we don't know the minimum value of the last added batch, we
-		 * don't know whether we already need the next batch, so we have to say
-		 * we need it, for correctness. This might be suboptimal.
-		 */
-		return true;
-	}
-
-	if (TupIsNull(last_batch->decompressed_scan_slot))
-	{
-		/*
-		 * Already returned all the tuples we had in the last added batch. Note
-		 * that the input batches are sorted by the minimum value, and maximums
-		 * can be arbitrary, so it's possible for e.g. the first added batch to
-		 * run out last.
-		 * We can see the last added batch running out if we have no more input
-		 * batches. Before running out, it would have compared equal to the top
-		 * tuple, and we would have requested more batches. There's no way to
-		 * assert this here because this queue doesn't know if the input has
-		 * ended. The only thing it can do is to ask for more input.
-		 */
-		return true;
-	}
-
 	const int comparison_result =
 		decompress_binaryheap_compare_slots(top_batch->decompressed_scan_slot,
-											last_batch->decompressed_scan_slot,
+											chunk_state->last_batch_first_tuple,
 											chunk_state);
 
-	Assert(comparison_result >= 0);
-
 	/*
-	 * If the current top tuple compares equal to the min tuple from the last
-	 * added batch, it means we have to add more batches. The next batch might
-	 * compare equal as well, we have to continue until we find one that
-	 * compares greater.
+	 * The invariant we have to preserve is that either:
+	 * 1) the current top tuple sorts before the first tuple of the last
+	 *    added batch,
+	 * 2) the input has ended.
+	 * Since the incoming batches arrive in the order of their first tuple,
+	 * if this invariant holds, then the current top tuple is found inside the
+	 * heap.
+	 * If it doesn't hold, the top tuple might be in the next incoming batches,
+	 * and we have to continue adding them.
 	 */
-	return comparison_result == 0;
+	return comparison_result <= 0;
 }
 
 void
@@ -194,7 +156,9 @@ batch_queue_heap_push_batch(DecompressChunkState *chunk_state, TupleTableSlot *c
 	DecompressBatchState *batch_state = batch_array_get_at(chunk_state, new_batch_index);
 
 	compressed_batch_set_compressed_tuple(chunk_state, batch_state, compressed_slot);
-	compressed_batch_advance(chunk_state, batch_state);
+	compressed_batch_save_first_tuple(chunk_state,
+									  batch_state,
+									  chunk_state->last_batch_first_tuple);
 
 	if (TupIsNull(batch_state->decompressed_scan_slot))
 	{
@@ -203,7 +167,6 @@ batch_queue_heap_push_batch(DecompressChunkState *chunk_state, TupleTableSlot *c
 		return;
 	}
 
-	chunk_state->last_added_batch = new_batch_index;
 	chunk_state->merge_heap =
 		binaryheap_add_unordered_autoresize(chunk_state->merge_heap, new_batch_index);
 }
@@ -230,13 +193,17 @@ batch_queue_heap_create(DecompressChunkState *chunk_state)
 	chunk_state->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY,
 												  decompress_binaryheap_compare_heap_pos,
 												  chunk_state);
+
+	Assert(chunk_state->last_batch_first_tuple == NULL);
+	chunk_state->last_batch_first_tuple =
+		MakeSingleTupleTableSlot(chunk_state->csstate.ss.ss_ScanTupleSlot->tts_tupleDescriptor,
+								 &TTSOpsVirtual);
 }
 
 void
 batch_queue_heap_reset(DecompressChunkState *chunk_state)
 {
 	binaryheap_reset(chunk_state->merge_heap);
-	chunk_state->last_added_batch = INVALID_BATCH_ID;
 }
 
 /*
@@ -249,6 +216,7 @@ batch_queue_heap_free(DecompressChunkState *chunk_state)
 	elog(DEBUG3, "Created batch states %d", chunk_state->n_batch_states);
 	binaryheap_free(chunk_state->merge_heap);
 	chunk_state->merge_heap = NULL;
+	ExecDropSingleTupleTableSlot(chunk_state->last_batch_first_tuple);
 
 	batch_array_destroy(chunk_state);
 }
