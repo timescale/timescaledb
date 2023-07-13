@@ -32,7 +32,10 @@ INSERT into logdata (timestamp, idSite, code, instance, valuefloat)
 select :t0 + ((97*x)%11971), x%1001, 'JP', 0 , 33.33
 from generate_series(1,3000) as t(x);
 
+\if :compress
 select compress_chunk(show_chunks('logdata'));
+\endif
+
 
 --call run_job (1000); --to compress the chunks.
 --call run_job (policy_id) --to compress the chunks.

@@ -1,10 +1,19 @@
 #!/bin/bash
 
 set -e
-psql tsdb -v ON_ERROR_STOP=1 -f dataset.pgsql
 
-psql tsdb -v ON_ERROR_STOP=1 -f _r.sql  2>&1 | tee _log
-grep -A999999999 PLAN _log | grep FLAMEG |cut -f 2- > _fg
-../FlameGraph/flamegraph.pl _fg > g1.svg
 
-firefox ../perf.svg  g1.svg 
+function measure() {
+	output=$1
+	shift
+	psql tsdb "$@" -v ON_ERROR_STOP=1 -f dataset.pgsql
+	psql tsdb "$@" -v ON_ERROR_STOP=1 -f _r.sql  2>&1 | tee _log
+	grep -A999999999 PLAN _log | grep FLAMEG |cut -f 2- > _fg
+	../FlameGraph/flamegraph.pl _fg > g1.svg
+	mv _log ${output}.log
+	mv g1.svg "${output}.svg"
+}
+measure comp_0 -v compress=0
+measure comp_1 -v compress=1
+
+firefox perf.svg comp_0.svg comp_1.svg
