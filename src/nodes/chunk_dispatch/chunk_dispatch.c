@@ -536,7 +536,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 typedef struct ProfileEntry
 {
 	void *fn;
-	uint64_t	enter_time;
+	struct timespec enter_time;
 	uint64_t	measured;
 } ProfileEntry;
 
@@ -558,18 +558,6 @@ ProfileState profile_state = {
 #define _curr_entry profile_state.entry[_depth]
 
 
-static uint64_t __attribute__((no_instrument_function))
-current_time() {
-	struct timespec t;
-	clock_gettime(CLOCK_MONOTONIC, &t);
-	uint64_t ret;
-	if(t.tv_sec) 
-		ret = t.tv_sec * 1000000000l;
-	ret += t.tv_nsec;
-	return ret;
-}
-
-
 void __attribute__((no_instrument_function))
 __cyg_profile_func_enter(void *this_fn, void *call_site)
 {
@@ -587,7 +575,7 @@ __cyg_profile_func_enter(void *this_fn, void *call_site)
 		return;
 	}
 	Ensure(_depth < N_PROFILE_ENTRY, "not enough profile slots");
-	_curr_entry.enter_time = current_time();
+	clock_gettime(CLOCK_MONOTONIC, &_curr_entry.enter_time);
 	_curr_entry.fn = this_fn;
 	_curr_entry.measured = 0;
 	_depth++;
@@ -625,11 +613,19 @@ const char*  __attribute__((no_instrument_function))  name_of(void *fn) {
 	return "(unknown)";
 }
 
+uint64_t  __attribute__((no_instrument_function))  time_diff(struct timespec st, struct timespec ed) ;
+uint64_t  __attribute__((no_instrument_function))  time_diff(struct timespec st, struct timespec ed) {
+    return (ed.tv_sec - st.tv_sec) * 1000000000l + (ed.tv_nsec - st.tv_nsec);
+}
+
+
+
 void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *this_fn, void *call_site)
 {
 	if (!_active)
 		return;
-	uint64_t end_time= current_time();
+	struct timespec end_time;
+	clock_gettime(CLOCK_MONOTONIC, &end_time);
 
 	while (--_depth>= 0 && _curr_entry.fn != this_fn)
 	{
