@@ -475,16 +475,17 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 	indexcols = lappend(indexcols, &sequence_num_elem);
 
 	stmt.indexParams = indexcols;
-	index_addr = DefineIndex(ht->main_table_relid,
-							 &stmt,
-							 InvalidOid, /* IndexRelationId */
-							 InvalidOid, /* parentIndexId */
-							 InvalidOid, /* parentConstraintId */
-							 false,		 /* is_alter_table */
-							 false,		 /* check_rights */
-							 false,		 /* check_not_in_use */
-							 false,		 /* skip_build */
-							 false);	 /* quiet */
+	index_addr = DefineIndexCompat(ht->main_table_relid,
+								   &stmt,
+								   InvalidOid, /* IndexRelationId */
+								   InvalidOid, /* parentIndexId */
+								   InvalidOid, /* parentConstraintId */
+								   -1,		   /* total_parts */
+								   false,	   /* is_alter_table */
+								   false,	   /* check_rights */
+								   false,	   /* check_not_in_use */
+								   false,	   /* skip_build */
+								   false);	   /* quiet */
 	index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
 
 	if (!HeapTupleIsValid(index_tuple))
