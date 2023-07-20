@@ -880,6 +880,23 @@ object_aclcheck(Oid classid, Oid objectid, Oid roleid, AclMode mode)
 	}
 	return ACLCHECK_NOT_OWNER;
 }
+
+/*
+ * PG16 replaces pg_foo_ownercheck() functions with a common object_ownercheck() function
+ * https://github.com/postgres/postgres/commit/afbfc029
+ */
+static inline bool
+object_ownercheck(Oid classid, Oid objectid, Oid roleid)
+{
+	switch (classid)
+	{
+		case RelationRelationId:
+			return pg_class_ownercheck(objectid, roleid);
+		default:
+			Assert(false);
+	}
+	return false;
+}
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */
