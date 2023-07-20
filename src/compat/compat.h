@@ -95,8 +95,19 @@
 									update,                                                        \
 									noDupErr,                                                      \
 									specConflict,                                                  \
-									arbiterIndexes)                                                \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
 	ExecInsertIndexTuples(slot, estate, noDupErr, specConflict, arbiterIndexes)
+#elif PG16_LT
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
 #else
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
@@ -104,8 +115,16 @@
 									update,                                                        \
 									noDupErr,                                                      \
 									specConflict,                                                  \
-									arbiterIndexes)                                                \
-	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri,                                                                     \
+						  slot,                                                                    \
+						  estate,                                                                  \
+						  update,                                                                  \
+						  noDupErr,                                                                \
+						  specConflict,                                                            \
+						  arbiterIndexes,                                                          \
+						  onlySummarizing)
 #endif
 
 /* PG14 fixes a bug in miscomputation of relids set in pull_varnos. The bugfix
