@@ -778,7 +778,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
 	/* Like regular materialized views, require owner to refresh. */
-	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
+	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
 					   get_rel_name(cagg->relid));
