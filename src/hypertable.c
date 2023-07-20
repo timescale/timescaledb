@@ -11,7 +11,9 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_constraint.h>
+#include <catalog/pg_database_d.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_namespace_d.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
 #include <commands/dbcommands.h>
@@ -1369,14 +1371,14 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 		 * Schema does not exist, so we must check that the user has
 		 * privileges to create the schema in the current database
 		 */
-		if (pg_database_aclcheck(MyDatabaseId, user_oid, ACL_CREATE) != ACLCHECK_OK)
+		if (object_aclcheck(DatabaseRelationId, MyDatabaseId, user_oid, ACL_CREATE) != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permissions denied: cannot create schema \"%s\" in database \"%s\"",
 							schema_name,
 							get_database_name(MyDatabaseId))));
 	}
-	else if (pg_namespace_aclcheck(schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
+	else if (object_aclcheck(NamespaceRelationId, schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permissions denied: cannot create chunks in schema \"%s\"", schema_name)));
@@ -2573,7 +2575,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 
 	integer_now_func_validate(now_func_oid, open_dim_type);
 
-	aclresult = pg_proc_aclcheck(now_func_oid, GetUserId(), ACL_EXECUTE);
+	aclresult = object_aclcheck(ProcedureRelationId, now_func_oid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),

@@ -125,7 +125,7 @@ job_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("function or procedure with OID %u does not exist", proc)));
 
-	if (pg_proc_aclcheck(proc, owner, ACL_EXECUTE) != ACLCHECK_OK)
+	if (object_aclcheck(ProcedureRelationId, proc, owner, ACL_EXECUTE) != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for function \"%s\"", func_name),
@@ -139,7 +139,7 @@ job_add(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("function with OID %d does not exist", check)));
 
-		if (pg_proc_aclcheck(check, owner, ACL_EXECUTE) != ACLCHECK_OK)
+		if (object_aclcheck(ProcedureRelationId, check, owner, ACL_EXECUTE) != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied for function \"%s\"", check_name_str),
@@ -365,7 +365,8 @@ job_alter(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("function with OID %d does not exist", check)));
 
-			if (pg_proc_aclcheck(check, GetUserId(), ACL_EXECUTE) != ACLCHECK_OK)
+			if (object_aclcheck(ProcedureRelationId, check, GetUserId(), ACL_EXECUTE) !=
+				ACLCHECK_OK)
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 						 errmsg("permission denied for function \"%s\"", check_name_str),

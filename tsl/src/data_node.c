@@ -152,7 +152,7 @@ validate_foreign_server(const ForeignServer *server, AclMode const mode, bool fa
 		return true;
 
 	/* Must have permissions on the server object */
-	aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
+	aclresult = object_aclcheck(ForeignServerRelationId, server->serverid, curuserid, mode);
 
 	valid = (aclresult == ACLCHECK_OK);
 
@@ -2136,7 +2136,7 @@ data_node_name_list_check_acl(List *data_node_names, AclMode mode)
 		if (mode != ACL_NO_CHECK)
 		{
 			/* Must have permissions on the server object */
-			aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
+			aclresult = object_aclcheck(ForeignServerRelationId, server->serverid, curuserid, mode);
 
 			if (aclresult != ACLCHECK_OK)
 				aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);

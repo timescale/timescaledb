@@ -848,4 +848,38 @@ RelationGetSmgr(Relation rel)
 				quiet)
 #endif
 
+#if PG16_LT
+#include <catalog/pg_database_d.h>
+#include <catalog/pg_foreign_server_d.h>
+#include <catalog/pg_namespace_d.h>
+#include <catalog/pg_proc_d.h>
+#include <catalog/pg_tablespace_d.h>
+#include <utils/acl.h>
+
+/*
+ * PG16 replaces most aclcheck functions with a common object_aclcheck() function
+ * https://github.com/postgres/postgres/commit/c727f511
+ */
+static inline AclResult
+object_aclcheck(Oid classid, Oid objectid, Oid roleid, AclMode mode)
+{
+	switch (classid)
+	{
+		case DatabaseRelationId:
+			return pg_database_aclcheck(objectid, roleid, mode);
+		case ForeignServerRelationId:
+			return pg_foreign_server_aclcheck(objectid, roleid, mode);
+		case NamespaceRelationId:
+			return pg_namespace_aclcheck(objectid, roleid, mode);
+		case ProcedureRelationId:
+			return pg_proc_aclcheck(objectid, roleid, mode);
+		case TableSpaceRelationId:
+			return pg_tablespace_aclcheck(objectid, roleid, mode);
+		default:
+			Assert(false);
+	}
+	return ACLCHECK_NOT_OWNER;
+}
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
