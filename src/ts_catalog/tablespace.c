@@ -10,6 +10,7 @@
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
+#include <catalog/pg_tablespace_d.h>
 #include <commands/tablespace.h>
 #include <commands/tablecmds.h>
 #include <access/xact.h>
@@ -191,7 +192,7 @@ tablespace_validate_revoke_internal(const char *tspcname, tuple_found_func tuple
 static void
 validate_revoke_create(Oid tspcoid, Oid role, Oid relid)
 {
-	AclResult aclresult = pg_tablespace_aclcheck(tspcoid, role, ACL_CREATE);
+	AclResult aclresult = object_aclcheck(TableSpaceRelationId, tspcoid, role, ACL_CREATE);
 
 	if (aclresult != ACLCHECK_OK)
 		ereport(ERROR,
@@ -554,7 +555,7 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 		 * user here, since we're not actually creating a table using this
 		 * tablespace at this point
 		 */
-		aclresult = pg_tablespace_aclcheck(tspc_oid, ownerid, ACL_CREATE);
+		aclresult = object_aclcheck(TableSpaceRelationId, tspc_oid, ownerid, ACL_CREATE);
 
 		if (aclresult != ACLCHECK_OK)
 			ereport(ERROR,

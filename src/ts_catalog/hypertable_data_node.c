@@ -10,6 +10,7 @@
 #include <utils/acl.h>
 #include <foreign/foreign.h>
 #include <miscadmin.h>
+#include <catalog/pg_foreign_server_d.h>
 
 #include "ts_catalog/hypertable_data_node.h"
 #include "scanner.h"
@@ -57,7 +58,10 @@ ts_hypertable_data_node_insert_multi(List *hypertable_data_nodes)
 		AclResult aclresult;
 
 		/* Must also have usage on the server object */
-		aclresult = pg_foreign_server_aclcheck(node->foreign_server_oid, curuserid, ACL_USAGE);
+		aclresult = object_aclcheck(ForeignServerRelationId,
+									node->foreign_server_oid,
+									curuserid,
+									ACL_USAGE);
 
 		if (aclresult != ACLCHECK_OK)
 		{

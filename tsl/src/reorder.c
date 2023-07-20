@@ -30,6 +30,7 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_tablespace_d.h>
 #include <catalog/toasting.h>
 #include <commands/cluster.h>
 #include <commands/tablecmds.h>
@@ -449,7 +450,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		AclResult aclresult;
 
-		aclresult = pg_tablespace_aclcheck(destination_tablespace, GetUserId(), ACL_CREATE);
+		aclresult =
+			object_aclcheck(TableSpaceRelationId, destination_tablespace, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -462,7 +464,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		AclResult aclresult;
 
-		aclresult = pg_tablespace_aclcheck(index_tablespace, GetUserId(), ACL_CREATE);
+		aclresult =
+			object_aclcheck(TableSpaceRelationId, index_tablespace, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
