@@ -1,4 +1,5 @@
 /*.pgbinary
+/bgw_custom-*.sql
 /cagg_bgw-*.sql
 /cagg_ddl-*.sql
 /cagg_errors_deprecated-*.sql
@@ -8,6 +9,7 @@
 /cagg_repair-*.sql
 /cagg_union_view-*.sql
 /cagg_usage-*.sql
+/compression_bgw-*.sql
 /compression_errors-*.sql
 /compression_sorted_merge-*.sql
 /compression_permissions-*.sql
@@ -29,4 +31,5 @@
 /remote-copy-*sv
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
+/telemetry_stats-*.sql
 /merge_append_partially_compressed-*.sql

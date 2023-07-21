@@ -335,6 +335,7 @@ add_chunk_stats(HyperStats *stats, Form_pg_class class, const Chunk *chunk,
 		stats->uncompressed_toast_size += fd_compr->uncompressed_toast_size;
 		stats->uncompressed_row_count += fd_compr->numrows_pre_compression;
 		stats->compressed_row_count += fd_compr->numrows_post_compression;
+		stats->compressed_row_frozen_immediately_count += fd_compr->numrows_frozen_immediately;
 
 		/* Also add compressed sizes to total number for entire table */
 		stats->storage.relsize.heap_size += fd_compr->compressed_heap_size;

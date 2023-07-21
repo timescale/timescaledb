@@ -58,7 +58,8 @@ typedef struct CompressChunkCxt
 static void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
 									  int32 compress_chunk_id, const RelationSize *compress_size,
-									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression)
+									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
+									  int64 rowcnt_frozen)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -93,6 +94,8 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *sr
 		Int64GetDatum(rowcnt_pre_compression);
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_post_compression)] =
 		Int64GetDatum(rowcnt_post_compression);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_frozen_immediately)] =
+		Int64GetDatum(rowcnt_frozen);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -487,6 +490,27 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
 		result_chunk_id = mergable_chunk->table_id;
 	}
+
+	/* Since the compressed relation is created in the same transaction as the tuples that will be
+	 * written by the compressor, we can insert the tuple directly in frozen state. This is the same
+	 * logic as performed in COPY INSERT FROZEN.
+	 *
+	 * Note: Tuples inserted with HEAP_INSERT_FROZEN become immediately visible to all transactions
+	 * (they violate the MVCC pattern). So, this flag can only be used when creating the compressed
+	 * chunk in the same transaction as the compressed tuples are inserted.
+	 *
+	 * If this isn't the case, then tuples can be seen multiple times by parallel readers - once in
+	 * the uncompressed part of the hypertable (since they are not deleted in the transaction) and
+	 * once in the compressed part of the hypertable since the MVCC semantic is violated due to the
+	 * flag.
+	 *
+	 * In contrast, when the compressed chunk part is created in the same transaction as the tuples
+	 * are written, the compressed chunk (i.e., the catalog entry) becomes visible to other
+	 * transactions only after the transaction that performs the compression is commited and
+	 * the uncompressed chunk is truncated.
+	 */
+	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
+
 	/* convert list to array of pointers for compress_chunk */
 	colinfo_array = palloc(sizeof(ColumnCompressionInfo *) * htcols_listlen);
 	foreach (lc, htcols_list)
@@ -498,7 +522,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	cstat = compress_chunk(cxt.srcht_chunk->table_id,
 						   compress_ht_chunk->table_id,
 						   colinfo_array,
-						   htcols_listlen);
+						   htcols_listlen,
+						   insert_options);
 
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
 	 * cascading deleted data in FK-referenced tables, while blocking deleting data
@@ -514,7 +539,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 											  compress_ht_chunk->fd.id,
 											  &after_size,
 											  cstat.rowcnt_pre_compression,
-											  cstat.rowcnt_post_compression);
+											  cstat.rowcnt_post_compression,
+											  cstat.rowcnt_frozen);
 
 		/* Copy chunk constraints (including fkey) to compressed chunk.
 		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
@@ -811,7 +837,8 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 										  compress_ht_chunk->fd.id,
 										  &compressed_size,
 										  numrows_pre_compression,
-										  numrows_post_compression);
+										  numrows_post_compression,
+										  0);
 
 	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
@@ -1071,7 +1098,8 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 						in_column_offsets,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
-						true /*reset_sequence*/);
+						true /*reset_sequence*/,
+						0 /*insert options*/);
 
 	/*
 	 * Keep the ExclusiveLock on the compressed chunk. This lock will be requested
@@ -1372,7 +1400,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 						in_column_offsets,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
-						true /*reset_sequence*/);
+						true /*reset_sequence*/,
+						0 /*insert options*/);
 
 	/* create an array of the segmentby column offsets in the compressed chunk */
 	int16 *segmentby_column_offsets_compressed =

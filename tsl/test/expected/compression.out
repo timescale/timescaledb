@@ -108,10 +108,10 @@ before_compression_table_bytes | 8192
 before_compression_index_bytes | 32768
 before_compression_toast_bytes | 0
 before_compression_total_bytes | 40960
-after_compression_table_bytes  | 8192
+after_compression_table_bytes  | 16384
 after_compression_index_bytes  | 16384
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 32768
+after_compression_total_bytes  | 40960
 node_name                      | 
 
 \x
@@ -124,28 +124,30 @@ select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
 \x
 select * from _timescaledb_catalog.compression_chunk_size
 order by chunk_id;
--[ RECORD 1 ]------------+------
-chunk_id                 | 1
-compressed_chunk_id      | 6
-uncompressed_heap_size   | 8192
-uncompressed_toast_size  | 0
-uncompressed_index_size  | 32768
-compressed_heap_size     | 8192
-compressed_toast_size    | 8192
-compressed_index_size    | 16384
-numrows_pre_compression  | 1
-numrows_post_compression | 1
--[ RECORD 2 ]------------+------
-chunk_id                 | 2
-compressed_chunk_id      | 5
-uncompressed_heap_size   | 8192
-uncompressed_toast_size  | 0
-uncompressed_index_size  | 32768
-compressed_heap_size     | 8192
-compressed_toast_size    | 8192
-compressed_index_size    | 16384
-numrows_pre_compression  | 1
-numrows_post_compression | 1
+-[ RECORD 1 ]--------------+------
+chunk_id                   | 1
+compressed_chunk_id        | 6
+uncompressed_heap_size     | 8192
+uncompressed_toast_size    | 0
+uncompressed_index_size    | 32768
+compressed_heap_size       | 16384
+compressed_toast_size      | 8192
+compressed_index_size      | 16384
+numrows_pre_compression    | 1
+numrows_post_compression   | 1
+numrows_frozen_immediately | 1
+-[ RECORD 2 ]--------------+------
+chunk_id                   | 2
+compressed_chunk_id        | 5
+uncompressed_heap_size     | 8192
+uncompressed_toast_size    | 0
+uncompressed_index_size    | 32768
+compressed_heap_size       | 16384
+compressed_toast_size      | 8192
+compressed_index_size      | 16384
+numrows_pre_compression    | 1
+numrows_post_compression   | 1
+numrows_frozen_immediately | 1
 
 \x
 select  ch1.id, ch1.schema_name, ch1.table_name ,  ch2.table_name as compress_table
@@ -393,10 +395,10 @@ before_compression_table_bytes | 8192
 before_compression_index_bytes | 16384
 before_compression_toast_bytes | 8192
 before_compression_total_bytes | 32768
-after_compression_table_bytes  | 8192
+after_compression_table_bytes  | 16384
 after_compression_index_bytes  | 16384
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 32768
+after_compression_total_bytes  | 40960
 node_name                      | 
 -[ RECORD 2 ]------------------+----------------------
 chunk_schema                   | _timescaledb_internal
@@ -406,10 +408,10 @@ before_compression_table_bytes | 8192
 before_compression_index_bytes | 16384
 before_compression_toast_bytes | 8192
 before_compression_total_bytes | 32768
-after_compression_table_bytes  | 8192
+after_compression_table_bytes  | 16384
 after_compression_index_bytes  | 16384
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 32768
+after_compression_total_bytes  | 40960
 node_name                      | 
 
 select * from hypertable_compression_stats('foo');
@@ -420,10 +422,10 @@ before_compression_table_bytes | 8192
 before_compression_index_bytes | 32768
 before_compression_toast_bytes | 0
 before_compression_total_bytes | 40960
-after_compression_table_bytes  | 8192
+after_compression_table_bytes  | 16384
 after_compression_index_bytes  | 16384
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 32768
+after_compression_total_bytes  | 40960
 node_name                      | 
 
 select * from hypertable_compression_stats('conditions');
@@ -434,10 +436,10 @@ before_compression_table_bytes | 16384
 before_compression_index_bytes | 32768
 before_compression_toast_bytes | 16384
 before_compression_total_bytes | 65536
-after_compression_table_bytes  | 16384
+after_compression_table_bytes  | 32768
 after_compression_index_bytes  | 32768
 after_compression_toast_bytes  | 16384
-after_compression_total_bytes  | 65536
+after_compression_total_bytes  | 81920
 node_name                      | 
 
 vacuum full foo;
