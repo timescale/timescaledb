@@ -124,3 +124,53 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.chunk table --
+
+
+--
+-- Rebuild the catalog table `_timescaledb_catalog.compression_chunk_size` to
+-- remove column `numrows_frozen_immediately`
+--
+CREATE TABLE _timescaledb_internal.compression_chunk_size_tmp
+    AS SELECT * from _timescaledb_catalog.compression_chunk_size;
+
+-- Drop depended views
+-- We assume that '_timescaledb_internal.compressed_chunk_stats' was already dropped in this update
+-- (see above)
+
+-- Drop table
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.compression_chunk_size;
+DROP TABLE _timescaledb_catalog.compression_chunk_size;
+
+CREATE TABLE _timescaledb_catalog.compression_chunk_size (
+  chunk_id integer NOT NULL,
+  compressed_chunk_id integer NOT NULL,
+  uncompressed_heap_size bigint NOT NULL,
+  uncompressed_toast_size bigint NOT NULL,
+  uncompressed_index_size bigint NOT NULL,
+  compressed_heap_size bigint NOT NULL,
+  compressed_toast_size bigint NOT NULL,
+  compressed_index_size bigint NOT NULL,
+  numrows_pre_compression bigint,
+  numrows_post_compression bigint,
+  -- table constraints
+  CONSTRAINT compression_chunk_size_pkey PRIMARY KEY (chunk_id),
+  CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_catalog.compression_chunk_size
+(chunk_id, compressed_chunk_id, uncompressed_heap_size, uncompressed_toast_size,
+  uncompressed_index_size, compressed_heap_size, compressed_toast_size,
+  compressed_index_size, numrows_pre_compression, numrows_post_compression)
+SELECT chunk_id, compressed_chunk_id, uncompressed_heap_size, uncompressed_toast_size,
+  uncompressed_index_size, compressed_heap_size, compressed_toast_size,
+  compressed_index_size, numrows_pre_compression, numrows_post_compression
+FROM _timescaledb_internal.compression_chunk_size_tmp;
+
+DROP TABLE _timescaledb_internal.compression_chunk_size_tmp;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
+
+GRANT SELECT ON _timescaledb_catalog.compression_chunk_size TO PUBLIC;
+
+-- End modify `_timescaledb_catalog.compression_chunk_size`

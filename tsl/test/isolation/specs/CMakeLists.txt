@@ -27,7 +27,7 @@ endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
-  list(APPEND TEST_FILES compression_chunk_race.spec
+  list(APPEND TEST_FILES compression_chunk_race.spec compression_freeze.spec
        compression_merge_race.spec
        decompression_chunk_and_parallel_query_wo_idx.spec)
   if(PG_VERSION VERSION_GREATER_EQUAL "14.0")

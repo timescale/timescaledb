@@ -549,6 +549,7 @@ chunk_copy_get_source_compressed_chunk_stats(ChunkCopy *cc)
 	cc->fd_ccs.compressed_index_size = atoll(PQgetvalue(res, 0, 5));
 	cc->fd_ccs.numrows_pre_compression = atoll(PQgetvalue(res, 0, 6));
 	cc->fd_ccs.numrows_post_compression = atoll(PQgetvalue(res, 0, 7));
+	cc->fd_ccs.numrows_frozen_immediately = 0;
 
 	ts_dist_cmd_close_response(dist_res);
 }

@@ -4,7 +4,6 @@ include(GenerateTestSchedule)
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
     agg_partials_pushdown.sql
-    bgw_custom.sql
     bgw_security.sql
     bgw_policy.sql
     cagg_errors.sql
@@ -15,7 +14,6 @@ set(TEST_FILES
     cagg_watermark.sql
     compressed_collation.sql
     compression_create_compressed_table.sql
-    compression_bgw.sql
     compression_conflicts.sql
     compression_insert.sql
     compression_policy.sql
@@ -84,9 +82,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     transparent_decompression_join_index.sql
     feature_flags.sql)
-  if(USE_TELEMETRY)
-    list(APPEND TEST_FILES telemetry_stats.sql)
-  endif()
 
   if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
@@ -175,6 +170,8 @@ if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
 endif()
 
 set(TEST_TEMPLATES
+    bgw_custom.sql.in
+    compression_bgw.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
@@ -201,6 +198,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     continuous_aggs.sql.in
     continuous_aggs_deprecated.sql.in
     deparse.sql.in)
+  if(USE_TELEMETRY)
+    list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
+  endif()
   if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
       APPEND

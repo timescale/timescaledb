@@ -201,6 +201,7 @@ typedef struct CompressionStats
 {
 	int64 rowcnt_pre_compression;
 	int64 rowcnt_post_compression;
+	int64 rowcnt_frozen;
 } CompressionStats;
 
 typedef struct PerColumn
@@ -264,6 +265,8 @@ typedef struct RowCompressor
 	bool reset_sequence;
 	/* flag for checking if we are working on the first tuple */
 	bool first_iteration;
+	/* the heap insert options */
+	int insert_options;
 } RowCompressor;
 
 /* SegmentFilter is used for filtering segments based on qualifiers */
@@ -312,7 +315,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithms algo);
 extern CompressionStats compress_chunk(Oid in_table, Oid out_table,
 									   const ColumnCompressionInfo **column_compression_info,
-									   int num_compression_infos);
+									   int num_compression_infos, int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
@@ -354,7 +357,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompr
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
 								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate, bool reset_sequence);
+								bool need_bistate, bool reset_sequence, int insert_options);
 extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
 													  int16 num_cols, Datum *compressed_datums,

@@ -38,6 +38,7 @@
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
+#include <utils/portal.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
@@ -53,6 +54,7 @@
 #include "create.h"
 #include "custom_type_cache.h"
 #include "arrow_c_data_interface.h"
+#include "debug_assert.h"
 #include "debug_point.h"
 #include "deltadelta.h"
 #include "dictionary.h"
@@ -223,7 +225,7 @@ truncate_relation(Oid table_oid)
 
 CompressionStats
 compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column_compression_info,
-			   int num_compression_infos)
+			   int num_compression_infos, int insert_options)
 {
 	int n_keys;
 	ListCell *lc;
@@ -399,7 +401,8 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 						in_column_offsets,
 						out_desc->natts,
 						true /*need_bistate*/,
-						false /*reset_sequence*/);
+						false /*reset_sequence*/,
+						insert_options);
 
 	if (matched_index_rel != NULL)
 	{
@@ -441,12 +444,19 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	}
 
 	row_compressor_finish(&row_compressor);
+	DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
 	truncate_relation(in_table);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
 	cstat.rowcnt_pre_compression = row_compressor.rowcnt_pre_compression;
 	cstat.rowcnt_post_compression = row_compressor.num_compressed_rows;
+
+	if ((insert_options & HEAP_INSERT_FROZEN) == HEAP_INSERT_FROZEN)
+		cstat.rowcnt_frozen = row_compressor.num_compressed_rows;
+	else
+		cstat.rowcnt_frozen = 0;
+
 	return cstat;
 }
 
@@ -836,7 +846,8 @@ void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence)
+					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
+					int insert_options)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
@@ -883,6 +894,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.sequence_num = SEQUENCE_NUM_GAP,
 		.reset_sequence = reset_sequence,
 		.first_iteration = true,
+		.insert_options = insert_options,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
@@ -1214,7 +1226,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	heap_insert(row_compressor->compressed_table,
 				compressed_tuple,
 				mycid,
-				0 /*=options*/,
+				row_compressor->insert_options /*=options*/,
 				row_compressor->bistate);
 	if (row_compressor->resultRelInfo->ri_NumIndices > 0)
 	{
