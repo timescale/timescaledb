@@ -1904,6 +1904,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO ts_device_table SELECT generate_series(0,999,1), 1, 100, 20;
 ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
+WARNING:  column "device" should be used for segmenting or ordering
 SELECT compress_chunk(i) AS chunk_name FROM show_chunks('ts_device_table') i \gset
 SELECT count(*) FROM ts_device_table;
  count 

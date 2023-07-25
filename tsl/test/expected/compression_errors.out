@@ -782,3 +782,42 @@ SELECT compress_chunk(show_chunks('readings'), TRUE);
 INSERT INTO readings("time", candy, battery_temperature)
     VALUES ('2022-11-11 11:11:11', 33, 0.3)
 ;
+-- Segmentby checks should be done for unique indexes without
+-- constraints, so create a table without constraints and add a unique
+-- index and try to create a table without using the right segmentby
+-- column.
+CREATE TABLE table_unique_index(
+       location smallint not null,
+       device_id smallint not null,
+       time timestamptz not null,
+       value float8 not null
+);
+CREATE UNIQUE index ON table_unique_index(location, device_id, time);
+SELECT table_name FROM create_hypertable('table_unique_index', 'time');
+     table_name     
+--------------------
+ table_unique_index
+(1 row)
+
+-- Will warn because the lack of segmentby/orderby compression options
+ALTER TABLE table_unique_index SET (timescaledb.compress);
+WARNING:  column "location" should be used for segmenting or ordering
+WARNING:  column "device_id" should be used for segmenting or ordering
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'location');
+WARNING:  column "device_id" should be used for segmenting or ordering
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_orderby = 'device_id');
+WARNING:  column "location" should be used for segmenting or ordering
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+-- Will enable compression without warnings
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'device_id');
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id,location');
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_orderby = 'device_id,location');
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'time,location', timescaledb.compress_orderby = 'device_id');
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'time,location,device_id');
+ALTER TABLE table_unique_index SET (timescaledb.compress = off);
