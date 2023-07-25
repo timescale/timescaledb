@@ -32,6 +32,7 @@ from ci_settings import (
     PG14_LATEST,
     PG15_EARLIEST,
     PG15_LATEST,
+    PG_LATEST,
 )
 
 # github event type which is either push, pull_request or schedule
