@@ -12,11 +12,7 @@
 
 #include "compat/compat.h"
 
-#if PG13_LT
-#include <utils/jsonapi.h>
-#else
 #include <common/jsonapi.h>
-#endif
 
 #include "export.h"
 

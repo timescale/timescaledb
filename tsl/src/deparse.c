@@ -964,7 +964,7 @@ deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname)
 			appendStringInfo(command,
 							 "%s%s ",
 							 priv->priv_name,
-							 lnext_compat(stmt->privileges, lc) != NULL ? "," : "");
+							 lnext(stmt->privileges, lc) != NULL ? "," : "");
 		}
 	}
 
@@ -1001,10 +1001,7 @@ deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname)
 				break;
 #endif
 		}
-		appendStringInfo(command,
-						 "%s%s ",
-						 role_name,
-						 lnext_compat(stmt->grantees, lc) != NULL ? "," : "");
+		appendStringInfo(command, "%s%s ", role_name, lnext(stmt->grantees, lc) != NULL ? "," : "");
 	}
 
 	if (stmt->grant_option)

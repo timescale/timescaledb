@@ -461,7 +461,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 			 */
 			terminate_and_cleanup_job(cur_sjob);
 
-			cur_ptr = lnext_compat(cur_jobs_list, cur_ptr);
+			cur_ptr = lnext(cur_jobs_list, cur_ptr);
 			continue;
 		}
 		if (cur_sjob->job.fd.id == new_sjob->job.fd.id)
@@ -477,8 +477,8 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 			if (cur_sjob->state == JOB_STATE_SCHEDULED)
 				scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
 
-			cur_ptr = lnext_compat(cur_jobs_list, cur_ptr);
-			new_ptr = lnext_compat(new_jobs, new_ptr);
+			cur_ptr = lnext(cur_jobs_list, cur_ptr);
+			new_ptr = lnext(new_jobs, new_ptr);
 		}
 		else if (cur_sjob->job.fd.id > new_sjob->job.fd.id)
 		{
@@ -489,7 +489,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 				 new_sjob->job.fd.fixed_schedule);
 
 			/* Advance the new_job list until we catch up to cur_list */
-			new_ptr = lnext_compat(new_jobs, new_ptr);
+			new_ptr = lnext(new_jobs, new_ptr);
 		}
 	}
 
@@ -498,7 +498,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 	{
 		ListCell *ptr;
 
-		for_each_cell_compat (ptr, cur_jobs_list, cur_ptr)
+		for_each_cell (ptr, cur_jobs_list, cur_ptr)
 			terminate_and_cleanup_job(lfirst(ptr));
 	}
 
@@ -507,7 +507,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 		/* Then there are more new jobs. Initialize all of them. */
 		ListCell *ptr;
 
-		for_each_cell_compat (ptr, new_jobs, new_ptr)
+		for_each_cell (ptr, new_jobs, new_ptr)
 			scheduled_bgw_job_transition_state_to(lfirst(ptr), JOB_STATE_SCHEDULED);
 	}
 
@@ -539,15 +539,8 @@ ts_populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
 #endif
 
 static int
-#if PG13_LT
-cmp_next_start(const void *left, const void *right)
-{
-	const ListCell *left_cell = *((ListCell **) left);
-	const ListCell *right_cell = *((ListCell **) right);
-#else
 cmp_next_start(const ListCell *left_cell, const ListCell *right_cell)
 {
-#endif
 	ScheduledBgwJob *left_sjob = lfirst(left_cell);
 	ScheduledBgwJob *right_sjob = lfirst(right_cell);
 
@@ -568,13 +561,9 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 	Assert(CurrentMemoryContext == scratch_mctx);
 
 	/* Order jobs by increasing next_start */
-#if PG13_LT
-	ordered_scheduled_jobs = list_qsort(scheduled_jobs, cmp_next_start);
-#else
-	/* PG13 does in-place sort */
+	/* list_sort does in-place sort - so make a copy and sort that */
 	ordered_scheduled_jobs = list_copy(scheduled_jobs);
 	list_sort(ordered_scheduled_jobs, cmp_next_start);
-#endif
 
 	foreach (lc, ordered_scheduled_jobs)
 	{

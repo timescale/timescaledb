@@ -9,7 +9,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard PostgreSQL 14, 13.2+ or 12 installation with development
+- A standard PostgreSQL 13.2+, 14, or 15 installation with development
 environment (header files) (e.g., `postgresql-server-dev-13` package
 for Linux, Postgres.app for MacOS)
 - C compiler (e.g., gcc or clang)
@@ -42,7 +42,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard [PostgreSQL 14, 13.2+ or 12 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
+- A standard [PostgreSQL 13.2+, 14 or 15 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
 - OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git

@@ -113,9 +113,6 @@ static void
 remove_pin(Cache *cache, SubTransactionId subtxnid)
 {
 	ListCell *lc;
-#if PG13_LT
-	ListCell *prev = NULL;
-#endif
 
 	foreach (lc, pinned_caches)
 	{
@@ -123,14 +120,10 @@ remove_pin(Cache *cache, SubTransactionId subtxnid)
 
 		if (cp->cache == cache && cp->subtxnid == subtxnid)
 		{
-			pinned_caches = list_delete_cell_compat(pinned_caches, lc, prev);
+			pinned_caches = list_delete_cell(pinned_caches, lc);
 			pfree(cp);
 			return;
 		}
-
-#if PG13_LT
-		prev = lc;
-#endif
 	}
 
 	/* should never reach here: there should always be a pin to remove */

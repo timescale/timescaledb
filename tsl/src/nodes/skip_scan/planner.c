@@ -458,13 +458,12 @@ get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_sc
 	/* attno mapping necessary */
 	if (map)
 	{
-		var = (Var *) map_variable_attnos_compat((Node *) var,
-												 var->varno,
-												 0,
-												 map->attrMap,
-												 map->outdesc->natts,
-												 InvalidOid,
-												 &found_wholerow);
+		var = (Var *) map_variable_attnos((Node *) var,
+										  var->varno,
+										  0,
+										  map->attrMap,
+										  InvalidOid,
+										  &found_wholerow);
 
 		free_conversion_map(map);
 

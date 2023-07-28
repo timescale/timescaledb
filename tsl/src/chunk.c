@@ -583,7 +583,7 @@ chunk_id_list_create(ArrayType *array)
 	}
 	array_free_iterator(it);
 
-	(void) list_sort_compat(id_list, list_int_cmp_compat);
+	list_sort(id_list, list_int_cmp_compat);
 	return id_list;
 }
 
@@ -605,33 +605,33 @@ chunk_id_list_exclusive_right_merge_join(const List *an_list, const List *dn_lis
 			if (compare == 0)
 			{
 				/* l = r */
-				l = lnext_compat(an_list, l);
-				r = lnext_compat(dn_list, r);
+				l = lnext(an_list, l);
+				r = lnext(dn_list, r);
 			}
 			else if (compare < 0)
 			{
 				/* l < r */
 				/* chunk exists only on the access node */
-				l = lnext_compat(an_list, l);
+				l = lnext(an_list, l);
 			}
 			else
 			{
 				/* l > r */
 				/* chunk exists only on the data node */
 				result = lappend_int(result, lfirst_int(r));
-				r = lnext_compat(dn_list, r);
+				r = lnext(dn_list, r);
 			}
 		}
 		else if (l)
 		{
 			/* chunk exists only on the access node */
-			l = lnext_compat(an_list, l);
+			l = lnext(an_list, l);
 		}
 		else if (r)
 		{
 			/* chunk exists only on the data node */
 			result = lappend_int(result, lfirst_int(r));
-			r = lnext_compat(dn_list, r);
+			r = lnext(dn_list, r);
 		}
 		else
 		{

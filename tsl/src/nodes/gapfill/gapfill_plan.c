@@ -287,10 +287,10 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 				/*
 				 * check arguments past first argument dont have Vars
 				 */
-				for (lc_arg = lnext_compat(context.call.window->args,
-										   list_head(context.call.window->args));
+				for (lc_arg =
+						 lnext(context.call.window->args, list_head(context.call.window->args));
 					 lc_arg != NULL;
-					 lc_arg = lnext_compat(context.call.window->args, lc_arg))
+					 lc_arg = lnext(context.call.window->args, lc_arg))
 				{
 					if (contain_var_clause(lfirst(lc_arg)))
 						ereport(ERROR,
@@ -547,10 +547,10 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 								/*
 								 * check arguments past first argument dont have Vars
 								 */
-								for (lc_arg = lnext_compat(context.call.window->args,
-														   list_head(context.call.window->args));
+								for (lc_arg = lnext(context.call.window->args,
+													list_head(context.call.window->args));
 									 lc_arg != NULL;
-									 lc_arg = lnext_compat(context.call.window->args, lc_arg))
+									 lc_arg = lnext(context.call.window->args, lc_arg))
 								{
 									if (contain_var_clause(lfirst(lc_arg)))
 										ereport(ERROR,

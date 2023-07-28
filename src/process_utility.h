@@ -24,11 +24,7 @@ typedef struct ProcessUtilityArgs
 	ParamListInfo params;
 	DestReceiver *dest;
 	List *hypertable_list;
-#if PG13_GE
 	QueryCompletion *completion_tag;
-#else
-	char *completion_tag;
-#endif
 #if PG14_GE
 	bool readonly_tree;
 #endif

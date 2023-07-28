@@ -692,15 +692,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				if (IsA(jtnode, JoinExpr))
 				{
 					join = castNode(JoinExpr, jtnode);
-#if PG13_LT
-					if (join->usingClause != NULL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("invalid continuous aggregate view"),
-								 errdetail(
-									 "Joins with USING clause in continuous aggregate definition"
-									 " work for Postgres versions 13 and above.")));
-#endif
 					jointype = join->jointype;
 					op = (OpExpr *) join->quals;
 					rte = list_nth(query->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);

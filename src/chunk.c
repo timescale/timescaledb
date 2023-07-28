@@ -1249,15 +1249,11 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 								 0),
 	};
 	LOCKMODE lockmode = AlterTableGetLockLevel(alterstmt.cmds);
-#if PG13_GE
 	AlterTableUtilityContext atcontext = {
 		.relid = AlterTableLookupRelation(&alterstmt, lockmode),
 	};
 
 	AlterTable(&alterstmt, lockmode, &atcontext);
-#else
-	AlterTable(AlterTableLookupRelation(&alterstmt, lockmode), lockmode, &alterstmt);
-#endif
 }
 
 static Chunk *
