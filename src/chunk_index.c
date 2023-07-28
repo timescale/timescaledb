@@ -107,11 +107,7 @@ adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
 		Var *var = lfirst_node(Var, lc);
 
 		var->varattno = ts_map_attno(ht_relid, chunkrel->rd_id, var->varattno);
-#if PG13_GE
 		var->varattnosyn = var->varattno;
-#else
-		var->varoattno = var->varattno;
-#endif
 	}
 }
 

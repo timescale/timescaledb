@@ -176,13 +176,12 @@ get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_cla
 	/* map hypertable attnos -> chunk attnos */
 	if (map != NULL)
 		returning_clauses = castNode(List,
-									 map_variable_attnos_compat((Node *) returning_clauses,
-																varno,
-																0,
-																map->attrMap,
-																map->outdesc->natts,
-																rowtype,
-																&found_whole_row));
+									 map_variable_attnos((Node *) returning_clauses,
+														 varno,
+														 0,
+														 map->attrMap,
+														 rowtype,
+														 &found_whole_row));
 
 	return ExecBuildProjectionInfo(returning_clauses,
 								   orig->pi_exprContext,
@@ -204,23 +203,21 @@ translate_clause(List *inclause, TupleConversionMap *chunk_map, Index varno, Rel
 
 	/* map hypertable attnos -> chunk attnos for the "excluded" table */
 	clause = castNode(List,
-					  map_variable_attnos_compat((Node *) clause,
-												 INNER_VAR,
-												 0,
-												 chunk_map->attrMap,
-												 RelationGetDescr(hyper_rel)->natts,
-												 RelationGetForm(chunk_rel)->reltype,
-												 &found_whole_row));
+					  map_variable_attnos((Node *) clause,
+										  INNER_VAR,
+										  0,
+										  chunk_map->attrMap,
+										  RelationGetForm(chunk_rel)->reltype,
+										  &found_whole_row));
 
 	/* map hypertable attnos -> chunk attnos for the hypertable */
 	clause = castNode(List,
-					  map_variable_attnos_compat((Node *) clause,
-												 varno,
-												 0,
-												 chunk_map->attrMap,
-												 RelationGetDescr(hyper_rel)->natts,
-												 RelationGetForm(chunk_rel)->reltype,
-												 &found_whole_row));
+					  map_variable_attnos((Node *) clause,
+										  varno,
+										  0,
+										  chunk_map->attrMap,
+										  RelationGetForm(chunk_rel)->reltype,
+										  &found_whole_row));
 
 	return clause;
 }
@@ -245,11 +242,7 @@ adjust_hypertable_tlist(List *tlist, TupleConversionMap *map)
 {
 	List *new_tlist = NIL;
 	TupleDesc chunk_tupdesc = map->outdesc;
-#if PG13_GE
 	AttrNumber *attrMap = map->attrMap->attnums;
-#else
-	AttrNumber *attrMap = map->attrMap;
-#endif
 	AttrNumber chunk_attrno;
 
 	for (chunk_attrno = 1; chunk_attrno <= chunk_tupdesc->natts; chunk_attrno++)

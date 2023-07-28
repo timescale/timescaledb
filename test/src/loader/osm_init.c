@@ -23,12 +23,7 @@ static void osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString
 #endif
 									 ProcessUtilityContext context, ParamListInfo params,
 									 QueryEnvironment *queryEnv, DestReceiver *dest,
-#if PG13_GE
-									 QueryCompletion *qc
-#else
-									 char *qc
-#endif
-);
+									 QueryCompletion *qc);
 
 extern void PGDLLEXPORT _PG_init(void);
 void
@@ -53,13 +48,7 @@ osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString,
 						 bool readOnlyTree,
 #endif
 						 ProcessUtilityContext context, ParamListInfo params,
-						 QueryEnvironment *queryEnv, DestReceiver *dest,
-#if PG13_GE
-						 QueryCompletion *qc
-#else
-						 char *qc
-#endif
-)
+						 QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
 {
 	if (nodeTag(pstmt->utilityStmt) == T_DropStmt)
 	{

@@ -177,11 +177,7 @@ prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_i
 	newec->ec_merged = NULL;
 
 	/* Prepend the ec */
-#if PG13_GE
 	root->eq_classes = lappend(root->eq_classes, newec);
-#else
-	root->eq_classes = lcons(newec, root->eq_classes);
-#endif
 
 	MemoryContextSwitchTo(oldcontext);
 }
@@ -210,7 +206,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
-			 lc = lnext_compat(chunk_pathkeys, lc))
+			 lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
 			var = (Var *) find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
@@ -1313,13 +1309,8 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 		var->varno = context->compressed_relid_idx;
 		var->varattno =
 			get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
-#if PG13_GE
 		var->varnosyn = var->varno;
 		var->varattnosyn = var->varattno;
-#else
-		var->varnoold = var->varno;
-		var->varoattno = var->varattno;
-#endif
 
 		return (Node *) var;
 	}
@@ -1397,12 +1388,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
-#if PG13_GE
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
-#else
-			/* Prepend the ec member because it's likely to be accessed soon */
-			cur_ec->ec_members = lcons(em, cur_ec->ec_members);
-#endif
 
 			return true;
 		}
@@ -1426,7 +1412,6 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 	Assert(info->chunk_rte->relid != info->compressed_rel->relid);
 	Assert(info->chunk_rel->relid != info->compressed_rel->relid);
 	/* based on add_child_rel_equivalences */
-#if PG13_GE
 	int i = -1;
 	bool ec_added = false;
 	Assert(root->ec_merging_done);
@@ -1436,12 +1421,6 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 	while ((i = bms_next_member(info->chunk_rel->eclass_indexes, i)) >= 0)
 	{
 		EquivalenceClass *cur_ec = (EquivalenceClass *) list_nth(root->eq_classes, i);
-#else
-	ListCell *lc;
-	foreach (lc, root->eq_classes)
-	{
-		EquivalenceClass *cur_ec = (EquivalenceClass *) lfirst(lc);
-#endif
 		/*
 		 * If this EC contains a volatile expression, then generating child
 		 * EMs would be downright dangerous, so skip it.  We rely on a
@@ -1455,15 +1434,11 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
 			continue;
-#if PG13_LT
-		add_segmentby_to_equivalence_class(cur_ec, info, &context);
-#else
 		ec_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
 		/* Record this EC index for the compressed rel */
 		if (ec_added)
 			info->compressed_rel->eclass_indexes =
 				bms_add_member(info->compressed_rel->eclass_indexes, i);
-#endif
 	}
 	info->compressed_rel->has_eclass_joins = info->chunk_rel->has_eclass_joins;
 }
@@ -1806,7 +1781,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 		 * we keep looping even if we found all segmentby columns in case a
 		 * columns appears both in baserestrictinfo and in ORDER BY clause
 		 */
-		for (; lc != NULL; lc = lnext_compat(pathkeys, lc))
+		for (; lc != NULL; lc = lnext(pathkeys, lc))
 		{
 			Assert(bms_num_members(segmentby_columns) <= info->num_segmentby_columns);
 			pk = lfirst(lc);
@@ -1846,7 +1821,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
-	for (pk_index = 1; lc != NULL; lc = lnext_compat(pathkeys, lc), pk_index++)
+	for (pk_index = 1; lc != NULL; lc = lnext(pathkeys, lc), pk_index++)
 	{
 		bool reverse = false;
 		pk = lfirst(lc);

@@ -61,7 +61,6 @@ ForEachMacros:
   - foreach
   - forboth
   - for_each_cell
-  - for_each_cell_compat
   - for_both_cell
   - forthree
 IncludeBlocks:   Preserve # separate include blocks will not be merged

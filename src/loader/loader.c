@@ -593,11 +593,7 @@ loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 #endif
 							ProcessUtilityContext context, ParamListInfo params,
 							QueryEnvironment *queryEnv, DestReceiver *dest,
-#if PG13_GE
 							QueryCompletion *completion_tag
-#else
-							char *completion_tag
-#endif
 
 )
 {

@@ -169,7 +169,7 @@ append_func_expr(StringInfo buf, const Node *expr, const List *rtable)
 	foreach (l, e->args)
 	{
 		append_expr(buf, lfirst(l), rtable);
-		if (lnext_compat(e->args, l))
+		if (lnext(e->args, l))
 			appendStringInfoString(buf, ", ");
 	}
 	appendStringInfoChar(buf, ')');
@@ -218,7 +218,7 @@ append_restrict_clauses(StringInfo buf, PlannerInfo *root, List *clauses)
 		RestrictInfo *c = lfirst(cell);
 
 		append_expr(buf, (Node *) c->clause, root->parse->rtable);
-		if (lnext_compat(clauses, cell))
+		if (lnext(clauses, cell))
 			appendStringInfoString(buf, ", ");
 	}
 }
@@ -271,7 +271,7 @@ append_pathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
 			append_expr(buf, (Node *) mem->em_expr, rtable);
 		}
 		appendStringInfoChar(buf, ')');
-		if (lnext_compat(pathkeys, i))
+		if (lnext(pathkeys, i))
 			appendStringInfoString(buf, ", ");
 	}
 	appendStringInfoChar(buf, ')');
@@ -515,9 +515,6 @@ tsl_debug_append_pruned_pathlist(StringInfo buf, PlannerInfo *root, RelOptInfo *
 	{
 		Path *p1 = (Path *) lfirst(lc1);
 		ListCell *lc2;
-#if PG13_LT
-		ListCell *prev = NULL;
-#endif
 
 		foreach (lc2, fdw_info->considered_paths)
 		{
@@ -525,14 +522,10 @@ tsl_debug_append_pruned_pathlist(StringInfo buf, PlannerInfo *root, RelOptInfo *
 
 			if (path_is_origin(p1, p2))
 			{
-				fdw_info->considered_paths =
-					list_delete_cell_compat(fdw_info->considered_paths, lc2, prev);
+				fdw_info->considered_paths = list_delete_cell(fdw_info->considered_paths, lc2);
 				fdw_utils_free_path(p2);
 				break;
 			}
-#if PG13_LT
-			prev = lc2;
-#endif
 		}
 	}
 

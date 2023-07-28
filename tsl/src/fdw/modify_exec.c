@@ -249,11 +249,7 @@ convert_attrs(TupleConversionMap *map, List *attrs)
 
 		for (i = 0; i < map->outdesc->natts; i++)
 		{
-#if PG13_GE
 			if (map->attrMap->attnums[i] == attnum)
-#else
-			if (map->attrMap[i] == attnum)
-#endif
 			{
 				new_attrs = lappend_int(new_attrs, AttrOffsetGetAttrNumber(i));
 				break;

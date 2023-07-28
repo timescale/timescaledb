@@ -727,7 +727,7 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 	 * We don't care about the locking order here, because this code uses
 	 * AccessShareLock that doesn't conflict with itself.
 	 */
-	chunk_ids = list_sort_compat(chunk_ids, list_int_cmp_compat);
+	list_sort(chunk_ids, list_int_cmp_compat);
 
 	return ts_chunk_scan_by_chunk_ids(ht->space, chunk_ids, num_chunks);
 }

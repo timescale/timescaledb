@@ -60,11 +60,7 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
-#if PG13_LT
-#include <access/tuptoaster.h>
-#else
 #include <access/toast_internals.h>
-#endif
 
 #include "annotations.h"
 #include "chunk.h"

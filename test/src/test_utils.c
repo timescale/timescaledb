@@ -311,11 +311,5 @@ ts_debug_allocated_bytes(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 
-#if !PG13_GE
-	/* Don't have this function on PG 12. */
-	(void) context;
-	PG_RETURN_UINT64(1);
-#else
 	PG_RETURN_UINT64(MemoryContextMemAllocated(context, /* recurse = */ true));
-#endif
 }
