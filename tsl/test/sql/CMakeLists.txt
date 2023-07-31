@@ -116,8 +116,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql)
   endif()
+  # UPDATE/DELETE on compressed hypertables is supported on PG version >= 14
   list(APPEND TEST_FILES compression.sql compression_update_delete.sql
-       compression_permissions.sql)
+       compression_permissions.sql recompress_chunk_segmentwise-v2.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))

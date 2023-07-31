@@ -1,0 +1,895 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE metrics_compressed(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON metrics_compressed(time);
+CREATE INDEX ON metrics_compressed(device_id,time);
+SELECT create_hypertable('metrics_compressed','time',create_default_indexes:=false);
+        create_hypertable        
+---------------------------------
+ (1,public,metrics_compressed,t)
+(1 row)
+
+ALTER TABLE metrics_compressed DROP COLUMN filler_1;
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics_compressed DROP COLUMN filler_2;
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics_compressed DROP COLUMN filler_3;
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ANALYZE metrics_compressed;
+-- compress chunks
+ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht WHERE c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_1_chunk
+(3 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+-- case1: 1 segment affected
+-- Number of segments decompressed is 1
+BEGIN;
+-- affects segment with sequence_num = 10
+INSERT INTO metrics_compressed VALUES ('2000-01-05 20:06:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-04 23:06:00+05:30'::timestamp with time zone, 1, 2, 3, 222.2, 333.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 1;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(4 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 1
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 1;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |            501 | Tue Jan 04 23:16:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    11 |            501 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 23:14:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(5 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case2: 2 segments affected with same segment by values
+-- Number of segments decompressed is 2
+BEGIN;
+-- affects segment with sequence_num = 20
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 1, 2, 3, 222.2, 333.3);
+-- affects segment with sequence_num = 40
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 1;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(4 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 2
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 1;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |            501 | Mon Jan 03 13:54:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    21 |            501 | Sun Jan 02 21:16:00 2000 PST | Mon Jan 03 13:52:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            599 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(5 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case3: 2 different segments affected
+-- Number of segments decompressed is 2
+BEGIN;
+-- affects segment with sequence_num = 20
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+-- affects segment with sequence_num = 40
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 3, 2, 3, 222.2, 333.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id IN (1, 3) ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(8 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 2
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id IN (1, 3) ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |            500 | Mon Jan 03 13:56:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    21 |            501 | Sun Jan 02 21:16:00 2000 PST | Mon Jan 03 13:54:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            599 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(9 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case4: 2 segments affected with same segment by values + new segments created
+-- Number of segments decompressed is 2
+BEGIN;
+-- affects segment with sequence_num = 20
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 1, 2, 3, 222.2, 333.3);
+-- affects segment with sequence_num = 40
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+-- create new segment
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 11, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 11, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 12, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 13, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 14, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 15, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 12, 2, 3, 22.2, 33.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(20 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 2
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |            501 | Mon Jan 03 13:54:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    21 |            501 | Sun Jan 02 21:16:00 2000 PST | Mon Jan 03 13:52:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            599 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+        11 |                    10 |              2 | Mon Jan 03 02:16:00 2000 PST | Mon Jan 03 02:26:00 2000 PST
+        12 |                    10 |              2 | Sat Jan 01 02:00:00 2000 PST | Mon Jan 03 02:16:00 2000 PST
+        13 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        14 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        15 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+(26 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case5: 3 different segments affected with same segment by values + new segments created
+-- Number of segments decompressed is 3
+BEGIN;
+-- affects segment with sequence_num = 20
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 1, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 2, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 3, 2, 3, 222.2, 333.3);
+-- create new segment
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 11, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 11, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 12, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 13, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 14, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 15, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 12, 2, 3, 22.2, 33.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(20 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 3
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |            500 | Mon Jan 03 13:56:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    21 |            501 | Sun Jan 02 21:16:00 2000 PST | Mon Jan 03 13:54:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:18:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    21 |              1 | Sun Jan 02 21:16:00 2000 PST | Sun Jan 02 21:16:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            599 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+        11 |                    10 |              2 | Mon Jan 03 02:16:00 2000 PST | Mon Jan 03 02:26:00 2000 PST
+        12 |                    10 |              2 | Sat Jan 01 02:00:00 2000 PST | Mon Jan 03 02:16:00 2000 PST
+        13 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        14 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        15 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+(27 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case6: all segments affected
+-- Number of segments decompressed is 5
+BEGIN;
+-- affects segment with sequence_num = 20
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 1, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 2, 2, 3, 22.2, 33.3);
+-- affects segment with sequence_num = 40
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 3, 2, 3, 222.2, 333.3);
+-- affects segment with sequence_num = 10
+INSERT INTO metrics_compressed VALUES ('2000-01-04 15:46:00+05:30'::timestamp with time zone, 4, 2, 3, 2222.2, 3333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-05 15:56:00+05:30'::timestamp with time zone, 5, 2, 3, 22222.2, 33333.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(20 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 5
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |            500 | Mon Jan 03 13:56:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    21 |            501 | Sun Jan 02 21:16:00 2000 PST | Mon Jan 03 13:54:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:18:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    21 |              1 | Sun Jan 02 21:16:00 2000 PST | Sun Jan 02 21:16:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            599 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:18:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    21 |              1 | Sun Jan 02 21:16:00 2000 PST | Sun Jan 02 21:16:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:38:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    11 |              1 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 06:36:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(24 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case7: all segments affected + new segments created
+-- Number of segments decompressed is 5
+BEGIN;
+-- affects segment with sequence_num = 10
+INSERT INTO metrics_compressed VALUES ('2000-01-05 15:46:00+05:30'::timestamp with time zone, 1, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-05 15:56:00+05:30'::timestamp with time zone, 2, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-05 15:30:00+05:30'::timestamp with time zone, 3, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-05 15:46:00+05:30'::timestamp with time zone, 4, 2, 3, 2222.2, 3333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-05 15:56:00+05:30'::timestamp with time zone, 5, 2, 3, 22222.2, 33333.3);
+-- create new segment
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 11, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 11, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 11, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 13, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 14, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 15, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 12, 2, 3, 22.2, 33.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(20 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 5
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |            500 | Tue Jan 04 23:18:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    11 |            501 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 23:16:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:38:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    11 |              1 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 06:36:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:38:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    11 |              1 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 06:36:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:38:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    11 |              1 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 06:36:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:38:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    11 |              1 | Tue Jan 04 06:36:00 2000 PST | Tue Jan 04 06:36:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+        11 |                    10 |              3 | Mon Jan 03 02:16:00 2000 PST | Mon Jan 03 02:26:00 2000 PST
+        12 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        13 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        14 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+        15 |                    10 |              1 | Sat Jan 01 02:00:00 2000 PST | Sat Jan 01 02:00:00 2000 PST
+(30 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case8: create new rows in existing segments
+BEGIN;
+-- does not affects any segments
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 1, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-30 15:30:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 2, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 3, 2, 3, 2222.2, 3333.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 4, 2, 3, 22222.2, 33333.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-30 15:30:00+05:30'::timestamp with time zone, 4, 2, 3, 22222.2, 33333.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(20 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 4
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            600 | Thu Dec 30 02:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            599 | Thu Dec 30 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    40 |            599 | Thu Dec 30 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         4 |                    40 |            600 | Thu Dec 30 02:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(20 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case9: check with UPDATE/DELETE on compressed chunks
+BEGIN;
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+ id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   6 | f       |      1 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                   5 | f       |      1 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |                   4 | f       |      1 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
+  5 |             2 | _timescaledb_internal | compress_hyper_2_5_chunk |                     | f       |      0 | f
+  6 |             2 | _timescaledb_internal | compress_hyper_2_6_chunk |                     | f       |      0 | f
+(6 rows)
+
+/* delete device id 4 */
+DELETE FROM metrics_compressed WHERE device_id = 4;
+/* update device id 3 */
+UPDATE metrics_compressed SET v0 = 111, v1 = 222, v2 = 333, v3 = 444 WHERE device_id = 3;
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+ id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   6 | f       |      9 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                   5 | f       |      9 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |                   4 | f       |      9 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
+  5 |             2 | _timescaledb_internal | compress_hyper_2_5_chunk |                     | f       |      0 | f
+  6 |             2 | _timescaledb_internal | compress_hyper_2_6_chunk |                     | f       |      0 | f
+(6 rows)
+
+-- INSERT new segments with device_id = 4
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 4, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-30 15:30:00+05:30'::timestamp with time zone, 4, 2, 3, 22.2, 33.3);
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(12 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  Total decompressed segments are: 0
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         1 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         1 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         1 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         1 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         2 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         2 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         2 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         2 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         3 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         3 |                    11 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         3 |                    12 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         3 |                    13 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+         4 |                    10 |              2 | Thu Dec 30 02:00:00 1999 PST | Thu Dec 30 16:00:00 1999 PST
+         5 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         5 |                    20 |           1000 | Sun Jan 02 21:16:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         5 |                    30 |           1000 | Sat Jan 01 11:56:00 2000 PST | Sun Jan 02 21:14:00 2000 PST
+         5 |                    40 |            598 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 11:54:00 2000 PST
+(17 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+ id | hypertable_id |      schema_name      |        table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+--------------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |                   6 | f       |      1 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |                   5 | f       |      9 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |                   4 | f       |      9 | f
+  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |                     | f       |      0 | f
+  5 |             2 | _timescaledb_internal | compress_hyper_2_5_chunk |                     | f       |      0 | f
+  6 |             2 | _timescaledb_internal | compress_hyper_2_6_chunk |                     | f       |      0 | f
+(6 rows)
+
+ROLLBACK;
+DROP TABLE metrics_compressed;
+-- case10: check with segmentby column being TEXT
+SELECT * FROM (
+    SELECT 3 priority, 'en_US' "COLLATION"
+    UNION ALL (SELECT 2, collname FROM pg_collation WHERE collname ilike 'en_us%' ORDER BY collname limit 1)
+    UNION ALL (SELECT 1, collname FROM pg_collation WHERE collname ilike 'en_us_utf%8%' ORDER BY collname limit 1)
+) c
+ORDER BY priority limit 1 \gset
+CREATE TABLE compressed_collation_ht(
+    time timestamp,
+    name text collate :"COLLATION",
+    value float
+);
+SELECT create_hypertable('compressed_collation_ht', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable           
+--------------------------------------
+ (3,public,compressed_collation_ht,t)
+(1 row)
+
+ALTER TABLE compressed_collation_ht SET
+    (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'name',
+        timescaledb.compress_orderby = 'time'
+    );
+INSERT INTO compressed_collation_ht VALUES
+    ('2021-01-01 01:01:01', 'á', '1'),
+    ('2021-01-01 01:01:02', 'b', '2'),
+    ('2021-01-01 01:01:03', 'ç', '2');
+SELECT compress_chunk(i) FROM show_chunks('compressed_collation_ht') i;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_7_chunk
+(1 row)
+
+BEGIN;
+/* below inserts should affect existing chunk and also create new chunks */
+INSERT INTO compressed_collation_ht VALUES
+    ('2021-01-01 01:01:01', 'á', '1');
+INSERT INTO compressed_collation_ht (time, name, value)
+SELECT time, 'á', '1'
+    FROM
+        generate_series(
+            '2021-01-01 01:01:01' :: timestamptz,
+            '2022-01-05 23:55:00+0',
+            '2m'
+        ) gtime(time);
+-- check metadata
+SELECT name, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1
+    FROM _timescaledb_internal.compress_hyper_4_8_chunk ORDER BY 1, 2;
+ name | _ts_meta_sequence_num | _ts_meta_count |      _ts_meta_min_1      |      _ts_meta_max_1      
+------+-----------------------+----------------+--------------------------+--------------------------
+ á    |                    10 |              1 | Fri Jan 01 01:01:01 2021 | Fri Jan 01 01:01:01 2021
+ b    |                    10 |              1 | Fri Jan 01 01:01:02 2021 | Fri Jan 01 01:01:02 2021
+ ç    |                    10 |              1 | Fri Jan 01 01:01:03 2021 | Fri Jan 01 01:01:03 2021
+(3 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_3_7_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_3_7_chunk');
+LOG:  Total decompressed segments are: 2
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT name, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1
+    FROM _timescaledb_internal.compress_hyper_4_8_chunk ORDER BY 1, 2;
+ name | _ts_meta_sequence_num | _ts_meta_count |      _ts_meta_min_1      |      _ts_meta_max_1      
+------+-----------------------+----------------+--------------------------+--------------------------
+ á    |                    10 |           1000 | Fri Jan 01 01:01:01 2021 | Sat Jan 02 10:15:01 2021
+ á    |                    11 |           1000 | Sat Jan 02 10:17:01 2021 | Sun Jan 03 19:35:01 2021
+ á    |                    12 |           1000 | Sun Jan 03 19:37:01 2021 | Tue Jan 05 04:55:01 2021
+ á    |                    13 |           1000 | Tue Jan 05 04:57:01 2021 | Wed Jan 06 14:15:01 2021
+ á    |                    14 |            292 | Wed Jan 06 14:17:01 2021 | Wed Jan 06 23:59:01 2021
+ b    |                    10 |              1 | Fri Jan 01 01:01:02 2021 | Fri Jan 01 01:01:02 2021
+ ç    |                    10 |              1 | Fri Jan 01 01:01:03 2021 | Fri Jan 01 01:01:03 2021
+(7 rows)
+
+ROLLBACK;
+-- case11: check segmentby columns with NULL values
+CREATE TABLE mytab (time TIMESTAMPTZ NOT NULL, a INT, b INT, c INT);
+SELECT table_name FROM create_hypertable('mytab', 'time', chunk_time_interval => interval '10 day');
+ table_name 
+------------
+ mytab
+(1 row)
+
+SELECT '2023-10-10 04:33:44.1234+05:30' as start_date \gset
+-- set both segmentby columns (a,c) = (value, NULL)
+INSERT INTO mytab
+    SELECT time,
+        CASE WHEN (:'start_date'::timestamptz - time < interval '1 days') THEN 1
+             WHEN (:'start_date'::timestamptz - time < interval '2 days') THEN 2
+             WHEN (:'start_date'::timestamptz - time < interval '3 days') THEN 3 ELSE 4 END as a
+    from generate_series(:'start_date'::timestamptz - interval '30 days', :'start_date'::timestamptz, interval '5 sec') as g1(time);
+-- set both segmentby columns (a,c) = (NULL, value)
+INSERT INTO mytab
+    SELECT time, NULL, 3, 4
+    from generate_series(:'start_date'::timestamptz - interval '30 days', :'start_date'::timestamptz, interval '5 sec') as g1(time);
+-- set both segmentby columns (a,c) = (NULL, NULL)
+INSERT INTO mytab
+    SELECT time, NULL, 5, NULL
+    from generate_series(:'start_date'::timestamptz - interval '30 days', :'start_date'::timestamptz, interval '5 sec') as g1(time);
+-- set both segmentby columns (a,c) = (value, value)
+INSERT INTO mytab
+    SELECT time, 6, 5, 7
+    from generate_series(:'start_date'::timestamptz - interval '30 days', :'start_date'::timestamptz, interval '5 sec') as g1(time);
+-- enable compression
+ALTER TABLE mytab SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'a, c'
+);
+-- compress chunks
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht WHERE c.hypertable_id = ht.id and ht.table_name = 'mytab' and c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_64_chunk
+ _timescaledb_internal._hyper_5_63_chunk
+ _timescaledb_internal._hyper_5_62_chunk
+ _timescaledb_internal._hyper_5_61_chunk
+(4 rows)
+
+-- check metadata
+SELECT a, c, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_6_68_chunk ORDER BY 1, 2;
+ a | c | _ts_meta_sequence_num | _ts_meta_count |          _ts_meta_min_1           |          _ts_meta_max_1           
+---+---+-----------------------+----------------+-----------------------------------+-----------------------------------
+ 4 |   |                    10 |            676 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+ 6 | 7 |                    10 |            676 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+   | 4 |                    10 |            676 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+   |   |                    10 |            676 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+(4 rows)
+
+BEGIN;
+-- insert new values
+-- should affect segments with values (4, NULL)
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', 4, 8, NULL);
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', 4, 9, NULL);
+-- should affect segments with values (6, 7)
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', 6, 10, 7);
+-- should affect segments with values (NULL, 4)
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 11, 4);
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 12, 4);
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 13, 4);
+-- should affect segments with values (NULL, NULL)
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 14, NULL);
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 15, NULL);
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 16, NULL);
+INSERT INTO mytab VALUES ('2023-09-10 05:00:00.1234+05:30', NULL, 17, NULL);
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_5_61_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_5_61_chunk');
+LOG:  Total decompressed segments are: 4
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+-- check metadata after recompression
+SELECT a, c, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_6_68_chunk ORDER BY 1, 2;
+ a | c | _ts_meta_sequence_num | _ts_meta_count |          _ts_meta_min_1           |          _ts_meta_max_1           
+---+---+-----------------------+----------------+-----------------------------------+-----------------------------------
+ 4 |   |                    10 |            678 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+ 6 | 7 |                    10 |            677 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+   | 4 |                    10 |            679 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+   |   |                    10 |            680 | Sat Sep 09 16:03:44.1234 2023 PDT | Sat Sep 09 16:59:59.1234 2023 PDT
+(4 rows)
+
+ROLLBACK;

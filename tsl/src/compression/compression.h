@@ -7,6 +7,7 @@
 #define TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
 
 #include <postgres.h>
+#include <access/skey.h>
 #include <c.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
@@ -195,6 +196,14 @@ typedef enum CompressionAlgorithms
 	_MAX_NUM_COMPRESSION_ALGORITHMS = 128,
 } CompressionAlgorithms;
 
+/* Defines what kind of compression operation it is */
+typedef enum CompressionType
+{
+	COMPRESS = 0,
+	RECOMPRESS,
+	DECOMPRESS,
+} CompressionType;
+
 typedef struct CompressionStats
 {
 	int64 rowcnt_pre_compression;
@@ -260,8 +269,25 @@ typedef struct RowCompressor
 	int64 num_compressed_rows;
 	/* if recompressing segmentwise, we use this info to reset the sequence number */
 	bool reset_sequence;
+	/*
+	 * During recompression,
+	 * set to FALSE when existing compressed segments are being recompressed
+	 * set to TRUE when new compressed segments are being inserted into heap
+	 * This will ensure that sequence number are generated/updated correctly
+	 */
+	bool update_sequence;
 	/* flag for checking if we are working on the first tuple */
 	bool first_iteration;
+	/* Represents the kind of compression operation */
+	CompressionType compression_type;
+	/*
+	 * During recompression, if number of rows per compressed segment crosses
+	 * MAX_ROWS_PER_COMPRESSION, we need to split this segment into half so
+	 * that data is equally distributed between new sequence numbers. To do
+	 * this we need to know the total count of number of rows per compressed
+	 * segment
+	 */
+	unsigned long total_rows_per_segment;
 } RowCompressor;
 
 /* SegmentFilter is used for filtering segments based on qualifiers */
@@ -351,7 +377,8 @@ extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompr
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
 								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate, bool reset_sequence);
+								bool need_bistate, bool reset_sequence,
+								CompressionType compressiontype);
 extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
 													  int16 num_cols, Datum *compressed_datums,
@@ -391,6 +418,12 @@ consumeCompressedData(StringInfo si, int bytes)
 	return result;
 }
 
+ScanKeyData *build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decompressor,
+							Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
+							int *num_scankeys);
+int create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filter_col_name,
+								  StrategyNumber strategy, ScanKeyData *scankeys, int num_scankeys,
+								  Bitmapset **null_columns, Datum value, bool is_null_check);
 /*
  * Normal compression uses 1k rows, but the regression tests use up to 1015.
  * We use this limit for sanity checks in case the compressed data is corrupt.

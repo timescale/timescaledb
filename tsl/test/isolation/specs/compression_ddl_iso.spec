@@ -44,7 +44,7 @@ session "S"
 step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch ORDER BY ch::text LIMIT 1; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
-step "SA" { SELECT * FROM ts_device_table; }
+step "SA" { SELECT * FROM ts_device_table ORDER BY time, location; }
 
 
 session "LCT"
