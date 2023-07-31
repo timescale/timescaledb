@@ -198,7 +198,7 @@ END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 ALTER TABLE _timescaledb_config.bgw_job
-    ALTER COLUMN owner SET DEFAULT current_role::regrole;
+    ALTER COLUMN owner SET DEFAULT pg_catalog.quote_ident(current_role)::regrole;
 
 -- Rebuild the _timescaledb_catalog.continuous_agg_migrate_plan_step definition
 ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step
