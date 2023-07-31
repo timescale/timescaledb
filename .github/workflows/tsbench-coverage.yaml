@@ -1,0 +1,204 @@
+# A job to inspect code coverage of current TSBench benchmarks, and also run
+# them with assertions enabled to have more test coverage.
+name: TSBench Code Coverage
+"on":
+  schedule:
+    - cron: '0 3 * * *'
+  push:
+    branches:
+      - main
+      - trigger/tsb-coverage
+  pull_request:
+    paths: .github/workflows/tsbench-coverage.yaml
+
+jobs:
+  coverage:
+    strategy:
+      fail-fast: false
+
+    name: TSBench Code Coverage
+    runs-on: ubuntu-22.04
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Install Linux Dependencies
+        run: |
+          # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
+          # If needed, install them before opening the core dump.
+          sudo apt-get update
+          sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+            libtest-most-perl tree golang moreutils
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v3
+
+      - name: Read configuration
+        id: config
+        run: python -B .github/gh_config_reader.py
+
+      # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+      # ages after the original problem.
+      - name: Get PostgreSQL Cache Key
+        id: cache-key
+        run: |
+          echo "key=postgresql-tsbcov-$(date +"%d")-3" >> $GITHUB_OUTPUT
+
+      # We cache the build directory instead of the install directory here
+      # because extension installation will write files to install directory
+      # leading to a tainted cache.
+      # Use separate cache/restore actions to save even if the job fails, to
+      # speed up development.
+      - name: Restore PostgreSQL Cache
+        id: restore-postgresql-cache
+        uses: actions/cache/restore@v3
+        with:
+          path: ~/${{ env.PG_SRC_DIR }}
+          key: "${{ steps.cache-key.outputs.key }}"
+
+      - name: Build PostgreSQL
+        if: steps.restore-postgresql-cache.outputs.cache-matched-key == ''
+        run: |
+          wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG15_LATEST }}/postgresql-${{ steps.config.outputs.PG15_LATEST }}.tar.bz2
+          mkdir -p ~/$PG_SRC_DIR
+          tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+          cd ~/$PG_SRC_DIR
+          ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+            --without-readline --without-zlib --without-libxml \
+            --enable-cassert --enable-debug
+          make -j$(nproc)
+
+      - name: Save PostgreSQL Cache
+        if: steps.restore-postgresql-cache.outputs.cache-matched-key == ''
+        id: save-postgresql-cache
+        uses: actions/cache/save@v3
+        with:
+          path: ~/${{ env.PG_SRC_DIR }}
+          key: "${{ steps.cache-key.outputs.key }}"
+
+      - name: Install PostgreSQL
+        run: |
+          make -C ~/$PG_SRC_DIR install
+
+      - name: Upload config.log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: config.log for PostgreSQL
+          path: ~/${{ env.PG_SRC_DIR }}/config.log
+
+      - name: Build TimescaleDB
+        run: |
+          set -e
+
+          cmake -B build -S . -DASSERTIONS=ON -DCODECOVERAGE=1 -DLINTER=OFF \
+            -DCMAKE_VERBOSE_MAKEFILE=1 \
+            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DPG_PATH=$HOME/$PG_INSTALL_DIR
+
+          make -C build -j$(nproc) install
+
+      - name: initdb
+        run: |
+          set -xeu
+
+          export PGDATA=db
+          export PGPORT=5432
+          export PGDATABASE=postgres
+          export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
+          initdb
+
+          go install github.com/timescale/timescaledb-tune/cmd/timescaledb-tune@latest
+
+          ~/go/bin/timescaledb-tune --yes
+
+          echo "statement_timeout=90s" >> $PGDATA/postgresql.conf
+
+      - name: Checkout tsbench
+        uses: actions/checkout@v3
+        with:
+          repository: 'timescale/tsbench'
+          path: 'tsbench'
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+
+      - name: Prepare tsbench
+        run: |
+          set -xeu
+
+          cd tsbench
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -e .
+
+      - name: Run tsbench
+        run: |
+          set -xeu
+
+          export PGDATA=db
+          export PGPORT=5432
+          export PGDATABASE=postgres
+          export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
+          pg_ctl -l postmaster.log start
+
+          psql -c "create extension timescaledb;"
+
+          cd tsbench
+          source .venv/bin/activate
+          tsbench-deployer --verbose --cache-s3-datasets
+          LANG=C LC_NUMERIC=C tsbench --max-executions=1 --verbose --verbose \
+            --with-connection pgsq://localhost:5432/postgres
+
+          # Postgres should survive.
+          psql -c "select 1;"
+
+      - name: Build coverage report
+        run: make -j $MAKE_JOBS -k -C build coverage
+
+      - name: Save LCOV coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: LCOV coverage report
+          path: ./build/codecov/codecov-report
+
+      - name: Collect the logs
+        if: always()
+        id: collectlogs
+        run: |
+          find . -name postmaster.log -exec cat {} + > postgres.log
+          # wait in case there are in-progress coredumps
+          sleep 10
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          # print OOM killer information
+          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+
+      - name: Save PostgreSQL log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: PostgreSQL log
+          path: postgres.log
+
+      - name: Stack trace
+        if: always() && steps.collectlogs.outputs.coredumps == 'true'
+        run: |
+          sudo coredumpctl gdb <<<"
+            set verbose on
+            set trace-commands on
+            show debug-file-directory
+            printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+            frame function ExceptionalCondition
+            printf "'"'"condition = '%s'\n"'"'", conditionName
+            up 1
+            l
+            info args
+            info locals
+            bt full
+          " 2>&1 | tee stacktrace.log
+          ./scripts/bundle_coredumps.sh
+          grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
+          exit 1 # Fail the job if we have core dumps.
+
