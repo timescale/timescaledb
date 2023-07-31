@@ -11,8 +11,8 @@ DROP VIEW IF EXISTS timescaledb_experimental.policies;
 
 ALTER TABLE _timescaledb_config.bgw_job
     ALTER COLUMN owner DROP DEFAULT,
-    ALTER COLUMN owner TYPE regrole USING owner::regrole,
-    ALTER COLUMN owner SET DEFAULT current_role::regrole;
+    ALTER COLUMN owner TYPE regrole USING pg_catalog.quote_ident(owner)::regrole,
+    ALTER COLUMN owner SET DEFAULT pg_catalog.quote_ident(current_role)::regrole;
 CREATE TABLE _timescaledb_config.bgw_job_tmp AS SELECT * FROM _timescaledb_config.bgw_job;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_job;
@@ -40,7 +40,7 @@ CREATE TABLE _timescaledb_config.bgw_job (
   retry_period interval NOT NULL,
   proc_schema name NOT NULL,
   proc_name name NOT NULL,
-  owner regrole NOT NULL DEFAULT current_role::regrole,
+  owner regrole NOT NULL DEFAULT pg_catalog.quote_ident(current_role)::regrole,
   scheduled bool NOT NULL DEFAULT TRUE,
   fixed_schedule bool not null default true,
   initial_start timestamptz,
