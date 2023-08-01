@@ -23,12 +23,12 @@
 
 #include "compression/compression.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/planner.h"
-#include "nodes/decompress_chunk/exec.h"
-#include "import/planner.h"
-#include "guc.h"
 #include "custom_type_cache.h"
+#include "guc.h"
+#include "import/planner.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/planner.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",
@@ -59,6 +59,11 @@ check_for_system_columns(Bitmapset *attrs_used)
 /*
  * Given the scan targetlist and the bitmapset of the needed columns, determine
  * which scan columns become which decompressed columns (fill decompression_map).
+ *
+ * Note that the chunk_attrs_needed bitmap is offset by the
+ * FirstLowInvalidHeapAttributeNumber, similar to RelOptInfo.attr_needed. This
+ * allows to encode the requirement for system columns, which have negative
+ * attnos.
  */
 static void
 build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *chunk_attrs_needed)
@@ -116,8 +121,9 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 
 	/*
 	 * Go over the scan targetlist and determine to which output column each
-	 * scan column goes.
+	 * scan column goes, saving other additional info as we do that.
 	 */
+	path->have_bulk_decompression_columns = false;
 	path->decompression_map = NIL;
 	foreach (lc, scan_tlist)
 	{
@@ -230,10 +236,17 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 		path->is_segmentby_column =
 			lappend_int(path->is_segmentby_column,
 						compression_info && compression_info->segmentby_column_index != 0);
+
+		const bool bulk_decompression_possible =
+			destination_attno_in_uncompressed_chunk > 0 && compression_info &&
+			tsl_get_decompress_all_function(compression_info->algo_id) != NULL;
+		path->have_bulk_decompression_columns |= bulk_decompression_possible;
+		path->bulk_decompression_column =
+			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
 	}
 
 	/*
-	 * Check that we have found all the needed columns in the scan targetlist.
+	 * Check that we have found all the needed columns in the compressed targetlist.
 	 * We can't conveniently check that we have all columns for all-row vars, so
 	 * skip attno 0 in this check.
 	 */
@@ -242,7 +255,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	if (bit >= 0)
 	{
 		elog(ERROR,
-			 "column '%s' (%d) not found in the scan targetlist for compressed chunk '%s'",
+			 "column '%s' (%d) not found in the targetlist for compressed chunk '%s'",
 			 get_attname(path->info->chunk_rte->relid,
 						 bit + FirstLowInvalidHeapAttributeNumber,
 						 /* missing_ok = */ true),
@@ -252,7 +265,7 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 
 	if (missing_count)
 	{
-		elog(ERROR, "the count column was not found in the compressed scan targetlist");
+		elog(ERROR, "the count column was not found in the compressed targetlist");
 	}
 
 	if (missing_sequence)
@@ -476,7 +489,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	pull_varattnos((Node *) decompress_plan->scan.plan.qual,
 				   dcpath->info->chunk_rel->relid,
 				   &chunk_attrs_needed);
-	pull_varattnos((Node *) dcpath->cpath.path.pathtarget->exprs,
+	pull_varattnos((Node *) dcpath->custom_path.path.pathtarget->exprs,
 				   dcpath->info->chunk_rel->relid,
 				   &chunk_attrs_needed);
 
@@ -488,69 +501,129 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/* Build heap sort info for sorted_merge_append */
 	List *sort_options = NIL;
 
-	if (dcpath->sorted_merge_append)
+	if (dcpath->batch_sorted_merge)
 	{
-		/* sorted_merge_append is used when the 'order by' of the query and the
-		 * 'order by' of the segments do match, we use a heap to merge the segments.
-		 * For the heap we need a compare function that determines the heap order. This
-		 * function is constructed here.
+		/*
+		 * 'order by' of the query and the 'order by' of the compressed batches
+		 * match, so we will we use a heap to merge the batches. For the heap we
+		 * need a compare function that determines the heap order. This function
+		 * is constructed here.
+		 *
+		 * Batch sorted merge is done over the decompressed chunk scan tuple, so
+		 * we must match the pathkeys to the decompressed chunk tupdesc.
 		 */
-		AttrNumber *sortColIdx = NULL;
-		Oid *sortOperators = NULL;
-		Oid *collations = NULL;
-		bool *nullsFirst = NULL;
-		int numsortkeys = 0;
 
-		/* We need a targetlist at this point to build the sort info below. If the target list is
-		 * not populated by PostgreSQL already, populate it here.
-		 */
-		if (decompress_plan->scan.plan.targetlist == NIL)
-			decompress_plan->scan.plan.targetlist = ts_build_path_tlist(root, (Path *) path);
-
-		Assert(decompress_plan->scan.plan.targetlist != NIL);
-		Assert(dcpath->cpath.path.pathkeys != NIL);
-
-		ts_prepare_sort_from_pathkeys(&decompress_plan->scan.plan,
-									  dcpath->cpath.path.pathkeys,
-									  bms_make_singleton(dcpath->info->chunk_rel->relid),
-									  NULL,
-									  false,
-									  &numsortkeys,
-									  &sortColIdx,
-									  &sortOperators,
-									  &collations,
-									  &nullsFirst);
+		int numsortkeys = list_length(dcpath->custom_path.path.pathkeys);
 
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
 		List *sort_collations = NIL;
 		List *sort_nulls = NIL;
 
-		/* Since we have to keep the sort info in custom_private, we store the information
-		 * in copyable lists */
-		for (int i = 0; i < numsortkeys; i++)
+		/*
+		 */
+		ListCell *lc;
+		foreach (lc, dcpath->custom_path.path.pathkeys)
 		{
-			sort_col_idx = lappend_oid(sort_col_idx, sortColIdx[i]);
-			sort_ops = lappend_oid(sort_ops, sortOperators[i]);
-			sort_collations = lappend_oid(sort_collations, collations[i]);
-			sort_nulls = lappend_oid(sort_nulls, nullsFirst[i]);
+			PathKey *pk = lfirst(lc);
+			EquivalenceClass *ec = pk->pk_eclass;
+
+			/*
+			 * Find the equivalence member that belongs to decompressed relation.
+			 */
+			ListCell *membercell = NULL;
+			foreach (membercell, ec->ec_members)
+			{
+				EquivalenceMember *em = lfirst(membercell);
+
+				if (em->em_is_const)
+				{
+					continue;
+				}
+
+				int em_relid;
+				if (!bms_get_singleton_member(em->em_relids, &em_relid))
+				{
+					continue;
+				}
+
+				if ((Index) em_relid != dcpath->info->chunk_rel->relid)
+				{
+					continue;
+				}
+
+				Ensure(IsA(em->em_expr, Var),
+					   "non-Var pathkey not expected for compressed batch sorted mege");
+
+				/*
+				 * We found a Var equivalence member that belongs to the
+				 * decompressed relation. We can use its varattno directly for
+				 * the comparison operator, because it operates on the
+				 * decompressed scan tuple.
+				 */
+				Var *var = castNode(Var, em->em_expr);
+				Assert((Index) var->varno == (Index) em_relid);
+
+				/*
+				 * Look up the correct sort operator from the PathKey's slightly
+				 * abstracted representation.
+				 */
+				Oid sortop = get_opfamily_member(pk->pk_opfamily,
+												 var->vartype,
+												 var->vartype,
+												 pk->pk_strategy);
+				if (!OidIsValid(sortop)) /* should not happen */
+					elog(ERROR,
+						 "missing operator %d(%u,%u) in opfamily %u",
+						 pk->pk_strategy,
+						 var->vartype,
+						 var->vartype,
+						 pk->pk_opfamily);
+
+				sort_col_idx = lappend_oid(sort_col_idx, var->varattno);
+				sort_collations = lappend_oid(sort_collations, var->varcollid);
+				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
+				sort_ops = lappend_oid(sort_ops, sortop);
+
+				break;
+			}
+
+			Ensure(membercell != NULL,
+				   "could not find matching decompressed chunk column for batch sorted merge "
+				   "pathkey");
 		}
 
 		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
 
-		/* Build a sort node for the compressed batches. The sort function is derived from the sort
-		 * function of the pathkeys, except that it refers to the min and max elements of the
-		 * batches. We have already verified that the pathkeys match the compression order_by, so
-		 * this mapping can be done here. */
+		/*
+		 * Build a sort node for the compressed batches. The sort function is
+		 * derived from the sort function of the pathkeys, except that it refers
+		 * to the min and max metadata columns of the batches. We have already
+		 * verified that the pathkeys match the compression order_by, so this
+		 * mapping is possible.
+		 */
+		AttrNumber *sortColIdx = palloc(sizeof(AttrNumber) * numsortkeys);
+		Oid *sortOperators = palloc(sizeof(Oid) * numsortkeys);
+		Oid *collations = palloc(sizeof(Oid) * numsortkeys);
+		bool *nullsFirst = palloc(sizeof(bool) * numsortkeys);
 		for (int i = 0; i < numsortkeys; i++)
 		{
-			Oid opfamily, opcintype;
-			int16 strategy;
+			Oid sortop = list_nth_oid(sort_ops, i);
 
 			/* Find the operator in pg_amop --- failure shouldn't happen */
-			if (!get_ordering_op_properties(sortOperators[i], &opfamily, &opcintype, &strategy))
+			Oid opfamily, opcintype;
+			int16 strategy;
+			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
+											&opfamily,
+											&opcintype,
+											&strategy))
 				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
 
+			/*
+			 * This way to determine the matching metadata column works, because
+			 * we have already verified that the pathkeys match the compression
+			 * orderby.
+			 */
 			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
 			char *meta_col_name = strategy == BTLessStrategyNumber ?
 									  column_segment_min_name(i + 1) :
@@ -562,14 +635,20 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 			if (attr_position == InvalidAttrNumber)
 				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
 
-			/* If the the target list is not based on the layout of the uncompressed chunk,
-			 * (see comment for physical_tlist above), adjust the position of the attribute.
+			/*
+			 * If the the compressed target list is not based on the layout of
+			 * the uncompressed chunk (see comment for physical_tlist above),
+			 * adjust the position of the attribute.
 			 */
 			if (target_list_compressed_is_physical)
 				sortColIdx[i] = attr_position;
 			else
 				sortColIdx[i] =
 					find_attr_pos_in_tlist(compressed_scan->plan.targetlist, attr_position);
+
+			sortOperators[i] = sortop;
+			collations[i] = list_nth_oid(sort_collations, i);
+			nullsFirst[i] = list_nth_oid(sort_nulls, i);
 		}
 
 		/* Now build the compressed batches sort node */
@@ -603,13 +682,21 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
-	settings = list_make4_int(dcpath->info->hypertable_id,
+	const bool enable_bulk_decompression = !dcpath->batch_sorted_merge &&
+										   ts_guc_enable_bulk_decompression &&
+										   dcpath->have_bulk_decompression_columns;
+
+	settings = list_make5_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
-							  dcpath->sorted_merge_append);
+							  dcpath->batch_sorted_merge,
+							  enable_bulk_decompression);
 
-	decompress_plan->custom_private =
-		list_make4(settings, dcpath->decompression_map, dcpath->is_segmentby_column, sort_options);
+	decompress_plan->custom_private = list_make5(settings,
+												 dcpath->decompression_map,
+												 dcpath->is_segmentby_column,
+												 dcpath->bulk_decompression_column,
+												 sort_options);
 
 	return &decompress_plan->scan.plan;
 }
