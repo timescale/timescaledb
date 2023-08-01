@@ -128,9 +128,10 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	{
 		if (IS_INTEGER_TYPE(all_policies.partition_type))
 		{
+			bool found_drop_after = false;
 			drop_after_HT = ts_jsonb_get_int64_field(orig_ht_reten_job->fd.config,
 													 POL_RETENTION_CONF_KEY_DROP_AFTER,
-													 false);
+													 &found_drop_after);
 		}
 		else
 		{
