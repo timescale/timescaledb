@@ -96,7 +96,10 @@ CREATE TABLE public.bgw_log(
     msg TEXT
 );
 CREATE VIEW sorted_bgw_log AS
-    SELECT msg_no, application_name, regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+    SELECT msg_no,
+    	   application_name,
+    	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
+	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -202,13 +205,14 @@ SELECT * FROM timescaledb_information.job_stats;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                   msg                                   
+--------+------------------+-------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | unscheduled      | Execute job 1
-(4 rows)
+      1 | unscheduled      | job 1000 (unscheduled) exiting with success: execution time (RANDOM) ms
+(5 rows)
 
 SELECT delete_job(1000);
  delete_job 
@@ -312,12 +316,13 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                  msg                                   
+--------+------------------+------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-(3 rows)
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
+(4 rows)
 
 --Test that the scheduler will not run job again if not enough time has passed
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
@@ -334,13 +339,14 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                  msg                                   
+--------+------------------+------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-(4 rows)
+(5 rows)
 
 --After enough time has passed the scheduler will run the job again
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 50);
@@ -357,17 +363,19 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                  msg                                   
+--------+------------------+------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-(8 rows)
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
+(10 rows)
 
 --Now it runs it one more time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(120, 100);
@@ -384,21 +392,24 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                  msg                                   
+--------+------------------+------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1       | Execute job 1
-(12 rows)
+      1 | test_job_1       | job 1000 (test_job_1) exiting with success: execution time (RANDOM) ms
+(15 rows)
 
 --
 -- Test what happens when running a job that throws an error
@@ -718,13 +729,14 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                     msg                                     
+--------+------------------+-----------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(4 rows)
+      2 | test_job_3_long  | job 1003 (test_job_3_long) exiting with success: execution time (RANDOM) ms
+(5 rows)
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
  ts_bgw_params_mock_wait_returns_immediately 
@@ -805,8 +817,8 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                         msg                         
---------+------------------+-----------------------------------------------------
+ msg_no | application_name |                                     msg                                     
+--------+------------------+-----------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
@@ -817,7 +829,8 @@ SELECT * FROM sorted_bgw_log;
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(10 rows)
+      2 | test_job_3_long  | job 1004 (test_job_3_long) exiting with success: execution time (RANDOM) ms
+(11 rows)
 
 --Test sending a SIGHUP to a job
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -982,8 +995,8 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                         msg                         
---------+------------------+-----------------------------------------------------
+ msg_no | application_name |                                     msg                                     
+--------+------------------+-----------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
@@ -995,7 +1008,8 @@ SELECT * FROM sorted_bgw_log;
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(11 rows)
+      2 | test_job_3_long  | job 1005 (test_job_3_long) exiting with success: execution time (RANDOM) ms
+(12 rows)
 
 CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
@@ -1191,12 +1205,13 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                  msg                                   
+--------+------------------+------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_4       | Execute job 4
-(3 rows)
+      1 | test_job_4       | job 1012 (test_job_4) exiting with success: execution time (RANDOM) ms
+(4 rows)
 
 -- Now just make sure that the job actually runs in 200ms
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
@@ -1215,16 +1230,18 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                  msg                                   
+--------+------------------+------------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_4       | Execute job 4
+      1 | test_job_4       | job 1012 (test_job_4) exiting with success: execution time (RANDOM) ms
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_4       | Execute job 4
-(7 rows)
+      1 | test_job_4       | job 1012 (test_job_4) exiting with success: execution time (RANDOM) ms
+(9 rows)
 
 -- Test updating jobs list
 TRUNCATE bgw_log;
@@ -1572,25 +1589,29 @@ SELECT ts_bgw_params_reset_time(500000, true);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                        msg                         
---------+------------------+----------------------------------------------------
+ msg_no | application_name |                                 msg                                 
+--------+------------------+---------------------------------------------------------------------
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | another          | Execute job 1
+      1 | another          | job 1024 (another) exiting with success: execution time (RANDOM) ms
       3 | DB Scheduler     | [TESTING] Registered new background worker
       4 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | another          | Execute job 1
+      1 | another          | job 1024 (another) exiting with success: execution time (RANDOM) ms
       5 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       6 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       7 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       8 | DB Scheduler     | [TESTING] Registered new background worker
       9 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | new_job          | Execute job 1
+      1 | new_job          | job 1025 (new_job) exiting with success: execution time (RANDOM) ms
      10 | DB Scheduler     | [TESTING] Registered new background worker
      11 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | new_job          | Execute job 1
-(16 rows)
+      1 | new_job          | job 1025 (new_job) exiting with success: execution time (RANDOM) ms
+(20 rows)
 
 \x on
 SELECT * FROM _timescaledb_internal.bgw_job_stat;

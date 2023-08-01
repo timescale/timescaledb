@@ -779,7 +779,7 @@ get_col_info_for_attnum(Hypertable *ht, CompressColInfo *colinfo, AttrNumber att
  * This is limited to foreign key constraints now
  */
 static List *
-validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
+validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, Bitmapset **indexes)
 {
 	Oid relid = ht->main_table_relid;
 	Relation pg_constr;
@@ -802,9 +802,18 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
-		/* we check primary ,unique and exclusion constraints.
-		 * move foreign key constarints over to compression table
-		 * ignore triggers
+		/* Save away the supporting index, if any, that we check so that we
+		 * can ignore it in the index checking and not get duplicate messages.
+		 *
+		 * We are saving all checked indexes here even though only the unique
+		 * index is a problem at this point. It potentially avoids a second
+		 * check of an index that we have already checked. */
+		if (OidIsValid(form->conindid))
+			*indexes = bms_add_member(*indexes, form->conindid);
+
+		/*
+		 * We check primary, unique, and exclusion constraints.  Move foreign
+		 * key constraints over to compression table ignore triggers
 		 */
 		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER)
 			continue;
@@ -822,6 +831,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 			int j, numkeys;
 			int16 *attnums;
 			bool is_null;
+
 			/* Extract the conkey array, ie, attnums of PK's columns */
 			Datum adatum = heap_getattr(tuple,
 										Anum_pg_constraint_conkey,
@@ -844,11 +854,10 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 			attnums = (int16 *) ARR_DATA_PTR(arr);
 			for (j = 0; j < numkeys; j++)
 			{
-				FormData_hypertable_compression *col_def =
+				Form_hypertable_compression col_def =
 					get_col_info_for_attnum(ht, colinfo, attnums[j]);
 
-				if (col_def == NULL)
-					elog(ERROR, "missing column definition for constraint");
+				Ensure(col_def, "missing column definition for constraint");
 
 				if (form->contype == CONSTRAINT_FOREIGN)
 				{
@@ -881,6 +890,59 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 	systable_endscan(scan);
 	table_close(pg_constr, AccessShareLock);
 	return conlist;
+}
+
+/*
+ * Validate existing indexes on the hypertable. Note that there can be indexes
+ * that do not have a corresponding constraint.
+ *
+ * We pass in a list of indexes that we should ignore since these are checked
+ * by the constraint checking above.
+ */
+static void
+validate_existing_indexes(Hypertable *ht, CompressColInfo *colinfo, Bitmapset *ignore)
+{
+	Relation pg_index;
+	HeapTuple htup;
+	ScanKeyData skey;
+	SysScanDesc indscan;
+
+	ScanKeyInit(&skey,
+				Anum_pg_index_indrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(ht->main_table_relid));
+
+	pg_index = table_open(IndexRelationId, AccessShareLock);
+	indscan = systable_beginscan(pg_index, IndexIndrelidIndexId, true, NULL, 1, &skey);
+
+	while (HeapTupleIsValid(htup = systable_getnext(indscan)))
+	{
+		Form_pg_index index = (Form_pg_index) GETSTRUCT(htup);
+
+		/* We can ignore indexes that are being dropped, invalid indexes,
+		 * exclusion indexes, and any indexes checked by the constraint
+		 * checking. We can also skip checks below if the index is not a
+		 * unique index. */
+		if (!index->indislive || !index->indisvalid || index->indisexclusion ||
+			index->indisprimary || !index->indisunique || bms_is_member(index->indexrelid, ignore))
+			continue;
+
+		/* Now we check that all columns of the unique index are part of the
+		 * segmentby columns. */
+		for (int i = 0; i < index->indnkeyatts; i++)
+		{
+			int attno = index->indkey.values[i];
+			Form_hypertable_compression col_def = get_col_info_for_attnum(ht, colinfo, attno);
+			Ensure(col_def, "missing column definition for unique index");
+			if (col_def->segmentby_column_index < 1 && col_def->orderby_column_index < 1)
+				ereport(WARNING,
+						(errmsg("column \"%s\" should be used for segmenting or ordering",
+								NameStr(col_def->attname))));
+		}
+	}
+	systable_endscan(indscan);
+	table_close(pg_index, AccessShareLock);
 }
 
 static void
@@ -1132,8 +1194,15 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		check_modify_compression_options(ht, with_clause_options, orderby_cols);
 
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
-	/* check if we can create a compressed hypertable with existing constraints */
-	constraint_list = validate_existing_constraints(ht, &compress_cols);
+
+	/* Check if we can create a compressed hypertable with existing
+	 * constraints and indexes. */
+	{
+		Bitmapset *indexes = NULL;
+		constraint_list = validate_existing_constraints(ht, &compress_cols, &indexes);
+		validate_existing_indexes(ht, &compress_cols, indexes);
+		bms_free(indexes);
+	}
 
 	/* take explicit locks on catalog tables and keep them till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);

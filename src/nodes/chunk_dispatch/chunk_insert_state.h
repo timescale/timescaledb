@@ -6,7 +6,6 @@
 #ifndef TIMESCALEDB_CHUNK_INSERT_STATE_H
 #define TIMESCALEDB_CHUNK_INSERT_STATE_H
 
-#include <nodes/execnodes.h>
 #include <postgres.h>
 #include <funcapi.h>
 #include <access/tupconvert.h>
@@ -26,18 +25,12 @@ typedef struct ChunkInsertState
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
 	 * differs, it is necessary to convert tuples to chunk format before
-	 * insertion, ON CONFLICT, or RETURNING handling. In particular, with
-	 * PG12, the table AM (storage format) can also differ between the
-	 * hypertable root and each chunk (as well as between each chunk, in
-	 * theory).
+	 * insertion, ON CONFLICT, or RETURNING handling. The table AM (storage format)
+	 * can also differ between the hypertable root and each chunk (as well as
+	 * between each chunk, in theory).
 	 *
-	 * Thus, for PG12, which has more mature partitioning support, the
-	 * ResultRelInfo keeps per-relation slots for these purposes. In that
-	 * case, the slots here simply points to the per-relation slots in the
-	 * ResultRelInfo. However, earlier PostgreSQL versions are hardcoded to a
-	 * single tuple table slot (for the root), and in that case each per-chunk
-	 * slot here points to a common shared slot and it necessary to set the
-	 * tuple descriptor on the slots when switching between chunks.
+	 * The ResultRelInfo keeps per-relation slots for these purposes. The slots
+	 * here simply points to the per-relation slots in the ResultRelInfo.
 	 */
 
 	/* Pointer to slot for projected tuple in ON CONFLICT handling */

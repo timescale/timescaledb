@@ -26,14 +26,13 @@ import json
 import os
 import subprocess
 from ci_settings import (
-    PG12_EARLIEST,
-    PG12_LATEST,
     PG13_EARLIEST,
     PG13_LATEST,
     PG14_EARLIEST,
     PG14_LATEST,
     PG15_EARLIEST,
     PG15_LATEST,
+    PG_LATEST,
 )
 
 # github event type which is either push, pull_request or schedule
@@ -144,7 +143,6 @@ def macos_config(overrides):
                 "compressed_collation",
             },
             "os": "macos-11",
-            "pg": PG12_LATEST,
             "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
@@ -173,10 +171,6 @@ if event_type == "pull_request":
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(
-    build_debug_config({"pg": PG12_LATEST, "ignored_tests": ignored_tests})
-)
-
-m["include"].append(
     build_debug_config(
         {
             "pg": PG13_LATEST,
@@ -195,7 +189,7 @@ m["include"].append(
     build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
 )
 
-# test latest postgres release in MacOS
+# test timescaledb with release config on latest postgres release in MacOS
 m["include"].append(
     build_release_config(
         macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
@@ -210,24 +204,6 @@ m["include"].append(
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
 if event_type != "pull_request":
-    # add debug test for first supported PG12 version
-    # most of the IGNORES are the isolation tests because the output format has changed between versions
-    # chunk_utils, telemetry and tablespace are skipped because of use after free bugs in postgres 12.0 which those tests hit
-    pg12_debug_earliest = {
-        "pg": PG12_EARLIEST,
-        # The early releases don't build with llvm 14.
-        "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-        "skipped_tests": {"chunk_utils", "tablespace", "telemetry"},
-        "ignored_tests": {
-            "cluster-12",
-            "cagg_policy",
-            "debug_notice",
-            "dist_gapfill_pushdown-12",
-        },
-        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
-    }
-    m["include"].append(build_debug_config(pg12_debug_earliest))
-
     # add debug test for first supported PG13 version
     pg13_debug_earliest = {
         "pg": PG13_EARLIEST,
@@ -259,26 +235,26 @@ if event_type != "pull_request":
         build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_tests})
     )
 
-    # add debug test for MacOS
-    m["include"].append(build_debug_config(macos_config({})))
+    # add debug tests for timescaledb on latest postgres release in MacOS
+    m["include"].append(
+        build_debug_config(
+            macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
+        )
+    )
 
     # add release test for latest pg releases
-    m["include"].append(build_release_config({"pg": PG12_LATEST}))
     m["include"].append(build_release_config({"pg": PG13_LATEST}))
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
     m["include"].append(
         build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
     )
 
-    # add apache only test for latest pg
-    m["include"].append(build_apache_config({"pg": PG12_LATEST}))
-    m["include"].append(build_apache_config({"pg": PG13_LATEST}))
-    m["include"].append(build_apache_config({"pg": PG14_LATEST}))
-    m["include"].append(build_apache_config({"pg": PG15_LATEST}))
+    # add apache only test for latest pg versions
+    for PG_LATEST_VER in PG_LATEST:
+        m["include"].append(build_apache_config({"pg": PG_LATEST_VER}))
 
     # to discover issues with upcoming releases we run CI against
     # the stable branches of supported PG releases
-    m["include"].append(build_debug_config({"pg": 12, "snapshot": "snapshot"}))
     m["include"].append(build_debug_config({"pg": 13, "snapshot": "snapshot"}))
     m["include"].append(
         build_debug_config(

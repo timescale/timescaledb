@@ -8,11 +8,11 @@
 #include <nodes/bitmapset.h>
 
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/batch_array.h"
+#include "nodes/decompress_chunk/exec.h"
 
 /*
- * Create states to hold information for up to n batches
+ * Create states to hold information for up to n batches.
  */
 void
 batch_array_create(DecompressChunkState *chunk_state, int nbatches)
@@ -28,7 +28,7 @@ batch_array_create(DecompressChunkState *chunk_state, int nbatches)
 }
 
 /*
- * Create states to hold information for up to n batches
+ * Destroy batch states.
  */
 void
 batch_array_destroy(DecompressChunkState *chunk_state)
@@ -50,7 +50,7 @@ batch_array_destroy(DecompressChunkState *chunk_state)
 }
 
 /*
- * Enhance the capacity of existing batch states
+ * Enhance the capacity of existing batch states.
  */
 static void
 batch_array_enlarge(DecompressChunkState *chunk_state, int new_number)

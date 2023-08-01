@@ -3192,7 +3192,7 @@ process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	/* If this is part of changing the type of a column that is used in a clustered index
 	 * the above lookup might fail. But in this case we don't need to mark the index clustered
-	 * as postgres takes care of that already (except PG12 < 12.3) */
+	 * as postgres takes care of that already */
 	if (!OidIsValid(index_relid))
 		return;
 

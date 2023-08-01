@@ -609,7 +609,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	if (dcpath->batch_sorted_merge)
 	{
 		/*
-		 * 'order by' of the query and the 'order by' of the compressed  batches
+		 * 'order by' of the query and the 'order by' of the compressed batches
 		 * match, so we will we use a heap to merge the batches. For the heap we
 		 * need a compare function that determines the heap order. This function
 		 * is constructed here.
@@ -646,13 +646,13 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 					continue;
 				}
 
-				Index em_relid;
-				if (!bms_get_singleton_member(em->em_relids, (int *) &em_relid))
+				int em_relid;
+				if (!bms_get_singleton_member(em->em_relids, &em_relid))
 				{
 					continue;
 				}
 
-				if (em_relid != dcpath->info->chunk_rel->relid)
+				if ((Index) em_relid != dcpath->info->chunk_rel->relid)
 				{
 					continue;
 				}
@@ -667,7 +667,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				 * decompressed scan tuple.
 				 */
 				Var *var = castNode(Var, em->em_expr);
-				Assert((Index) var->varno == em_relid);
+				Assert((Index) var->varno == (Index) em_relid);
 
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly

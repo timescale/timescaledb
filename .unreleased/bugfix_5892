@@ -1,0 +1,2 @@
+Implements: #5894 Check unique indexes when enabling compression
+Fixes: #5892

@@ -112,7 +112,10 @@ CREATE TABLE public.bgw_log(
 );
 
 CREATE VIEW sorted_bgw_log AS
-    SELECT msg_no, application_name, regexp_replace(regexp_replace(msg, 'Wait until [0-9]+, started at [0-9]+', 'Wait until (RANDOM), started at (RANDOM)'), 'background worker "[^"]+"','connection') AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+    SELECT msg_no,
+    	   application_name,
+    	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
+	   FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT

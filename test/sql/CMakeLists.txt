@@ -1,6 +1,7 @@
 include(GenerateTestSchedule)
 
 set(TEST_FILES
+    agg_bookends.sql
     alter.sql
     alternate_users.sql
     baserel_cache.sql
@@ -11,6 +12,9 @@ set(TEST_FILES
     create_chunks.sql
     create_hypertable.sql
     create_table.sql
+    constraint.sql
+    copy.sql
+    copy_where.sql
     ddl_errors.sql
     drop_extension.sql
     drop_hypertable.sql
@@ -25,17 +29,20 @@ set(TEST_FILES
     histogram_test.sql
     index.sql
     information_views.sql
+    insert.sql
     insert_many.sql
     insert_single.sql
     insert_returning.sql
     lateral.sql
-    misc.sql
     null_exclusion.sql
     partition.sql
     partitioning.sql
+    partitionwise.sql
+    plan_expand_hypertable.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
+    plan_hypertable_inline.sql
     plan_ordered_append.sql
     relocate_extension.sql
     reloptions.sql
@@ -54,19 +61,12 @@ set(TEST_FILES
     license.sql)
 
 set(TEST_TEMPLATES
-    agg_bookends.sql.in
     append.sql.in
-    insert.sql.in
     cluster.sql.in
-    constraint.sql.in
-    copy.sql.in
     cursor.sql.in
     ddl.sql.in
     delete.sql.in
-    partitionwise.sql.in
-    plan_expand_hypertable.sql.in
     plan_hashagg.sql.in
-    plan_hypertable_inline.sql.in
     rowsecurity.sql.in
     update.sql.in
     parallel.sql.in

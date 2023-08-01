@@ -8,6 +8,7 @@
 \set DATA_NODE_1 :TEST_DBNAME _1
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
+\set INTERVAL_TEST FALSE
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -923,6 +924,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -975,16 +977,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [5] should be multiple of the time bucket width of "public.conditions_summary_1" [2].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -998,6 +1024,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -1070,6 +1097,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -1087,6 +1138,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -1139,16 +1191,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be greater or equal than the time bucket width of "public.conditions_summary_1" [4].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- cleanup
 DROP TABLE conditions;
@@ -2027,6 +2103,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -2079,17 +2156,41 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
 DETAIL:  Continuous aggregate with a fixed time bucket width (e.g. 61 days) cannot be created on top of one using variable time bucket width (e.g. 1 month).
 The variance can lead to the fixed width one not being a multiple of the variable width one.
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
@@ -2103,6 +2204,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -2155,16 +2257,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -2178,6 +2304,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -2250,6 +2377,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -2267,6 +2418,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -2319,16 +2471,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be greater or equal than the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- ########################################################
 -- ## TIMESTAMPTZ data type tests
@@ -3202,6 +3378,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3254,17 +3431,41 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with fixed-width bucket on top of one using variable-width bucket
 DETAIL:  Continuous aggregate with a fixed time bucket width (e.g. 61 days) cannot be created on top of one using variable time bucket width (e.g. 1 month).
 The variance can lead to the fixed width one not being a multiple of the variable width one.
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for non-multiple bucket sizes
@@ -3278,6 +3479,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3330,16 +3532,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validation test for equal bucket sizes
@@ -3353,6 +3579,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3425,6 +3652,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -3442,6 +3693,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3494,16 +3746,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be greater or equal than the time bucket width of "public.conditions_summary_1" [@ 2 hours].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Validations using time bucket with timezone (ref issue #5126)
@@ -3524,6 +3800,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3596,6 +3873,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -3610,6 +3911,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3662,16 +3964,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 16 mins] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 5 mins].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 --
 -- Variable bucket size with the same timezones
@@ -3687,6 +4013,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3759,6 +4086,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -3778,6 +4129,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3850,6 +4202,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -3870,6 +4246,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -3942,6 +4319,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -3962,6 +4363,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4034,6 +4436,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4048,6 +4474,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4120,6 +4547,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4133,6 +4584,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4205,6 +4657,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4218,6 +4694,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4290,6 +4767,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4303,6 +4804,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4355,16 +4857,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 360 days] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 7 days].
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 year] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 7 days].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 \set BUCKET_WIDTH_1ST 'INTERVAL \'1 week\''
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
@@ -4374,6 +4900,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4426,16 +4953,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
-DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 30 days] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 7 days].
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
+DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 mon] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 7 days].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- bug report 5277
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
@@ -4449,6 +5000,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4521,6 +5073,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4534,6 +5110,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4606,6 +5183,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4619,6 +5220,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4691,6 +5293,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4705,6 +5331,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4777,6 +5404,30 @@ UNION ALL
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
@@ -4791,6 +5442,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- LICENSE-TIMESCALE for a copy of the license.
 \set CAGG_NAME_1ST_LEVEL conditions_summary_1
 \set CAGG_NAME_2TH_LEVEL conditions_summary_2
+\set CAGG_NAME_3TH_LEVEL conditions_summary_3
 --
 -- CAGG on hypertable (1st level)
 --
@@ -4843,16 +5495,40 @@ SELECT
 FROM :CAGG_NAME_1ST_LEVEL
 GROUP BY 1
 WITH NO DATA;
-psql:include/cagg_on_cagg_validations.sql:43: ERROR:  cannot create continuous aggregate with incompatible bucket width
+psql:include/cagg_on_cagg_validations.sql:44: ERROR:  cannot create continuous aggregate with incompatible bucket width
 DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 0.00116 secs] should be multiple of the time bucket width of "public.conditions_summary_1" [@ 0.000146 secs].
 \d+ :CAGG_NAME_2TH_LEVEL
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Check for incorrect CAGGs
+\if :INTERVAL_TEST
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-01 00:00:00-00', 10, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
+  INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+  CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+  CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
+  WITH (timescaledb.continuous) AS
+  SELECT
+    \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
+    \else
+      time_bucket(:BUCKET_WIDTH_3TH, "bucket") AS bucket
+    \endif
+  FROM :CAGG_NAME_2TH_LEVEL
+  GROUP BY 1
+  WITH DATA;
+  \d+ :CAGG_NAME_3TH_LEVEL
+  --There should never be dulpicates in the output of the following query
+  SELECT * from :CAGG_NAME_3TH_LEVEL;
+  DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
+  DELETE FROM conditions WHERE device_id = 4;
+\endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:53: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  materialized view "conditions_summary_2" does not exist, skipping
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- Cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;

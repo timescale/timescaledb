@@ -7,6 +7,7 @@
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_1ST FALSE
 \set IS_TIME_DIMENSION_WITH_TIMEZONE_2TH FALSE
 \set IS_JOIN FALSE
+\set INTERVAL_TEST FALSE
 -- ########################################################
 -- ## INTEGER data type tests
 -- ########################################################
@@ -213,6 +214,14 @@ SET timezone TO 'UTC';
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
 
+--#Bugfix 5734 #1
+\set INTERVAL_TEST TRUE
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_3TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
+
 --
 -- Variable bucket size with different timezones
 --
@@ -222,6 +231,14 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
+
+--#Bugfix 5734 #2
+\set INTERVAL_TEST TRUE
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_3TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
 
 --
 -- TZ bucket on top of non-TZ bucket
@@ -233,6 +250,14 @@ SET timezone TO 'UTC';
 \set BUCKET_WIDTH_2TH 'INTERVAL \'1 month\''
 \set WARNING_MESSAGE '-- SHOULD WORK'
 \ir include/cagg_on_cagg_validations.sql
+
+--#Bugfix 5734 #3
+\set INTERVAL_TEST TRUE
+\set BUCKET_WIDTH_1ST 'INTERVAL \'1 hour\''
+\set BUCKET_WIDTH_2TH 'INTERVAL \'1 day\''
+\set BUCKET_WIDTH_3TH 'INTERVAL \'1 month\''
+\ir include/cagg_on_cagg_validations.sql
+\set INTERVAL_TEST FALSE
 
 --
 -- non-TZ bucket on top of TZ bucket

@@ -8,6 +8,9 @@ name: SQLsmith
     branches:
       - sqlsmith
       - main
+  pull_request:
+    paths: .github/workflows/sqlsmith.yaml
+
 jobs:
   sqlsmith:
     # Change the JOB_NAME variable below when changing the name.
@@ -16,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["ubuntu-20.04"]
+        os: ["ubuntu-22.04"]
         pg: [ "15" ]
         build_type: ["Debug"]
       fail-fast: false
@@ -26,19 +29,21 @@ jobs:
       JOB_NAME: SQLsmith PG${{ matrix.pg }}
 
     steps:
-    - name: Install Linux Dependencies
-      run: |
-        sudo apt-get update
-
     - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
-            libkrb5-dev build-essential autoconf autoconf-archive libpqxx-dev \
+            libkrb5-dev build-essential autoconf autoconf-archive \
             libboost-regex-dev libsqlite3-dev
+
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-        sudo apt-get update
-        sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+        sudo apt-get purge postgresql*
+        sudo apt-get install libpqxx-dev postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+        # Make sure the system postgres service is not running.
+        sudo systemctl mask postgresql
+        sudo systemctl stop postgresql
+        { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -46,7 +51,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        make -C build
+        make -j$(nproc) -C build
         sudo make -C build install
 
     - name: Checkout sqlsmith
@@ -61,7 +66,7 @@ jobs:
         cd sqlsmith
         autoreconf -i
         ./configure
-        make
+        make -j$(nproc)
 
     - name: Setup test environment
       run: |

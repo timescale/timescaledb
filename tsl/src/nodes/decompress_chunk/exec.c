@@ -300,7 +300,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 
 	/*
-	 * Determine which columns we are going to gecompress. Since in the hottest
+	 * Determine which columns we are going to decompress. Since in the hottest
 	 * loop we work only with compressed columns, we'll put them in front of the
 	 * array. So first, count how many compressed and not compressed columns
 	 * we have.
@@ -423,7 +423,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 *
 	 * Start with the default size.
 	 */
-	chunk_state->batch_memory_context_bytes = 8192;
+	chunk_state->batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
 	if (chunk_state->enable_bulk_decompression)
 	{
 		for (int i = 0; i < num_total; i++)
@@ -454,6 +454,14 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	chunk_state->batch_memory_context_bytes =
 		Min(chunk_state->batch_memory_context_bytes, 1 * 1024 * 1024);
 
+	elog(DEBUG3,
+		 "Batch memory context has initial capacity of  %d bytes",
+		 chunk_state->batch_memory_context_bytes);
+
+	/*
+	 * Choose which batch queue we are going to use: heap for batch sorted
+	 * merge, and one-element FIFO for normal decompression.
+	 */
 	if (chunk_state->batch_sorted_merge)
 	{
 		chunk_state->batch_queue = &BatchQueueFunctionsHeap;
@@ -475,7 +483,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 /*
  * The exec function for the DecompressChunk node. It takes the explicit queue
- * functions pointer as a micro-optimization, to allow these functions to be
+ * functions pointer as an optimization, to allow these functions to be
  * inlined in the FIFO case. This is important because this is a part of a
  * relatively hot loop.
  */

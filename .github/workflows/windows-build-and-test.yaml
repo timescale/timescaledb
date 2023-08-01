@@ -21,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
-      pg12_latest: ${{ steps.config.outputs.pg12_latest }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
@@ -49,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 12, 13, 14, 15 ]
+        pg: [ 13, 14, 15 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata telemetry"]
@@ -58,9 +57,6 @@ jobs:
           data_fetcher dist_compression dist_remote_error remote_txn"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
-          - pg: 12
-            pkg_version: ${{ fromJson(needs.config.outputs.pg12_latest) }}
-            tsl_skips_version: dist_partial_agg-12
           - pg: 13
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}
             tsl_skips_version: dist_grant-13 dist_partial_agg-13
@@ -148,7 +144,6 @@ jobs:
       run: cmake --install build_win --config ${{ matrix.build_type }}
 
     - name: Setup postgres cluster
-      if: matrix.pg != '12'
       run: |
         ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=us --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
@@ -172,14 +167,12 @@ jobs:
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Install postgres for test runner
-      if: matrix.pg != '12'
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
 
     - name: Run tests
-      if: matrix.pg != '12'
       shell: wsl-bash {0}
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
@@ -195,7 +188,6 @@ jobs:
         make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
-      if: matrix.pg != '12'
       run: |
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl stop
         timeout 10
@@ -208,7 +200,6 @@ jobs:
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
-      if: matrix.pg != '12'
       shell: wsl-bash {0}
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
@@ -226,7 +217,7 @@ jobs:
 
     - name: Show regression diffs
       id: collectlogs
-      if: always() && matrix.pg != '12'
+      if: always()
       env:
         WSLENV: GITHUB_OUTPUT/p
       shell: wsl-bash {0}
@@ -237,7 +228,7 @@ jobs:
         cat regression.log
 
     - name: Save regression diffs
-      if: always() && matrix.pg != '12' && steps.collectlogs.outputs.regression_diff == 'true'
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@v3
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
@@ -253,7 +244,7 @@ jobs:
         path: postgres.log
 
     - name: Upload test results to the database
-      if: always() && matrix.pg != '12'
+      if: always()
       shell: wsl-bash {0}
       env:
         # Update when adding new variables.

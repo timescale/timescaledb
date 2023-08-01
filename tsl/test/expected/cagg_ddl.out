@@ -2013,3 +2013,29 @@ SELECT * FROM transactions_montly ORDER BY bucket;
  Wed Oct 31 17:00:00 2018 PDT |  70 |  10 |  10
 (2 rows)
 
+-- Check set_chunk_time_interval on continuous aggregate
+CREATE MATERIALIZED VIEW cagg_set_chunk_time_interval
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 month', time) AS bucket,
+       SUM(fiat_value),
+       MAX(fiat_value),
+       MIN(fiat_value)
+FROM transactions
+GROUP BY 1
+WITH NO DATA;
+SELECT set_chunk_time_interval('cagg_set_chunk_time_interval', chunk_time_interval => interval '1 month');
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+CALL refresh_continuous_aggregate('cagg_set_chunk_time_interval', NULL, NULL);
+SELECT _timescaledb_internal.to_interval(d.interval_length) = interval '1 month'
+FROM _timescaledb_catalog.dimension d
+         RIGHT JOIN _timescaledb_catalog.continuous_agg ca ON ca.user_view_name = 'cagg_set_chunk_time_interval'
+WHERE d.hypertable_id = ca.mat_hypertable_id;
+ ?column? 
+----------
+ t
+(1 row)
+

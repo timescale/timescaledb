@@ -1,0 +1,5 @@
+Implements: #5860 Rectifies interval calculation for Heirarchical CAggs
+
+Fixes: #5734
+
+Thanks: @lukaskirner

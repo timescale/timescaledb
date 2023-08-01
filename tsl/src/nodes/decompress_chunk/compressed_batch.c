@@ -11,14 +11,13 @@
 #include <utils/date.h>
 #include <utils/timestamp.h>
 
-#include "nodes/decompress_chunk/compressed_batch.h"
-
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "debug_assert.h"
 #include "guc.h"
+#include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
-#include "vector_predicates.h"
+#include "nodes/decompress_chunk/vector_predicates.h"
 
 static ArrowArray *
 make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
@@ -197,6 +196,13 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 	 */
 	if (batch_state->per_batch_context == NULL)
 	{
+		/*
+		 * We use custom size for the batch memory context page, calculated to
+		 * fit the typical result of bulk decompression (if we use it).
+		 * This allows us to save on expensive malloc/free calls, because the
+		 * Postgres memory contexts reallocate all pages except the first one
+		 * after earch reset.
+		 */
 		batch_state->per_batch_context =
 			AllocSetContextCreate(CurrentMemoryContext,
 								  "DecompressChunk per_batch",

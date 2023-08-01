@@ -1298,9 +1298,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
-			/* This only works for PG12 because for earlier versions the inheritance
-			 * expansion happens too early during the planning phase
-			 */
 			RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 			Query *query = root->parse;
 			/* Mark hypertable RTEs we'd like to expand ourselves.
