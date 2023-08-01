@@ -38,9 +38,15 @@ typedef struct CompressionInfo
 
 } CompressionInfo;
 
+typedef struct ColumnCompressionInfo
+{
+	FormData_hypertable_compression fd;
+	bool bulk_decompression_possible;
+} DecompressChunkColumnCompression;
+
 typedef struct DecompressChunkPath
 {
-	CustomPath cpath;
+	CustomPath custom_path;
 	CompressionInfo *info;
 	/*
 	 * decompression_map maps targetlist entries of the compressed scan to tuple
@@ -60,10 +66,21 @@ typedef struct DecompressChunkPath
 	 */
 	List *is_segmentby_column;
 
+	/*
+	 * Same structure as above, says whether we support bulk decompression for this
+	 * column.
+	 */
+	List *bulk_decompression_column;
+
+	/*
+	 * If we produce at least some columns that support bulk decompression.
+	 */
+	bool have_bulk_decompression_columns;
+
 	List *compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;
-	bool sorted_merge_append;
+	bool batch_sorted_merge;
 } DecompressChunkPath;
 
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,

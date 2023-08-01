@@ -102,6 +102,8 @@ extern char *ts_current_timestamp_mock;
 #define ts_shutdown_bgw false
 #endif
 
+extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
+
 void _guc_init(void);
 void _guc_fini(void);
 extern TSDLLEXPORT void ts_assign_ssl_options_hook(void *fn);
