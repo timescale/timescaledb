@@ -11,7 +11,7 @@
  * Specialization of bulk simple8brle decompression for a data type specified by
  * ELEMENT_TYPE macro.
  */
-static uint16
+static void
 FUNCTION_NAME(simple8brle_decompress_all_buf,
 			  ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
 							ELEMENT_TYPE *restrict decompressed_values, uint16 n_buffer_elements)
@@ -134,8 +134,6 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 	 */
 	CheckCompressedData(decompressed_index >= n_total_values);
 	Assert(decompressed_index <= n_buffer_elements);
-
-	return n_total_values;
 }
 
 /*
@@ -144,12 +142,11 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
  * element type we have.
  */
 static ELEMENT_TYPE *FUNCTION_NAME(simple8brle_decompress_all,
-								   ELEMENT_TYPE)(Simple8bRleSerialized *compressed, uint16 *n_)
+								   ELEMENT_TYPE)(Simple8bRleSerialized *compressed)
 	pg_attribute_unused();
 
 static ELEMENT_TYPE *
-FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
-														uint16 *n_)
+FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *compressed)
 {
 	const uint16 n_total_values = compressed->num_elements;
 	Assert(n_total_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
@@ -162,8 +159,8 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_buffer_elements);
 
-	*n_ = FUNCTION_NAME(simple8brle_decompress_all_buf,
-						ELEMENT_TYPE)(compressed, decompressed_values, n_buffer_elements);
+	FUNCTION_NAME(simple8brle_decompress_all_buf, ELEMENT_TYPE)
+	(compressed, decompressed_values, n_buffer_elements);
 
 	return decompressed_values;
 }

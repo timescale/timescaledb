@@ -882,6 +882,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 }
 
 /* Bulk gorilla decompression, specialized for supported data types. */
+#include "simple8b_rle_prefix_sum.h"
 
 #define ELEMENT_TYPE uint8
 #include "simple8b_rle_decompress_all.h"

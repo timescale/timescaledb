@@ -40,22 +40,18 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	CheckCompressedData(n_total >= n_notnull);
 
 	/* Unpack the basic compressed data parts. */
-	Simple8bRleBitmap tag0s = simple8brle_bitmap_prefixsums(gorilla_data->tag0s);
-	Simple8bRleBitmap tag1s = simple8brle_bitmap_prefixsums(gorilla_data->tag1s);
-
-	BitArray leading_zeros_bitarray = gorilla_data->leading_zeros;
-	BitArrayIterator leading_zeros_iterator;
-	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
+	Simple8bRlePrefixSum tag1s;
+	simple8brle_prefix_sums(gorilla_data->tag1s, &tag1s);
 
 	uint8 all_leading_zeros[MAX_NUM_LEADING_ZEROS_PADDED_N64];
 	const uint16 leading_zeros_padded =
 		unpack_leading_zeros_array(&gorilla_data->leading_zeros, all_leading_zeros);
 
+	const uint16 num_bit_widths = gorilla_data->num_bits_used_per_xor->num_elements;
 	uint8 bit_widths[MAX_NUM_LEADING_ZEROS_PADDED_N64];
-	const uint16 num_bit_widths =
-		simple8brle_decompress_all_buf_uint8(gorilla_data->num_bits_used_per_xor,
-											 bit_widths,
-											 MAX_NUM_LEADING_ZEROS_PADDED_N64);
+	simple8brle_decompress_all_buf_uint8(gorilla_data->num_bits_used_per_xor,
+										 bit_widths,
+										 MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
 	BitArray xors_bitarray = gorilla_data->xors;
 	BitArrayIterator xors_iterator;
@@ -69,14 +65,14 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * 1a) Sanity check: the number of bit widths we have matches the
 	 * number of 1s in the tag1s array.
 	 */
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) == num_bit_widths);
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) <= leading_zeros_padded);
+	CheckCompressedData(simple8brle_prefix_sum_total(&tag1s) == num_bit_widths);
+	CheckCompressedData(simple8brle_prefix_sum_total(&tag1s) <= leading_zeros_padded);
 
 	/*
 	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
 	 * widths.
 	 */
-	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag1s, 0) == 1);
+	CheckCompressedData(simple8brle_prefix_sum_get_at(&tag1s, 0) == 1);
 
 	/*
 	 * 1c) Sanity check: can't have more different elements than notnull elements.
@@ -93,9 +89,9 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	ELEMENT_TYPE prev = 0;
 	for (uint16 i = 0; i < n_different; i++)
 	{
-		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
-		const uint8 current_leading_zeros =
-			all_leading_zeros[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
+		const uint16 offset = simple8brle_prefix_sum_get_at(&tag1s, i) - 1;
+		const uint8 current_xor_bits = bit_widths[offset];
+		const uint8 current_leading_zeros = all_leading_zeros[offset];
 
 		/*
 		 * Truncate the shift here not to cause UB on the corrupt data.
@@ -109,25 +105,29 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 
 	/*
 	 * 2) Fill out the stretches of repeated elements, encoded with tag0 = 0.
-	 *
+	 */
+	Simple8bRlePrefixSum tag0s;
+	simple8brle_prefix_sums(gorilla_data->tag0s, &tag0s);
+
+	/*
 	 * 2a) Sanity check: number of different elements according to tag0s must be
 	 * the same as number of different elements according to tag1s, so that the
 	 * current_element doesn't underrun.
 	 */
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag0s) == n_different);
+	CheckCompressedData(simple8brle_prefix_sum_total(&tag0s) == n_different);
 
 	/*
 	 * 2b) Sanity check: tag0s[0] == 1 -- the first element of the sequence is
 	 * always "different from the previous one".
 	 */
-	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag0s, 0) == 1);
+	CheckCompressedData(simple8brle_prefix_sum_get_at(&tag0s, 0) == 1);
 
 	/*
 	 * 2b) Fill the repeated elements.
 	 */
 	for (int i = n_notnull - 1; i >= 0; i--)
 	{
-		decompressed_values[i] = decompressed_values[simple8brle_bitmap_prefix_sum(&tag0s, i) - 1];
+		decompressed_values[i] = decompressed_values[simple8brle_prefix_sum_get_at(&tag0s, i) - 1];
 	}
 
 	/*
@@ -149,7 +149,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		 * We have decompressed the data with nulls skipped, reshuffle it
 		 * according to the nulls bitmap.
 		 */
-		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(gorilla_data->nulls);
+		Simple8bRleBitmap nulls;
+		simple8brle_bitmap_decompress(gorilla_data->nulls, &nulls);
 		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
 
 		int current_notnull_element = n_notnull - 1;

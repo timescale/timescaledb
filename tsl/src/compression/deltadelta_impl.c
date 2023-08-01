@@ -18,43 +18,32 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
 	Simple8bRleSerialized *deltas_compressed = bytes_deserialize_simple8b_and_advance(&si);
+	Simple8bRleSerialized *nulls_compressed = NULL;
 
 	const bool has_nulls = header->has_nulls == 1;
-
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
-
-	/*
-	 * Can't use element type here because of zig-zag encoding. The deltas are
-	 * computed in uint64, so we can get a delta that is actually larger than
-	 * the element type. We can't just truncate the delta either, because it
-	 * will lead to broken decompression results. The test case is in
-	 * test_delta4().
-	 */
-	uint16 num_deltas;
-	const uint64 *restrict deltas_zigzag =
-		simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
-
-	Simple8bRleBitmap nulls = { 0 };
+	uint16 n_nulls = 0;
 	if (has_nulls)
 	{
-		Simple8bRleSerialized *nulls_compressed = bytes_deserialize_simple8b_and_advance(&si);
-		nulls = simple8brle_bitmap_decompress(nulls_compressed);
+		nulls_compressed = bytes_deserialize_simple8b_and_advance(&si);
+		n_nulls = nulls_compressed->num_elements;
 	}
 
 	/*
 	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
 	 * can work in 64-byte blocks.
 	 */
-	const uint16 n_total = has_nulls ? nulls.num_elements : num_deltas;
-	const uint16 n_total_padded =
-		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const uint16 n_notnull = num_deltas;
+	const uint16 n_notnull = deltas_compressed->num_elements;
 	const uint16 n_notnull_padded =
 		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
+	const uint16 n_total = has_nulls ? n_nulls : n_notnull;
+	const uint16 n_total_padded =
+		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	Assert(n_total > 0);
 
 	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
 	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
@@ -65,6 +54,15 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
 	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
+
+	/*
+	 * Can't use element type here because of zig-zag encoding. The deltas are
+	 * computed in uint64, so we can get a delta that is actually larger than
+	 * the element type. We can't just truncate the delta either, because it
+	 * will lead to broken decompression results. The test case is in
+	 * test_delta4().
+	 */
+	const uint64 *restrict deltas_zigzag = simple8brle_decompress_all_uint64(deltas_compressed);
 
 	/* Now fill the data w/o nulls. */
 	ELEMENT_TYPE current_delta = 0;
@@ -95,6 +93,8 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	/* Now move the data to account for nulls, and fill the validity bitmap. */
 	if (has_nulls)
 	{
+		Simple8bRleBitmap nulls = { 0 };
+		simple8brle_bitmap_decompress(nulls_compressed, &nulls);
 		/*
 		 * The number of not-null elements we have must be consistent with the
 		 * nulls bitmap.
