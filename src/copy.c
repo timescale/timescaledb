@@ -1154,7 +1154,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 		TSCopyMultiInsertInfoFlushAndCleanup(&multiInsertInfo);
 
 	/* Done, clean up */
-	if (errcallback.previous)
+	if (ccstate->cstate && callback)
 		error_context_stack = errcallback.previous;
 
 	FreeBulkInsertState(bistate);
