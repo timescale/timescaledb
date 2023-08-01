@@ -1275,3 +1275,35 @@ SELECT * FROM deals_best_weekly;
  Sun Apr 24 17:00:00 2022 PDT | 117.764705882353 |          6
 (1 row)
 
+-- github issue 5907: segfault when creating 1-step policies on cagg
+-- whose underlying hypertable has a retention policy setup
+CREATE TABLE t(a integer NOT NULL, b integer);
+SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
+ create_hypertable 
+-------------------
+ (25,public,t,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION unix_now() returns int LANGUAGE SQL IMMUTABLE as $$ SELECT extract(epoch from now())::INT $$;
+SELECT set_integer_now_func('t', 'unix_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT add_retention_policy('t', 20);
+ add_retention_policy 
+----------------------
+                 1056
+(1 row)
+
+CREATE MATERIALIZED VIEW cagg(a, sumb) WITH (timescaledb.continuous)
+AS SELECT time_bucket(1, a), sum(b)
+   FROM t GROUP BY time_bucket(1, a);
+NOTICE:  continuous aggregate "cagg" is already up-to-date
+SELECT timescaledb_experimental.add_policies('cagg');
+ add_policies 
+--------------
+ f
+(1 row)
+
