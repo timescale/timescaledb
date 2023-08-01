@@ -630,3 +630,19 @@ SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
 -- expect to get an up-to-date notice
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
 SELECT * FROM deals_best_weekly;
+
+-- github issue 5907: segfault when creating 1-step policies on cagg
+-- whose underlying hypertable has a retention policy setup
+CREATE TABLE t(a integer NOT NULL, b integer);
+SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
+
+CREATE OR REPLACE FUNCTION unix_now() returns int LANGUAGE SQL IMMUTABLE as $$ SELECT extract(epoch from now())::INT $$;
+SELECT set_integer_now_func('t', 'unix_now');
+
+SELECT add_retention_policy('t', 20);
+
+CREATE MATERIALIZED VIEW cagg(a, sumb) WITH (timescaledb.continuous)
+AS SELECT time_bucket(1, a), sum(b)
+   FROM t GROUP BY time_bucket(1, a);
+
+SELECT timescaledb_experimental.add_policies('cagg');
