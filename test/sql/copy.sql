@@ -94,14 +94,17 @@ SELECT create_hypertable('test', 'b');
 COPY TEST (a,b) FROM STDIN (delimiter ',', null 'N');
 N,'2020-01-01'
 \.
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages TO NOTICE;
+
+-- Do a basic test of COPY with a wrong PROGRAM
+COPY hyper FROM PROGRAM 'error';
 \set ON_ERROR_STOP 1
 
 ----------------------------------------------------------------
 -- Testing COPY TO.
 ----------------------------------------------------------------
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET client_min_messages TO NOTICE;
 
 -- COPY TO using a hypertable will not copy any tuples, but should
 -- show a notice.

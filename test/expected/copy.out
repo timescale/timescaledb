@@ -152,12 +152,15 @@ NOTICE:  adding not-null constraint to column "b"
 \set ON_ERROR_STOP 0
 COPY TEST (a,b) FROM STDIN (delimiter ',', null 'N');
 ERROR:  null value in column "a" of relation "_hyper_5_13_chunk" violates not-null constraint
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages TO NOTICE;
+-- Do a basic test of COPY with a wrong PROGRAM
+COPY hyper FROM PROGRAM 'error';
+ERROR:  program "error" failed
 \set ON_ERROR_STOP 1
 ----------------------------------------------------------------
 -- Testing COPY TO.
 ----------------------------------------------------------------
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET client_min_messages TO NOTICE;
 -- COPY TO using a hypertable will not copy any tuples, but should
 -- show a notice.
 COPY hyper TO STDOUT DELIMITER ',';

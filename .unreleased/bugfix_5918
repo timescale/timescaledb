@@ -1,0 +1,3 @@
+Fixes: #5918 Fix crash in COPY from program returning error
+
+Thanks: @alexanderlaw
