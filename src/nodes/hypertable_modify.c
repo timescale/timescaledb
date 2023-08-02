@@ -1790,13 +1790,14 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 										   specToken);
 
 			/* insert index entries for tuple */
-			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
-												   slot,
-												   estate,
-												   false,
-												   true,
-												   &specConflict,
-												   arbiterIndexes);
+			recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
+														 slot,
+														 estate,
+														 false,
+														 true,
+														 &specConflict,
+														 arbiterIndexes,
+														 false);
 
 			/* adjust the tuple's state accordingly */
 			table_tuple_complete_speculative(resultRelationDesc, slot, specToken, !specConflict);
@@ -1830,8 +1831,14 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 
 			/* insert index entries for tuple */
 			if (resultRelInfo->ri_NumIndices > 0)
-				recheckIndexes =
-					ExecInsertIndexTuples(resultRelInfo, slot, estate, false, false, NULL, NIL);
+				recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
+															 slot,
+															 estate,
+															 false,
+															 false,
+															 NULL,
+															 NIL,
+															 false);
 		}
 	}
 

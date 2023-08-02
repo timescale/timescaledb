@@ -385,7 +385,8 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 														 false,
 														 false,
 														 NULL,
-														 NIL);
+														 NIL,
+														 false);
 
 			ExecARInsertTriggers(estate,
 								 resultRelInfo,
@@ -1091,7 +1092,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 																 false,
 																 false,
 																 NULL,
-																 NIL);
+																 NIL,
+																 false);
 				/* AFTER ROW INSERT Triggers */
 				ExecARInsertTriggers(estate,
 									 resultRelInfo,
