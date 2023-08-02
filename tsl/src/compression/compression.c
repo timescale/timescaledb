@@ -2443,7 +2443,15 @@ fix_index_qual(Relation comp_chunk_rel, Relation index_rel, Var *var, List **pre
 			   char *column_name, Node *node, Oid opno)
 {
 	int i = 0;
+#if PG16_LT
 	Bitmapset *key_columns = RelationGetIndexAttrBitmap(comp_chunk_rel, INDEX_ATTR_BITMAP_ALL);
+#else
+	Bitmapset *key_columns =
+		RelationGetIndexAttrBitmap(comp_chunk_rel, INDEX_ATTR_BITMAP_HOT_BLOCKING);
+	key_columns =
+		bms_add_members(key_columns,
+						RelationGetIndexAttrBitmap(comp_chunk_rel, INDEX_ATTR_BITMAP_SUMMARIZED));
+#endif
 
 	for (i = 0; i < index_rel->rd_index->indnatts; i++)
 	{
