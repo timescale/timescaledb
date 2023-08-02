@@ -320,7 +320,11 @@ option_extract_join_ref_table_list(const char *join_tables)
 	{
 		char *tablename = (char *) lfirst(lc);
 
+#if PG16_LT
 		RangeVar *rangevar = makeRangeVarFromNameList(stringToQualifiedNameList(tablename));
+#else
+		RangeVar *rangevar = makeRangeVarFromNameList(stringToQualifiedNameList(tablename, NULL));
+#endif
 
 		Oid relOid = RangeVarGetRelidExtended(rangevar,
 											  AccessShareLock,
