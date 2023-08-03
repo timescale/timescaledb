@@ -1,0 +1,1 @@
+Implements: #5909 CREATE INDEX ONLY ON hypertable creates index on chunks

@@ -342,4 +342,22 @@ SELECT table_name FROM create_hypertable('i3056', 'date_created');
 ALTER TABLE i3056 DROP COLUMN c;
 INSERT INTO i3056(order_number,date_created) VALUES (1, '2000-01-01');
 
+-- #5908 test CREATE INDEX ON ONLY main table
+CREATE TABLE test(time timestamptz, temp float);
+SELECT create_hypertable('test', 'time');
 
+INSERT INTO test (time,temp) VALUES
+       (generate_series(TIMESTAMP '2019-08-01', TIMESTAMP '2019-08-10', INTERVAL '10 minutes'), ROUND(RANDOM()*10)::float);
+SELECT * FROM show_chunks('test');
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+
+-- create index per chunk
+CREATE INDEX _hyper_15_21_chunk_test_temp_idx ON  _timescaledb_internal._hyper_15_21_chunk(temp);
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+SELECT * FROM test.show_indexes('test');
+
+-- create index only on main table
+CREATE INDEX test_temp_idx ON ONLY test (time);
+
+SELECT * FROM test.show_indexes('test');
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
