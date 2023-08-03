@@ -77,6 +77,7 @@
 #include "remote/dist_commands.h"
 #include "deparse.h"
 #include "timezones.h"
+#include "guc.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
@@ -869,6 +870,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	Hypertable *mat_ht;
 	Oid relid;
 	char *schema_name;
+
+	ts_feature_flag_check(FEATURE_CAGG);
 
 	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
 	relid = get_relname_relid(stmt->into->rel->relname, nspid);
