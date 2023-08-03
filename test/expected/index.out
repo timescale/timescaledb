@@ -726,3 +726,58 @@ SELECT table_name FROM create_hypertable('i3056', 'date_created');
 
 ALTER TABLE i3056 DROP COLUMN c;
 INSERT INTO i3056(order_number,date_created) VALUES (1, '2000-01-01');
+-- #5908 test CREATE INDEX ON ONLY main table
+CREATE TABLE test(time timestamptz, temp float);
+SELECT create_hypertable('test', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable  
+--------------------
+ (15,public,test,t)
+(1 row)
+
+INSERT INTO test (time,temp) VALUES
+       (generate_series(TIMESTAMP '2019-08-01', TIMESTAMP '2019-08-10', INTERVAL '10 minutes'), ROUND(RANDOM()*10)::float);
+SELECT * FROM show_chunks('test');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_15_21_chunk
+ _timescaledb_internal._hyper_15_22_chunk
+(2 rows)
+
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+                         Index                          | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_15_21_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+-- create index per chunk
+CREATE INDEX _hyper_15_21_chunk_test_temp_idx ON  _timescaledb_internal._hyper_15_21_chunk(temp);
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+                         Index                          | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_15_21_chunk_test_temp_idx | {temp}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_15_21_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
+(2 rows)
+
+SELECT * FROM test.show_indexes('test');
+     Index     | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------+---------+------+--------+---------+-----------+------------
+ test_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+-- create index only on main table
+CREATE INDEX test_temp_idx ON ONLY test (time);
+SELECT * FROM test.show_indexes('test');
+     Index     | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------+---------+------+--------+---------+-----------+------------
+ test_temp_idx | {time}  |      | f      | f       | f         | 
+ test_time_idx | {time}  |      | f      | f       | f         | 
+(2 rows)
+
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+                         Index                          | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_15_21_chunk_test_temp_idx | {temp}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_15_21_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
+(2 rows)
+
