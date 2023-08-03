@@ -26,6 +26,7 @@
 #include "hypertable.h"
 #include "reorder.h"
 #include "utils.h"
+#include "guc.h"
 #include "bgw/job_stat.h"
 #include "bgw/timer.h"
 
@@ -128,6 +129,7 @@ policy_reorder_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	policy_reorder_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
@@ -161,6 +163,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	text *timezone = PG_ARGISNULL(4) ? NULL : PG_GETARG_TEXT_PP(4);
 	char *valid_timezone = NULL;
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (timezone != NULL)
@@ -302,6 +305,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	Hypertable *ht;
 	Cache *hcache;
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);

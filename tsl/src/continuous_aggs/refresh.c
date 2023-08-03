@@ -594,6 +594,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		.type = InvalidOid,
 	};
 
+	ts_feature_flag_check(FEATURE_CAGG);
+
 	cagg = get_cagg_by_relid(cagg_relid);
 	refresh_window.type = cagg->partition_type;
 
