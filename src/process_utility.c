@@ -2781,6 +2781,7 @@ process_index_start(ProcessUtilityArgs *args)
 		ts_cagg_permissions_check(ht->main_table_relid, GetUserId());
 		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
 	}
+
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
@@ -2789,6 +2790,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	if (cagg)
 		RESTORE_USER(uid, saved_uid, sec_ctx);
+
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
 	 * to do here. */
@@ -2798,7 +2800,13 @@ process_index_start(ProcessUtilityArgs *args)
 		return DDL_DONE;
 	}
 	Assert(OidIsValid(root_table_index.objectId));
-	info.obj.objectId = root_table_index.objectId;
+
+	/* support ONLY ON clause, index on root table already created */
+	if (!stmt->relation->inh)
+	{
+		ts_cache_release(hcache);
+		return DDL_DONE;
+	}
 
 	/* CREATE INDEX on the chunks, unless this is a distributed hypertable */
 	if (hypertable_is_distributed(ht))
@@ -2807,6 +2815,7 @@ process_index_start(ProcessUtilityArgs *args)
 		return DDL_DONE;
 	}
 
+	info.obj.objectId = root_table_index.objectId;
 	/* collect information required for per chunk index creation */
 	main_table_relation = table_open(ht->main_table_relid, AccessShareLock);
 	main_table_desc = RelationGetDescr(main_table_relation);
