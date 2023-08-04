@@ -30,3 +30,6 @@ RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL,
 next_start TIMESTAMPTZ, check_config TEXT, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT)
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
+
+ALTER TABLE _timescaledb_config.bgw_job
+    ALTER COLUMN owner SET DEFAULT pg_catalog.quote_ident(current_role)::regrole;
