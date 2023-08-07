@@ -1,0 +1,224 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- this test checks the validity of the produced plans for partially compressed chunks
+-- when injecting query_pathkeys on top of the append
+-- path that combines the uncompressed and compressed parts of a chunk.
+
+set timescaledb.enable_decompression_sorted_merge = off;
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+
+CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float);
+SELECT create_hypertable('ht_metrics_compressed','time');
+ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
+
+INSERT INTO ht_metrics_compressed
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'6 hour') time,
+generate_series(1,3) device;
+
+SELECT compress_chunk(c) FROM show_chunks('ht_metrics_compressed') c;
+-- make them partially compressed
+INSERT INTO ht_metrics_compressed
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'9 hour') time,
+generate_series(1,3) device;
+
+-- chunkAppend eligible queries (from tsbench)
+-- sort is not pushed down
+:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time DESC, device LIMIT 1;
+:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
+:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time desc limit 10;
+:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('2d',time) DESC LIMIT 1;
+:PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time, device DESC LIMIT 1;
+-- index scan, no sort on top
+:PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1; -- index scan, no resorting required
+SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1; -- this uses the index and does not do sort on top
+SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1;
+:PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1; -- this also uses the index and does not do sort on top
+SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1;
+
+-- not eligible for chunkAppend, but eligible for sort pushdown
+:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
+:PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
+
+CREATE TABLE test1 (
+time timestamptz NOT NULL,
+    x1 integer,
+    x2 integer,
+    x3 integer,
+    x4 integer,
+    x5 integer);
+
+SELECT FROM create_hypertable('test1', 'time');
+
+ALTER TABLE test1 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'time DESC, x3 ASC, x4 ASC');
+
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
+
+SELECT compress_chunk(i) FROM show_chunks('test1') i;
+ANALYZE test1;
+
+-- make all the chunks partially compressed
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10, 20, 30, 40 ,50);
+
+-- tests that require resorting (pushdown below decompressChunk node cannot happen)
+
+-- requires resorting, no pushdown can happen
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC;
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+
+-- requires resorting
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+
+-- all these require resorting, no pushdown can happen
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
+
+:PREFIX
+SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, x4, time LIMIT 10;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 LIMIT 10;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 LIMIT 10;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3, x4 LIMIT 10;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 10; -- no pushdown because orderby does not match
+
+-- queries with pushdown
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time LIMIT 10;
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- pushdown
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; -- pushdown
+
+:PREFIX
+SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
+
+---------------------------------------------------------------------------
+-- test queries without ordered append, but still eligible for sort pushdown
+---------------------------------------------------------------------------
+
+CREATE TABLE test2 (
+time timestamptz NOT NULL,
+    x1 integer,
+    x2 integer,
+    x3 integer,
+    x4 integer,
+    x5 integer);
+
+SELECT FROM create_hypertable('test2', 'time');
+
+ALTER TABLE test2 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'x3 ASC, x4 ASC');
+
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
+-- chunk 2
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 03:00:00-00', 1, 2, 4, 4, 0);
+
+SELECT compress_chunk(i) FROM show_chunks('test2') i;
+-- make them partially compressed
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 1, 2, 1, 1, 0);
+INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:02:01-00', 1, 2, 1, 1, 0);
+
+set enable_indexscan = off;
+-- queries where sort is pushed down
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3;
+SELECT * FROM test2 ORDER BY x1, x2, x5, x3;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4;
+SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4;
+
+-- queries where sort is not pushed down
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x3;
+SELECT * FROM test2 ORDER BY x1, x2, x3;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x4;
+SELECT * FROM test2 ORDER BY x1, x2, x5, x4;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, time;
+SELECT * FROM test2 ORDER BY x1, x2, x5, time;
+
+-----------------------------
+-- tests with space partitioning
+-----------------------------
+CREATE TABLE test3 (
+time timestamptz NOT NULL,
+    x1 integer,
+    x2 integer,
+    x3 integer,
+    x4 integer,
+    x5 integer);
+
+SELECT FROM create_hypertable('test3', 'time');
+SELECT add_dimension('test3', 'x1', number_partitions => 2);
+
+ALTER TABLE test3 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'x3 ASC, x4 ASC');
+
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
+-- chunk 2
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:00:00-00', 1, 2, 1, 1, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 01:00:00-00', 1, 3, 2, 2, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 02:00:00-00', 2, 1, 3, 3, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 03:00:00-00', 1, 2, 4, 4, 0);
+
+SELECT compress_chunk(i) FROM show_chunks('test3') i;
+-- make them partially compressed
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 1, 2, 1, 1, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:02:01-00', 1, 2, 1, 1, 0);
+
+set enable_indexscan = off;
+-- queries where sort is pushed down
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3;
+SELECT * FROM test3 ORDER BY x1, x2, x5, x3;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4;
+SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4;
+
+-- queries where sort is not pushed down
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x3;
+SELECT * FROM test3 ORDER BY x1, x2, x3;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x4;
+SELECT * FROM test3 ORDER BY x1, x2, x5, x4;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, time;
+SELECT * FROM test3 ORDER BY x1, x2, x5, time;
+

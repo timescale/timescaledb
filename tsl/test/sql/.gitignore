@@ -24,3 +24,4 @@
 /telemetry_stats-*.sql
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
+/merge_append_partially_compressed-*.sql

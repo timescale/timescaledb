@@ -772,34 +772,31 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 */
 			if (batch_merge_path != NULL)
 			{
-				Path *merge_append_path =
-					(Path *) create_merge_append_path_compat(root,
-															 chunk_rel,
-															 list_make2(batch_merge_path,
-																		uncompressed_path),
-															 root->query_pathkeys,
-															 req_outer,
-															 NIL);
-
-				add_path(chunk_rel, merge_append_path);
+				path = (Path *) create_merge_append_path_compat(root,
+																chunk_rel,
+																list_make2(batch_merge_path,
+																		   uncompressed_path),
+																root->query_pathkeys,
+																req_outer,
+																NIL);
 			}
-
-			/*
-			 * Ideally, we would like for this to be a MergeAppend path.
-			 * However, accumulate_append_subpath will cut out MergeAppend
-			 * and directly add its children, so we have to combine the children
-			 * into a MergeAppend node later, at the chunk append level.
-			 */
-			path = (Path *) create_append_path_compat(root,
-													  chunk_rel,
-													  list_make2(path, uncompressed_path),
-													  NIL /* partial paths */,
-													  NIL /* pathkeys */,
-													  req_outer,
-													  0,
-													  false,
-													  false,
-													  path->rows + uncompressed_path->rows);
+			else
+				/*
+				 * Ideally, we would like for this to be a MergeAppend path.
+				 * However, accumulate_append_subpath will cut out MergeAppend
+				 * and directly add its children, so we have to combine the children
+				 * into a MergeAppend node later, at the chunk append level.
+				 */
+				path = (Path *) create_append_path_compat(root,
+														  chunk_rel,
+														  list_make2(path, uncompressed_path),
+														  NIL /* partial paths */,
+														  root->query_pathkeys /* pathkeys */,
+														  req_outer,
+														  0,
+														  false,
+														  false,
+														  path->rows + uncompressed_path->rows);
 		}
 
 		/* this has to go after the path is copied for the ordered path since path can get freed in
