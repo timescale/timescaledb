@@ -78,13 +78,14 @@ WHERE mat_hypertable_id = :cagg_id;
  t            | time_bucket_ng | @ 1 mon      |        | 
 (1 row)
 
--- Check that there is no saved invalidation threshold before any refreshes
+-- Check that the saved invalidation threshold is -infinity
 SELECT _timescaledb_functions.to_timestamp(watermark)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
  to_timestamp 
 --------------
-(0 rows)
+ -infinity
+(1 row)
 
 -- Make sure truncating of the refresh window works
 \set ON_ERROR_STOP 0

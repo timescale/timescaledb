@@ -149,8 +149,8 @@ SELECT experimental, name, bucket_width, origin, timezone
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id_1w;
 
--- Check the invalidation threshold
-SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+-- Check the invalidation threshold is -infinity
+SELECT _timescaledb_functions.to_timestamp(watermark) at time zone 'MSK'
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
 
@@ -175,7 +175,6 @@ FROM conditions_summary_tz
 ORDER by month, city;
 
 -- Check the invalidation threshold
-
 SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;

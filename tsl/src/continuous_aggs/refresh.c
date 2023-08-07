@@ -760,10 +760,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const CaggRefreshCallContext callctx, const bool start_isnull,
 								const bool end_isnull)
 {
-	Catalog *catalog = ts_catalog_get();
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
-	int64 computed_invalidation_threshold;
 	int64 invalidation_threshold;
 	bool is_raw_ht_distributed;
 	int rc;
@@ -828,35 +826,26 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 					   &refresh_window,
 					   "refreshing continuous aggregate");
 
-	/* Perform the refresh across two transactions.
+	/*
+	 * Perform the refresh across two transactions.
 	 *
 	 * The first transaction moves the invalidation threshold (if needed) and
 	 * copies over invalidations from the hypertable log to the cagg
 	 * invalidation log. Doing the threshold and copying as part of the first
 	 * transaction ensures that the threshold and new invalidations will be
 	 * visible as soon as possible to concurrent refreshes and that we keep
-	 * locks for only a short period. Note that the first transaction
-	 * serializes around the threshold table lock, which protects both the
-	 * threshold and the invalidation processing against concurrent refreshes.
+	 * locks for only a short period.
 	 *
 	 * The second transaction processes the cagg invalidation log and then
 	 * performs the actual refresh (materialization of data). This transaction
 	 * serializes around a lock on the materialized hypertable for the
 	 * continuous aggregate that gets refreshed.
 	 */
-	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-					AccessExclusiveLock);
-
-	/* Compute new invalidation threshold. Note that this computation caps the
-	 * threshold at the end of the last bucket that holds data in the
-	 * underlying hypertable. */
-	computed_invalidation_threshold = invalidation_threshold_compute(cagg, &refresh_window);
 
 	/* Set the new invalidation threshold. Note that this only updates the
 	 * threshold if the new value is greater than the old one. Otherwise, the
 	 * existing threshold is returned. */
-	invalidation_threshold = invalidation_threshold_set_or_get(cagg->data.raw_hypertable_id,
-															   computed_invalidation_threshold);
+	invalidation_threshold = invalidation_threshold_set_or_get(cagg, &refresh_window);
 
 	/* We must also cap the refresh window at the invalidation threshold. If
 	 * we process invalidations after the threshold, the continuous aggregates

@@ -1,4 +1,4 @@
-Parsed test spec with 8 sessions
+Parsed test spec with 9 sessions
 
 starting permutation: R1_refresh S1_select R3_refresh S1_select L2_read_unlock_threshold_table L3_unlock_cagg_table L1_unlock_threshold_table
 step R1_refresh: 
@@ -13,7 +13,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -31,10 +32,11 @@ cagg_bucket_count
                 7
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|       70
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |         70
+conditions2|-2147483648
+(2 rows)
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
@@ -48,7 +50,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -69,10 +72,11 @@ cagg_bucket_count
                10
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|      100
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+(2 rows)
 
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
@@ -91,11 +95,10 @@ step L2_read_lock_threshold_table:
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
- <waiting ...>
+
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
-step R3_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -105,7 +108,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -122,10 +126,11 @@ cagg_bucket_count
                 6
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|      100
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -144,11 +149,10 @@ step L2_read_lock_threshold_table:
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
- <waiting ...>
+
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
-step R3_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -158,7 +162,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -179,10 +184,11 @@ cagg_bucket_count
                10
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|      100
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -201,11 +207,10 @@ step L2_read_lock_threshold_table:
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
- <waiting ...>
+
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
-step R1_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -215,7 +220,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -236,10 +242,11 @@ cagg_bucket_count
                10
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|      100
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -273,7 +280,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -291,10 +299,11 @@ cagg_bucket_count
                 7
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|       70
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |         70
+conditions2|-2147483648
+(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -333,7 +342,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -351,10 +361,11 @@ cagg_bucket_count
                 7
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|       70
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |         70
+conditions2|-2147483648
+(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -392,7 +403,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -413,10 +425,11 @@ cagg_bucket_count
                10
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|      100
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -453,7 +466,8 @@ step S1_select:
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 
 bucket|        avg_temp
 ------+----------------
@@ -470,14 +484,23 @@ cagg_bucket_count
                 6
 (1 row)
 
-hypertable|threshold
-----------+---------
-conditions|      100
-(1 row)
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
+
+
+starting permutation: R1_refresh R12_refresh
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+
+step R12_refresh: 
+    CALL refresh_continuous_aggregate('cond2_10', 25, 70);
 

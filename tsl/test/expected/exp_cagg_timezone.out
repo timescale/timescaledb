@@ -157,13 +157,14 @@ WHERE mat_hypertable_id = :cagg_id_1w;
  t            | time_bucket_ng | @ 7 days     |        | MSK
 (1 row)
 
--- Check the invalidation threshold
-SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+-- Check the invalidation threshold is -infinity
+SELECT _timescaledb_functions.to_timestamp(watermark) at time zone 'MSK'
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
- to_char 
----------
-(0 rows)
+ timezone  
+-----------
+ -infinity
+(1 row)
 
 -- Make sure the invalidation log is empty
 SELECT

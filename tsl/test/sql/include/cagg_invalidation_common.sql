@@ -182,8 +182,8 @@ CREATE VIEW hyper_invals AS SELECT * FROM get_hyper_invals();
 CREATE VIEW cagg_invals AS SELECT * FROM get_cagg_invals();
 
 -- Must refresh to move the invalidation threshold, or no
--- invalidations will be generated. Initially, there is no threshold
--- set:
+-- invalidations will be generated. Initially, threshold is the
+-- MIN of the time dimension data type:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 

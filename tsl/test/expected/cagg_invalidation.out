@@ -224,13 +224,15 @@ $$;
 CREATE VIEW hyper_invals AS SELECT * FROM get_hyper_invals();
 CREATE VIEW cagg_invals AS SELECT * FROM get_cagg_invals();
 -- Must refresh to move the invalidation threshold, or no
--- invalidations will be generated. Initially, there is no threshold
--- set:
+-- invalidations will be generated. Initially, threshold is the
+-- MIN of the time dimension data type:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
----------------+-----------
-(0 rows)
+ hypertable_id |      watermark       
+---------------+----------------------
+             1 | -9223372036854775808
+             2 |          -2147483648
+(2 rows)
 
 -- There should be only "infinite" invalidations in the cagg
 -- invalidation log:
@@ -246,10 +248,11 @@ SELECT * FROM cagg_invals;
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
----------------+-----------
-             1 |        50
-(1 row)
+ hypertable_id |  watermark  
+---------------+-------------
+             1 |          50
+             2 | -2147483648
+(2 rows)
 
 -- Invalidations should be cleared inside the refresh window:
 SELECT * FROM cagg_invals;
@@ -277,10 +280,11 @@ CALL refresh_continuous_aggregate('cond_10', 20, 49);
 psql:include/cagg_invalidation_common.sql:207: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
----------------+-----------
-             1 |        50
-(1 row)
+ hypertable_id |  watermark  
+---------------+-------------
+             1 |          50
+             2 | -2147483648
+(2 rows)
 
 -- Nothing changes with invalidations either since the region was
 -- already refreshed and no new invalidations have been generated:
@@ -991,9 +995,10 @@ WHERE user_view_name = 'thresh_2' \gset
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id | watermark 
----------------+-----------
-(0 rows)
+ hypertable_id |  watermark  
+---------------+-------------
+             7 | -2147483648
+(1 row)
 
 -- Test manual invalidation error
 \if :IS_DISTRIBUTED

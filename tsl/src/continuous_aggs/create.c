@@ -56,6 +56,7 @@
 #include "finalize.h"
 #include "common.h"
 #include "create.h"
+#include "invalidation_threshold.h"
 
 #include "debug_assert.h"
 #include "ts_catalog/catalog.h"
@@ -929,8 +930,9 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	Ensure(NULL != mat_ht, "materialization hypertable %d not found", cagg->data.mat_hypertable_id);
-
 	ts_cagg_watermark_insert(mat_ht, 0, true);
+
+	invalidation_threshold_initialize(cagg);
 
 	if (!stmt->into->skipData)
 	{
