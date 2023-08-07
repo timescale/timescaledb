@@ -1,0 +1,2 @@
+Fixes: #5930 Add update tests with weird user names for jobs
+Thanks: @mrksngl for discovering and reporting the issue
