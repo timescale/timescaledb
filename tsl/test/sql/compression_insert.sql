@@ -511,7 +511,7 @@ BEGIN;
 INSERT INTO trigger_test VALUES
                    ( '2000-01-01',1,11, 'eleven', 111),
                    ( '2010-01-01',10,10, 'ten', 222);
-SELECT * FROM trigger_test ORDER BY 1 ,2, 5;
+SELECT * FROM trigger_test ORDER BY 1 ,2, 3, 5;
 ROLLBACK;
 
 DROP TABLE trigger_test;
