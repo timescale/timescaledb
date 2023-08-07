@@ -120,7 +120,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (3, 15);
+UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+SET watermark = 15
+WHERE hypertable_id = 3;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 INSERT INTO ca_inval_test SELECT generate_series(5, 15);
@@ -174,7 +176,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, 2);
+UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+SET watermark = 2
+WHERE hypertable_id = 5;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 INSERT INTO ts_continuous_test VALUES (1, 1);

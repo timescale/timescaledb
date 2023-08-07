@@ -233,9 +233,10 @@ CREATE MATERIALIZED VIEW cit_view
         GROUP BY 1 WITH NO DATA;
 INSERT INTO ca_inval_test SELECT generate_series(0, 5);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
----------------+-----------
-(0 rows)
+ hypertable_id |  watermark  
+---------------+-------------
+             3 | -2147483648
+(1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
@@ -243,7 +244,9 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (3, 15);
+UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+SET watermark = 15
+WHERE hypertable_id = 3;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO ca_inval_test SELECT generate_series(5, 15);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
@@ -328,9 +331,10 @@ CREATE MATERIALIZED VIEW continuous_view
         FROM ts_continuous_test
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
----------------+-----------
-(0 rows)
+ hypertable_id |  watermark  
+---------------+-------------
+             5 | -2147483648
+(1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
@@ -338,7 +342,9 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, 2);
+UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+SET watermark = 2
+WHERE hypertable_id = 5;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO ts_continuous_test VALUES (1, 1);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;

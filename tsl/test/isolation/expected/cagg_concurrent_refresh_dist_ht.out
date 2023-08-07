@@ -121,11 +121,10 @@ step L2_read_lock_threshold_table:
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
- <waiting ...>
+
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
-step R3_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -189,11 +188,10 @@ step L2_read_lock_threshold_table:
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
- <waiting ...>
+
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
-step R3_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -261,11 +259,10 @@ step L2_read_lock_threshold_table:
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
- <waiting ...>
+
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
-step R1_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10

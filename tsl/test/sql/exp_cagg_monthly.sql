@@ -74,7 +74,7 @@ SELECT experimental, name, bucket_width, origin, timezone
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
 
--- Check that there is no saved invalidation threshold before any refreshes
+-- Check that the saved invalidation threshold is -infinity
 SELECT _timescaledb_functions.to_timestamp(watermark)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;

@@ -15,18 +15,23 @@
 setup
 {
     SELECT _timescaledb_internal.stop_background_workers();
+
     CREATE TABLE conditions(time int, temp float);
     SELECT create_hypertable('conditions', 'time', chunk_time_interval => 20);
+
     INSERT INTO conditions
     SELECT t, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
     FROM generate_series(1, 100, 1) t;
+
     CREATE OR REPLACE FUNCTION cond_now()
     RETURNS int LANGUAGE SQL STABLE AS
     $$
       SELECT coalesce(max(time), 0)
       FROM conditions
     $$;
+
     SELECT set_integer_now_func('conditions', 'cond_now');
+
     CREATE MATERIALIZED VIEW cond_10
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
@@ -34,12 +39,38 @@ setup
       SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
       GROUP BY 1 WITH NO DATA;
+
     CREATE MATERIALIZED VIEW cond_20
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
     AS
       SELECT time_bucket(20, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
+      GROUP BY 1 WITH NO DATA;
+
+    CREATE TABLE conditions2(time int, temp float);
+
+    SELECT create_hypertable('conditions2', 'time', chunk_time_interval => 20);
+
+    INSERT INTO conditions2
+    SELECT t, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+    FROM generate_series(1, 100, 1) t;
+
+    CREATE OR REPLACE FUNCTION cond2_now()
+    RETURNS int LANGUAGE SQL STABLE AS
+    $$
+      SELECT coalesce(max(time), 0)
+      FROM conditions2
+    $$;
+
+    SELECT set_integer_now_func('conditions2', 'cond2_now');
+
+    CREATE MATERIALIZED VIEW cond2_10
+    WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+    AS
+      SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
+      FROM conditions2
       GROUP BY 1 WITH NO DATA;
 
     CREATE OR REPLACE FUNCTION cagg_bucket_count(cagg regclass)
@@ -80,6 +111,7 @@ setup
     BEGIN
       SELECT format('%I.%I', user_view_schema, user_view_name)
       FROM _timescaledb_catalog.continuous_agg
+      WHERE user_view_name = cagg
       INTO mattable;
       EXECUTE format('LOCK table %s IN EXCLUSIVE MODE', mattable);
     END; $$ LANGUAGE plpgsql;
@@ -117,6 +149,7 @@ setup
 
 teardown {
     DROP TABLE conditions CASCADE;
+    DROP TABLE conditions2 CASCADE;
 }
 
 # Session to refresh the cond_10 continuous aggregate
@@ -131,6 +164,16 @@ step "R1_refresh"
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
 }
 
+session "R12"
+setup
+{
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+}
+step "R12_refresh"
+{
+    CALL refresh_continuous_aggregate('cond2_10', 25, 70);
+}
 
 # Refresh that overlaps with R1
 session "R2"
@@ -249,7 +292,8 @@ step "S1_select"
     SELECT h.table_name AS hypertable, it.watermark AS threshold
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
     _timescaledb_catalog.hypertable h
-    WHERE it.hypertable_id = h.id;
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
 }
 
 ####################################################################
@@ -297,3 +341,6 @@ permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table
 # Concurrent refreshing across two different aggregates on same
 # hypertable does not block
 permutation "L3_lock_cagg_table" "R3_refresh" "R4_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
+
+# Concurrent refresh of caggs on different hypertables should not block each other
+permutation "R1_refresh" "R12_refresh"

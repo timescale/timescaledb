@@ -1,0 +1,1 @@
+Implements: #5809 Relax invalidation threshold table-level lock to row-level when refreshing a Continuous Aggregate
