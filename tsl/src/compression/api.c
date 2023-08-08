@@ -46,6 +46,7 @@
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "utils.h"
+#include "guc.h"
 
 typedef struct CompressChunkCxt
 {
@@ -785,6 +786,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	Assert(!PG_ARGISNULL(0));
 	Assert(!PG_ARGISNULL(1));
 
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
@@ -833,6 +835,9 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
@@ -863,6 +868,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
@@ -1013,6 +1021,7 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
 
@@ -1225,6 +1234,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 

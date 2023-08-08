@@ -105,7 +105,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
-    recompress_chunk_segmentwise.sql)
+    recompress_chunk_segmentwise.sql
+    feature_flags.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))

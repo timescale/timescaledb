@@ -24,6 +24,7 @@
 #include "time_utils.h"
 #include "policy_utils.h"
 #include "time_utils.h"
+#include "guc.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw/job_stat.h"
 #include "bgw/timer.h"
@@ -213,6 +214,7 @@ policy_refresh_cagg_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	policy_refresh_cagg_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
@@ -652,6 +654,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	bool if_not_exists;
 	NullableDatum start_offset, end_offset;
 
+	ts_feature_flag_check(FEATURE_POLICY);
+
 	cagg_oid = PG_GETARG_OID(0);
 
 	if (PG_ARGISNULL(3))
@@ -750,6 +754,8 @@ policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 
 	/* For backward compatibility, we use IF_NOT_EXISTS when IF_EXISTS is not given */
 	if_exists = PG_ARGISNULL(2) ? if_not_exists : PG_GETARG_BOOL(2);
+
+	ts_feature_flag_check(FEATURE_POLICY);
 	(void) policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
 	PG_RETURN_VOID();
 }
