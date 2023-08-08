@@ -105,4 +105,14 @@ void _guc_init(void);
 void _guc_fini(void);
 extern TSDLLEXPORT void ts_assign_ssl_options_hook(void *fn);
 
+typedef enum
+{
+	FEATURE_HYPERTABLE,
+	FEATURE_HYPERTABLE_COMPRESSION,
+	FEATURE_CAGG,
+	FEATURE_POLICY
+} FeatureFlagType;
+
+extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
+
 #endif /* TIMESCALEDB_GUC_H */
