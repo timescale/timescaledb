@@ -17,6 +17,7 @@
 #include "hypertable_cache.h"
 #include "policy_utils.h"
 #include "utils.h"
+#include "guc.h"
 #include "jsonb_utils.h"
 #include "bgw/job.h"
 #include "bgw_policy/job.h"
@@ -241,6 +242,8 @@ policies_add(PG_FUNCTION_ARGS)
 	compression_policy comp;
 	retention_policy ret;
 
+	ts_feature_flag_check(FEATURE_POLICY);
+
 	rel_oid = PG_GETARG_OID(0);
 	if_not_exists = PG_GETARG_BOOL(1);
 
@@ -307,6 +310,8 @@ policies_remove(PG_FUNCTION_ARGS)
 	int i;
 	bool success = false;
 
+	ts_feature_flag_check(FEATURE_POLICY);
+
 	if (policy_array == NULL)
 		PG_RETURN_BOOL(false);
 
@@ -346,6 +351,8 @@ policies_remove_all(PG_FUNCTION_ARGS)
 	int failures = 0;
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
 
+	ts_feature_flag_check(FEATURE_POLICY);
+
 	if (!cagg)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -381,6 +388,8 @@ policies_alter(PG_FUNCTION_ARGS)
 	refresh_policy ref;
 	compression_policy comp;
 	retention_policy ret;
+
+	ts_feature_flag_check(FEATURE_POLICY);
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)
@@ -612,6 +621,8 @@ policies_show(PG_FUNCTION_ARGS)
 	FuncCallContext *funcctx;
 	static List *jobs;
 	JsonbParseState *parse_state = NULL;
+
+	ts_feature_flag_check(FEATURE_POLICY);
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)

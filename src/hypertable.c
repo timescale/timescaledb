@@ -1897,6 +1897,8 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	uint32 flags = 0;
 	List *data_nodes = NIL;
 
+	ts_feature_flag_check(FEATURE_HYPERTABLE);
+
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!OidIsValid(table_relid))
