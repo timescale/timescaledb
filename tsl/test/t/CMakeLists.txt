@@ -1,4 +1,5 @@
-set(PROVE_TEST_FILES 001_simple_multinode.pl 003_connections_privs.pl)
+set(PROVE_TEST_FILES 001_simple_multinode.pl 003_connections_privs.pl
+                     009_logrepl_decomp_marker.pl)
 set(PROVE_DEBUG_TEST_FILES
     002_chunk_copy_move.pl 004_multinode_rdwr_1pc.pl 005_add_data_node.pl
     006_job_crash_log.pl 007_healthcheck.pl 008_mvcc_cagg.pl)
