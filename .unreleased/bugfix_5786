@@ -1,1 +1,0 @@
-Fixes: #5786 Ensure pg_config --cppflags are passed
