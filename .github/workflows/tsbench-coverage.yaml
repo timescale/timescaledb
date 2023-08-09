@@ -1,9 +1,13 @@
 # A job to inspect code coverage of current TSBench benchmarks, and also run
-# them with assertions enabled to have more test coverage.
+# them with assertions enabled to have more test coverage. The results are saved
+# as an artifact of the GitHub Action.
 name: TSBench Code Coverage
 "on":
+  # Also check on schedule even if there are no commits to main, because the
+  # tsbench repository can change separately.
   schedule:
     - cron: '0 3 * * *'
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -152,7 +156,8 @@ jobs:
           LANG=C LC_NUMERIC=C tsbench --max-executions=1 --verbose --verbose \
             --with-connection pgsq://localhost:5432/postgres
 
-          # Postgres should survive.
+          # Postgres should survive. If not, it would mean an assertion failure
+          # in the tsbench test, or some other error.
           psql -c "select 1;"
 
       - name: Build coverage report
