@@ -44,6 +44,7 @@
 #include "custom_type_cache.h"
 #include "trigger.h"
 #include "utils.h"
+#include "guc.h"
 
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
@@ -474,16 +475,17 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 	indexcols = lappend(indexcols, &sequence_num_elem);
 
 	stmt.indexParams = indexcols;
-	index_addr = DefineIndex(ht->main_table_relid,
-							 &stmt,
-							 InvalidOid, /* IndexRelationId */
-							 InvalidOid, /* parentIndexId */
-							 InvalidOid, /* parentConstraintId */
-							 false,		 /* is_alter_table */
-							 false,		 /* check_rights */
-							 false,		 /* check_not_in_use */
-							 false,		 /* skip_build */
-							 false);	 /* quiet */
+	index_addr = DefineIndexCompat(ht->main_table_relid,
+								   &stmt,
+								   InvalidOid, /* IndexRelationId */
+								   InvalidOid, /* parentIndexId */
+								   InvalidOid, /* parentConstraintId */
+								   -1,		   /* total_parts */
+								   false,	   /* is_alter_table */
+								   false,	   /* check_rights */
+								   false,	   /* check_not_in_use */
+								   false,	   /* skip_build */
+								   false);	   /* quiet */
 	index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
 
 	if (!HeapTupleIsValid(index_tuple))
@@ -1159,6 +1161,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	List *orderby_cols;
 	List *constraint_list = NIL;
 
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
 		ereport(ERROR,
@@ -1256,6 +1260,8 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;
 
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
 	FormData_hypertable_compression *ht_comp =
 		ts_hypertable_compression_get_by_pkey(orig_htid, colname);
 	/* don't add column if it already exists */
@@ -1291,6 +1297,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	Assert(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 	FormData_hypertable_compression *ht_comp =
 		ts_hypertable_compression_get_by_pkey(ht->fd.id, name);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	/* With DROP COLUMN IF EXISTS we might end up being called
 	 * for non-existant columns. */

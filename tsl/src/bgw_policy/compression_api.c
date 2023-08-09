@@ -15,6 +15,7 @@
 #include "hypertable_cache.h"
 #include "policy_utils.h"
 #include "utils.h"
+#include "guc.h"
 #include "jsonb_utils.h"
 #include "bgw/job.h"
 #include "bgw_policy/job.h"
@@ -128,6 +129,7 @@ policy_recompression_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	policy_recompression_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
@@ -341,7 +343,10 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	 * so we need to act like a strict function in those cases
 	 */
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	{
+		ts_feature_flag_check(FEATURE_POLICY);
 		PG_RETURN_NULL();
+	}
 
 	Oid user_rel_oid = PG_GETARG_OID(0);
 	Datum compress_after_datum = PG_GETARG_DATUM(1);
@@ -356,6 +361,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
 	char *valid_timezone = NULL;
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -454,6 +460,7 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 	Oid user_rel_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 
+	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	return policy_compression_remove_internal(user_rel_oid, if_exists);

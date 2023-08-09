@@ -473,7 +473,11 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		{
 			RangeVar *sequence;
 
+#if PG16_LT
 			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name));
+#else
+			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name, NULL));
+#endif
 			tables_info[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
 		}
 		else

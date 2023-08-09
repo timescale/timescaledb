@@ -145,16 +145,17 @@ create_default_index(const Hypertable *ht, List *indexelems)
 		.indexParams = indexelems,
 	};
 
-	DefineIndex(ht->main_table_relid,
-				&stmt,
-				InvalidOid, /* indexRelationId */
-				InvalidOid, /* parentIndexId */
-				InvalidOid, /* parentConstraintId */
-				false,		/* is_alter_table */
-				false,		/* check_rights */
-				false,		/* check_not_in_use */
-				false,		/* skip_build */
-				true);		/* quiet */
+	DefineIndexCompat(ht->main_table_relid,
+					  &stmt,
+					  InvalidOid, /* indexRelationId */
+					  InvalidOid, /* parentIndexId */
+					  InvalidOid, /* parentConstraintId */
+					  -1,		  /* total_parts */
+					  false,	  /* is_alter_table */
+					  false,	  /* check_rights */
+					  false,	  /* check_not_in_use */
+					  false,	  /* skip_build */
+					  true);	  /* quiet */
 }
 
 static const Node *
@@ -293,6 +294,7 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	Oid relid;
 	LOCKMODE lockmode;
 	ObjectAddress root_table_address;
+	int total_parts = -1;
 
 	if (stmt->concurrent)
 		PreventInTransactionBlock(true, "CREATE INDEX CONCURRENTLY");
@@ -346,6 +348,7 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 						 errdetail("Table \"%s\" contains chunks of the wrong type.",
 								   stmt->relation->relname)));
 		}
+		total_parts = list_length(inheritors) - 1;
 		list_free(inheritors);
 	}
 
@@ -355,16 +358,18 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	/* ... and do it */
 	EventTriggerAlterTableStart((Node *) stmt);
 
-	root_table_address = DefineIndex(relid, /* OID of heap relation */
-									 stmt,
-									 InvalidOid, /* no predefined OID */
-									 InvalidOid, /* parentIndexId */
-									 InvalidOid, /* parentConstraintId */
-									 false,		 /* is_alter_table */
-									 true,		 /* check_rights */
-									 false,		 /* check_not_in_use */
-									 false,		 /* skip_build */
-									 false);	 /* quiet */
+	(void) total_parts;
+	root_table_address = DefineIndexCompat(relid, /* OID of heap relation */
+										   stmt,
+										   InvalidOid,	/* no predefined OID */
+										   InvalidOid,	/* parentIndexId */
+										   InvalidOid,	/* parentConstraintId */
+										   total_parts, /* total_parts */
+										   false,		/* is_alter_table */
+										   true,		/* check_rights */
+										   false,		/* check_not_in_use */
+										   false,		/* skip_build */
+										   false);		/* quiet */
 
 	return root_table_address;
 }

@@ -193,9 +193,16 @@ ht_ExecUpdateEpilogue(ModifyTableContext * context, UpdateContext * updateCxt,
 	ModifyTableState *mtstate = context->mtstate;
 
 	/* insert index entries for tuple if necessary */
+
 	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
-		recheckIndexes =
-			ExecInsertIndexTuples(resultRelInfo, slot, context->estate, true, false, NULL, NIL);
+		recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
+													 slot,
+													 context->estate,
+													 true,
+													 false,
+													 NULL,
+													 NIL,
+													 false);
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggersCompat(context->estate,

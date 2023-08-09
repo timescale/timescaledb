@@ -77,6 +77,7 @@ bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
+TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_parameterized_data_node_scan = true;
@@ -106,10 +107,74 @@ TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
 TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
 TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
+bool ts_guc_debug_require_batch_sorted_merge = false;
+
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
 #endif
+
+static bool ts_guc_enable_hypertable_create = true;
+static bool ts_guc_enable_hypertable_compression = true;
+static bool ts_guc_enable_cagg_create = true;
+static bool ts_guc_enable_policy_create = true;
+
+typedef struct
+{
+	const char *name;
+	const char *description;
+	bool *enable;
+} FeatureFlag;
+
+static FeatureFlag ts_feature_flags[] = {
+	[FEATURE_HYPERTABLE] = { "timescaledb.enable_hypertable_create",
+							 "Enable creation of hypertable",
+							 &ts_guc_enable_hypertable_create },
+
+	[FEATURE_HYPERTABLE_COMPRESSION] = { "timescaledb.enable_hypertable_compression",
+										 "Enable hypertable compression functions",
+										 &ts_guc_enable_hypertable_compression },
+
+	[FEATURE_CAGG] = { "timescaledb.enable_cagg_create",
+					   "Enable creation of continuous aggregate",
+					   &ts_guc_enable_cagg_create },
+
+	[FEATURE_POLICY] = { "timescaledb.enable_policy_create",
+						 "Enable creation of policies and user-defined actions",
+						 &ts_guc_enable_policy_create }
+};
+
+static void
+ts_feature_flag_add(FeatureFlagType type)
+{
+	FeatureFlag *flag = &ts_feature_flags[type];
+	int flag_context = PGC_SIGHUP;
+#ifdef TS_DEBUG
+	flag_context = PGC_USERSET;
+#endif
+	DefineCustomBoolVariable(flag->name,
+							 flag->description,
+							 NULL,
+							 flag->enable,
+							 true,
+							 flag_context,
+							 GUC_SUPERUSER_ONLY,
+							 NULL,
+							 NULL,
+							 NULL);
+}
+
+void
+ts_feature_flag_check(FeatureFlagType type)
+{
+	FeatureFlag *flag = &ts_feature_flags[type];
+	if (likely(*flag->enable))
+		return;
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("this feature is disabled"),
+			 errdetail("Feature flag \"%s\" is off", flag->name)));
+}
 
 /*
  * We have to understand if we have finished initializing the GUCs, so that we
@@ -299,6 +364,19 @@ _guc_init(void)
 							 &ts_guc_enable_skip_scan,
 							 true,
 							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_decompression_logrep_markers",
+							 "Enable logical replication markers for decompression ops",
+							 "Enable the generation of logical replication markers in the "
+							 "WAL stream to mark the start and end of decompressions (for insert, "
+							 "update, and delete operations)",
+							 &ts_guc_enable_decompression_logrep_markers,
+							 false,
+							 PGC_SIGHUP,
 							 0,
 							 NULL,
 							 NULL,
@@ -633,6 +711,17 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_require_batch_sorted_merge",
+							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ &ts_guc_debug_require_batch_sorted_merge,
+							 /* bootValue= */ false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 #endif
 
 	DefineCustomEnumVariable("timescaledb.hypertable_distributed_default",
@@ -661,6 +750,12 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+
+	/* register feature flags */
+	ts_feature_flag_add(FEATURE_HYPERTABLE);
+	ts_feature_flag_add(FEATURE_HYPERTABLE_COMPRESSION);
+	ts_feature_flag_add(FEATURE_CAGG);
+	ts_feature_flag_add(FEATURE_POLICY);
 
 	gucs_are_initialized = true;
 

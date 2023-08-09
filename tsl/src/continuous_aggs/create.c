@@ -77,6 +77,7 @@
 #include "remote/dist_commands.h"
 #include "deparse.h"
 #include "timezones.h"
+#include "guc.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
@@ -411,16 +412,17 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
 		char *grpcolname = (char *) lfirst(le);
 		IndexElem grpelem = { .type = T_IndexElem, .name = grpcolname };
 		stmt.indexParams = list_make2(&grpelem, &timeelem);
-		indxaddr = DefineIndex(ht->main_table_relid,
-							   &stmt,
-							   InvalidOid, /* indexRelationId */
-							   InvalidOid, /* parentIndexId */
-							   InvalidOid, /* parentConstraintId */
-							   false,	   /* is_alter_table */
-							   false,	   /* check_rights */
-							   false,	   /* check_not_in_use */
-							   false,	   /* skip_build */
-							   false);	   /* quiet */
+		indxaddr = DefineIndexCompat(ht->main_table_relid,
+									 &stmt,
+									 InvalidOid, /* indexRelationId */
+									 InvalidOid, /* parentIndexId */
+									 InvalidOid, /* parentConstraintId */
+									 -1,		 /* total_parts */
+									 false,		 /* is_alter_table */
+									 false,		 /* check_rights */
+									 false,		 /* check_not_in_use */
+									 false,		 /* skip_build */
+									 false);	 /* quiet */
 		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
 
 		if (!HeapTupleIsValid(indxtuple))
@@ -869,6 +871,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	Hypertable *mat_ht;
 	Oid relid;
 	char *schema_name;
+
+	ts_feature_flag_check(FEATURE_CAGG);
 
 	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
 	relid = get_relname_relid(stmt->into->rel->relname, nspid);

@@ -30,6 +30,7 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_tablespace_d.h>
 #include <catalog/toasting.h>
 #include <commands/cluster.h>
 #include <commands/tablecmds.h>
@@ -415,7 +416,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	/* Our check gives better error messages, but keep the original one too. */
 	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
-	if (!pg_class_ownercheck(ht->main_table_relid, GetUserId()))
+	if (!object_ownercheck(RelationRelationId, ht->main_table_relid, GetUserId()))
 	{
 		Oid main_table_relid = ht->main_table_relid;
 
@@ -449,7 +450,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		AclResult aclresult;
 
-		aclresult = pg_tablespace_aclcheck(destination_tablespace, GetUserId(), ACL_CREATE);
+		aclresult =
+			object_aclcheck(TableSpaceRelationId, destination_tablespace, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -462,7 +464,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		AclResult aclresult;
 
-		aclresult = pg_tablespace_aclcheck(index_tablespace, GetUserId(), ACL_CREATE);
+		aclresult =
+			object_aclcheck(TableSpaceRelationId, index_tablespace, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -562,7 +565,7 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	 * that the relation still is what we think it is.
 	 */
 	/* Check that the user still owns the relation */
-	if (!pg_class_ownercheck(tableOid, GetUserId()))
+	if (!object_ownercheck(RelationRelationId, tableOid, GetUserId()))
 	{
 		relation_close(OldHeap, ExclusiveLock);
 		ereport(WARNING, (errcode(ERRCODE_WARNING), errmsg("ownership changed during reorder")));

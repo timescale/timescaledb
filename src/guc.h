@@ -28,6 +28,7 @@ extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
+extern TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_per_data_node_queries;
 extern TSDLLEXPORT bool ts_guc_enable_parameterized_data_node_scan;
@@ -102,8 +103,20 @@ extern char *ts_current_timestamp_mock;
 #define ts_shutdown_bgw false
 #endif
 
+extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
+
 void _guc_init(void);
 void _guc_fini(void);
 extern TSDLLEXPORT void ts_assign_ssl_options_hook(void *fn);
+
+typedef enum
+{
+	FEATURE_HYPERTABLE,
+	FEATURE_HYPERTABLE_COMPRESSION,
+	FEATURE_CAGG,
+	FEATURE_POLICY
+} FeatureFlagType;
+
+extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 
 #endif /* TIMESCALEDB_GUC_H */

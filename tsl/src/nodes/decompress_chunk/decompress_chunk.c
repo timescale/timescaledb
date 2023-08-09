@@ -28,7 +28,7 @@
 #include "import/planner.h"
 #include "import/allpaths.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/sorted_merge.h"
+#include "nodes/decompress_chunk/batch_queue_heap.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
@@ -37,6 +37,12 @@
 #define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01
 
 #define DECOMPRESS_CHUNK_BATCH_SIZE 1000
+
+/* We have to decompress the compressed batches in parallel. Therefore, we need a high
+ * amount of memory. Set the tuple cost for this algorithm a very high value to prevent
+ * that this algorithm is chosen when a lot of batches needs to be merged. For more details,
+ * see the discussion in cost_decompress_sorted_merge_append(). */
+#define DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST 0.8
 
 static CustomPathMethods decompress_chunk_path_methods = {
 	.CustomName = "DecompressChunk",
@@ -391,7 +397,7 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 			  -1);
 
 	/* startup_cost is cost before fetching first tuple */
-	dcpath->cpath.path.startup_cost = sort_path.total_cost;
+	dcpath->custom_path.path.startup_cost = sort_path.total_cost;
 
 	/*
 	 * The cost model for the normal chunk decompression produces the following total
@@ -413,10 +419,10 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 	 * Note: To behave similarly to the cost model of the regular decompression path, this cost
 	 * model does not consider the number of tuples.
 	 */
-	dcpath->cpath.path.total_cost =
+	dcpath->custom_path.path.total_cost =
 		sort_path.total_cost + pow(sort_path.rows, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
 
-	dcpath->cpath.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	dcpath->custom_path.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 }
 
 /*
@@ -721,13 +727,13 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				batch_merge_path = copy_decompress_chunk_path((DecompressChunkPath *) path);
 
 				batch_merge_path->reverse = (merge_result != SCAN_FORWARD);
-				batch_merge_path->sorted_merge_append = true;
+				batch_merge_path->batch_sorted_merge = true;
 
 				/* The segment by optimization is only enabled if it can deliver the tuples in the
 				 * same order as the query requested it. So, we can just copy the pathkeys of the
 				 * query here.
 				 */
-				batch_merge_path->cpath.path.pathkeys = root->query_pathkeys;
+				batch_merge_path->custom_path.path.pathkeys = root->query_pathkeys;
 				cost_decompress_sorted_merge_append(root, batch_merge_path, child_path);
 
 				/* If the chunk is partially compressed, prepare the path only and add it later
@@ -735,7 +741,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * compressed and uncompressed part of the chunk.
 				 */
 				if (!ts_chunk_is_partial(chunk))
-					add_path(chunk_rel, &batch_merge_path->cpath.path);
+					add_path(chunk_rel, &batch_merge_path->custom_path.path);
 			}
 		}
 
@@ -749,7 +755,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			dcpath->reverse = sort_info.reverse;
 			dcpath->needs_sequence_num = sort_info.needs_sequence_num;
 			dcpath->compressed_pathkeys = sort_info.compressed_pathkeys;
-			dcpath->cpath.path.pathkeys = root->query_pathkeys;
+			dcpath->custom_path.path.pathkeys = root->query_pathkeys;
 
 			/*
 			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
@@ -771,16 +777,16 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						  work_mem,
 						  -1);
 
-				cost_decompress_chunk(&dcpath->cpath.path, &sort_path);
+				cost_decompress_chunk(&dcpath->custom_path.path, &sort_path);
 			}
 			/*
 			 * if chunk is partially compressed don't add this now but add an append path later
 			 * combining the uncompressed and compressed parts of the chunk
 			 */
 			if (!ts_chunk_is_partial(chunk))
-				add_path(chunk_rel, &dcpath->cpath.path);
+				add_path(chunk_rel, &dcpath->custom_path.path);
 			else
-				path = &dcpath->cpath.path;
+				path = &dcpath->custom_path.path;
 		}
 
 		/*
@@ -1524,28 +1530,28 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 
 	path->info = info;
 
-	path->cpath.path.pathtype = T_CustomScan;
-	path->cpath.path.parent = info->chunk_rel;
-	path->cpath.path.pathtarget = info->chunk_rel->reltarget;
+	path->custom_path.path.pathtype = T_CustomScan;
+	path->custom_path.path.parent = info->chunk_rel;
+	path->custom_path.path.pathtarget = info->chunk_rel->reltarget;
 
-	path->cpath.path.param_info = compressed_path->param_info;
+	path->custom_path.path.param_info = compressed_path->param_info;
 
-	path->cpath.flags = 0;
-	path->cpath.methods = &decompress_chunk_path_methods;
-	path->sorted_merge_append = false;
+	path->custom_path.flags = 0;
+	path->custom_path.methods = &decompress_chunk_path_methods;
+	path->batch_sorted_merge = false;
 
 	/* To prevent a non-parallel path with this node appearing
 	 * in a parallel plan we only set parallel_safe to true
 	 * when parallel_workers is greater than 0 which is only
 	 * the case when creating partial paths. */
-	path->cpath.path.parallel_safe = parallel_workers > 0;
-	path->cpath.path.parallel_workers = parallel_workers;
-	path->cpath.path.parallel_aware = false;
+	path->custom_path.path.parallel_safe = parallel_workers > 0;
+	path->custom_path.path.parallel_workers = parallel_workers;
+	path->custom_path.path.parallel_aware = false;
 
-	path->cpath.custom_paths = list_make1(compressed_path);
+	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
 	path->compressed_pathkeys = NIL;
-	cost_decompress_chunk(&path->cpath.path, compressed_path);
+	cost_decompress_chunk(&path->custom_path.path, compressed_path);
 
 	return path;
 }

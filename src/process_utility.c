@@ -2791,6 +2791,7 @@ process_index_start(ProcessUtilityArgs *args)
 		ts_cagg_permissions_check(ht->main_table_relid, GetUserId());
 		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
 	}
+
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
@@ -2799,6 +2800,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	if (cagg)
 		RESTORE_USER(uid, saved_uid, sec_ctx);
+
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
 	 * to do here. */
@@ -2808,7 +2810,13 @@ process_index_start(ProcessUtilityArgs *args)
 		return DDL_DONE;
 	}
 	Assert(OidIsValid(root_table_index.objectId));
-	info.obj.objectId = root_table_index.objectId;
+
+	/* support ONLY ON clause, index on root table already created */
+	if (!stmt->relation->inh)
+	{
+		ts_cache_release(hcache);
+		return DDL_DONE;
+	}
 
 	/* CREATE INDEX on the chunks, unless this is a distributed hypertable */
 	if (hypertable_is_distributed(ht))
@@ -2817,6 +2825,7 @@ process_index_start(ProcessUtilityArgs *args)
 		return DDL_DONE;
 	}
 
+	info.obj.objectId = root_table_index.objectId;
 	/* collect information required for per chunk index creation */
 	main_table_relation = table_open(ht->main_table_relid, AccessShareLock);
 	main_table_desc = RelationGetDescr(main_table_relation);
@@ -3422,7 +3431,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 					process_altertable_drop_not_null(ht, cmd);
 				break;
 			case AT_AddColumn:
+#if PG16_LT
 			case AT_AddColumnRecurse:
+#endif
 			{
 				ColumnDef *col;
 				ListCell *constraint_lc;
@@ -3440,12 +3451,16 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				break;
 			}
 			case AT_DropColumn:
+#if PG16_LT
 			case AT_DropColumnRecurse:
+#endif
 				if (NULL != ht)
 					process_altertable_drop_column(ht, cmd);
 				break;
 			case AT_AddConstraint:
+#if PG16_LT
 			case AT_AddConstraintRecurse:
+#endif
 				Assert(IsA(cmd->def, Constraint));
 
 				if (NULL == ht)
@@ -3727,7 +3742,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		}
 		break;
 		case AT_AddConstraint:
+#if PG16_LT
 		case AT_AddConstraintRecurse:
+#endif
 		{
 			Constraint *stmt = (Constraint *) cmd->def;
 			const char *conname = stmt->conname;
@@ -3788,7 +3805,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			process_altertable_alter_constraint_end(ht, cmd);
 			break;
 		case AT_ValidateConstraint:
+#if PG16_LT
 		case AT_ValidateConstraintRecurse:
+#endif
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
 		case AT_DropCluster:
@@ -3850,11 +3869,15 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_AddColumn:
+#if PG16_LT
 		case AT_AddColumnRecurse:
+#endif
 			/* this is handled for compressed hypertables by tsl code */
 			break;
 		case AT_DropColumn:
+#if PG16_LT
 		case AT_DropColumnRecurse:
+#endif
 #if PG13_GE
 		case AT_DropExpression:
 #endif
@@ -3865,7 +3888,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_DropConstraint:
+#if PG16_LT
 		case AT_DropConstraintRecurse:
+#endif
 			/* drop constraints handled by process_ddl_sql_drop */
 			break;
 #if PG13_LT

@@ -11,6 +11,7 @@
 #include <fmgr.h>
 
 #include <access/hash.h>
+#include <access/xact.h>
 #include <storage/ipc.h>
 #include <storage/lock.h>
 #include <miscadmin.h>
@@ -176,6 +177,10 @@ ts_debug_point_wait(const char *name, bool blocking)
 	DebugPoint point;
 	LockAcquireResult lock_acquire_result pg_attribute_unused();
 	bool lock_release_result pg_attribute_unused();
+
+	/* Ensure that we are in a transaction before trying for locks */
+	if (!IsTransactionState())
+		return;
 
 	debug_point_init(&point, name);
 

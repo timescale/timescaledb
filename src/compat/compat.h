@@ -89,8 +89,19 @@
 									update,                                                        \
 									noDupErr,                                                      \
 									specConflict,                                                  \
-									arbiterIndexes)                                                \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
 	ExecInsertIndexTuples(slot, estate, noDupErr, specConflict, arbiterIndexes)
+#elif PG16_LT
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
 #else
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
@@ -98,8 +109,16 @@
 									update,                                                        \
 									noDupErr,                                                      \
 									specConflict,                                                  \
-									arbiterIndexes)                                                \
-	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri,                                                                     \
+						  slot,                                                                    \
+						  estate,                                                                  \
+						  update,                                                                  \
+						  noDupErr,                                                                \
+						  specConflict,                                                            \
+						  arbiterIndexes,                                                          \
+						  onlySummarizing)
 #endif
 
 /* PG14 fixes a bug in miscomputation of relids set in pull_varnos. The bugfix
@@ -352,6 +371,7 @@ get_reindex_options(ReindexStmt *stmt)
  * define lfifth macro for convenience
  */
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
+#define lfifth_int(l) lfirst_int(list_nth_cell(l, 4))
 
 /* PG13 removes the natts parameter from map_variable_attnos */
 #if PG13_LT
@@ -773,6 +793,110 @@ RelationGetSmgr(Relation rel)
 #else
 #define pg_nodiscard
 #endif
+#endif
+
+/*
+ * PG16 adds a new parameter to DefineIndex, total_parts, that takes
+ * in the total number of direct and indirect partitions of the relation.
+ *
+ * https://github.com/postgres/postgres/commit/27f5c712
+ */
+#if PG16_LT
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  parentIndexId,                                                           \
+						  parentConstraintId,                                                      \
+						  total_parts,                                                             \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  check_not_in_use,                                                        \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				parentIndexId,                                                                     \
+				parentConstraintId,                                                                \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				check_not_in_use,                                                                  \
+				skip_build,                                                                        \
+				quiet)
+#else
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  parentIndexId,                                                           \
+						  parentConstraintId,                                                      \
+						  total_parts,                                                             \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  check_not_in_use,                                                        \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				parentIndexId,                                                                     \
+				parentConstraintId,                                                                \
+				total_parts,                                                                       \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				check_not_in_use,                                                                  \
+				skip_build,                                                                        \
+				quiet)
+#endif
+
+#if PG16_LT
+#include <catalog/pg_database_d.h>
+#include <catalog/pg_foreign_server_d.h>
+#include <catalog/pg_namespace_d.h>
+#include <catalog/pg_proc_d.h>
+#include <catalog/pg_tablespace_d.h>
+#include <utils/acl.h>
+
+/*
+ * PG16 replaces most aclcheck functions with a common object_aclcheck() function
+ * https://github.com/postgres/postgres/commit/c727f511
+ */
+static inline AclResult
+object_aclcheck(Oid classid, Oid objectid, Oid roleid, AclMode mode)
+{
+	switch (classid)
+	{
+		case DatabaseRelationId:
+			return pg_database_aclcheck(objectid, roleid, mode);
+		case ForeignServerRelationId:
+			return pg_foreign_server_aclcheck(objectid, roleid, mode);
+		case NamespaceRelationId:
+			return pg_namespace_aclcheck(objectid, roleid, mode);
+		case ProcedureRelationId:
+			return pg_proc_aclcheck(objectid, roleid, mode);
+		case TableSpaceRelationId:
+			return pg_tablespace_aclcheck(objectid, roleid, mode);
+		default:
+			Assert(false);
+	}
+	return ACLCHECK_NOT_OWNER;
+}
+
+/*
+ * PG16 replaces pg_foo_ownercheck() functions with a common object_ownercheck() function
+ * https://github.com/postgres/postgres/commit/afbfc029
+ */
+static inline bool
+object_ownercheck(Oid classid, Oid objectid, Oid roleid)
+{
+	switch (classid)
+	{
+		case RelationRelationId:
+			return pg_class_ownercheck(objectid, roleid);
+		default:
+			Assert(false);
+	}
+	return false;
+}
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */
