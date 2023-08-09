@@ -4,6 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.11.2 (2023-08-09)
+
+This release contains bug fixes since the 2.11.1 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* #5923 Feature flags for TimescaleDB features
+**Bugfixes**
+* #5680 Fix DISTINCT query with JOIN on multiple segmentby columns
+* #5774 Fixed two bugs in decompression sorted merge code 
+* #5786 Ensure pg_config --cppflags are passed
+* #5906 Fix quoting owners in sql scripts.
+* #5912 Fix crash in 1-step integer policy creation
+**Thanks**
+* @mrksngl for submitting a PR to fix extension upgrade scripts
+* @ericdevries for reporting an issue with DISTINCT queries using segmentby columns of compressed hypertable
+
 ## 2.11.1 (2023-06-29)
 
 This release contains bug fixes since the 2.11.0 release.
@@ -72,12 +89,10 @@ This release includes these noteworthy features:
 * #5642 Fix ALTER TABLE SET with normal tables
 * #5666 Reduce memory usage for distributed analyze
 * #5668 Fix subtransaction resource owner
-* #5680 Fix DISTINCT query with JOIN on multiple segmentby columns
 
 **Thanks**
 * @kovetskiy and @DZDomi for reporting peformance regression in Realtime Continuous Aggregates
 * @ollz272 for reporting an issue with interpolate error messages
-* @ericdevries for reporting an issue with DISTINCT queries using segmentby columns of compressed hypertable
 
 
 ## 2.10.3 (2023-04-26)
