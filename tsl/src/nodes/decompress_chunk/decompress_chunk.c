@@ -1319,6 +1319,7 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	return NULL;
 }
 
+/* This function is inspired by the Postgres add_child_rel_equivalences. */
 static bool
 add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *info,
 								   EMCreationContext *context)
@@ -1389,6 +1390,19 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+			/*
+			 * Prepend the EC member because it's likely to be accessed soon.
+			 * This hides some quadratic behavior in build_compressed_scan_pathkeys.
+			 *
+			 * Note that we cannot add to the front here, because then the
+			 * compressed chunk EM might get picked as SortGroupExpr by
+			 * cost_incremental_sort, and estimate_num_groups will assert that
+			 * the rel is simple rel, but it will fail because the compressed
+			 * chunk rel is a deadrel. Anyway, it wouldn't make sense to estimate
+			 * the group numbers by one append member, probably Postgres expects
+			 * to see the parent relation first in the EMs.
+			 */
+			//cur_ec->ec_members = lcons(em, cur_ec->ec_members);
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
 
 			return true;
@@ -1414,7 +1428,6 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 	Assert(info->chunk_rel->relid != info->compressed_rel->relid);
 	/* based on add_child_rel_equivalences */
 	int i = -1;
-	bool ec_added = false;
 	Assert(root->ec_merging_done);
 	/* use chunk rel's eclass_indexes to avoid traversing all
 	 * the root's eq_classes
@@ -1435,9 +1448,10 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
 			continue;
-		ec_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
+
+		bool em_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
 		/* Record this EC index for the compressed rel */
-		if (ec_added)
+		if (em_added)
 			info->compressed_rel->eclass_indexes =
 				bms_add_member(info->compressed_rel->eclass_indexes, i);
 	}
