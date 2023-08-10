@@ -78,7 +78,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	 */
 	Oid remote_chunk_relid = InvalidOid;
 	ListCell *lc;
-	foreach (lc, chunk_private->chunk->data_nodes)
+	foreach (lc, chunk_private->cached_chunk_struct->data_nodes)
 	{
 		ChunkDataNode *cdn = (ChunkDataNode *) lfirst(lc);
 		if (cdn->foreign_server_oid == chunkrel->serverid)
@@ -94,7 +94,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	 */
 	old = MemoryContextSwitchTo(scas->mctx);
 	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
-	sca->chunks = lappend(sca->chunks, chunk_private->chunk);
+	sca->chunks = lappend(sca->chunks, chunk_private->cached_chunk_struct);
 	sca->remote_chunk_ids = lappend_int(sca->remote_chunk_ids, remote_chunk_relid);
 	sca->pages += chunkrel->pages;
 	sca->rows += chunkrel->rows;
