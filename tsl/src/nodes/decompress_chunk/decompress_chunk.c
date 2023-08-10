@@ -197,66 +197,37 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	 */
 	if (info->num_segmentby_columns > 0)
 	{
+		TimescaleDBPrivate *compressed_fdw_private =
+			(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
 		Bitmapset *segmentby_columns = bms_copy(info->chunk_segmentby_ri);
 		ListCell *lc;
-		char *column_name;
-		Oid sortop;
-		Oid opfamily, opcintype;
-		int16 strategy;
-
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
 			 lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
-			var = (Var *) find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
-
-			if (var == NULL || !IsA(var, Var))
-				/* this should not happen because we validated the pathkeys when creating the path
-				 */
-				elog(ERROR, "Invalid pathkey for compressed scan");
-
-			/* not a segmentby column, rest of pathkeys should be handled by compress_orderby */
-			if (!bms_is_member(var->varattno, info->chunk_segmentby_attnos))
-				break;
-
-			/* skip duplicate references */
-			if (bms_is_member(var->varattno, segmentby_columns))
-				continue;
-
-			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
-			varattno = get_attnum(info->compressed_rte->relid, column_name);
-			var = makeVar(info->compressed_rel->relid,
-						  varattno,
-						  var->vartype,
-						  var->vartypmod,
-						  var->varcollid,
-						  0);
-
-			sortop =
-				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_strategy);
-			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			EquivalenceMember *compressed_em = NULL;
+			ListCell *ec_em_pair_cell;
+			foreach (ec_em_pair_cell, compressed_fdw_private->compressed_ec_em_pairs)
 			{
-				if (type_is_enum(var->vartype))
+				List *pair = lfirst(ec_em_pair_cell);
+				if (linitial(pair) == pk->pk_eclass)
 				{
-					sortop = get_opfamily_member(pk->pk_opfamily,
-												 ANYENUMOID,
-												 ANYENUMOID,
-												 pk->pk_strategy);
-				}
-				else
-				{
-					elog(ERROR, "sort operator lookup failed for column \"%s\"", column_name);
+					compressed_em = lsecond(pair);
+					break;
 				}
 			}
-			PathKey *new_pk = make_pathkey_from_compressed(root,
-											  info->compressed_rel->relid,
-											  (Expr *) var,
-											  sortop,
-											  pk->pk_nulls_first);
-			Assert(new_pk == pk);
+
+			if (compressed_em == NULL)
+			{
+				/* not a segmentby column, rest of pathkeys should be handled by compress_orderby */
+				break;
+			}
+
 			compressed_pathkeys = lappend(compressed_pathkeys, pk);
+
+			segmentby_columns =
+				bms_add_member(segmentby_columns, castNode(Var, compressed_em->em_expr)->varattno);
 		}
 
 		/* we validated this when we created the Path so only asserting here */
@@ -292,6 +263,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		 * then other ec classes */
 		prepend_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
 
+		/* FIXME this also needs to be removed in the same way. */
 		pk = make_pathkey_from_compressed(root,
 										  info->compressed_rel->relid,
 										  (Expr *) var,
@@ -1319,12 +1291,18 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	return NULL;
 }
 
+/* This function is inspired by the Postgres add_child_rel_equivalences. */
 static bool
 add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *info,
 								   EMCreationContext *context)
 {
 	Relids uncompressed_chunk_relids = info->chunk_rel->relids;
 	ListCell *lc;
+
+	TimescaleDBPrivate *compressed_fdw_private =
+		(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
+	Assert(compressed_fdw_private != NULL);
+
 	foreach (lc, cur_ec->ec_members)
 	{
 		Expr *child_expr;
@@ -1352,6 +1330,11 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		context->current_col_info = get_compression_info_for_em((Node *) var, context);
 		if (context->current_col_info == NULL)
 			continue;
+
+		if (!COMPRESSIONCOL_IS_SEGMENT_BY(context->current_col_info))
+		{
+			continue;
+		}
 
 		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context);
 		if (child_expr == NULL)
@@ -1389,7 +1372,27 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+			/*
+			 * In some cases the new EC member is likely to be accessed soon, so
+			 * it would make sense to add it to the front, but we cannot do that
+			 * here. If we do that, the
+			 * compressed chunk EM might get picked as SortGroupExpr by
+			 * cost_incremental_sort, and estimate_num_groups will assert that
+			 * the rel is simple rel, but it will fail because the compressed
+			 * chunk rel is a deadrel. Anyway, it wouldn't make sense to estimate
+			 * the group numbers by one append member, probably Postgres expects
+			 * to see the parent relation first in the EMs.
+			 */
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
+
+			/*
+			 * Cache the matching EquivalenceClass and EquivalenceMember for
+			 * segmentby column for future use, if we want to build a path that
+			 * sorts on it. Sorting is defined by PathKeys, which refer to
+			 * EquivalenceClasses, so it's a convenient form.
+			 */
+			compressed_fdw_private->compressed_ec_em_pairs =
+				lappend(compressed_fdw_private->compressed_ec_em_pairs, list_make2(cur_ec, em));
 
 			return true;
 		}
@@ -1414,7 +1417,6 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 	Assert(info->chunk_rel->relid != info->compressed_rel->relid);
 	/* based on add_child_rel_equivalences */
 	int i = -1;
-	bool ec_added = false;
 	Assert(root->ec_merging_done);
 	/* use chunk rel's eclass_indexes to avoid traversing all
 	 * the root's eq_classes
@@ -1435,9 +1437,10 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
 			continue;
-		ec_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
+
+		bool em_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
 		/* Record this EC index for the compressed rel */
-		if (ec_added)
+		if (em_added)
 			info->compressed_rel->eclass_indexes =
 				bms_add_member(info->compressed_rel->eclass_indexes, i);
 	}
