@@ -1509,6 +1509,18 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunks[i];
 		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);
+
+		/*
+		 * Planning indexes is expensive, and if this is a fully compressed chunk, we
+		 * know we'll never need to use indexes on the uncompressed version, since
+		 * all the data is in the compressed chunk anyway. Therefore, it is much
+		 * faster if we simply trash the indexlist here and never plan any useless
+		 * IndexPaths at all.
+		 * If the chunk is partially compressed, then we should enable indexScan
+		 * on the uncompressed part.
+		 */
+		if (!ts_chunk_is_partial(chunks[i]) && ts_chunk_is_compressed(chunks[i]))
+			child_rel->indexlist = NIL;
 	}
 }
 

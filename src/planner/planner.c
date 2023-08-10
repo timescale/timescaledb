@@ -1311,33 +1311,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		{
 			ts_create_private_reloptinfo(rel);
 
-			if (ts_guc_enable_transparent_decompression && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-			{
-				RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
-				/*
-				 * FIXME this ignores the Chunk structs looked up during
-				 * hypertable expansion, because it is called from build_simple_rel
-				 * before we even have a chance to set these structs.
-				 */
-				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true);
-
-				if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-				{
-					Relation uncompressed_chunk = table_open(relation_objectid, NoLock);
-
-					/* Planning indexes is expensive, and if this is a fully compressed chunk, we
-					 * know we'll never need to use indexes on the uncompressed version, since
-					 * all the data is in the compressed chunk anyway. Therefore, it is much
-					 * faster if we simply trash the indexlist here and never plan any useless
-					 * IndexPaths at all.
-					 * If the chunk is partially compressed, then we should enable indexScan
-					 * on the uncompressed part.
-					 */
-					if (!ts_chunk_is_partial(chunk))
-						rel->indexlist = NIL;
-					table_close(uncompressed_chunk, NoLock);
-				}
-			}
 			break;
 		}
 		case TS_REL_HYPERTABLE_CHILD:
