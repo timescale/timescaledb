@@ -250,11 +250,12 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 					elog(ERROR, "sort operator lookup failed for column \"%s\"", column_name);
 				}
 			}
-			pk = make_pathkey_from_compressed(root,
+			PathKey *new_pk = make_pathkey_from_compressed(root,
 											  info->compressed_rel->relid,
 											  (Expr *) var,
 											  sortop,
 											  pk->pk_nulls_first);
+			Assert(new_pk == pk);
 			compressed_pathkeys = lappend(compressed_pathkeys, pk);
 		}
 
