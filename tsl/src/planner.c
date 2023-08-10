@@ -121,16 +121,37 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	 * We check if it is the ONLY case by calling ts_rte_is_marked_for_expansion.
 	 * Respecting ONLY here is important to not break postgres tools like pg_dump.
 	 */
+	TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
 	if (ts_guc_enable_transparent_decompression && ht &&
 		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
 		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && rel->fdw_private != NULL &&
-		((TimescaleDBPrivate *) rel->fdw_private)->compressed)
+		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && fdw_private != NULL && fdw_private->compressed)
 	{
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true);
+		if (fdw_private->cached_chunk_struct == NULL)
+		{
+			/*
+			 * We can not have the cached Chunk struct,
+			 * 1) if it was a direct query on the chunk;
+			 * 2) if it is not a SELECT QUERY.
+			 * Caching is done by our hypertable expansion, which doesn't run in
+			 * these cases.
+			 *
+			 * Also on PG13 when a DELETE query runs through SPI, its command
+			 * type is CMD_SELECT. Apparently it goes into inheritance_planner,
+			 * which uses a hack to pretend it's actually a SELECT query, but
+			 * for some reason for non-SPI queries the query type is still
+			 * correct. You can observe it in the continuous_aggs-13 test.
+			 * Just ignore this assertion on 13 and look up the chunk.
+			 */
+#if PG14_GE
+			Assert(rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
+#endif
+			fdw_private->cached_chunk_struct =
+				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
+		}
 
-		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-			ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
+		if (fdw_private->cached_chunk_struct->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			ts_decompress_chunk_generate_paths(root, rel, ht, fdw_private->cached_chunk_struct);
 	}
 }
 
