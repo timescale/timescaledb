@@ -1112,17 +1112,16 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			ts_sort_transform_optimization(root, rel);
+			/*
+			 * Since the sort optimization adds new paths to the rel it has
+			 * to happen before any optimizations that replace pathlist.
+			 */
+			if (ts_cm_functions->set_rel_pathlist_query != NULL)
+				ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
 			break;
 		default:
 			break;
 	}
-
-	/*
-	 * Since the sort optimization adds new paths to the rel it has
-	 * to happen before any optimizations that replace pathlist.
-	 */
-	if (ts_cm_functions->set_rel_pathlist_query != NULL)
-		ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
 
 	if (reltype == TS_REL_HYPERTABLE &&
 #if PG14_GE

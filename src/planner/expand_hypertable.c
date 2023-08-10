@@ -1514,7 +1514,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 #endif
 		}
 
-		ts_get_private_reloptinfo(child_rel)->chunk = chunks[i];
+		ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunks[i];
 		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);
 	}
 }

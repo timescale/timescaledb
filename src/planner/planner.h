@@ -40,7 +40,7 @@ typedef struct TimescaleDBPrivate
 	TsFdwRelInfo *fdw_relation_info;
 
 	/* Cached chunk data for the chunk relinfo. */
-	Chunk *chunk;
+	Chunk *cached_chunk_struct;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);

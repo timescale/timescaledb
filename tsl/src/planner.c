@@ -127,10 +127,25 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && rel->fdw_private != NULL &&
 		((TimescaleDBPrivate *) rel->fdw_private)->compressed)
 	{
-		Chunk *chunk = ((TimescaleDBPrivate *) rel->fdw_private)->chunk;
+		Chunk **cached_chunk_ptr_ptr =
+			&((TimescaleDBPrivate *) rel->fdw_private)->cached_chunk_struct;
 
-		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-			ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
+		if (*cached_chunk_ptr_ptr == NULL)
+		{
+			/*
+			 * We can not have the cached Chunk struct,
+			 * 1) if it was a direct query on the chunk;
+			 * 2) if it is not a SELECT QUERY.
+			 * Caching is done by our hypertable expansion, which doesn't run in
+			 * these cases.
+			 */
+			Assert(rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
+			*cached_chunk_ptr_ptr =
+				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
+		}
+
+		if ((*cached_chunk_ptr_ptr)->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			ts_decompress_chunk_generate_paths(root, rel, ht, (*cached_chunk_ptr_ptr));
 	}
 }
 

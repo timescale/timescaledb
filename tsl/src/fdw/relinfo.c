@@ -300,10 +300,10 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	 * exclusion, so we'll have to look up this info now.
 	 */
 	TimescaleDBPrivate *chunk_private = ts_get_private_reloptinfo(chunk_rel);
-	if (chunk_private->chunk == NULL)
+	if (chunk_private->cached_chunk_struct == NULL)
 	{
 		RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-		chunk_private->chunk =
+		chunk_private->cached_chunk_struct =
 			ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 	}
 
@@ -319,7 +319,8 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, parent_rte->relid, CACHE_FLAG_NONE);
 	Hyperspace *hyperspace = ht->space;
 
-	const double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
+	const double fillfactor =
+		estimate_chunk_fillfactor(chunk_private->cached_chunk_struct, hyperspace);
 
 	/* Can't have nonzero tuples in zero pages */
 	Assert(parent_private->average_chunk_pages != 0 || parent_private->average_chunk_tuples <= 0);
