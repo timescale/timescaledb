@@ -770,6 +770,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	Chunk *compress_ht_chunk;
 	Cache *hcache;
 	CompressChunkCxt cxt;
+	bool chunk_was_compressed;
 
 	Assert(!PG_ARGISNULL(0));
 	Assert(!PG_ARGISNULL(1));
@@ -812,7 +813,15 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 										  numrows_pre_compression,
 										  numrows_post_compression);
 
+	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
+	if (!chunk_was_compressed && ts_table_has_tuples(cxt.srcht_chunk->table_id, AccessShareLock))
+	{
+		/* The chunk was not compressed before it had the compressed chunk
+		 * attached to it, and it contains rows, so we set it to be partial.
+		 */
+		ts_chunk_set_partial(cxt.srcht_chunk);
+	}
 	ts_cache_release(hcache);
 
 	PG_RETURN_OID(chunk_relid);

@@ -1,0 +1,4 @@
+Implements: #5951 _timescaledb_internal.create_compressed_chunk doesn't account for existing uncompressed rows
+
+Fixes: #5946
+

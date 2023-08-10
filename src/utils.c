@@ -32,6 +32,7 @@
 #include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
@@ -1347,4 +1348,27 @@ ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber attno)
 
 	pfree(attname);
 	return dst_attno;
+}
+
+bool
+ts_relation_has_tuples(Relation rel)
+{
+	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+	TupleTableSlot *slot =
+		MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
+	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);
+
+	table_endscan(scandesc);
+	ExecDropSingleTupleTableSlot(slot);
+	return hastuples;
+}
+
+bool
+ts_table_has_tuples(Oid table_relid, LOCKMODE lockmode)
+{
+	Relation rel = table_open(table_relid, lockmode);
+	bool hastuples = ts_relation_has_tuples(rel);
+
+	table_close(rel, lockmode);
+	return hastuples;
 }
