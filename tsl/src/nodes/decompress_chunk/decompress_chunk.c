@@ -16,6 +16,7 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
+#include <planner/planner.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/typcache.h>
@@ -72,7 +73,7 @@ static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, Comp
 														 int parallel_workers,
 														 Path *compressed_path);
 
-static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
+static void decompress_chunk_add_plannerinfo(PlannerInfo *root, Hypertable *ht, CompressionInfo *info, Chunk *chunk,
 											 RelOptInfo *chunk_rel, bool needs_sequence_num);
 
 static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
@@ -592,7 +593,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	chunk_rel->partial_pathlist = NIL;
 
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
-	decompress_chunk_add_plannerinfo(root, info, chunk, chunk_rel, sort_info.needs_sequence_num);
+	decompress_chunk_add_plannerinfo(root, ht, info, chunk, chunk_rel, sort_info.needs_sequence_num);
 	compressed_rel = info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
@@ -1473,24 +1474,22 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  * and add it to PlannerInfo
  */
 static void
-decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
+decompress_chunk_add_plannerinfo(PlannerInfo *root, Hypertable *ht, CompressionInfo *info, Chunk *chunk,
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
-	ListCell *lc;
 	Index compressed_index = root->simple_rel_array_size;
-	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	Oid compressed_relid = compressed_chunk->table_id;
-	RelOptInfo *compressed_rel;
+	Oid compressed_reloid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, /* missing_ok = */ false);
+	ts_add_baserel_cache_entry_for_chunk(compressed_reloid, ht);
 
 	expand_planner_arrays(root, 1);
-	info->compressed_rte = decompress_chunk_make_rte(compressed_relid, AccessShareLock);
+	info->compressed_rte = decompress_chunk_make_rte(compressed_reloid, AccessShareLock);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
 
 	root->simple_rel_array[compressed_index] = NULL;
 
-	compressed_rel = build_simple_rel(root, compressed_index, NULL);
+	RelOptInfo *compressed_rel = build_simple_rel(root, compressed_index, NULL);
 	/* github issue :1558
 	 * set up top_parent_relids for this rel as the same as the
 	 * original hypertable, otherwise eq classes are not computed correctly
@@ -1502,6 +1501,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
+	ListCell *lc;
 	foreach (lc, info->hypertable_compression_info)
 	{
 		FormData_hypertable_compression *fd = lfirst(lc);

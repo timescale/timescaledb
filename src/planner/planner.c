@@ -156,7 +156,7 @@ static struct BaserelInfo_hash *ts_baserel_info = NULL;
  * chunk info at the plan time chunk exclusion.
  */
 void
-add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
+ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
 {
 	Assert(hypertable != NULL);
 	Assert(ts_baserel_info != NULL);
