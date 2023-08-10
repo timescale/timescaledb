@@ -37,16 +37,7 @@ SELECT _timescaledb_internal.test_status_ssl(401);
 SELECT _timescaledb_internal.test_status_ssl(404);
 SELECT _timescaledb_internal.test_status_ssl(500);
 SELECT _timescaledb_internal.test_status_ssl(503);
-\set ON_ERROR_STOP 1
-SELECT _timescaledb_internal.test_status(200);
-SELECT _timescaledb_internal.test_status(201);
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.test_status(304);
-SELECT _timescaledb_internal.test_status(400);
-SELECT _timescaledb_internal.test_status(401);
-SELECT _timescaledb_internal.test_status(404);
-SELECT _timescaledb_internal.test_status(500);
-SELECT _timescaledb_internal.test_status(503);
+
 \set ON_ERROR_STOP 1
 
 -- This function runs the test 5 times, because each time the internal C function is choosing a random length to send from the server on each socket read. We hit many cases this way.
