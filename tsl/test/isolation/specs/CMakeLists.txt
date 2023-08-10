@@ -31,8 +31,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     dist_ha_chunk_drop.spec
     dist_ha_chunk_drop.spec
     dist_restore_point.spec
-    remote_create_chunk.spec
-    telemetry_iso.spec)
+    remote_create_chunk.spec)
   if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
     list(APPEND TEST_FILES freeze_chunk.spec compression_dml_iso.spec)
   endif()
