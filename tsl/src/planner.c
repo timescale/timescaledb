@@ -121,16 +121,13 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	 * We check if it is the ONLY case by calling ts_rte_is_marked_for_expansion.
 	 * Respecting ONLY here is important to not break postgres tools like pg_dump.
 	 */
+	TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
 	if (ts_guc_enable_transparent_decompression && ht &&
 		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
 		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && rel->fdw_private != NULL &&
-		((TimescaleDBPrivate *) rel->fdw_private)->compressed)
+		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && fdw_private != NULL && fdw_private->compressed)
 	{
-		Chunk **cached_chunk_ptr_ptr =
-			&((TimescaleDBPrivate *) rel->fdw_private)->cached_chunk_struct;
-
-		if (*cached_chunk_ptr_ptr == NULL)
+		if (fdw_private->cached_chunk_struct == NULL)
 		{
 			/*
 			 * We can not have the cached Chunk struct,
@@ -149,12 +146,12 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 #if PG14_GE
 			Assert(rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
 #endif
-			*cached_chunk_ptr_ptr =
+			fdw_private->cached_chunk_struct =
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}
 
-		if ((*cached_chunk_ptr_ptr)->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-			ts_decompress_chunk_generate_paths(root, rel, ht, (*cached_chunk_ptr_ptr));
+		if (fdw_private->cached_chunk_struct->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			ts_decompress_chunk_generate_paths(root, rel, ht, fdw_private->cached_chunk_struct);
 	}
 }
 
