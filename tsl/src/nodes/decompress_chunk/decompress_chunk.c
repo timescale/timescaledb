@@ -192,6 +192,8 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	List *compressed_pathkeys = NIL;
 	PathKey *pk;
 
+	//TimescaleDBPrivate* compressed_fdw_private = (TimescaleDBPrivate *) info->compressed_rel->fdw_private;
+
 	/*
 	 * all segmentby columns need to be prefix of pathkeys
 	 * except those with equality constraint in baserestrictinfo
@@ -251,12 +253,42 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 					elog(ERROR, "sort operator lookup failed for column \"%s\"", column_name);
 				}
 			}
-			pk = make_pathkey_from_compressed(root,
+
+			/*
+			 * FIXME Is this necessary? We have pk_eclass above, just
+			 * take the EM from it that we created in
+			 * compressed_rel_setup_equivalence_classes().
+			 */
+			PathKey *new_pk = make_pathkey_from_compressed(root,
 											  info->compressed_rel->relid,
 											  (Expr *) var,
 											  sortop,
 											  pk->pk_nulls_first);
+
+			if (new_pk != pk)
+			{
+//				my_print(root);
+//				fprintf(stderr, "uncompressed relindex is %d\n", info->chunk_rel->relid);
+//				fprintf(stderr, "old pk:\n");
+//				my_print(pk);
+//				fprintf(stderr, "new pk:\n");
+				Assert(false);
+			}
+
 			compressed_pathkeys = lappend(compressed_pathkeys, pk);
+
+//			EquivalenceMember *compressed_em = NULL;
+//			ListCell *ec_em_pair_cell;
+//			foreach (ec_em_pair_cell, compressed_fdw_info->compressed_ec_em_pairs)
+//			{
+//				List *pair = lfirst(ec_em_pair_cell);
+//				if (linitial(pair) == pk->pk_eclass)
+//				{
+//					compressed_em = lsecond(pair);
+//					break;
+//				}
+//			}
+//			Ensure(compressed_em != NULL, "compressed equivalence member not found");
 		}
 
 		/* we validated this when we created the Path so only asserting here */
@@ -1326,6 +1358,10 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 {
 	Relids uncompressed_chunk_relids = info->chunk_rel->relids;
 	ListCell *lc;
+
+	TimescaleDBPrivate* compressed_fdw_private = (TimescaleDBPrivate *) info->compressed_rel->fdw_private;
+	Assert(compressed_fdw_private != NULL);
+
 	foreach (lc, cur_ec->ec_members)
 	{
 		Expr *child_expr;
@@ -1404,6 +1440,10 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			 */
 			//cur_ec->ec_members = lcons(em, cur_ec->ec_members);
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
+
+			compressed_fdw_private->compressed_ec_em_pairs = lappend(
+				compressed_fdw_private->compressed_ec_em_pairs,
+				list_make2(cur_ec, em));
 
 			return true;
 		}

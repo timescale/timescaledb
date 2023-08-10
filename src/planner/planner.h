@@ -40,6 +40,9 @@ typedef struct TimescaleDBPrivate
 
 	/* Cached chunk data for the chunk relinfo. */
 	Chunk *cached_chunk_struct;
+
+	/* Cached equivalence members for compressed chunks. List of (EC, EM) Lists. */
+	List *compressed_ec_em_pairs;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);
