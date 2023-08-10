@@ -714,7 +714,7 @@ policies_show(PG_FUNCTION_ARGS)
 
 		JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
-		funcctx->user_fctx = lnext_compat(jobs, (ListCell *) funcctx->user_fctx);
+		funcctx->user_fctx = lnext(jobs, (ListCell *) funcctx->user_fctx);
 		SRF_RETURN_NEXT(funcctx, PointerGetDatum(JsonbValueToJsonb(result)));
 	}
 	PG_RETURN_NULL();

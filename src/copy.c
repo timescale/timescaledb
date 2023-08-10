@@ -461,20 +461,6 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 	pfree(buffer);
 }
 
-#if PG13_LT
-/* list_sort comparator to sort TSCopyMultiInsertBuffer by usage */
-static int
-TSCmpBuffersByUsage(const void *a, const void *b)
-{
-	int b1 = ((const TSCopyMultiInsertBuffer *) lfirst(*(ListCell **) a))->nused;
-	int b2 = ((const TSCopyMultiInsertBuffer *) lfirst(*(ListCell **) b))->nused;
-
-	Assert(b1 >= 0);
-	Assert(b2 >= 0);
-
-	return (b1 > b2) ? 1 : (b1 == b2) ? 0 : -1;
-}
-#else
 /* list_sort comparator to sort TSCopyMultiInsertBuffer by usage */
 static int
 TSCmpBuffersByUsage(const ListCell *a, const ListCell *b)
@@ -487,7 +473,6 @@ TSCmpBuffersByUsage(const ListCell *a, const ListCell *b)
 
 	return (b1 > b2) ? 1 : (b1 == b2) ? 0 : -1;
 }
-#endif
 
 /*
  * Flush all buffers by writing the tuples to the chunks. In addition, trim down the
@@ -519,7 +504,7 @@ TSCopyMultiInsertInfoFlush(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cur_
 
 	/* Sorting is only needed if we want to remove the least used buffers */
 	if (buffers_to_delete > 0)
-		buffer_list = list_sort_compat(buffer_list, TSCmpBuffersByUsage);
+		list_sort(buffer_list, TSCmpBuffersByUsage);
 
 	/* Flush buffers and delete them if needed */
 	foreach (lc, buffer_list)
@@ -808,10 +793,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 #endif
 	{
 		ti_options |= HEAP_INSERT_SKIP_FSM;
-#if PG13_LT
-		if (!XLogIsNeeded())
-			ti_options |= HEAP_INSERT_SKIP_WAL;
-#endif
 	}
 
 	/*
@@ -1184,13 +1165,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	 * If we skipped writing WAL, then we need to sync the heap (but not
 	 * indexes since those use WAL anyway)
 	 */
-#if PG13_LT
-	if (ti_options & HEAP_INSERT_SKIP_WAL)
-		heap_sync(ccstate->rel);
-#else
 	if (!RelationNeedsWAL(ccstate->rel))
 		smgrimmedsync(RelationGetSmgr(ccstate->rel), MAIN_FORKNUM);
-#endif
 
 	return processed;
 }
@@ -1279,16 +1255,10 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 {
 	ListCell *cur;
 	char *xactReadOnly;
-#if PG13_GE
 	ParseNamespaceItem *nsitem =
 		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
 	RangeTblEntry *rte = nsitem->p_rte;
 	addNSItemToQuery(pstate, nsitem, true, true, true);
-#else
-	RangeTblEntry *rte =
-		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
-	addRTEtoQuery(pstate, rte, false, true, true);
-#endif
 	rte->requiredPerms = ACL_INSERT;
 
 	foreach (cur, attnums)

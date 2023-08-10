@@ -689,15 +689,14 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 				AppendRelInfo *app = lfirst(next);
 				if (app->parent_reloid == rte->relid)
 				{
-					subroot->append_rel_list =
-						list_delete_cell_compat(subroot->append_rel_list, next, prev);
-					next = prev != NULL ? lnext_compat(subroot->append_rel_list, next) :
+					subroot->append_rel_list = list_delete_cell(subroot->append_rel_list, next);
+					next = prev != NULL ? lnext(subroot->append_rel_list, next) :
 										  list_head(subroot->append_rel_list);
 				}
 				else
 				{
 					prev = next;
-					next = lnext_compat(subroot->append_rel_list, next);
+					next = lnext(subroot->append_rel_list, next);
 				}
 			}
 		}

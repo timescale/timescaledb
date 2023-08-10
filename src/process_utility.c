@@ -674,13 +674,8 @@ process_copy(ProcessUtilityArgs *args)
 	/* Performs acl check in here inside `copy_security_check` */
 	timescaledb_DoCopy(stmt, args->query_string, &processed, ht);
 
-#if PG13_GE
 	args->completion_tag->commandTag = CMDTAG_COPY;
 	args->completion_tag->nprocessed = processed;
-#else
-	if (args->completion_tag)
-		snprintf(args->completion_tag, COMPLETION_TAG_BUFSIZE, "COPY " UINT64_FORMAT, processed);
-#endif
 
 	add_hypertable_to_process_args(args, ht);
 
@@ -3870,9 +3865,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 #if PG16_LT
 		case AT_DropColumnRecurse:
 #endif
-#if PG13_GE
 		case AT_DropExpression:
-#endif
 
 			/*
 			 * adding and dropping columns handled in
@@ -3885,11 +3878,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 #endif
 			/* drop constraints handled by process_ddl_sql_drop */
 			break;
-#if PG13_LT
-		case AT_ProcessedConstraint: /* internal command never hit in our
-									  * test code, so don't know how to
-									  * handle */
-#endif
 		case AT_ReAddComment:			   /* internal command never hit in our test
 											* code, so don't know how to handle */
 		case AT_AddColumnToView:		   /* only used with views */
@@ -4296,11 +4284,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		return DDL_CONTINUE;
 
 	if (check_read_only)
-#if PG13_GE
 		PreventCommandIfReadOnly(CreateCommandName(args->parsetree));
-#else
-		PreventCommandIfReadOnly(CreateCommandTag(args->parsetree));
-#endif
 
 	return handler(args);
 }
@@ -4496,12 +4480,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 #endif
 							  ProcessUtilityContext context, ParamListInfo params,
 							  QueryEnvironment *queryEnv, DestReceiver *dest,
-#if PG13_GE
-							  QueryCompletion *completion_tag
-#else
-							  char *completion_tag
-#endif
-)
+							  QueryCompletion *completion_tag)
 {
 	ProcessUtilityArgs args = {
 		.query_string = query_string,

@@ -641,11 +641,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 				RangeTblEntry *jrte = rt_fetch(join->rtindex, inp->final_userquery->rtable);
 				rte->joinaliasvars = jrte->joinaliasvars;
 				rte->jointype = jrte->jointype;
-#if PG13_GE
 				rte->joinleftcols = jrte->joinleftcols;
 				rte->joinrightcols = jrte->joinrightcols;
 				rte->joinmergedcols = jrte->joinmergedcols;
-#endif
 #if PG14_GE
 				rte->join_using_alias = jrte->join_using_alias;
 #endif

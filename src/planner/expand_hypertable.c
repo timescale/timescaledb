@@ -627,8 +627,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 	ListCell *prev pg_attribute_unused() = NULL;
 	List *additional_quals = NIL;
 
-	for (lc = list_head((List *) quals); lc != NULL;
-		 prev = lc, lc = lnext_compat((List *) quals, lc))
+	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext((List *) quals, lc))
 	{
 		Expr *qual = lfirst(lc);
 		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
@@ -701,9 +700,6 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 static List *
 remove_exclusion_fns(List *restrictinfo)
 {
-#if PG13_LT
-	ListCell *prev = NULL;
-#endif
 	ListCell *lc = list_head(restrictinfo);
 
 	while (lc != NULL)
@@ -722,13 +718,10 @@ remove_exclusion_fns(List *restrictinfo)
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("first parameter for chunks_in function needs to be record")));
 
-			restrictinfo = list_delete_cell_compat((List *) restrictinfo, lc, prev);
+			restrictinfo = list_delete_cell(restrictinfo, lc);
 			return restrictinfo;
 		}
-#if PG13_LT
-		prev = lc;
-#endif
-		lc = lnext_compat(restrictinfo, lc);
+		lc = lnext(restrictinfo, lc);
 	}
 	return restrictinfo;
 }
