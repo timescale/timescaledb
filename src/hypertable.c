@@ -1365,29 +1365,6 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 }
 
 static bool
-relation_has_tuples(Relation rel)
-{
-	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
-	TupleTableSlot *slot =
-		MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
-	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);
-
-	table_endscan(scandesc);
-	ExecDropSingleTupleTableSlot(slot);
-	return hastuples;
-}
-
-static bool
-table_has_tuples(Oid table_relid, LOCKMODE lockmode)
-{
-	Relation rel = table_open(table_relid, lockmode);
-	bool hastuples = relation_has_tuples(rel);
-
-	table_close(rel, lockmode);
-	return hastuples;
-}
-
-static bool
 table_is_logged(Oid table_relid)
 {
 	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
@@ -1641,7 +1618,7 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(relid, GetUserId());
 
-	if (table_has_tuples(relid, AccessShareLock))
+	if (ts_table_has_tuples(relid, AccessShareLock))
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("hypertable \"%s\" has data in the root table", get_rel_name(relid)),
@@ -2208,7 +2185,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Check that the table doesn't have any unsupported constraints */
 	hypertable_validate_constraints(table_relid, replication_factor);
 
-	table_has_data = relation_has_tuples(rel);
+	table_has_data = ts_relation_has_tuples(rel);
 
 	if ((flags & HYPERTABLE_CREATE_MIGRATE_DATA) == 0 && table_has_data)
 		ereport(ERROR,

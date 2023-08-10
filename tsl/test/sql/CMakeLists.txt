@@ -13,6 +13,7 @@ set(TEST_FILES
     cagg_refresh.sql
     cagg_watermark.sql
     compressed_collation.sql
+    compression_create_compressed_table.sql
     compression_bgw.sql
     compression_conflicts.sql
     compression_insert.sql

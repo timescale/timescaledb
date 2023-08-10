@@ -3674,22 +3674,28 @@ chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
 bool
 ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 {
+	bool success = false;
 	ScanKeyData scankey[1];
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_idx_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(chunk->fd.id));
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   chunk_check_ignorearg_dropped_filter,
-							   chunk_set_compressed_id_in_tuple,
-							   &compressed_chunk_id,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+	success = chunk_scan_internal(CHUNK_ID_INDEX,
+								  scankey,
+								  1,
+								  chunk_check_ignorearg_dropped_filter,
+								  chunk_set_compressed_id_in_tuple,
+								  &compressed_chunk_id,
+								  0,
+								  ForwardScanDirection,
+								  RowExclusiveLock,
+								  CurrentMemoryContext) > 0;
+	if (success)
+	{
+		chunk->fd.status = ts_set_flags_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
+	}
+	return success;
 }
 
 /*Assume permissions are already checked */
