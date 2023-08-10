@@ -50,32 +50,6 @@ ERROR:  endpoint sent back unexpected HTTP status: 500
 SELECT _timescaledb_internal.test_status_ssl(503);
 ERROR:  endpoint sent back unexpected HTTP status: 503
 \set ON_ERROR_STOP 1
-SELECT _timescaledb_internal.test_status(200);
-   test_status   
------------------
- {"status": 200}
-(1 row)
-
-SELECT _timescaledb_internal.test_status(201);
-   test_status   
------------------
- {"status": 201}
-(1 row)
-
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.test_status(304);
-ERROR:  endpoint sent back unexpected HTTP status: 304
-SELECT _timescaledb_internal.test_status(400);
-ERROR:  endpoint sent back unexpected HTTP status: 400
-SELECT _timescaledb_internal.test_status(401);
-ERROR:  endpoint sent back unexpected HTTP status: 401
-SELECT _timescaledb_internal.test_status(404);
-ERROR:  endpoint sent back unexpected HTTP status: 404
-SELECT _timescaledb_internal.test_status(500);
-ERROR:  endpoint sent back unexpected HTTP status: 500
-SELECT _timescaledb_internal.test_status(503);
-ERROR:  endpoint sent back unexpected HTTP status: 503
-\set ON_ERROR_STOP 1
 -- This function runs the test 5 times, because each time the internal C function is choosing a random length to send from the server on each socket read. We hit many cases this way.
 CREATE OR REPLACE FUNCTION mocker(TEXT) RETURNS SETOF TEXT AS
 $BODY$
