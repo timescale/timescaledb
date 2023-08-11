@@ -88,41 +88,9 @@ is_compressed_column(CompressionInfo *info, AttrNumber attno)
 	return column_info->algo_id != 0;
 }
 
-/*
- * Like ts_make_pathkey_from_sortop but passes down the compressed relid so that existing
- * equivalence members that are marked as children are properly checked.
- */
-static PathKey *
-make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *expr, Oid ordering_op,
-							 bool nulls_first)
-{
-	Oid opfamily, opcintype, collation;
-	int16 strategy;
-
-	/* Find the operator in pg_amop --- failure shouldn't happen */
-	if (!get_ordering_op_properties(ordering_op, &opfamily, &opcintype, &strategy))
-		elog(ERROR, "operator %u is not a valid ordering operator", ordering_op);
-
-	/* Because SortGroupClause doesn't carry collation, consult the expr */
-	collation = exprCollation((Node *) expr);
-
-	Assert(compressed_relid < (Index) root->simple_rel_array_size);
-	return ts_make_pathkey_from_sortinfo(root,
-										 expr,
-										 NULL,
-										 opfamily,
-										 opcintype,
-										 collation,
-										 (strategy == BTGreaterStrategyNumber),
-										 nulls_first,
-										 0,
-										 bms_make_singleton(compressed_relid),
-										 true);
-}
-
-static void
-prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
-					  Oid sortop, bool nulls_first)
+static EquivalenceClass *
+append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
+					 Oid sortop, bool nulls_first)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 
@@ -176,10 +144,11 @@ prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_i
 	newec->ec_max_security = 0;
 	newec->ec_merged = NULL;
 
-	/* Prepend the ec */
 	root->eq_classes = lappend(root->eq_classes, newec);
 
 	MemoryContextSwitchTo(oldcontext);
+
+	return newec;
 }
 
 static void
@@ -258,17 +227,20 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			nulls_first = false;
 		}
 
-		/* Prepend the ec class for the sequence number. We are prepending
-		 * the ec for efficiency in finding it. We are more likely to look for it
-		 * then other ec classes */
-		prepend_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
+		/*
+		 * Create the EquivalenceClass for the sequence number, so that we can
+		 * build PathKey that refers to it.
+		 */
+		EquivalenceClass *ec =
+			append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
 
-		/* FIXME this also needs to be removed in the same way. */
-		pk = make_pathkey_from_compressed(root,
-										  info->compressed_rel->relid,
-										  (Expr *) var,
-										  sortop,
-										  nulls_first);
+		/* Find the operator in pg_amop --- failure shouldn't happen. */
+		Oid opfamily, opcintype;
+		int16 strategy;
+		if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+
+		pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
 
 		compressed_pathkeys = lappend(compressed_pathkeys, pk);
 	}
