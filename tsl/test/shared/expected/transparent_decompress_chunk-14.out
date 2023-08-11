@@ -26,14 +26,10 @@ SELECT * FROM ONLY :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
 QUERY PLAN
  Limit (actual rows=0 loops=1)
    Output: "time", device_id, v0, v1, v2, v3
-   ->  Sort (actual rows=0 loops=1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=0 loops=1)
          Output: "time", device_id, v0, v1, v2, v3
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: quicksort 
-         ->  Seq Scan on _timescaledb_internal._hyper_X_X_chunk (actual rows=0 loops=1)
-               Output: "time", device_id, v0, v1, v2, v3
-               Filter: (_hyper_X_X_chunk.device_id = 1)
-(9 rows)
+         Index Cond: (_hyper_X_X_chunk.device_id = 1)
+(5 rows)
 
 -- test expressions
 :PREFIX
@@ -681,7 +677,6 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Nested Loop
-         Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
          ->  Gather Merge
                Workers Planned: 1
                ->  Sort
@@ -689,8 +684,10 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Parallel Seq Scan on compress_hyper_X_X_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-               ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(11 rows)
+               Filter: (m1."time" = "time")
+               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                     Index Cond: (device_id = m1.device_id)
+(12 rows)
 
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -705,21 +702,22 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Nested Loop
-         Join Filter: (m1."time" = m3."time")
          ->  Nested Loop
-               Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
+               Join Filter: (m1."time" = m3."time")
                ->  Gather Merge
                      Workers Planned: 1
                      ->  Sort
                            Sort Key: m1."time", m1.device_id
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                                  ->  Parallel Seq Scan on compress_hyper_X_X_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
-               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
-                     Index Cond: (device_id = 3)
-(16 rows)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
+                     ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
+                           Index Cond: (device_id = 3)
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
+               Filter: (m1."time" = "time")
+               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                     Index Cond: (device_id = m1.device_id)
+(17 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
@@ -760,24 +758,24 @@ FROM metrics m1
 QUERY PLAN
  Limit
    ->  Merge Join
-         Merge Cond: (m1."time" = m2."time")
-         ->  Custom Scan (ChunkAppend) on metrics m1
-               Order: m1."time"
-               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1
-                     Index Cond: (device_id = 1)
-               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2
-                     Index Cond: (device_id = 1)
-               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3
-                     Index Cond: (device_id = 1)
+         Merge Cond: (m2."time" = m1."time")
+         ->  Custom Scan (ChunkAppend) on metrics_space m2
+               Order: m2."time"
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
+                     Index Cond: (device_id = 2)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
+                     Index Cond: (device_id = 2)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
+                     Index Cond: (device_id = 2)
          ->  Materialize
-               ->  Custom Scan (ChunkAppend) on metrics_space m2
-                     Order: m2."time"
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
-                           Index Cond: (device_id = 2)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
-                           Index Cond: (device_id = 2)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
-                           Index Cond: (device_id = 2)
+               ->  Custom Scan (ChunkAppend) on metrics m1
+                     Order: m1."time"
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1
+                           Index Cond: (device_id = 1)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2
+                           Index Cond: (device_id = 1)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3
+                           Index Cond: (device_id = 1)
 (20 rows)
 
 -- test OUTER JOIN

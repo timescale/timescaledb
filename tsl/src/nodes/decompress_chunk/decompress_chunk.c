@@ -89,41 +89,9 @@ is_compressed_column(CompressionInfo *info, AttrNumber attno)
 	return column_info->algo_id != 0;
 }
 
-/*
- * Like ts_make_pathkey_from_sortop but passes down the compressed relid so that existing
- * equivalence members that are marked as children are properly checked.
- */
-static PathKey *
-make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *expr, Oid ordering_op,
-							 bool nulls_first)
-{
-	Oid opfamily, opcintype, collation;
-	int16 strategy;
-
-	/* Find the operator in pg_amop --- failure shouldn't happen */
-	if (!get_ordering_op_properties(ordering_op, &opfamily, &opcintype, &strategy))
-		elog(ERROR, "operator %u is not a valid ordering operator", ordering_op);
-
-	/* Because SortGroupClause doesn't carry collation, consult the expr */
-	collation = exprCollation((Node *) expr);
-
-	Assert(compressed_relid < (Index) root->simple_rel_array_size);
-	return ts_make_pathkey_from_sortinfo(root,
-										 expr,
-										 NULL,
-										 opfamily,
-										 opcintype,
-										 collation,
-										 (strategy == BTGreaterStrategyNumber),
-										 nulls_first,
-										 0,
-										 bms_make_singleton(compressed_relid),
-										 true);
-}
-
-static void
-prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
-					  Oid sortop, bool nulls_first)
+static EquivalenceClass *
+append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
+					 Oid sortop, bool nulls_first)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 
@@ -177,10 +145,11 @@ prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_i
 	newec->ec_max_security = 0;
 	newec->ec_merged = NULL;
 
-	/* Prepend the ec */
 	root->eq_classes = lappend(root->eq_classes, newec);
 
 	MemoryContextSwitchTo(oldcontext);
+
+	return newec;
 }
 
 static void
@@ -200,95 +169,37 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	 */
 	if (info->num_segmentby_columns > 0)
 	{
+		TimescaleDBPrivate *compressed_fdw_private =
+			(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
 		Bitmapset *segmentby_columns = bms_copy(info->chunk_segmentby_ri);
 		ListCell *lc;
-		char *column_name;
-		Oid sortop;
-		Oid opfamily, opcintype;
-		int16 strategy;
-
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
 			 lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
-			var = (Var *) find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
-
-			if (var == NULL || !IsA(var, Var))
-				/* this should not happen because we validated the pathkeys when creating the path
-				 */
-				elog(ERROR, "Invalid pathkey for compressed scan");
-
-			/* not a segmentby column, rest of pathkeys should be handled by compress_orderby */
-			if (!bms_is_member(var->varattno, info->chunk_segmentby_attnos))
-				break;
-
-			/* skip duplicate references */
-			if (bms_is_member(var->varattno, segmentby_columns))
-				continue;
-
-			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
-			varattno = get_attnum(info->compressed_rte->relid, column_name);
-			var = makeVar(info->compressed_rel->relid,
-						  varattno,
-						  var->vartype,
-						  var->vartypmod,
-						  var->varcollid,
-						  0);
-
-			sortop =
-				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_strategy);
-			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			EquivalenceMember *compressed_em = NULL;
+			ListCell *ec_em_pair_cell;
+			foreach (ec_em_pair_cell, compressed_fdw_private->compressed_ec_em_pairs)
 			{
-				if (type_is_enum(var->vartype))
+				List *pair = lfirst(ec_em_pair_cell);
+				if (linitial(pair) == pk->pk_eclass)
 				{
-					sortop = get_opfamily_member(pk->pk_opfamily,
-												 ANYENUMOID,
-												 ANYENUMOID,
-												 pk->pk_strategy);
-				}
-				else
-				{
-					elog(ERROR, "sort operator lookup failed for column \"%s\"", column_name);
+					compressed_em = lsecond(pair);
+					break;
 				}
 			}
 
-			/*
-			 * FIXME Is this necessary? We have pk_eclass above, just
-			 * take the EM from it that we created in
-			 * compressed_rel_setup_equivalence_classes().
-			 */
-			PathKey *new_pk = make_pathkey_from_compressed(root,
-											  info->compressed_rel->relid,
-											  (Expr *) var,
-											  sortop,
-											  pk->pk_nulls_first);
-
-			if (new_pk != pk)
+			if (compressed_em == NULL)
 			{
-//				my_print(root);
-//				fprintf(stderr, "uncompressed relindex is %d\n", info->chunk_rel->relid);
-//				fprintf(stderr, "old pk:\n");
-//				my_print(pk);
-//				fprintf(stderr, "new pk:\n");
-				Assert(false);
+				/* not a segmentby column, rest of pathkeys should be handled by compress_orderby */
+				break;
 			}
 
 			compressed_pathkeys = lappend(compressed_pathkeys, pk);
 
-//			EquivalenceMember *compressed_em = NULL;
-//			ListCell *ec_em_pair_cell;
-//			foreach (ec_em_pair_cell, compressed_fdw_info->compressed_ec_em_pairs)
-//			{
-//				List *pair = lfirst(ec_em_pair_cell);
-//				if (linitial(pair) == pk->pk_eclass)
-//				{
-//					compressed_em = lsecond(pair);
-//					break;
-//				}
-//			}
-//			Ensure(compressed_em != NULL, "compressed equivalence member not found");
+			segmentby_columns =
+				bms_add_member(segmentby_columns, castNode(Var, compressed_em->em_expr)->varattno);
 		}
 
 		/* we validated this when we created the Path so only asserting here */
@@ -319,16 +230,20 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			nulls_first = false;
 		}
 
-		/* Prepend the ec class for the sequence number. We are prepending
-		 * the ec for efficiency in finding it. We are more likely to look for it
-		 * then other ec classes */
-		prepend_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
+		/*
+		 * Create the EquivalenceClass for the sequence number, so that we can
+		 * build PathKey that refers to it.
+		 */
+		EquivalenceClass *ec =
+			append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
 
-		pk = make_pathkey_from_compressed(root,
-										  info->compressed_rel->relid,
-										  (Expr *) var,
-										  sortop,
-										  nulls_first);
+		/* Find the operator in pg_amop --- failure shouldn't happen. */
+		Oid opfamily, opcintype;
+		int16 strategy;
+		if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+
+		pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
 
 		compressed_pathkeys = lappend(compressed_pathkeys, pk);
 	}
@@ -1359,7 +1274,8 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 	Relids uncompressed_chunk_relids = info->chunk_rel->relids;
 	ListCell *lc;
 
-	TimescaleDBPrivate* compressed_fdw_private = (TimescaleDBPrivate *) info->compressed_rel->fdw_private;
+	TimescaleDBPrivate *compressed_fdw_private =
+		(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
 	Assert(compressed_fdw_private != NULL);
 
 	foreach (lc, cur_ec->ec_members)
@@ -1389,6 +1305,17 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		context->current_col_info = get_compression_info_for_em((Node *) var, context);
 		if (context->current_col_info == NULL)
 			continue;
+
+		if (!COMPRESSIONCOL_IS_SEGMENT_BY(context->current_col_info))
+		{
+			/*
+			 * This EM is not a segmentby column. Technically we can have a
+			 * query which equates a segmentby column to a compressed column,
+			 * and therefore has an EC with such members, so we still have to
+			 * check other EMs, maybe they are segmentby.
+			 */
+			continue;
+		}
 
 		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context);
 		if (child_expr == NULL)
@@ -1425,12 +1352,11 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_const = false;
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
-			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+
 			/*
-			 * Prepend the EC member because it's likely to be accessed soon.
-			 * This hides some quadratic behavior in build_compressed_scan_pathkeys.
-			 *
-			 * Note that we cannot add to the front here, because then the
+			 * In some cases the new EC member is likely to be accessed soon, so
+			 * it would make sense to add it to the front, but we cannot do that
+			 * here. If we do that, the
 			 * compressed chunk EM might get picked as SortGroupExpr by
 			 * cost_incremental_sort, and estimate_num_groups will assert that
 			 * the rel is simple rel, but it will fail because the compressed
@@ -1438,12 +1364,17 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			 * the group numbers by one append member, probably Postgres expects
 			 * to see the parent relation first in the EMs.
 			 */
-			//cur_ec->ec_members = lcons(em, cur_ec->ec_members);
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
+			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
 
-			compressed_fdw_private->compressed_ec_em_pairs = lappend(
-				compressed_fdw_private->compressed_ec_em_pairs,
-				list_make2(cur_ec, em));
+			/*
+			 * Cache the matching EquivalenceClass and EquivalenceMember for
+			 * segmentby column for future use, if we want to build a path that
+			 * sorts on it. Sorting is defined by PathKeys, which refer to
+			 * EquivalenceClasses, so it's a convenient form.
+			 */
+			compressed_fdw_private->compressed_ec_em_pairs =
+				lappend(compressed_fdw_private->compressed_ec_em_pairs, list_make2(cur_ec, em));
 
 			return true;
 		}
@@ -1563,7 +1494,24 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->custom_path.path.parent = info->chunk_rel;
 	path->custom_path.path.pathtarget = info->chunk_rel->reltarget;
 
-	path->custom_path.path.param_info = compressed_path->param_info;
+	if (compressed_path->param_info != NULL)
+	{
+		/*
+		 * Note that we have to separately generate the parameterized path info
+		 * for decompressed chunk path. The compressed parameterized path only
+		 * checks the clauses on segmentby columns, not on the compressed
+		 * columns.
+		 */
+		path->custom_path.path.param_info =
+			get_baserel_parampathinfo(root,
+									  info->chunk_rel,
+									  compressed_path->param_info->ppi_req_outer);
+		Assert(path->custom_path.path.param_info != NULL);
+	}
+	else
+	{
+		path->custom_path.path.param_info = NULL;
+	}
 
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &decompress_chunk_path_methods;
