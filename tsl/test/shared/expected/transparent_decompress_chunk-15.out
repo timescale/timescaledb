@@ -599,12 +599,11 @@ QUERY PLAN
                      Output: "*VALUES*".column1
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=3598 loops=2)
          Output: _hyper_X_X_chunk.device_id
-         Filter: ("*VALUES*".column1 = _hyper_X_X_chunk.device_id)
          Bulk Decompression: false
          ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=4 loops=2)
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                Index Cond: (compress_hyper_X_X_chunk.device_id = "*VALUES*".column1)
-(17 rows)
+(16 rows)
 
 RESET enable_hashjoin;
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
@@ -632,12 +631,11 @@ QUERY PLAN
                      Output: "*VALUES*".column1
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=3598 loops=2)
          Output: _hyper_X_X_chunk.device_id
-         Filter: ("*VALUES*".column1 = _hyper_X_X_chunk.device_id)
          Bulk Decompression: false
          ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=4 loops=2)
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                Index Cond: (compress_hyper_X_X_chunk.device_id = "*VALUES*".column1)
-(17 rows)
+(16 rows)
 
 SET seq_page_cost = 100;
 -- loop/row counts of this query is different on windows so we run it without analyze
@@ -654,11 +652,10 @@ QUERY PLAN
                      Output: "*VALUES*".column1
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk
          Output: _hyper_X_X_chunk.device_id
-         Filter: ("*VALUES*".column1 = _hyper_X_X_chunk.device_id)
          ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on _timescaledb_internal.compress_hyper_X_X_chunk
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                Index Cond: (compress_hyper_X_X_chunk.device_id = "*VALUES*".column1)
-(15 rows)
+(14 rows)
 
 RESET seq_page_cost;
 -- test view
