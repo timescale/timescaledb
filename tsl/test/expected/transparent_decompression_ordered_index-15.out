@@ -716,7 +716,7 @@ ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
          ->  Seq Scan on nodetime (actual rows=1 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk met (actual rows=1 loops=1)
-         Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (nodetime.node = device_id))
+         Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
          Rows Removed by Filter: 47
          ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=1 loops=1)
                Index Cond: (device_id = nodetime.node)
