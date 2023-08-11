@@ -53,8 +53,8 @@ test inner join query_params q
     on q.a = test.a and q.b = test.b
 where test.time between '2020-01-01 00:00' and '2020-01-01 00:02'
 order by test.time;
-                                                                                                        QUERY PLAN                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk."time"
    ->  Nested Loop
@@ -64,7 +64,7 @@ order by test.time;
                      ->  Seq Scan on test_copy
                            Filter: (((a)::text = ANY ('{lat,lon}'::text[])) AND (b = 1))
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone) AND ((test_copy.a)::text = a) AND (test_copy.b = b))
+               Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
                ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_a_b__ts_meta_ on compress_hyper_2_2_chunk
                      Index Cond: ((a = (test_copy.a)::text) AND (b = test_copy.b))
                      Filter: ((_ts_meta_max_1 >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND (_ts_meta_min_1 <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
