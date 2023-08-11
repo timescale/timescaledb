@@ -403,18 +403,47 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	if (IsA(compressed_path, IndexPath))
 	{
-		/* from create_indexscan_plan() */
+		/*
+		 * Check if any of the decompressed scan clauses are redundant with
+		 * the compressed index scan clauses. Note that we can't use
+		 * is_redundant_derived_clause() here, because it can't work with
+		 * IndexClause's, so we use some custom code based on it.
+		 */
 		IndexPath *ipath = castNode(IndexPath, compressed_path);
 		List *indexqual = NIL;
 		Plan *indexplan;
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			if (is_redundant_derived_clause(rinfo, ipath->indexclauses))
-				continue; /* dup or derived from same EquivalenceClass */
+
+			ListCell *indexclause_cell = NULL;
+			if (rinfo->parent_ec != NULL)
+			{
+				foreach (indexclause_cell, ipath->indexclauses)
+				{
+					IndexClause *indexclause = lfirst(indexclause_cell);
+					RestrictInfo *index_rinfo = indexclause->rinfo;
+					if (index_rinfo->parent_ec == rinfo->parent_ec)
+					{
+						break;
+					}
+				}
+			}
+
+			if (indexclause_cell != NULL)
+			{
+				/* We already have an index clause derived from same EquivalenceClass. */
+				continue;
+			}
+
+			/*
+			 * We don't have this clause in the underlying index scan, add it
+			 * to the decompressed scan.
+			 */
 			decompress_plan->scan.plan.qual =
 				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
+
 		/* joininfo clauses on the compressed chunk rel have to
 		 * contain clauses on both compressed and
 		 * decompressed attnos. joininfo clauses get translated into

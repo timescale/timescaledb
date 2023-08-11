@@ -2185,7 +2185,6 @@ WHERE device_id_peer IN (
    ->  Append (actual rows=0 loops=2)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0 loops=2)
                Output: _hyper_1_1_chunk.device_id_peer
-               Filter: ("*VALUES*".column1 = _hyper_1_1_chunk.device_id_peer)
                Bulk Decompression: false
                ->  Index Scan using compress_hyper_5_15_chunk__compressed_hypertable_5_device_id_pe on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=0 loops=2)
                      Output: compress_hyper_5_15_chunk."time", compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer, compress_hyper_5_15_chunk.v0, compress_hyper_5_15_chunk.v1, compress_hyper_5_15_chunk.v2, compress_hyper_5_15_chunk.v3, compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk._ts_meta_sequence_num, compress_hyper_5_15_chunk._ts_meta_min_3, compress_hyper_5_15_chunk._ts_meta_max_3, compress_hyper_5_15_chunk._ts_meta_min_1, compress_hyper_5_15_chunk._ts_meta_max_1, compress_hyper_5_15_chunk._ts_meta_min_2, compress_hyper_5_15_chunk._ts_meta_max_2
@@ -2196,12 +2195,11 @@ WHERE device_id_peer IN (
                Rows Removed by Filter: 2520
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=0 loops=2)
                Output: _hyper_1_3_chunk.device_id_peer
-               Filter: ("*VALUES*".column1 = _hyper_1_3_chunk.device_id_peer)
                Bulk Decompression: false
                ->  Index Scan using compress_hyper_5_16_chunk__compressed_hypertable_5_device_id_pe on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=0 loops=2)
                      Output: compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3, compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_5_16_chunk.device_id_peer = "*VALUES*".column1)
-(29 rows)
+(27 rows)
 
 RESET enable_hashjoin;
 :PREFIX_VERBOSE
@@ -2254,7 +2252,6 @@ WHERE device_id IN (
    ->  Append (actual rows=1368 loops=2)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=360 loops=2)
                Output: _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_1_1_chunk.device_id)
                Bulk Decompression: false
                ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=1 loops=2)
                      Output: compress_hyper_5_15_chunk."time", compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer, compress_hyper_5_15_chunk.v0, compress_hyper_5_15_chunk.v1, compress_hyper_5_15_chunk.v2, compress_hyper_5_15_chunk.v3, compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk._ts_meta_sequence_num, compress_hyper_5_15_chunk._ts_meta_min_3, compress_hyper_5_15_chunk._ts_meta_max_3, compress_hyper_5_15_chunk._ts_meta_min_1, compress_hyper_5_15_chunk._ts_meta_max_1, compress_hyper_5_15_chunk._ts_meta_min_2, compress_hyper_5_15_chunk._ts_meta_max_2
@@ -2265,12 +2262,11 @@ WHERE device_id IN (
                Rows Removed by Filter: 2016
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=504 loops=2)
                Output: _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_1_3_chunk.device_id)
                Bulk Decompression: false
                ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=1 loops=2)
                      Output: compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3, compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_5_16_chunk.device_id = "*VALUES*".column1)
-(29 rows)
+(27 rows)
 
 SET seq_page_cost = 100;
 -- loop/row counts of this query is different on windows so we run it without analyze
@@ -2352,7 +2348,6 @@ WHERE device_id IN (
    ->  Append (actual rows=1368 loops=2)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=360 loops=2)
                Output: _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_1_1_chunk.device_id)
                Bulk Decompression: false
                ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=1 loops=2)
                      Output: compress_hyper_5_15_chunk."time", compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer, compress_hyper_5_15_chunk.v0, compress_hyper_5_15_chunk.v1, compress_hyper_5_15_chunk.v2, compress_hyper_5_15_chunk.v3, compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk._ts_meta_sequence_num, compress_hyper_5_15_chunk._ts_meta_min_3, compress_hyper_5_15_chunk._ts_meta_max_3, compress_hyper_5_15_chunk._ts_meta_min_1, compress_hyper_5_15_chunk._ts_meta_max_1, compress_hyper_5_15_chunk._ts_meta_min_2, compress_hyper_5_15_chunk._ts_meta_max_2
@@ -2363,12 +2358,11 @@ WHERE device_id IN (
                Rows Removed by Filter: 2016
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=504 loops=2)
                Output: _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_1_3_chunk.device_id)
                Bulk Decompression: false
                ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=1 loops=2)
                      Output: compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3, compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_5_16_chunk.device_id = "*VALUES*".column1)
-(29 rows)
+(27 rows)
 
 -- test view
 CREATE OR REPLACE VIEW compressed_view AS
@@ -3182,7 +3176,7 @@ WHERE metrics.time > metrics_space.time
          ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=504 loops=1)
    ->  Append (actual rows=0 loops=6840)
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=6840)
-               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time") AND (_hyper_2_4_chunk.device_id = device_id))
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
                Rows Removed by Filter: 360
                ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on compress_hyper_5_15_chunk (actual rows=1 loops=6840)
                      Index Cond: (device_id = _hyper_2_4_chunk.device_id)
@@ -3190,7 +3184,7 @@ WHERE metrics.time > metrics_space.time
                Index Cond: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
                Filter: (_hyper_2_4_chunk.device_id = device_id)
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=6840)
-               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time") AND (_hyper_2_4_chunk.device_id = device_id))
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
                Rows Removed by Filter: 504
                ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on compress_hyper_5_16_chunk (actual rows=1 loops=6840)
                      Index Cond: (device_id = _hyper_2_4_chunk.device_id)
@@ -6709,19 +6703,16 @@ WHERE device_id IN (
    ->  Append
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk
                Output: _hyper_2_4_chunk.device_id_peer, _hyper_2_4_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_2_4_chunk.device_id)
                ->  Index Scan using compress_hyper_6_17_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_17_chunk
                      Output: compress_hyper_6_17_chunk."time", compress_hyper_6_17_chunk.device_id, compress_hyper_6_17_chunk.device_id_peer, compress_hyper_6_17_chunk.v0, compress_hyper_6_17_chunk.v1, compress_hyper_6_17_chunk.v2, compress_hyper_6_17_chunk.v3, compress_hyper_6_17_chunk._ts_meta_count, compress_hyper_6_17_chunk._ts_meta_sequence_num, compress_hyper_6_17_chunk._ts_meta_min_3, compress_hyper_6_17_chunk._ts_meta_max_3, compress_hyper_6_17_chunk._ts_meta_min_1, compress_hyper_6_17_chunk._ts_meta_max_1, compress_hyper_6_17_chunk._ts_meta_min_2, compress_hyper_6_17_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_6_17_chunk.device_id = "*VALUES*".column1)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_5_chunk
                Output: _hyper_2_5_chunk.device_id_peer, _hyper_2_5_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_2_5_chunk.device_id)
                ->  Index Scan using compress_hyper_6_18_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_18_chunk
                      Output: compress_hyper_6_18_chunk."time", compress_hyper_6_18_chunk.device_id, compress_hyper_6_18_chunk.device_id_peer, compress_hyper_6_18_chunk.v0, compress_hyper_6_18_chunk.v1, compress_hyper_6_18_chunk.v2, compress_hyper_6_18_chunk.v3, compress_hyper_6_18_chunk._ts_meta_count, compress_hyper_6_18_chunk._ts_meta_sequence_num, compress_hyper_6_18_chunk._ts_meta_min_3, compress_hyper_6_18_chunk._ts_meta_max_3, compress_hyper_6_18_chunk._ts_meta_min_1, compress_hyper_6_18_chunk._ts_meta_max_1, compress_hyper_6_18_chunk._ts_meta_min_2, compress_hyper_6_18_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_6_18_chunk.device_id = "*VALUES*".column1)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_6_chunk
                Output: _hyper_2_6_chunk.device_id_peer, _hyper_2_6_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_2_6_chunk.device_id)
                ->  Index Scan using compress_hyper_6_19_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_19_chunk
                      Output: compress_hyper_6_19_chunk."time", compress_hyper_6_19_chunk.device_id, compress_hyper_6_19_chunk.device_id_peer, compress_hyper_6_19_chunk.v0, compress_hyper_6_19_chunk.v1, compress_hyper_6_19_chunk.v2, compress_hyper_6_19_chunk.v3, compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk._ts_meta_sequence_num, compress_hyper_6_19_chunk._ts_meta_min_3, compress_hyper_6_19_chunk._ts_meta_max_3, compress_hyper_6_19_chunk._ts_meta_min_1, compress_hyper_6_19_chunk._ts_meta_max_1, compress_hyper_6_19_chunk._ts_meta_min_2, compress_hyper_6_19_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_6_19_chunk.device_id = "*VALUES*".column1)
@@ -6736,20 +6727,18 @@ WHERE device_id IN (
                Index Cond: (_hyper_2_9_chunk.device_id = "*VALUES*".column1)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk
                Output: _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_2_10_chunk.device_id)
                ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_20_chunk
                      Output: compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3, compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk._ts_meta_min_3, compress_hyper_6_20_chunk._ts_meta_max_3, compress_hyper_6_20_chunk._ts_meta_min_1, compress_hyper_6_20_chunk._ts_meta_max_1, compress_hyper_6_20_chunk._ts_meta_min_2, compress_hyper_6_20_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_6_20_chunk.device_id = "*VALUES*".column1)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk
                Output: _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.device_id
-               Filter: ("*VALUES*".column1 = _hyper_2_11_chunk.device_id)
                ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_21_chunk
                      Output: compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3, compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk._ts_meta_min_3, compress_hyper_6_21_chunk._ts_meta_max_3, compress_hyper_6_21_chunk._ts_meta_min_1, compress_hyper_6_21_chunk._ts_meta_max_1, compress_hyper_6_21_chunk._ts_meta_min_2, compress_hyper_6_21_chunk._ts_meta_max_2
                      Index Cond: (compress_hyper_6_21_chunk.device_id = "*VALUES*".column1)
          ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _timescaledb_internal._hyper_2_12_chunk
                Output: _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.device_id
                Index Cond: (_hyper_2_12_chunk.device_id = "*VALUES*".column1)
-(52 rows)
+(47 rows)
 
 RESET seq_page_cost;
 :PREFIX_VERBOSE
@@ -8090,7 +8079,7 @@ WHERE metrics.time > metrics_space.time
          ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=504 loops=1)
    ->  Append (actual rows=0 loops=6840)
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=6840)
-               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time") AND (_hyper_2_4_chunk.device_id = device_id))
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
                Rows Removed by Filter: 360
                ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on compress_hyper_5_15_chunk (actual rows=1 loops=6840)
                      Index Cond: (device_id = _hyper_2_4_chunk.device_id)
@@ -8098,7 +8087,7 @@ WHERE metrics.time > metrics_space.time
                Index Cond: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
                Filter: (_hyper_2_4_chunk.device_id = device_id)
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=6840)
-               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time") AND (_hyper_2_4_chunk.device_id = device_id))
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
                Rows Removed by Filter: 504
                ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on compress_hyper_5_16_chunk (actual rows=1 loops=6840)
                      Index Cond: (device_id = _hyper_2_4_chunk.device_id)
