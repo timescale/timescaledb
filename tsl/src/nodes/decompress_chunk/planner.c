@@ -414,7 +414,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 			ListCell *indexclause_cell = NULL;
 			if (rinfo->parent_ec != NULL)
 			{
-				foreach(indexclause_cell, ipath->indexclauses)
+				foreach (indexclause_cell, ipath->indexclauses)
 				{
 					IndexClause *indexclause = lfirst(indexclause_cell);
 					RestrictInfo *index_rinfo = indexclause->rinfo;
