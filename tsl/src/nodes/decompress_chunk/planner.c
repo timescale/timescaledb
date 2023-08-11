@@ -410,11 +410,31 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			if (is_redundant_derived_clause(rinfo, ipath->indexclauses))
-				continue; /* dup or derived from same EquivalenceClass */
+
+			ListCell *indexclause_cell = NULL;
+			if (rinfo->parent_ec != NULL)
+			{
+				foreach(indexclause_cell, ipath->indexclauses)
+				{
+					IndexClause *indexclause = lfirst(indexclause_cell);
+					RestrictInfo *index_rinfo = indexclause->rinfo;
+					if (index_rinfo->parent_ec == rinfo->parent_ec)
+					{
+						break;
+					}
+				}
+			}
+
+			if (indexclause_cell != NULL)
+			{
+				/* We already have an index clause rived from same EquivalenceClass. */
+				continue;
+			}
+
 			decompress_plan->scan.plan.qual =
 				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
+
 		/* joininfo clauses on the compressed chunk rel have to
 		 * contain clauses on both compressed and
 		 * decompressed attnos. joininfo clauses get translated into
