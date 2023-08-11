@@ -1305,6 +1305,12 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 
 		if (!COMPRESSIONCOL_IS_SEGMENT_BY(context->current_col_info))
 		{
+			/*
+			 * This EM is not a segmentby column. Technically we can have a
+			 * query which equates a segmentby column to a compressed column,
+			 * and therefore has an EC with such members, so we still have to
+			 * check other EMs, maybe they are segmentby.
+			 */
 			continue;
 		}
 
@@ -1343,7 +1349,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_const = false;
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
-			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+
 			/*
 			 * In some cases the new EC member is likely to be accessed soon, so
 			 * it would make sense to add it to the front, but we cannot do that
@@ -1356,6 +1362,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			 * to see the parent relation first in the EMs.
 			 */
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
+			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
 
 			/*
 			 * Cache the matching EquivalenceClass and EquivalenceMember for
@@ -1485,7 +1492,24 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->custom_path.path.parent = info->chunk_rel;
 	path->custom_path.path.pathtarget = info->chunk_rel->reltarget;
 
-	path->custom_path.path.param_info = compressed_path->param_info;
+	if (compressed_path->param_info != NULL)
+	{
+		/*
+		 * Note that we have to separately generate the parameterized path info
+		 * for decompressed chunk path. The compressed parameterized path only
+		 * checks the clauses on segmentby columns, not on the compressed
+		 * columns.
+		 */
+		path->custom_path.path.param_info =
+			get_baserel_parampathinfo(root,
+									  info->chunk_rel,
+									  compressed_path->param_info->ppi_req_outer);
+		Assert(path->custom_path.path.param_info != NULL);
+	}
+	else
+	{
+		path->custom_path.path.param_info = NULL;
+	}
 
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &decompress_chunk_path_methods;
