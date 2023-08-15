@@ -35,7 +35,7 @@ typedef struct CompressionInfo
 	 */
 	Bitmapset *chunk_const_segmentby;
 	/* compressed chunk attribute numbers for columns that are compressed */
-	Bitmapset *compressed_chunk_compressed_attnos;
+	Bitmapset *compressed_attnos_in_compressed_chunk;
 
 	bool single_chunk; /* query on explicit chunk */
 

@@ -1170,6 +1170,49 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 	return expression_tree_mutator(node, chunk_joininfo_mutator, context);
 }
 
+/* Check if the expression references a compressed column in compressed chunk. */
+static bool
+has_compressed_vars_walker(Node *node, CompressionInfo *info)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Var))
+	{
+		Var *var = castNode(Var, node);
+		if ((Index) var->varno != (Index) info->compressed_rel->relid)
+		{
+			return false;
+		}
+
+		if (var->varattno <= 0)
+		{
+			/*
+			 * Shouldn't see a system var here, might be a whole row var?
+			 * In any case, we can't push it down to the compressed scan level.
+			 */
+			return true;
+		}
+
+		if (bms_is_member(var->varattno, info->compressed_attnos_in_compressed_chunk))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	return expression_tree_walker(node, has_compressed_vars_walker, info);
+}
+
+static bool
+has_compressed_vars(RestrictInfo *ri, CompressionInfo *info)
+{
+	return expression_tree_walker((Node *) ri->clause, has_compressed_vars_walker, info);
+}
+
 /* translate chunk_rel->joininfo for compressed_rel
  * this is necessary for create_index_path which gets join clauses from
  * rel->joininfo and sets up parameterized paths (in rel->ppilist).
@@ -1186,12 +1229,21 @@ compressed_rel_setup_joininfo(RelOptInfo *compressed_rel, CompressionInfo *info)
 	List *compress_joininfo = NIL;
 	foreach (lc, chunk_rel->joininfo)
 	{
-		RestrictInfo *compress_ri;
 		RestrictInfo *ri = (RestrictInfo *) lfirst(lc);
-		Node *result = chunk_joininfo_mutator((Node *) ri, info);
-		Assert(IsA(result, RestrictInfo));
-		compress_ri = (RestrictInfo *) result;
-		compress_joininfo = lappend(compress_joininfo, compress_ri);
+
+		RestrictInfo *adjusted = (RestrictInfo *) chunk_joininfo_mutator((Node *) ri, info);
+		Assert(IsA(adjusted, RestrictInfo));
+
+		if (has_compressed_vars(adjusted, info))
+		{
+			/*
+			 * We can't check clauses that refer to compressed columns during
+			 * the compressed scan.
+			 */
+			continue;
+		}
+
+		compress_joininfo = lappend(compress_joininfo, adjusted);
 	}
 	compressed_rel->joininfo = compress_joininfo;
 }
@@ -1481,8 +1533,8 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 			/* store attnos for the compressed chunk here */
 			AttrNumber compressed_chunk_attno =
 				get_attnum(info->compressed_rte->relid, NameStr(fd->attname));
-			info->compressed_chunk_compressed_attnos =
-				bms_add_member(info->compressed_chunk_compressed_attnos, compressed_chunk_attno);
+			info->compressed_attnos_in_compressed_chunk =
+				bms_add_member(info->compressed_attnos_in_compressed_chunk, compressed_chunk_attno);
 		}
 	}
 	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
