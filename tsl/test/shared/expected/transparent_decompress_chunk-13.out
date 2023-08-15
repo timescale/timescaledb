@@ -684,7 +684,6 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Nested Loop
-         Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
          ->  Gather Merge
                Workers Planned: 1
                ->  Sort
@@ -692,8 +691,10 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Parallel Seq Scan on compress_hyper_X_X_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-               ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(11 rows)
+               Filter: ((m1."time" = "time") AND (m1.device_id = device_id))
+               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                     Index Cond: (device_id = m1.device_id)
+(12 rows)
 
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -708,21 +709,22 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Nested Loop
-         Join Filter: (m1."time" = m3."time")
          ->  Nested Loop
-               Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
+               Join Filter: (m1."time" = m3."time")
                ->  Gather Merge
                      Workers Planned: 1
                      ->  Sort
                            Sort Key: m1."time", m1.device_id
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                                  ->  Parallel Seq Scan on compress_hyper_X_X_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
-               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
-                     Index Cond: (device_id = 3)
-(16 rows)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
+                     ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
+                           Index Cond: (device_id = 3)
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
+               Filter: ((m1."time" = "time") AND (m1.device_id = device_id))
+               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                     Index Cond: (device_id = m1.device_id)
+(17 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
