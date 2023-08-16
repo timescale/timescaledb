@@ -322,33 +322,6 @@ replace_compressed_vars(Node *node, CompressionInfo *info)
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
 }
 
-typedef struct CompressedAttnoContext
-{
-	Bitmapset *compressed_attnos;
-	Index compress_relid;
-} CompressedAttnoContext;
-
-/* check if the clause refers to any attributes that are in compressed
- * form.
- */
-static bool
-clause_has_compressed_attrs(Node *node, void *context)
-{
-	if (node == NULL)
-		return true;
-	if (IsA(node, Var))
-	{
-		CompressedAttnoContext *cxt = (CompressedAttnoContext *) context;
-		Var *var = (Var *) node;
-		if ((Index) var->varno == cxt->compress_relid)
-		{
-			if (bms_is_member(var->varattno, cxt->compressed_attnos))
-				return true;
-		}
-	}
-	return expression_tree_walker(node, clause_has_compressed_attrs, context);
-}
-
 /*
  * Find the resno of the given attribute in the provided target list
  */
@@ -403,10 +376,13 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	if (IsA(compressed_path, IndexPath))
 	{
-		/* from create_indexscan_plan() */
+		/*
+		 * Check if any of the decompressed scan clauses are redundant with
+		 * the compressed index scan clauses. Note that we can't use
+		 * is_redundant_derived_clause() here, because it can't work with
+		 * IndexClause's, so we use some custom code based on it.
+		 */
 		IndexPath *ipath = castNode(IndexPath, compressed_path);
-		List *indexqual = NIL;
-		Plan *indexplan;
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
@@ -427,37 +403,17 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 			if (indexclause_cell != NULL)
 			{
-				/* We already have an index clause rived from same EquivalenceClass. */
+				/* We already have an index clause derived from same EquivalenceClass. */
 				continue;
 			}
 
+			/*
+			 * We don't have this clause in the underlying index scan, add it
+			 * to the decompressed scan.
+			 */
 			decompress_plan->scan.plan.qual =
 				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
-
-		/* joininfo clauses on the compressed chunk rel have to
-		 * contain clauses on both compressed and
-		 * decompressed attnos. joininfo clauses get translated into
-		 * ParamPathInfo for the indexpath. But the index scans can't
-		 * handle compressed attributes, so remove them from the
-		 * indexscans here. (these are included in the `clauses` passed in
-		 * to the function and so were added as filters
-		 * for decompress_plan->scan.plan.qual in the loop above. )
-		 */
-		indexplan = linitial(custom_plans);
-		Assert(IsA(indexplan, IndexScan) || IsA(indexplan, IndexOnlyScan));
-		foreach (lc, indexplan->qual)
-		{
-			Node *expr = (Node *) lfirst(lc);
-			CompressedAttnoContext cxt;
-			Index compress_relid = dcpath->info->compressed_rel->relid;
-			cxt.compress_relid = compress_relid;
-			cxt.compressed_attnos = dcpath->info->compressed_chunk_compressed_attnos;
-
-			if (!clause_has_compressed_attrs((Node *) expr, &cxt))
-				indexqual = lappend(indexqual, expr);
-		}
-		indexplan->qual = indexqual;
 	}
 	else
 	{
