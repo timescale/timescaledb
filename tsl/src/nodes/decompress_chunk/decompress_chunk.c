@@ -171,7 +171,14 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	{
 		TimescaleDBPrivate *compressed_fdw_private =
 			(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
-		Bitmapset *segmentby_columns = bms_copy(info->chunk_segmentby_ri);
+		/*
+		 * We don't need any sorting for the segmentby columns that are equated
+		 * to a constant. The respective constant ECs are excluded from
+		 * canonical pathkeys, so we won't see these columns here. Count them as
+		 * seen from the start, so that we arrive at the proper counts of seen
+		 * segmentby columns in the end.
+		 */
+		Bitmapset *segmentby_columns = bms_copy(info->chunk_const_segmentby);
 		ListCell *lc;
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
@@ -190,11 +197,13 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 				}
 			}
 
-			if (compressed_em == NULL)
-			{
-				/* not a segmentby column, rest of pathkeys should be handled by compress_orderby */
-				break;
-			}
+			/*
+			 * We should exit the loop after we've seen all required segmentby
+			 * columns. If we haven't seen them all, but the next pathkey
+			 * already refers a compressed column, it is a bug. See
+			 * build_sortinfo().
+			 */
+			Assert(compressed_em != NULL);
 
 			compressed_pathkeys = lappend(compressed_pathkeys, pk);
 
@@ -202,14 +211,18 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 				bms_add_member(segmentby_columns, castNode(Var, compressed_em->em_expr)->varattno);
 		}
 
-		/* we validated this when we created the Path so only asserting here */
+		/*
+		 * Either we sort by all segmentby columns, or by subset of them and
+		 * nothing else. We verified this condition in build_sortinfo(), so only
+		 * asserting here.
+		 */
 		Assert(bms_num_members(segmentby_columns) == info->num_segmentby_columns ||
 			   list_length(compressed_pathkeys) == list_length(chunk_pathkeys));
 	}
 
 	/*
 	 * If pathkeys contains non-segmentby columns the rest of the ordering
-	 * requirements will be satisfied by ordering by sequence_num
+	 * requirements will be satisfied by ordering by sequence_num.
 	 */
 	if (sort_info->needs_sequence_num)
 	{
@@ -231,8 +244,8 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		}
 
 		/*
-		 * Create the EquivalenceClass for the sequence number, so that we can
-		 * build PathKey that refers to it.
+		 * Create the EquivalenceClass for the sequence number column of this
+		 * compressed chunk, so that we can build the PathKey that refers to it.
 		 */
 		EquivalenceClass *ec =
 			append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
@@ -1356,13 +1369,13 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			/*
 			 * In some cases the new EC member is likely to be accessed soon, so
 			 * it would make sense to add it to the front, but we cannot do that
-			 * here. If we do that, the
-			 * compressed chunk EM might get picked as SortGroupExpr by
-			 * cost_incremental_sort, and estimate_num_groups will assert that
-			 * the rel is simple rel, but it will fail because the compressed
-			 * chunk rel is a deadrel. Anyway, it wouldn't make sense to estimate
-			 * the group numbers by one append member, probably Postgres expects
-			 * to see the parent relation first in the EMs.
+			 * here. If we do that, the compressed chunk EM might get picked as
+			 * SortGroupExpr by cost_incremental_sort, and estimate_num_groups
+			 * will assert that the rel is simple rel, but it will fail because
+			 * the compressed chunk rel is a deadrel. Anyway, it wouldn't make
+			 * sense to estimate the group numbers by one append member,
+			 * probably Postgres expects to see the parent relation first in the
+			 * EMs.
 			 */
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
@@ -1683,13 +1696,14 @@ get_column_compressioninfo(List *hypertable_compression_info, char *column_name)
 }
 
 /*
- * Find toplevel equality constraints of segmentby columns in baserestrictinfo
+ * Find segmentby columns that are equated to a constant by a toplevel
+ * baserestrictinfo.
  *
  * This will detect Var = Const and Var = Param and set the corresponding bit
- * in CompressionInfo->chunk_segmentby_ri
+ * in CompressionInfo->chunk_const_segmentby.
  */
 static void
-find_restrictinfo_equality(RelOptInfo *chunk_rel, CompressionInfo *info)
+find_const_segmentby(RelOptInfo *chunk_rel, CompressionInfo *info)
 {
 	Bitmapset *segmentby_columns = NULL;
 
@@ -1738,7 +1752,7 @@ find_restrictinfo_equality(RelOptInfo *chunk_rel, CompressionInfo *info)
 			}
 		}
 	}
-	info->chunk_segmentby_ri = segmentby_columns;
+	info->chunk_const_segmentby = segmentby_columns;
 }
 
 /*
@@ -1775,8 +1789,8 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 		 * initialize segmentby with equality constraints from baserestrictinfo because
 		 * those columns dont need to be prefix of pathkeys
 		 */
-		find_restrictinfo_equality(chunk_rel, info);
-		segmentby_columns = bms_copy(info->chunk_segmentby_ri);
+		find_const_segmentby(chunk_rel, info);
+		segmentby_columns = bms_copy(info->chunk_const_segmentby);
 
 		/*
 		 * loop over pathkeys until we find one that is not a segmentby column

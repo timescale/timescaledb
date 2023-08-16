@@ -8,15 +8,6 @@
 #
 setup
 {
-	CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-	CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
-
-	CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT) RETURNS BIGINT LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_id';
-
 	CREATE FUNCTION invalidate_data_node(node_name NAME) RETURNS BOOL LANGUAGE C STRICT
 	AS '@TSL_MODULE_PATHNAME@', 'ts_test_alter_data_node';
 

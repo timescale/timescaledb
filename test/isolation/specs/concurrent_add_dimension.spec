@@ -3,12 +3,6 @@
 # LICENSE-APACHE for a copy of the license.
 
 setup {
-  CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-  CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-  AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
-
   DROP TABLE IF EXISTS dim_test;
   CREATE TABLE dim_test(time TIMESTAMPTZ, device int, device2 int);
   SELECT table_name FROM create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');

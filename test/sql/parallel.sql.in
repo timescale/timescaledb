@@ -69,6 +69,74 @@ SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
 -- test parallel ChunkAppend
 :PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
 
+:PREFIX SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
+SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
+
+-- test parallel ChunkAppend with only work done in the parallel workers
+SET parallel_leader_participation = off;
+SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
+RESET parallel_leader_participation;
+
+-- Test parallel chunk append is used
+SET parallel_tuple_cost = 0;
+:PREFIX SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
+SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
+
+-- Test normal chunk append can be used in a parallel worker
+:PREFIX SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SELECT * FROM "test" WHERE i >= 400000 ORDER BY i) AS t2 ON (TRUE) ORDER BY t1.i, t2.i LIMIT 10;
+SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SELECT * FROM "test" WHERE i >= 400000 ORDER BY i) AS t2 ON (TRUE) ORDER BY t1.i, t2.i LIMIT 10;
+
+-- Test parallel ChunkAppend reinit
+SET enable_material = off;
+SET min_parallel_table_scan_size = 0;
+SET min_parallel_index_scan_size = 0;
+SET enable_hashjoin = 'off';
+SET enable_nestloop = 'off';
+
+CREATE TABLE sensor_data(
+      time timestamptz NOT NULL,
+      sensor_id integer NOT NULL);
+
+SELECT FROM create_hypertable(relation=>'sensor_data', time_column_name=> 'time');
+
+-- Sensors 1 and 2
+INSERT INTO sensor_data
+SELECT time, sensor_id
+FROM
+generate_series('2000-01-01 00:00:30', '2022-01-01 00:00:30', INTERVAL '3 months') AS g1(time),
+generate_series(1, 2, 1) AS g2(sensor_id)
+ORDER BY time;
+
+-- Sensor 100
+INSERT INTO sensor_data
+SELECT time, 100 as sensor_id
+FROM
+generate_series('2000-01-01 00:00:30', '2022-01-01 00:00:30', INTERVAL '1 year') AS g1(time)
+ORDER BY time;
+
+:PREFIX SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+
+-- Check query result
+SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+
+-- Ensure the same result is produced if only the parallel workers have to produce them (i.e., the pstate is reinitialized properly)
+SET parallel_leader_participation = off;
+SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+RESET parallel_leader_participation;
+
+-- Ensure the same query result is produced by a sequencial query
+SET max_parallel_workers_per_gather TO 0;
+SET force_parallel_mode = 'off';
+SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+
+RESET enable_material;
+RESET min_parallel_table_scan_size;
+RESET min_parallel_index_scan_size;
+RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET parallel_tuple_cost;
+SET force_parallel_mode = 'on';
+
 -- test worker assignment
 -- first chunk should have 1 worker and second chunk should have 2
 SET max_parallel_workers_per_gather TO 2;

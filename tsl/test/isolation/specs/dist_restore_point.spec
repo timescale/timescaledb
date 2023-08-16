@@ -6,15 +6,6 @@
 #
 setup
 {
-	CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-	CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
-
-	CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT) RETURNS BIGINT LANGUAGE C VOLATILE STRICT
-	AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_id';
-
 	CREATE OR REPLACE FUNCTION waitpoint_locks(tag TEXT) RETURNS bigint AS
 	$$
 		SELECT count(*) FROM pg_locks WHERE objid = debug_waitpoint_id(tag);

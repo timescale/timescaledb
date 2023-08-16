@@ -684,7 +684,7 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Parallel Seq Scan on compress_hyper_X_X_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-               Filter: (m1."time" = "time")
+               Filter: ((m1."time" = "time") AND (m1.device_id = device_id))
                ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
                      Index Cond: (device_id = m1.device_id)
 (12 rows)
@@ -714,7 +714,7 @@ QUERY PLAN
                      ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
                            Index Cond: (device_id = 3)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-               Filter: (m1."time" = "time")
+               Filter: ((m1."time" = "time") AND (m1.device_id = device_id))
                ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
                      Index Cond: (device_id = m1.device_id)
 (17 rows)

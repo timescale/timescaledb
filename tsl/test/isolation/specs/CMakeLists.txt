@@ -3,33 +3,9 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
                           reorder_vs_insert_other_chunk.spec.in)
 
 set(TEST_TEMPLATES_MODULE_DEBUG
-    reorder_vs_insert.spec.in
-    reorder_vs_select.spec.in
-    remote_create_chunk.spec.in
-    dist_su_copy_chunk.spec.in
-    dist_ha_chunk_drop.spec.in
-    dist_restore_point.spec.in
-    dist_cmd_exec.spec.in
-    cagg_drop_chunks_iso.spec.in
-    telemetry_iso.spec.in
-    compression_chunk_race.spec.in
-    compression_merge_race.spec.in
-    decompression_chunk_and_parallel_query.in
-    decompression_chunk_and_parallel_query_wo_idx.in)
-
-# These tests are using markers for the isolation tests (to avoid race
-# conditions causing differing output), which were added after 12.7, 13.3, and
-# 14.0.
-if(PG_VERSION VERSION_GREATER "12.7"
-   OR PG_VERSION VERSION_GREATER "13.3"
-   OR PG_VERSION VERSION_GREATER_EQUAL "14.0")
-  list(APPEND TEST_TEMPLATES_MODULE_DEBUG deadlock_recompress_chunk.spec.in)
-endif()
-
-if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
-  list(APPEND TEST_TEMPLATES_MODULE_DEBUG freeze_chunk.spec.in
-       compression_dml_iso.spec)
-endif()
+    reorder_vs_insert.spec.in reorder_vs_select.spec.in
+    dist_su_copy_chunk.spec.in dist_cmd_exec.spec.in
+    decompression_chunk_and_parallel_query.in)
 
 list(
   APPEND
@@ -44,7 +20,30 @@ list(
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
-  list(APPEND TEST_FILES cagg_multi_dist_ht.spec)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_drop_chunks_iso.spec
+    cagg_multi_dist_ht.spec
+    compression_chunk_race.spec
+    compression_merge_race.spec
+    decompression_chunk_and_parallel_query_wo_idx.spec
+    dist_ha_chunk_drop.spec
+    dist_ha_chunk_drop.spec
+    dist_restore_point.spec
+    remote_create_chunk.spec)
+  if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
+    list(APPEND TEST_FILES freeze_chunk.spec compression_dml_iso.spec)
+  endif()
+  # These tests are using markers for the isolation tests (to avoid race
+  # conditions causing differing output), which were added after 12.7, 13.3, and
+  # 14.0.
+  if(PG_VERSION VERSION_GREATER "12.7"
+     OR PG_VERSION VERSION_GREATER "13.3"
+     OR PG_VERSION VERSION_GREATER_EQUAL "14.0")
+    list(APPEND TEST_FILES deadlock_recompress_chunk.spec)
+  endif()
+
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # need to generate MODULE name for the .spec files
