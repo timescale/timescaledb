@@ -117,7 +117,7 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	Oid user_id = OidIsValid(check_as_user) ? check_as_user : GetUserId();
 	int i = 0;
 	int num_data_nodes, num_all_data_nodes;
-	int32 hypertable_id = ts_chunk_get_hypertable_id_by_relid(rel->rd_id);
+	int32 hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
 	List *all_replicas = NIL, *avail_replicas = NIL;
 
 	if (hypertable_id == INVALID_HYPERTABLE_ID)

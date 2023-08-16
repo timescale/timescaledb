@@ -16,6 +16,7 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
+#include <planner/planner.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/typcache.h>
@@ -1503,21 +1504,31 @@ static void
 decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
-	ListCell *lc;
 	Index compressed_index = root->simple_rel_array_size;
-	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	Oid compressed_relid = compressed_chunk->table_id;
-	RelOptInfo *compressed_rel;
+	FormData_chunk compressed_fd = ts_chunk_get_formdata(chunk->fd.compressed_chunk_id);
+	Oid compressed_reloid = ts_get_relation_relid(NameStr(compressed_fd.schema_name),
+												  NameStr(compressed_fd.table_name),
+												  /* return_invalid = */ false);
+
+	/*
+	 * Add the compressed chunk to the baserel cache. Note that it belongs to
+	 * a different hypertable, the internal compression table.
+	 */
+	Oid compression_hypertable_reloid =
+		ts_hypertable_id_to_relid(compressed_fd.hypertable_id, /* return_invalid = */ false);
+	ts_add_baserel_cache_entry_for_chunk(compressed_reloid,
+										 ts_planner_get_hypertable(compression_hypertable_reloid,
+																   CACHE_FLAG_NONE));
 
 	expand_planner_arrays(root, 1);
-	info->compressed_rte = decompress_chunk_make_rte(compressed_relid, AccessShareLock);
+	info->compressed_rte = decompress_chunk_make_rte(compressed_reloid, AccessShareLock);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
 
 	root->simple_rel_array[compressed_index] = NULL;
 
-	compressed_rel = build_simple_rel(root, compressed_index, NULL);
+	RelOptInfo *compressed_rel = build_simple_rel(root, compressed_index, NULL);
 	/* github issue :1558
 	 * set up top_parent_relids for this rel as the same as the
 	 * original hypertable, otherwise eq classes are not computed correctly
@@ -1529,6 +1540,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
+	ListCell *lc;
 	foreach (lc, info->hypertable_compression_info)
 	{
 		FormData_hypertable_compression *fd = lfirst(lc);

@@ -152,7 +152,7 @@ static struct BaserelInfo_hash *ts_baserel_info = NULL;
  * chunk info at the plan time chunk exclusion.
  */
 void
-add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
+ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
 {
 	Assert(hypertable != NULL);
 	Assert(ts_baserel_info != NULL);
@@ -165,6 +165,8 @@ add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
 		Assert(entry->ht != NULL);
 		return;
 	}
+
+	Assert(ts_chunk_get_hypertable_id_by_reloid(chunk_reloid) == hypertable->fd.id);
 
 	/* Fill the cache entry. */
 	entry->ht = hypertable;
@@ -695,7 +697,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 
 #ifdef USE_ASSERT_CHECKING
 		/* Sanity check on the caller-specified hypertable reloid. */
-		int32 parent_hypertable_id = ts_chunk_get_hypertable_id_by_relid(chunk_reloid);
+		int32 parent_hypertable_id = ts_chunk_get_hypertable_id_by_reloid(chunk_reloid);
 		if (parent_hypertable_id != INVALID_HYPERTABLE_ID)
 		{
 			Assert(ts_hypertable_id_to_relid(parent_hypertable_id, false) == parent_reloid);
@@ -712,7 +714,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		/* Hypertable reloid not specified by the caller, look it up by
 		 * an expensive metadata scan.
 		 */
-		int32 hypertable_id = ts_chunk_get_hypertable_id_by_relid(chunk_reloid);
+		int32 hypertable_id = ts_chunk_get_hypertable_id_by_reloid(chunk_reloid);
 
 		if (hypertable_id != INVALID_HYPERTABLE_ID)
 		{

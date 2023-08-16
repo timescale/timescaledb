@@ -98,7 +98,7 @@ typedef enum PartializeAggFixAggref
 	TS_FIX_AGGSPLIT_FINAL = 2
 } PartializeAggFixAggref;
 
-Hypertable *ts_planner_get_hypertable(const Oid relid, const unsigned int flags);
+extern TSDLLEXPORT Hypertable *ts_planner_get_hypertable(const Oid relid, const unsigned int flags);
 bool has_partialize_function(Node *node, PartializeAggFixAggref fix_aggref);
 bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
 
@@ -110,6 +110,7 @@ extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
 
-extern void add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable);
+extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
+															 Hypertable *hypertable);
 
 #endif /* TIMESCALEDB_PLANNER_H */

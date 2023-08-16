@@ -67,7 +67,7 @@ get_chunk_data_nodes(Oid relid)
 	/* check that alteast one data node is available for this chunk */
 	if (chunk_data_nodes == NIL)
 	{
-		Hypertable *ht = ts_hypertable_get_by_id(ts_chunk_get_hypertable_id_by_relid(relid));
+		Hypertable *ht = ts_hypertable_get_by_id(ts_chunk_get_hypertable_id_by_reloid(relid));
 
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),

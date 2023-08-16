@@ -2712,17 +2712,17 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 }
 
 static bool
-chunk_simple_scan_by_relid(Oid relid, FormData_chunk *form, bool missing_ok)
+chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
 {
 	bool found = false;
 
-	if (OidIsValid(relid))
+	if (OidIsValid(reloid))
 	{
-		const char *table = get_rel_name(relid);
+		const char *table = get_rel_name(reloid);
 
 		if (table != NULL)
 		{
-			Oid nspid = get_rel_namespace(relid);
+			Oid nspid = get_rel_namespace(reloid);
 			const char *schema = get_namespace_name(nspid);
 
 			found = chunk_simple_scan_by_name(schema, table, form, missing_ok);
@@ -2732,7 +2732,7 @@ chunk_simple_scan_by_relid(Oid relid, FormData_chunk *form, bool missing_ok)
 	if (!found && !missing_ok)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("chunk with relid %u not found", relid)));
+				 errmsg("chunk with reloid %u not found", reloid)));
 
 	return found;
 }
@@ -2765,7 +2765,7 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	if (last_relid == relid)
 		return last_id;
 
-	chunk_simple_scan_by_relid(relid, &form, false);
+	chunk_simple_scan_by_reloid(relid, &form, false);
 
 	last_relid = relid;
 	last_id = form.id;
@@ -2778,7 +2778,7 @@ ts_chunk_get_id_by_relid(Oid relid)
 {
 	FormData_chunk form;
 
-	chunk_simple_scan_by_relid(relid, &form, /* missing_ok = */ false);
+	chunk_simple_scan_by_reloid(relid, &form, /* missing_ok = */ false);
 	return form.id;
 }
 
@@ -2787,18 +2787,18 @@ ts_chunk_exists_relid(Oid relid)
 {
 	FormData_chunk form;
 
-	return chunk_simple_scan_by_relid(relid, &form, true);
+	return chunk_simple_scan_by_reloid(relid, &form, true);
 }
 
 /*
  * Returns 0 if there is no chunk with such reloid.
  */
 int32
-ts_chunk_get_hypertable_id_by_relid(Oid relid)
+ts_chunk_get_hypertable_id_by_reloid(Oid reliod)
 {
 	FormData_chunk form;
 
-	if (chunk_simple_scan_by_relid(relid, &form, /* missing_ok = */ true))
+	if (chunk_simple_scan_by_reloid(reliod, &form, /* missing_ok = */ true))
 	{
 		return form.hypertable_id;
 	}
@@ -2828,13 +2828,21 @@ ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id, 
 	FormData_chunk form;
 
 	Assert(hypertable_id != NULL && chunk_status != NULL);
-	if (chunk_simple_scan_by_relid(relid, &form, /* missing_ok = */ true))
+	if (chunk_simple_scan_by_reloid(relid, &form, /* missing_ok = */ true))
 	{
 		*hypertable_id = form.hypertable_id;
 		*chunk_status = form.status;
 		return true;
 	}
 	return false;
+}
+
+FormData_chunk
+ts_chunk_get_formdata(int32 chunk_id)
+{
+	FormData_chunk fd;
+	chunk_simple_scan_by_id(chunk_id, &fd, /* missing_ok = */ false);
+	return fd;
 }
 
 /*
