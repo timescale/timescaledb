@@ -1,59 +1,97 @@
 -- needed post 1.7.0 to fixup continuous aggregates created in 1.7.0 ---
-DO $$
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.fixup_caggs() AS
+$$
 DECLARE
  vname regclass;
+ mat_ht_id INTEGER;
  materialized_only bool;
- ts_version TEXT;
+ finalized bool;
+ ts_major TEXT;
+ ts_minor TEXT;
 BEGIN
-    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-    IF ts_version >= '2.7.0' THEN
+    SELECT (string_to_array(extversion,'.'))[1], (string_to_array(extversion,'.'))[2] INTO ts_major, ts_minor FROM pg_extension WHERE extname = 'timescaledb';
+    IF ts_major::INTEGER = 2 AND ts_minor::INTEGER >= 7 THEN
             CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
                 cagg_view REGCLASS, force_rebuild boolean
             ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
     END IF;
-    FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
-    LOOP
-        -- the cast from oid to text returns
-        -- quote_qualified_identifier (see regclassout).
-        --
-        -- We use the if statement to handle pre-2.0 as well as
-        -- post-2.0.  This could be turned into a procedure if we want
-        -- to have something more generic, but right now it is just
-        -- this case.
-        IF ts_version < '2.0.0' THEN
-            EXECUTE format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
-        ELSIF ts_version < '2.7.0' THEN
-            EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
-        ELSE
-            SET log_error_verbosity TO VERBOSE;
-            CALL _timescaledb_internal.post_update_cagg_try_repair(vname, false);
-        END IF;
-    END LOOP;
-    IF ts_version >= '2.7.0' THEN
+    IF ts_major::INTEGER = 2 AND ts_minor::INTEGER < 7 THEN
+        FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
+        LOOP
+            -- the cast from oid to text returns
+            -- quote_qualified_identifier (see regclassout).
+            --
+            -- We use the if statement to handle pre-2.0 as well as
+            -- post-2.0.  This could be turned into a procedure if we want
+            -- to have something more generic, but right now it is just
+            -- this case.
+            IF ts_minor::INTEGER < 0 THEN
+                EXECUTE format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
+            ELSIF ts_minor::INTEGER < 7 THEN
+                EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
+            END IF;
+        END LOOP;
+    ELSIF ts_major::INTEGER = 2 AND ts_minor::INTEGER >= 7 THEN
+        FOR vname, mat_ht_id, materialized_only, finalized IN select format('%I.%I', cagg.user_view_schema,
+            cagg.user_view_name)::regclass, cagg.mat_hypertable_id, cagg.materialized_only, cagg.finalized from _timescaledb_catalog.continuous_agg cagg
+        LOOP
+            IF ts_minor::INTEGER < 12 THEN
+                SET log_error_verbosity TO VERBOSE;
+                CALL _timescaledb_internal.post_update_cagg_try_repair(vname, false);
+            ELSIF ts_minor::INTEGER = 12 AND finalized IS FALSE THEN
+                -- Insert/Update watermark before calling migration
+                INSERT INTO _timescaledb_catalog.continuous_aggs_watermark
+                VALUES (mat_ht_id, _timescaledb_functions.cagg_watermark_materialized(mat_ht_id))
+                ON CONFLICT (mat_hypertable_id)
+                DO NOTHING;
+
+                CALL public.cagg_migrate(vname, TRUE, TRUE);
+                RAISE NOTICE 'Migrated old format continuous aggregate %s ', vname::text;
+            END IF;
+        END LOOP;
+    END IF;
+    IF ts_major::INTEGER = 2 AND ts_minor::INTEGER >= 7 THEN
             DROP PROCEDURE IF EXISTS _timescaledb_internal.post_update_cagg_try_repair;
     END IF;
     EXCEPTION WHEN OTHERS THEN RAISE;
 END
-$$;
+$$ LANGUAGE PLPGSQL;
+CALL _timescaledb_internal.fixup_caggs();
+DROP PROCEDURE _timescaledb_internal.fixup_caggs();
 
 -- For tsdb >= v2.10.0 apply the cagg repair when necessary
-DO $$
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.fixup_caggs() AS
+$$
 DECLARE
  vname regclass;
+ mat_ht_id INTEGER;
  materialized_only bool;
- ts_version TEXT;
+ finalized bool;
+ ts_major TEXT;
+ ts_minor TEXT;
 BEGIN
-    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-     IF ts_version >= '2.10.0' THEN
+    SELECT (string_to_array(extversion,'.'))[1], (string_to_array(extversion,'.'))[2] INTO ts_major, ts_minor FROM pg_extension WHERE extname = 'timescaledb';
+     IF ts_major::INTEGER = 2 AND ts_minor::INTEGER >= 10 THEN
 	        CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
 	            cagg_view REGCLASS, force_rebuild BOOLEAN
 	        ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
 
-	        FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
+	        FOR vname, mat_ht_id, materialized_only, finalized IN select format('%I.%I', cagg.user_view_schema,
+				cagg.user_view_name)::regclass, cagg.mat_hypertable_id, cagg.materialized_only, cagg.finalized from _timescaledb_catalog.continuous_agg cagg
 	        LOOP
-	            IF ts_version >= '2.10.0' THEN
+                IF ts_minor::INTEGER >= 10 AND ts_minor::INTEGER < 12 THEN
 	                SET log_error_verbosity TO VERBOSE;
 	                CALL _timescaledb_internal.post_update_cagg_try_repair(vname, true);
+                ELSIF ts_minor::INTEGER = 12 AND finalized IS FALSE THEN
+                    RAISE NOTICE 'Materialized ht id: %s ', mat_ht_id;
+                    -- Insert/Update watermark before calling migration
+                    INSERT INTO _timescaledb_catalog.continuous_aggs_watermark
+                    VALUES (mat_ht_id, _timescaledb_functions.cagg_watermark_materialized(mat_ht_id))
+                    ON CONFLICT (mat_hypertable_id)
+                    DO NOTHING;
+
+                    CALL public.cagg_migrate(vname, TRUE, TRUE);
+                    RAISE NOTICE 'Migrated old format continuous aggregate % ', vname::text;
 	            END IF;
 	        END LOOP;
 
@@ -61,7 +99,9 @@ BEGIN
 	    END IF;
     EXCEPTION WHEN OTHERS THEN RAISE;
 END
-$$;
+$$ LANGUAGE PLPGSQL;
+CALL _timescaledb_internal.fixup_caggs();
+DROP PROCEDURE _timescaledb_internal.fixup_caggs();
 
 -- can only be dropped after views have been rebuilt
 DROP FUNCTION IF EXISTS _timescaledb_internal.cagg_watermark(oid);

@@ -19,9 +19,7 @@ SELECT
   :ts_major < 2 AS has_ignore_invalidations_older_than,
   :ts_major < 2 AS has_max_interval_per_job,
   :ts_major >= 2 AS has_create_mat_view,
-  :ts_major >= 2 AS has_continuous_aggs_policy,
-  :ts_major = 2 AND :ts_minor >= 7 AS has_continuous_aggs_finals_form,
-  :ts_major = 2 AND :ts_minor IN (7,8) AS has_continuous_aggs_finalized_option
+  :ts_major >= 2 AS has_continuous_aggs_policy
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
@@ -63,11 +61,7 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
     -- we had a bug related to that and need to verify if compression can be
     -- enabled on such a view
     CREATE MATERIALIZED VIEW rename_cols
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-    \else
     WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
-    \endif
 \endif
     SELECT time_bucket('1 week', timec) AS bucket,
            location,
@@ -86,11 +80,7 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
 \else
     CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
-    \endif
 \endif
     AS
       SELECT time_bucket('1week', timec) as bucket,
@@ -167,11 +157,7 @@ CREATE SCHEMA cagg;
     WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
 \else
     CREATE MATERIALIZED VIEW IF NOT EXISTS cagg.realtime_mat
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=false)
-    \endif
 \endif
     AS
       SELECT time_bucket('1week', timec) as bucket,
@@ -239,11 +225,7 @@ CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
            timescaledb.max_interval_per_job = '100000 days')
 \else
     CREATE MATERIALIZED VIEW IF NOT EXISTS  mat_ignoreinval
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
-    \endif
 \endif
     AS
       SELECT time_bucket('1 week', timec) as bucket,
@@ -280,11 +262,7 @@ SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timest
            timescaledb.max_interval_per_job='100000 days' )
 \else
     CREATE MATERIALIZED VIEW mat_inval
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    \endif
 \endif
     AS
       SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
@@ -328,11 +306,7 @@ INSERT INTO int_time_test VALUES
            timescaledb.refresh_interval='12 hours')
 \else
     CREATE MATERIALIZED VIEW mat_inttime
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    \endif
 \endif
     AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
@@ -350,11 +324,7 @@ INSERT INTO int_time_test VALUES
            timescaledb.refresh_interval='12 hours')
 \else
     CREATE MATERIALIZED VIEW mat_inttime2
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    \endif
 \endif
     AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
@@ -388,11 +358,7 @@ SELECT create_hypertable('conflict_test', 'time', chunk_time_interval => INTERVA
            timescaledb.refresh_interval='12 hours' )
 \else
     CREATE MATERIALIZED VIEW mat_conflict
-    \if :has_continuous_aggs_finalized_option
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-    \else
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    \endif
 \endif
     AS
       SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
@@ -451,9 +417,6 @@ WITH (
 \if :has_max_interval_per_job
      timescaledb.refresh_lag='-30 day',
      timescaledb.max_interval_per_job ='1000 day',
-\endif
-\if :has_continuous_aggs_finalized_option
-     timescaledb.finalized = false,
 \endif
      timescaledb.continuous
 ) AS

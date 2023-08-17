@@ -24,12 +24,6 @@
 
 #define FINALFN "finalize_agg"
 
-extern Oid get_finalize_function_oid(void);
-extern Aggref *get_finalize_aggref(Aggref *inp, Var *partial_state_var);
-extern Node *add_aggregate_partialize_mutator(Node *node, AggPartCxt *cxt);
-extern Node *add_var_mutator(Node *node, AggPartCxt *cxt);
-extern Node *finalize_query_create_having_qual(FinalizeQueryInfo *inp,
-											   MatTableColumnInfo *mattblinfo);
 extern Query *finalize_query_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 											  ObjectAddress *mattbladdress);
 extern void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,

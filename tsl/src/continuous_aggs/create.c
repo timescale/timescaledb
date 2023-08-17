@@ -751,13 +751,11 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	stmt->options = NULL;
 
 	/*
-	 * Step 0: Add any internal columns needed for materialization based
-	 *         on the user query's table.
+	 * Old format caggs are not supported anymore, there is no need to add
+	 * an internal chunk id column for materialized hypertable.
+	 *
+	 * Step 1: create the materialization table.
 	 */
-	if (!finalized)
-		mattablecolumninfo_addinternal(&mattblinfo);
-
-	/* Step 1: create the materialization table. */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
 	ts_catalog_restore_user(&sec_ctx);

@@ -23,12 +23,20 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	int sec_ctx;
 	Oid uid, saved_uid;
 
+	bool finalized = ContinuousAggIsFinalized(agg);
+	if (!finalized)
+	{
+		ereport(WARNING,
+				(errmsg("Continuous Aggregates with partials is not supported anymore."),
+				 errdetail("Migrate the Continuous Aggregates to finalized form to rebuild.")));
+		return;
+	}
+
 	/* Cagg view created by the user. */
 	Oid user_view_oid = relation_oid(&agg->data.user_view_schema, &agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
 
-	bool finalized = ContinuousAggIsFinalized(agg);
 	bool rebuild_cagg_with_joins = false;
 
 	/* Extract final query from user view query. */

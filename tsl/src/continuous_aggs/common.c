@@ -14,7 +14,6 @@ static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id
 									int32 parent_mat_hypertable_id);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause,
 									List *targetList);
-static bool cagg_agg_validate(Node *node, void *context);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool finalized);
 static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
@@ -367,50 +366,6 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 		elog(ERROR, "continuous aggregate view must include a valid time bucket function");
 }
 
-static bool
-cagg_agg_validate(Node *node, void *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, Aggref))
-	{
-		Aggref *agg = (Aggref *) node;
-		HeapTuple aggtuple;
-		Form_pg_aggregate aggform;
-		if (agg->aggorder || agg->aggdistinct || agg->aggfilter)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("aggregates with FILTER / DISTINCT / ORDER BY are not supported")));
-		}
-		/* Fetch the pg_aggregate row. */
-		aggtuple = SearchSysCache1(AGGFNOID, agg->aggfnoid);
-		if (!HeapTupleIsValid(aggtuple))
-			elog(ERROR, "cache lookup failed for aggregate %u", agg->aggfnoid);
-		aggform = (Form_pg_aggregate) GETSTRUCT(aggtuple);
-		if (aggform->aggkind != 'n')
-		{
-			ReleaseSysCache(aggtuple);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("ordered set/hypothetical aggregates are not supported")));
-		}
-		if (!OidIsValid(aggform->aggcombinefn) ||
-			(aggform->aggtranstype == INTERNALOID && !OidIsValid(aggform->aggdeserialfn)))
-		{
-			ReleaseSysCache(aggtuple);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("aggregates which are not parallelizable are not supported")));
-		}
-		ReleaseSysCache(aggtuple);
-
-		return false;
-	}
-	return expression_tree_walker(node, cagg_agg_validate, context);
-}
-
 /*
  * Check query and extract error details and error hints.
  *
@@ -421,13 +376,11 @@ cagg_agg_validate(Node *node, void *context)
 static bool
 cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, const bool finalized)
 {
-/*
- * For now deprecate partial aggregates on release builds only.
- * Once migration tests are made compatible with PG15 enable deprecation
- * on debug builds as well.
- */
-#ifndef DEBUG
-#if PG15_GE
+	/*
+	 * For now deprecate partial aggregates on release builds only.
+	 * Once migration tests are made compatible with PG15 enable deprecation
+	 * on debug builds as well.
+	 */
 	if (!finalized)
 	{
 		/* continuous aggregates with old format will not be allowed */
@@ -438,8 +391,6 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 							   "to true.");
 		return false;
 	}
-#endif
-#endif
 	if (!query->jointree->fromlist)
 	{
 		appendStringInfoString(hint, "FROM clause missing in the query");
@@ -474,17 +425,6 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 		appendStringInfoString(hint,
 							   "Use LIMIT and LIMIT OFFSET in SELECTS from the continuous "
 							   "aggregate view instead.");
-		return false;
-	}
-
-	if (query->sortClause && !finalized)
-	{
-		appendStringInfoString(detail,
-							   "ORDER BY is not supported in queries defining continuous "
-							   "aggregates.");
-		appendStringInfoString(hint,
-							   "Use ORDER BY clauses in SELECTS from the continuous aggregate view "
-							   "instead.");
 		return false;
 	}
 
@@ -639,13 +579,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
 
-	/* Finalized cagg doesn't have those restrictions anymore. */
-	if (!finalized)
-	{
-		/* Validate aggregates allowed. */
-		cagg_agg_validate((Node *) query->targetList, NULL);
-		cagg_agg_validate((Node *) query->havingQual, NULL);
-	}
 	/* Check if there are only two tables in the from list. */
 	fromList = query->jointree->fromlist;
 	if (list_length(fromList) > CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
@@ -659,13 +592,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
 		!IsA(linitial(query->jointree->fromlist), RangeTblRef))
 	{
-		/* Using old format caggs is not supported */
-		if (!finalized)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("old format of continuous aggregate is not supported with joins"),
-					 errhint("Set timescaledb.finalized to TRUE.")));
-
 		if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
 		{
 			if (!IsA(linitial(fromList), RangeTblRef) || !IsA(lsecond(fromList), RangeTblRef))

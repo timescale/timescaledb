@@ -56,16 +56,6 @@ FROM
   hyper
 GROUP BY hour, device;
 
-CREATE MATERIALIZED VIEW contagg_old
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-  time_bucket('1 hour', time) AS hour,
-  device,
-  min(time)
-FROM
-  hyper
-GROUP BY hour, device;
-
 -- Create another view (already have the "relations" view)
 CREATE VIEW devices AS
 SELECT DISTINCT ON (device) device
@@ -86,14 +76,12 @@ INSERT INTO part
 SELECT * FROM normal;
 
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
-CALL refresh_continuous_aggregate('contagg_old', NULL, NULL);
 
 -- ANALYZE to get updated reltuples stats
 ANALYZE normal, hyper, part;
 
 SELECT count(c) FROM show_chunks('hyper') c;
 SELECT count(c) FROM show_chunks('contagg') c;
-SELECT count(c) FROM show_chunks('contagg_old') c;
 
 -- Update and show the telemetry report
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -227,16 +215,6 @@ FROM
   disthyper
 GROUP BY hour, device;
 
-CREATE MATERIALIZED VIEW distcontagg_old
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-  time_bucket('1 hour', time) AS hour,
-  device,
-  min(time)
-FROM
-  disthyper
-GROUP BY hour, device;
-
 VACUUM;
 
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -264,7 +242,6 @@ select add_job('job_test_fixed', '1 week');
 select add_job('job_test_drifting', '1 week', fixed_schedule => false);
 -- add continuous aggregate refresh policy for contagg
 select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, interval '3 weeks'); -- drifting
-select add_continuous_aggregate_policy('contagg_old', interval '3 weeks', NULL, interval '3 weeks', initial_start => now()); -- fixed
 -- add retention policy, fixed
 select add_retention_policy('hyper', interval '1 year', initial_start => now());
 -- add compression policy

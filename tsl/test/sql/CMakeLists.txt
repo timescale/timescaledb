@@ -66,9 +66,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
-    cagg_errors_deprecated.sql
     cagg_joins.sql
-    cagg_migrate.sql
     cagg_multi.sql
     cagg_on_cagg.sql
     cagg_on_cagg_joins.sql
@@ -185,8 +183,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES cagg_query.sql.in continuous_aggs.sql.in
-       continuous_aggs_deprecated.sql.in)
+  list(APPEND TEST_TEMPLATES cagg_query.sql.in continuous_aggs.sql.in)
   if(ENABLE_MULTINODE_TESTS)
     list(
       APPEND
