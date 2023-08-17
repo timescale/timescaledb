@@ -11,7 +11,7 @@ create table test_schema.test_table(time BIGINT, temp float8, device_id text, de
 
 \set ON_ERROR_STOP 0
 -- get_create_command should fail since hypertable isn't made yet
-SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 \set ON_ERROR_STOP 1
 
 \dt "test_schema".*
@@ -58,7 +58,7 @@ select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2
 -- Check that the insert block trigger exists
 SELECT * FROM test.show_triggers('test_schema.test_table');
 
-SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 
 --test adding one more closed dimension
 select add_dimension('test_schema.test_table', 'location', 4);
@@ -79,7 +79,7 @@ SELECT set_number_partitions('test_schema.test_table', 0, 'location');
 -- Too many
 SELECT set_number_partitions('test_schema.test_table', 32768, 'location');
 -- get_create_command only works on tables w/ 1 or 2 dimensions
-SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 \set ON_ERROR_STOP 1
 
 --test adding one more open dimension
@@ -197,7 +197,7 @@ select add_dimension('test_schema.test_table', 'location', 2, if_not_exists => t
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
-SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
+SELECT * FROM _timescaledb_functions.get_create_command('test_1dim');
 
 \dt "test_schema".*
 
@@ -386,8 +386,8 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
 -- check get_create_command produces valid command
 CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
 SELECT create_hypertable('test_schema.test_sql_cmd','time');
-SELECT * FROM _timescaledb_internal.get_create_command('test_sql_cmd');
-SELECT _timescaledb_internal.get_create_command('test_sql_cmd') AS create_cmd; \gset
+SELECT * FROM _timescaledb_functions.get_create_command('test_sql_cmd');
+SELECT _timescaledb_functions.get_create_command('test_sql_cmd') AS create_cmd; \gset
 DROP TABLE test_schema.test_sql_cmd CASCADE;
 CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
 SELECT test.execute_sql(:'create_cmd');
