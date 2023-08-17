@@ -15,5 +15,5 @@ run_tests "$@" -v8 \
 
 # Also run repair tests for >=2.10.x versions due to PR #5441
 run_tests "$@" -r -v8 \
-          2.10.0-pg14 2.10.1-pg14 2.10.2-pg14 2.10.3-pg14 2.11.0-pg14 2.11.1-pg14
+          2.10.0-pg14 2.10.1-pg14 2.10.2-pg14 2.10.3-pg14 2.11.0-pg14 2.11.1-pg14 2.11.2-pg14
 
