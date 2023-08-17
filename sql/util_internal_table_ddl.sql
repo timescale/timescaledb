@@ -11,7 +11,7 @@
 -- so that it knows how to restore the hypertable without user intervention.
 --
 -- It only works for hypertables with up to 2 dimensions.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_create_command(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.get_create_command(
     table_name NAME
 )
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS

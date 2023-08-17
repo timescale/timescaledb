@@ -8,7 +8,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 \set ON_ERROR_STOP 0
 -- get_create_command should fail since hypertable isn't made yet
-SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 ERROR:  hypertable "test_table" not found
 \set ON_ERROR_STOP 1
 \dt "test_schema".*
@@ -72,7 +72,7 @@ SELECT * FROM test.show_triggers('test_schema.test_table');
  ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
 (1 row)
 
-SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
                                                                 get_create_command                                                                
 --------------------------------------------------------------------------------------------------------------------------------------------------
  SELECT create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
@@ -137,7 +137,7 @@ ERROR:  invalid number of partitions: must be between 1 and 32767
 SELECT set_number_partitions('test_schema.test_table', 32768, 'location');
 ERROR:  invalid number of partitions: must be between 1 and 32767
 -- get_create_command only works on tables w/ 1 or 2 dimensions
-SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 ERROR:  get_create_command only supports hypertables with up to 2 dimensions
 \set ON_ERROR_STOP 1
 --test adding one more open dimension
@@ -416,7 +416,7 @@ NOTICE:  adding not-null constraint to column "time"
  (7,test_schema,test_1dim,t)
 (1 row)
 
-SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
+SELECT * FROM _timescaledb_functions.get_create_command('test_1dim');
                                                        get_create_command                                                       
 --------------------------------------------------------------------------------------------------------------------------------
  SELECT create_hypertable('test_schema.test_1dim', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
@@ -713,13 +713,13 @@ NOTICE:  adding not-null constraint to column "time"
  (15,test_schema,test_sql_cmd,t)
 (1 row)
 
-SELECT * FROM _timescaledb_internal.get_create_command('test_sql_cmd');
+SELECT * FROM _timescaledb_functions.get_create_command('test_sql_cmd');
                                                         get_create_command                                                         
 -----------------------------------------------------------------------------------------------------------------------------------
  SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
 (1 row)
 
-SELECT _timescaledb_internal.get_create_command('test_sql_cmd') AS create_cmd; \gset
+SELECT _timescaledb_functions.get_create_command('test_sql_cmd') AS create_cmd; \gset
                                                             create_cmd                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);

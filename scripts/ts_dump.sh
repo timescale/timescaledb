@@ -33,7 +33,7 @@ pg_dump "$@" --schema-only -t $HYPERTABLE -f $PREFIX-schema.sql
 echo >> $PREFIX-schema.sql "--
 -- Restore to hypertable
 --"
-psql "$@" -qAtX -c "SELECT _timescaledb_internal.get_create_command('$HYPERTABLE');" >> $PREFIX-schema.sql
+psql "$@" -qAtX -c "SELECT _timescaledb_functions.get_create_command('$HYPERTABLE');" >> $PREFIX-schema.sql
 
 echo "Backing up data as $PREFIX-data.csv..."
 psql "$@" -c "\COPY (SELECT * FROM $HYPERTABLE) TO $PREFIX-data.csv DELIMITER ',' CSV"
