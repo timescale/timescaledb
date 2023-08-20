@@ -21,7 +21,7 @@ CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_boo
 \c :DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "one_Partition" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 \c :DBNAME :ROLE_DEFAULT_PERM_USER;
-SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
              1 | public      | one_Partition | t

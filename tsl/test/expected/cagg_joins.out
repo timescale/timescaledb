@@ -76,7 +76,7 @@ View definition:
     _materialized_hypertable_3.avg,
     _materialized_hypertable_3.name
    FROM _timescaledb_internal._materialized_hypertable_3 _materialized_hypertable_3
-  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_3.bucket)
 UNION ALL
 ( SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
@@ -84,7 +84,7 @@ UNION ALL
     devices.name
    FROM conditions,
     devices
-  WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day))
   ORDER BY (time_bucket('@ 1 day'::interval, conditions.day)))
   ORDER BY 1;
@@ -154,7 +154,7 @@ View definition:
     _materialized_hypertable_4.avg,
     _materialized_hypertable_4.name
    FROM _timescaledb_internal._materialized_hypertable_4 _materialized_hypertable_4
-  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_4.bucket)
 UNION ALL
 ( SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
@@ -162,7 +162,7 @@ UNION ALL
     devices.name
    FROM conditions
      JOIN devices ON conditions.device_id = devices.device_id
-  WHERE conditions.day >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  WHERE conditions.day >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day))
   ORDER BY (time_bucket('@ 1 day'::interval, conditions.day)))
   ORDER BY 1;
@@ -233,7 +233,7 @@ View definition:
     _materialized_hypertable_5.avg,
     _materialized_hypertable_5.name
    FROM _timescaledb_internal._materialized_hypertable_5 _materialized_hypertable_5
-  WHERE _materialized_hypertable_5.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(5)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_5.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(5)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_5.bucket)
 UNION ALL
 ( SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
@@ -241,7 +241,7 @@ UNION ALL
     devices.name
    FROM conditions
      JOIN devices USING (device_id)
-  WHERE conditions.day >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(5)), '-infinity'::timestamp with time zone)
+  WHERE conditions.day >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(5)), '-infinity'::timestamp with time zone)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day))
   ORDER BY (time_bucket('@ 1 day'::interval, conditions.day)))
   ORDER BY 1;
@@ -313,7 +313,7 @@ View definition:
     _materialized_hypertable_6.avg,
     _materialized_hypertable_6.name
    FROM _timescaledb_internal._materialized_hypertable_6 _materialized_hypertable_6
-  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_6.bucket)
 UNION ALL
 ( SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
@@ -321,7 +321,7 @@ UNION ALL
     devices.name
    FROM devices,
     conditions
-  WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+  WHERE conditions.device_id = devices.device_id AND conditions.day >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(6)), '-infinity'::timestamp with time zone)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day))
   ORDER BY (time_bucket('@ 1 day'::interval, conditions.day)))
   ORDER BY 1;
@@ -394,7 +394,7 @@ View definition:
     _materialized_hypertable_7.avg,
     _materialized_hypertable_7.name
    FROM _timescaledb_internal._materialized_hypertable_7 _materialized_hypertable_7
-  WHERE _materialized_hypertable_7.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(7)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_7.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(7)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_7.bucket)
 UNION ALL
 ( SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
@@ -402,7 +402,7 @@ UNION ALL
     devices.name
    FROM devices
      JOIN conditions ON conditions.device_id = devices.device_id
-  WHERE conditions.day >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(7)), '-infinity'::timestamp with time zone)
+  WHERE conditions.day >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(7)), '-infinity'::timestamp with time zone)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day))
   ORDER BY (time_bucket('@ 1 day'::interval, conditions.day)))
   ORDER BY 1;
@@ -477,7 +477,7 @@ View definition:
     _materialized_hypertable_8.avg,
     _materialized_hypertable_8.name
    FROM _timescaledb_internal._materialized_hypertable_8 _materialized_hypertable_8
-  WHERE _materialized_hypertable_8.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_8.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_8.bucket)
 UNION ALL
 ( SELECT time_bucket('@ 1 day'::interval, conditions.day) AS bucket,
@@ -485,7 +485,7 @@ UNION ALL
     devices.name
    FROM devices
      JOIN conditions USING (device_id)
-  WHERE conditions.day >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp with time zone)
+  WHERE conditions.day >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(8)), '-infinity'::timestamp with time zone)
   GROUP BY devices.name, (time_bucket('@ 1 day'::interval, conditions.day))
   ORDER BY (time_bucket('@ 1 day'::interval, conditions.day)))
   ORDER BY 1;

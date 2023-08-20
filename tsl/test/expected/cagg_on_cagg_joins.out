@@ -150,12 +150,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
@@ -578,12 +578,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
@@ -1335,12 +1335,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
@@ -1758,12 +1758,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
@@ -2098,12 +2098,12 @@ View definition:
  SELECT _materialized_hypertable_21.bucket,
     _materialized_hypertable_21.temperature
    FROM _timescaledb_internal._materialized_hypertable_21
-  WHERE _materialized_hypertable_21.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_21.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions."time"));
 
 --
@@ -2200,12 +2200,12 @@ View definition:
  SELECT _materialized_hypertable_22.bucket,
     _materialized_hypertable_22.temperature
    FROM _timescaledb_internal._materialized_hypertable_22
-  WHERE _materialized_hypertable_22.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(22)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_22.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(22)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(22)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(22)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
 
 --
@@ -2301,12 +2301,12 @@ View definition:
  SELECT _materialized_hypertable_23.bucket,
     _materialized_hypertable_23.temperature
    FROM _timescaledb_internal._materialized_hypertable_23
-  WHERE _materialized_hypertable_23.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_23.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 hour'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 hour'::interval, conditions."time"));
 
 --
@@ -2338,12 +2338,12 @@ View definition:
  SELECT _materialized_hypertable_24.bucket,
     _materialized_hypertable_24.temperature
    FROM _timescaledb_internal._materialized_hypertable_24
-  WHERE _materialized_hypertable_24.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(24)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_24.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(24)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(24)), '-infinity'::timestamp without time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(24)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket));
 
 \set ON_ERROR_STOP 1
@@ -2416,12 +2416,12 @@ View definition:
  SELECT _materialized_hypertable_25.bucket,
     _materialized_hypertable_25.temperature
    FROM _timescaledb_internal._materialized_hypertable_25
-  WHERE _materialized_hypertable_25.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(25)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_25.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(25)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(25)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(25)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
 
 --
@@ -2616,12 +2616,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
@@ -3039,12 +3039,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH NO DATA;
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')
@@ -3379,12 +3379,12 @@ View definition:
  SELECT _materialized_hypertable_34.bucket,
     _materialized_hypertable_34.temperature
    FROM _timescaledb_internal._materialized_hypertable_34
-  WHERE _materialized_hypertable_34.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_34.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions."time"));
 
 --
@@ -3481,12 +3481,12 @@ View definition:
  SELECT _materialized_hypertable_35.bucket,
     _materialized_hypertable_35.temperature
    FROM _timescaledb_internal._materialized_hypertable_35
-  WHERE _materialized_hypertable_35.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(35)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_35.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(35)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(35)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(35)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
 
 --
@@ -3582,12 +3582,12 @@ View definition:
  SELECT _materialized_hypertable_36.bucket,
     _materialized_hypertable_36.temperature
    FROM _timescaledb_internal._materialized_hypertable_36
-  WHERE _materialized_hypertable_36.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_36.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 hour'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 hour'::interval, conditions."time"));
 
 --
@@ -3619,12 +3619,12 @@ View definition:
  SELECT _materialized_hypertable_37.bucket,
     _materialized_hypertable_37.temperature
    FROM _timescaledb_internal._materialized_hypertable_37
-  WHERE _materialized_hypertable_37.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(37)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_37.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(37)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(37)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(37)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket));
 
 \set ON_ERROR_STOP 1
@@ -3697,12 +3697,12 @@ View definition:
  SELECT _materialized_hypertable_38.bucket,
     _materialized_hypertable_38.temperature
    FROM _timescaledb_internal._materialized_hypertable_38
-  WHERE _materialized_hypertable_38.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(38)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_38.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(38)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 2 hours'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(38)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(38)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 2 hours'::interval, conditions."time"));
 
 --
@@ -3805,12 +3805,12 @@ View definition:
  SELECT _materialized_hypertable_39.bucket,
     _materialized_hypertable_39.temperature
    FROM _timescaledb_internal._materialized_hypertable_39
-  WHERE _materialized_hypertable_39.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(39)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_39.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(39)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(39)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(39)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text));
 
 --
@@ -3842,12 +3842,12 @@ View definition:
  SELECT _materialized_hypertable_40.bucket,
     _materialized_hypertable_40.temperature
    FROM _timescaledb_internal._materialized_hypertable_40
-  WHERE _materialized_hypertable_40.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(40)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_40.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(40)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket, 'US/Pacific'::text) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(40)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(40)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 hour'::interval, conditions_summary_1.bucket, 'US/Pacific'::text));
 
 \set ON_ERROR_STOP 1
@@ -3916,12 +3916,12 @@ View definition:
  SELECT _materialized_hypertable_41.bucket,
     _materialized_hypertable_41.temperature
    FROM _timescaledb_internal._materialized_hypertable_41
-  WHERE _materialized_hypertable_41.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(41)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_41.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(41)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(41)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(41)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 5 mins'::interval, conditions."time", 'US/Pacific'::text));
 
 --
@@ -4018,12 +4018,12 @@ View definition:
  SELECT _materialized_hypertable_42.bucket,
     _materialized_hypertable_42.temperature
    FROM _timescaledb_internal._materialized_hypertable_42
-  WHERE _materialized_hypertable_42.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(42)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_42.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(42)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(42)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(42)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text));
 
 --
@@ -4055,12 +4055,12 @@ View definition:
  SELECT _materialized_hypertable_43.bucket,
     _materialized_hypertable_43.temperature
    FROM _timescaledb_internal._materialized_hypertable_43
-  WHERE _materialized_hypertable_43.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(43)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_43.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(43)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(43)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(43)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text));
 
 \set ON_ERROR_STOP 1
@@ -4134,12 +4134,12 @@ View definition:
  SELECT _materialized_hypertable_44.bucket,
     _materialized_hypertable_44.temperature
    FROM _timescaledb_internal._materialized_hypertable_44
-  WHERE _materialized_hypertable_44.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(44)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_44.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(44)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time", 'US/Pacific'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(44)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(44)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'US/Pacific'::text));
 
 --
@@ -4171,12 +4171,12 @@ View definition:
  SELECT _materialized_hypertable_45.bucket,
     _materialized_hypertable_45.temperature
    FROM _timescaledb_internal._materialized_hypertable_45
-  WHERE _materialized_hypertable_45.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(45)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_45.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(45)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(45)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(45)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text));
 
 \set ON_ERROR_STOP 1
@@ -4251,12 +4251,12 @@ View definition:
  SELECT _materialized_hypertable_46.bucket,
     _materialized_hypertable_46.temperature
    FROM _timescaledb_internal._materialized_hypertable_46
-  WHERE _materialized_hypertable_46.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(46)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_46.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(46)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(46)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(46)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 --
@@ -4288,12 +4288,12 @@ View definition:
  SELECT _materialized_hypertable_47.bucket,
     _materialized_hypertable_47.temperature
    FROM _timescaledb_internal._materialized_hypertable_47
-  WHERE _materialized_hypertable_47.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(47)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_47.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(47)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(47)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(47)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket, 'UTC'::text));
 
 \set ON_ERROR_STOP 1
@@ -4368,12 +4368,12 @@ View definition:
  SELECT _materialized_hypertable_48.bucket,
     _materialized_hypertable_48.temperature
    FROM _timescaledb_internal._materialized_hypertable_48
-  WHERE _materialized_hypertable_48.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(48)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_48.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(48)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(48)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(48)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text));
 
 --
@@ -4405,12 +4405,12 @@ View definition:
  SELECT _materialized_hypertable_49.bucket,
     _materialized_hypertable_49.temperature
    FROM _timescaledb_internal._materialized_hypertable_49
-  WHERE _materialized_hypertable_49.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(49)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_49.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(49)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(49)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(49)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions_summary_1.bucket));
 
 \set ON_ERROR_STOP 1
@@ -4484,12 +4484,12 @@ View definition:
  SELECT _materialized_hypertable_50.bucket,
     _materialized_hypertable_50.temperature
    FROM _timescaledb_internal._materialized_hypertable_50
-  WHERE _materialized_hypertable_50.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(50)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_50.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(50)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(50)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(50)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text));
 
 --
@@ -4521,12 +4521,12 @@ View definition:
  SELECT _materialized_hypertable_51.bucket,
     _materialized_hypertable_51.temperature
    FROM _timescaledb_internal._materialized_hypertable_51
-  WHERE _materialized_hypertable_51.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(51)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_51.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(51)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 year'::interval, conditions_summary_1.bucket) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(51)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(51)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 year'::interval, conditions_summary_1.bucket));
 
 \set ON_ERROR_STOP 1
@@ -4594,12 +4594,12 @@ View definition:
  SELECT _materialized_hypertable_52.bucket,
     _materialized_hypertable_52.temperature
    FROM _timescaledb_internal._materialized_hypertable_52
-  WHERE _materialized_hypertable_52.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(52)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_52.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(52)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(52)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(52)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time", 'UTC'::text));
 
 --
@@ -4631,12 +4631,12 @@ View definition:
  SELECT _materialized_hypertable_53.bucket,
     _materialized_hypertable_53.temperature
    FROM _timescaledb_internal._materialized_hypertable_53
-  WHERE _materialized_hypertable_53.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(53)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_53.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(53)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 3 mons'::interval, conditions_summary_1.bucket) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(53)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(53)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 3 mons'::interval, conditions_summary_1.bucket));
 
 \set ON_ERROR_STOP 1
@@ -4704,12 +4704,12 @@ View definition:
  SELECT _materialized_hypertable_54.bucket,
     _materialized_hypertable_54.temperature
    FROM _timescaledb_internal._materialized_hypertable_54
-  WHERE _materialized_hypertable_54.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(54)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_54.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(54)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 mon'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(54)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(54)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 mon'::interval, conditions."time", 'UTC'::text));
 
 --
@@ -4741,12 +4741,12 @@ View definition:
  SELECT _materialized_hypertable_55.bucket,
     _materialized_hypertable_55.temperature
    FROM _timescaledb_internal._materialized_hypertable_55
-  WHERE _materialized_hypertable_55.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(55)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_55.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(55)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 year'::interval, conditions_summary_1.bucket) AS bucket,
     sum(conditions_summary_1.temperature) AS temperature
    FROM conditions_summary_1
-  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(55)), '-infinity'::timestamp with time zone)
+  WHERE conditions_summary_1.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(55)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 year'::interval, conditions_summary_1.bucket));
 
 \set ON_ERROR_STOP 1
@@ -4814,12 +4814,12 @@ View definition:
  SELECT _materialized_hypertable_56.bucket,
     _materialized_hypertable_56.temperature
    FROM _timescaledb_internal._materialized_hypertable_56
-  WHERE _materialized_hypertable_56.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(56)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_56.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(56)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(56)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(56)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time", 'UTC'::text));
 
 --
@@ -4910,12 +4910,12 @@ View definition:
  SELECT _materialized_hypertable_57.bucket,
     _materialized_hypertable_57.temperature
    FROM _timescaledb_internal._materialized_hypertable_57
-  WHERE _materialized_hypertable_57.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(57)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_57.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(57)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time", 'UTC'::text) AS bucket,
     sum(conditions.temperature) AS temperature
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(57)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(57)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time", 'UTC'::text));
 
 --

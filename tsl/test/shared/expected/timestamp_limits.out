@@ -62,9 +62,9 @@ min_pg_date        | 4714-11-24 BC
 SELECT test.min_ts_timestamptz(),
        test.min_ts_timestamp(),
        test.min_ts_date(),
-       _timescaledb_internal.to_timestamp(test.internal_min_ts_timestamptz()) AS min_ts_internal_timestamptz,
-       _timescaledb_internal.to_timestamp_without_timezone(test.internal_min_ts_timestamp()) AS min_ts_internal_timestamp,
-       _timescaledb_internal.to_date(test.internal_min_ts_date()) AS min_ts_internal_date;
+       _timescaledb_functions.to_timestamp(test.internal_min_ts_timestamptz()) AS min_ts_internal_timestamptz,
+       _timescaledb_functions.to_timestamp_without_timezone(test.internal_min_ts_timestamp()) AS min_ts_internal_timestamp,
+       _timescaledb_functions.to_date(test.internal_min_ts_date()) AS min_ts_internal_date;
 -[ RECORD 1 ]---------------+--------------------------
 min_ts_timestamptz          | 4714-11-24 00:00:00+00 BC
 min_ts_timestamp            | 4714-11-24 00:00:00 BC
@@ -89,9 +89,9 @@ end_pg_date        | 5874898-01-01
 SELECT test.end_ts_timestamptz(),
        test.end_ts_timestamp(),
        test.end_ts_date(),
-       _timescaledb_internal.to_timestamp(test.internal_end_ts_timestamptz()) AS end_ts_internal_timestamptz,
-       _timescaledb_internal.to_timestamp_without_timezone(test.internal_end_ts_timestamp()) AS end_ts_internal_timestamp,
-       _timescaledb_internal.to_date(test.internal_end_ts_date()) AS end_ts_internal_date;
+       _timescaledb_functions.to_timestamp(test.internal_end_ts_timestamptz()) AS end_ts_internal_timestamptz,
+       _timescaledb_functions.to_timestamp_without_timezone(test.internal_end_ts_timestamp()) AS end_ts_internal_timestamp,
+       _timescaledb_functions.to_date(test.internal_end_ts_date()) AS end_ts_internal_date;
 -[ RECORD 1 ]---------------+-------------------------
 end_ts_timestamptz          | 294247-01-02 00:00:00+00
 end_ts_timestamp            | 294247-01-02 00:00:00

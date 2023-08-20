@@ -1141,7 +1141,7 @@ insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
 CALL refresh_continuous_aggregate('search_query_count_3', '2001-05-01 00:00+0'::timestamptz, '2001-06-01 00:00+0'::timestamptz);
 
 --verify watermark and check that chunks are compressed
-SELECT _timescaledb_internal.to_timestamp(w) FROM _timescaledb_internal.cagg_watermark(:'MAT_HTID') w;
+SELECT _timescaledb_functions.to_timestamp(w) FROM _timescaledb_internal.cagg_watermark(:'MAT_HTID') w;
 
 SELECT chunk_name, range_start, range_end, is_compressed
 FROM timescaledb_information.chunks

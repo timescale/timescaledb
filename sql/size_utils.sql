@@ -395,9 +395,9 @@ BEGIN
         RETURN format('%L', time_value); -- scale determined by user.
       WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype THEN
         -- assume time_value is in microsec
-        RETURN format('%1$L', _timescaledb_internal.to_timestamp(time_value)); -- microseconds
+        RETURN format('%1$L', _timescaledb_functions.to_timestamp(time_value)); -- microseconds
       WHEN 'DATE'::regtype THEN
-        RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
+        RETURN format('%L', timezone('UTC',_timescaledb_functions.to_timestamp(time_value))::date);
       ELSE
         RETURN time_value;
     END CASE;

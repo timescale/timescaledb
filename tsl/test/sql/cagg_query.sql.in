@@ -239,11 +239,11 @@ ORDER BY m1.location COLLATE "C", m1.timec DESC
 LIMIT 10;
 
 -- Show the current watermark
-SELECT _timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(:mat_id));
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(:mat_id));
 
 -- The watermark should, in this case, be the same as the invalidation
 -- threshold
-SELECT _timescaledb_internal.to_timestamp(watermark)
+SELECT _timescaledb_functions.to_timestamp(watermark)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :raw_id;
 
@@ -264,11 +264,11 @@ WHERE hypertable_name = :'mat_name';
 
 -- The watermark should be updated to reflect the dropped data (i.e.,
 -- the cache should be reset)
-SELECT _timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(:mat_id));
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(:mat_id));
 
 -- Since we removed the last chunk, the invalidation threshold doesn't
 -- move back, while the watermark does.
-SELECT _timescaledb_internal.to_timestamp(watermark)
+SELECT _timescaledb_functions.to_timestamp(watermark)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :raw_id;
 

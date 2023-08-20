@@ -50,12 +50,12 @@ CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
 
 -- Check chunk_interval
 \if :IS_TIME_DIMENSION
-  SELECT h.table_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT h.table_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.hypertable h
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = h.id
   WHERE h.table_name = 'conditions'
   UNION ALL
-  SELECT c.user_view_name AS name, _timescaledb_internal.to_interval(d.interval_length) AS chunk_interval
+  SELECT c.user_view_name AS name, _timescaledb_functions.to_interval(d.interval_length) AS chunk_interval
   FROM _timescaledb_catalog.continuous_agg c
   LEFT JOIN _timescaledb_catalog.dimension d on d.hypertable_id = c.mat_hypertable_id
   WHERE c.user_view_name IN (:'CAGG_NAME_1ST_LEVEL', :'CAGG_NAME_2TH_LEVEL', :'CAGG_NAME_3TH_LEVEL')

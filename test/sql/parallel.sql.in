@@ -13,7 +13,7 @@
 
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
-INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1,10) AS x;
+INSERT INTO test SELECT x, x+0.1, _timescaledb_functions.to_timestamp(x*1000)  FROM generate_series(0,1000000-1,10) AS x;
 
 ANALYZE test;
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);

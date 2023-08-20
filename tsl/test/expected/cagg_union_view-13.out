@@ -37,17 +37,17 @@ SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_ag
 (1 row)
 
 SELECT pg_get_viewdef('metrics_summary',true);
-                                                                                pg_get_viewdef                                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                              +
-     _materialized_hypertable_2.avg                                                                                                                                           +
-    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                     +
-   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
- UNION ALL                                                                                                                                                                    +
-  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
-     avg(metrics.value) AS avg                                                                                                                                                +
-    FROM metrics                                                                                                                                                              +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
+                                                                                 pg_get_viewdef                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                               +
+     _materialized_hypertable_2.avg                                                                                                                                            +
+    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                      +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                     +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                      +
+     avg(metrics.value) AS avg                                                                                                                                                 +
+    FROM metrics                                                                                                                                                               +
+   WHERE metrics."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -89,17 +89,17 @@ SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_ag
 (1 row)
 
 SELECT pg_get_viewdef('metrics_summary',true);
-                                                                                pg_get_viewdef                                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                              +
-     _materialized_hypertable_2.avg                                                                                                                                           +
-    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                     +
-   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
- UNION ALL                                                                                                                                                                    +
-  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
-     avg(metrics.value) AS avg                                                                                                                                                +
-    FROM metrics                                                                                                                                                              +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
+                                                                                 pg_get_viewdef                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                               +
+     _materialized_hypertable_2.avg                                                                                                                                            +
+    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                      +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                     +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                      +
+     avg(metrics.value) AS avg                                                                                                                                                 +
+    FROM metrics                                                                                                                                                               +
+   WHERE metrics."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -119,17 +119,17 @@ SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_ag
 (1 row)
 
 SELECT pg_get_viewdef('metrics_summary',true);
-                                                                                pg_get_viewdef                                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                              +
-     _materialized_hypertable_2.avg                                                                                                                                           +
-    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                     +
-   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
- UNION ALL                                                                                                                                                                    +
-  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
-     avg(metrics.value) AS avg                                                                                                                                                +
-    FROM metrics                                                                                                                                                              +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
+                                                                                 pg_get_viewdef                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_2.time_bucket,                                                                                                                               +
+     _materialized_hypertable_2.avg                                                                                                                                            +
+    FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                      +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                     +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                      +
+     avg(metrics.value) AS avg                                                                                                                                                 +
+    FROM metrics                                                                                                                                                               +
+   WHERE metrics."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)                       +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -209,17 +209,17 @@ SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_ag
 (1 row)
 
 SELECT pg_get_viewdef('metrics_summary',true);
-                                                                                pg_get_viewdef                                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT _materialized_hypertable_3.time_bucket,                                                                                                                              +
-     _materialized_hypertable_3.avg                                                                                                                                           +
-    FROM _timescaledb_internal._materialized_hypertable_3                                                                                                                     +
-   WHERE _materialized_hypertable_3.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)+
- UNION ALL                                                                                                                                                                    +
-  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                     +
-     avg(metrics.value) AS avg                                                                                                                                                +
-    FROM metrics                                                                                                                                                              +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)                       +
+                                                                                 pg_get_viewdef                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT _materialized_hypertable_3.time_bucket,                                                                                                                               +
+     _materialized_hypertable_3.avg                                                                                                                                            +
+    FROM _timescaledb_internal._materialized_hypertable_3                                                                                                                      +
+   WHERE _materialized_hypertable_3.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)+
+ UNION ALL                                                                                                                                                                     +
+  SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                      +
+     avg(metrics.value) AS avg                                                                                                                                                 +
+    FROM metrics                                                                                                                                                               +
+   WHERE metrics."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)                       +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 

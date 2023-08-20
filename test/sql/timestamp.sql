@@ -95,17 +95,17 @@ SET timezone = 'UTC';
 SELECT to_timestamp(1486480176.236538);
 
 -- extension-specific version taking microsecond UNIX timestamp
-SELECT _timescaledb_internal.to_timestamp(1486480176236538);
+SELECT _timescaledb_functions.to_timestamp(1486480176236538);
 
 -- Should be the inverse of the statement above.
-SELECT _timescaledb_internal.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
+SELECT _timescaledb_functions.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
 
 -- For timestamps, BIGINT MAX represents +Infinity and BIGINT MIN
 -- -Infinity. We keep this notion for UNIX epoch time:
-SELECT _timescaledb_internal.to_unix_microseconds('+infinity');
-SELECT _timescaledb_internal.to_timestamp(9223372036854775807);
-SELECT _timescaledb_internal.to_unix_microseconds('-infinity');
-SELECT _timescaledb_internal.to_timestamp(-9223372036854775808);
+SELECT _timescaledb_functions.to_unix_microseconds('+infinity');
+SELECT _timescaledb_functions.to_timestamp(9223372036854775807);
+SELECT _timescaledb_functions.to_unix_microseconds('-infinity');
+SELECT _timescaledb_functions.to_timestamp(-9223372036854775808);
 
 -- In UNIX microseconds, the largest bigint value below infinity
 -- (BIGINT MAX) is smaller than internal date upper bound and should
@@ -113,20 +113,20 @@ SELECT _timescaledb_internal.to_timestamp(-9223372036854775808);
 -- cannot overflow a 64-bit INTEGER since the postgres epoch is at a
 -- later date compared to the UNIX epoch, and is therefore represented
 -- by a smaller number
-SELECT _timescaledb_internal.to_timestamp(9223372036854775806);
+SELECT _timescaledb_functions.to_timestamp(9223372036854775806);
 
 -- Julian day zero is -210866803200000000 microseconds from UNIX epoch
-SELECT _timescaledb_internal.to_timestamp(-210866803200000000);
+SELECT _timescaledb_functions.to_timestamp(-210866803200000000);
 
 \set VERBOSITY default
 -- Going beyond Julian day zero should give out-of-range error
-SELECT _timescaledb_internal.to_timestamp(-210866803200000001);
+SELECT _timescaledb_functions.to_timestamp(-210866803200000001);
 
 -- Lower bound on date (should return the Julian day zero UNIX timestamp above)
-SELECT _timescaledb_internal.to_unix_microseconds('4714-11-24 00:00:00+00 BC');
+SELECT _timescaledb_functions.to_unix_microseconds('4714-11-24 00:00:00+00 BC');
 
 -- Going beyond lower bound on date should return out-of-range
-SELECT _timescaledb_internal.to_unix_microseconds('4714-11-23 23:59:59.999999+00 BC');
+SELECT _timescaledb_functions.to_unix_microseconds('4714-11-23 23:59:59.999999+00 BC');
 
 -- The upper bound for Postgres TIMESTAMPTZ
 SELECT timestamp '294276-12-31 23:59:59.999999+00';
@@ -136,17 +136,17 @@ SELECT timestamp '294276-12-31 23:59:59.999999+00' + interval '1 us';
 
 -- Cannot represent the upper bound timestamp with a UNIX microsecond timestamp
 -- since the Postgres epoch is at a later date than the UNIX epoch.
-SELECT _timescaledb_internal.to_unix_microseconds('294276-12-31 23:59:59.999999+00');
+SELECT _timescaledb_functions.to_unix_microseconds('294276-12-31 23:59:59.999999+00');
 
 -- Subtracting the difference between the two epochs (10957 days) should bring
 -- us within range.
 SELECT timestamp '294276-12-31 23:59:59.999999+00' - interval '10957 days';
 
-SELECT _timescaledb_internal.to_unix_microseconds('294247-01-01 23:59:59.999999');
+SELECT _timescaledb_functions.to_unix_microseconds('294247-01-01 23:59:59.999999');
 
 -- Adding one microsecond should take us out-of-range again
 SELECT timestamp '294247-01-01 23:59:59.999999' + interval '1 us';
-SELECT _timescaledb_internal.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');
+SELECT _timescaledb_functions.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');
 
 --no time_bucketing of dates not by integer # of days
 

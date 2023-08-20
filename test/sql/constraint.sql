@@ -408,7 +408,7 @@ CREATE TABLE hyper_ex (
     ) WHERE (not canceled)
 );
 
-SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
@@ -463,7 +463,7 @@ CREATE TABLE hyper_ex_invalid (
 );
 
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 \set ON_ERROR_STOP 1
 
 
@@ -476,7 +476,7 @@ CREATE TABLE hyper_noinherit (
 SELECT * FROM test.show_constraints('hyper_noinherit');
 
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('hyper_noinherit', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_noinherit', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 \set ON_ERROR_STOP 1
 
 CREATE TABLE hyper_noinherit_alter (
@@ -484,7 +484,7 @@ CREATE TABLE hyper_noinherit_alter (
     sensor_1 NUMERIC NULL DEFAULT 1
 );
 
-SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_noinherit_alter ADD CONSTRAINT check_noinherit CHECK (sensor_1 > 0) NO INHERIT;
@@ -554,7 +554,7 @@ CREATE TABLE hyper_ex_deferred (
     ) WHERE (not canceled) DEFERRABLE INITIALLY DEFERRED
 );
 
-SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 
 INSERT INTO hyper_ex_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 12);
 

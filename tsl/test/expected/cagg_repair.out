@@ -163,7 +163,7 @@ View definition:
     _materialized_hypertable_2.max,
     _materialized_hypertable_2.sum
    FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
-  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
     devices.name AS device_name,
@@ -172,7 +172,7 @@ UNION ALL
     sum(conditions.temperature) AS sum
    FROM conditions
      JOIN devices ON devices.id = conditions.device_id
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time")), devices.name;
 
 SELECT * FROM conditions_summary ORDER BY bucket, device_name;
@@ -206,7 +206,7 @@ View definition:
     _materialized_hypertable_2.max,
     _materialized_hypertable_2.sum
    FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
-  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
     devices.name AS device_name,
@@ -215,7 +215,7 @@ UNION ALL
     sum(conditions.temperature) AS sum
    FROM conditions
      JOIN devices ON devices.id = conditions.device_id
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time")), devices.name;
 
 SELECT * FROM conditions_summary ORDER BY bucket, device_name;
@@ -248,7 +248,7 @@ View definition:
     _materialized_hypertable_2.max,
     _materialized_hypertable_2.sum
    FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
-  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
     devices.name AS device_name,
@@ -257,7 +257,7 @@ UNION ALL
     sum(conditions.temperature) AS sum
    FROM conditions
      JOIN devices ON devices.id = conditions.device_id
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(2)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time")), devices.name;
 
 SELECT * FROM conditions_summary ORDER BY bucket, device_name;
@@ -301,14 +301,14 @@ View definition:
     _materialized_hypertable_3.max,
     _materialized_hypertable_3.sum
    FROM _timescaledb_internal._materialized_hypertable_3
-  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
     max(conditions.temperature) AS max,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(3)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time"));
 
 -- Tests with old cagg format
@@ -341,7 +341,7 @@ View definition:
     _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_3_3, NULL::integer) AS max,
     _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_4_4, NULL::bigint) AS sum
    FROM _timescaledb_internal._materialized_hypertable_4
-  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY _materialized_hypertable_4.bucket
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
@@ -349,7 +349,7 @@ UNION ALL
     max(conditions.temperature) AS max,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time"));
 
 DROP PROCEDURE _timescaledb_internal.cagg_try_repair (REGCLASS, BOOLEAN);

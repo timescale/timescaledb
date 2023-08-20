@@ -12,9 +12,9 @@ CREATE OR REPLACE VIEW chunk_view AS
     ht.table_name AS hypertable_name,
     srcch.schema_name AS schema_name,
     srcch.table_name AS chunk_name,
-    _timescaledb_internal.to_timestamp(dimsl.range_start)
+    _timescaledb_functions.to_timestamp(dimsl.range_start)
      AS range_start,
-    _timescaledb_internal.to_timestamp(dimsl.range_end)
+    _timescaledb_functions.to_timestamp(dimsl.range_end)
      AS range_end
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id

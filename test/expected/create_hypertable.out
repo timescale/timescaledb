@@ -22,20 +22,20 @@ create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
 \set ON_ERROR_STOP 0
 -- Permission denied with unprivileged role
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  permission denied for schema test_schema at character 33
 -- CREATE on schema is not enough
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT ALL ON SCHEMA test_schema TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  must be owner of hypertable "test_table_no_not_null"
 \set ON_ERROR_STOP 1
 -- Should work with when granted table owner role
 RESET ROLE;
 GRANT :ROLE_DEFAULT_PERM_USER TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |       table_name       | created 
 ---------------+-------------+------------------------+---------
@@ -51,14 +51,14 @@ RESET ROLE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- No permissions on associated schema should fail
-select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
 ERROR:  permissions denied: cannot create chunks in schema "chunk_schema"
 \set ON_ERROR_STOP 1
 -- Granting permissions on chunk_schema should make things work
 RESET ROLE;
 GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------

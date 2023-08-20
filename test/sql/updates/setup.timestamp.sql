@@ -9,8 +9,17 @@ CREATE TABLE PUBLIC.hyper_timestamp (
   value int NOT NULL
 );
 
-SELECT * FROM create_hypertable('hyper_timestamp'::regclass, 'time'::name, 'device_id'::name, number_partitions => 2,
-    chunk_time_interval=> _timescaledb_internal.interval_to_usec('1 minute'));
+
+DO $$
+BEGIN
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'interval_to_usec' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    PERFORM create_hypertable('hyper_timestamp'::regclass, 'time'::name, 'device_id'::name, number_partitions => 2, chunk_time_interval=> _timescaledb_internal.interval_to_usec('1 minute'));
+  ELSE
+    PERFORM create_hypertable('hyper_timestamp'::regclass, 'time'::name, 'device_id'::name, number_partitions => 2, chunk_time_interval=> _timescaledb_functions.interval_to_usec('1 minute'));
+  END IF;
+END;
+$$;
 
 --some old versions use more slice_ids than newer ones. Make this uniform
 CALL _timescaledb_testing.restart_dimension_slice_id();

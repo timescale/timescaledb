@@ -199,7 +199,7 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                      Chunks excluded during startup: 0
                      ->  Index Scan using _hyper_4_6_chunk__materialized_hypertable_4_bucket_idx on _timescaledb_internal._hyper_4_6_chunk
                            Output: _hyper_4_6_chunk.bucket, _hyper_4_6_chunk.device_id, _hyper_4_6_chunk.metric_avg, _hyper_4_6_chunk.metric_spread
-                           Index Cond: (_hyper_4_6_chunk.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone))
+                           Index Cond: (_hyper_4_6_chunk.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone))
                            Filter: (_hyper_4_6_chunk.metric_spread = '1800'::double precision)
                ->  HashAggregate
                      Output: (time_bucket('@ 1 hour'::interval, jit_test_contagg.observation_time)), jit_test_contagg.device_id, avg(jit_test_contagg.metric), (max(jit_test_contagg.metric) - min(jit_test_contagg.metric))
@@ -212,7 +212,7 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                            Chunks excluded during startup: 4
                            ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
                                  Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
-                                 Index Cond: (_hyper_3_5_chunk.observation_time >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone))
+                                 Index Cond: (_hyper_3_5_chunk.observation_time >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone))
 (27 rows)
 
 -- generate the results into two different files
