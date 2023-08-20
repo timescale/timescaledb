@@ -16,29 +16,29 @@ ERROR:  time column cannot be NULL
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time');
 ERROR:  integer dimensions require an explicit interval
 -- space dimensions require explicit number of partitions
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  invalid number of partitions for dimension "Device_id"
-SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  relation "public.Hypertable_1_mispelled" does not exist at character 33
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  column "time_mispelled" does not exist
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  invalid type for dimension "Device_id"
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  column "Device_id_mispelled" does not exist
 INSERT INTO PUBLIC."Hypertable_1" VALUES(1,'dev_1', 3);
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  table "Hypertable_1" is not empty
 DELETE FROM  PUBLIC."Hypertable_1" ;
 \set ON_ERROR_STOP 1
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              1 | public      | Hypertable_1 | t
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  table "Hypertable_1" is already a hypertable
 \set ON_ERROR_STOP 1
 INSERT INTO "Hypertable_1" VALUES (0, 1, 0);
@@ -61,9 +61,9 @@ ERROR:  operation not supported on chunk tables
 \set ON_ERROR_STOP 1
 CREATE TABLE PUBLIC."Child" () INHERITS ("Parent");
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Parent"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Parent"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  table "Parent" is already partitioned
-SELECT * FROM create_hypertable('"public"."Child"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Child"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  table "Child" is already partitioned
 \set ON_ERROR_STOP 1
 CREATE UNLOGGED TABLE PUBLIC."Hypertable_unlogged" (
@@ -72,11 +72,11 @@ CREATE UNLOGGED TABLE PUBLIC."Hypertable_unlogged" (
   temp_c int NOT NULL DEFAULT -1
 );
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  table "Hypertable_unlogged" has to be logged
 \set ON_ERROR_STOP 1
 ALTER TABLE PUBLIC."Hypertable_unlogged" SET LOGGED;
-SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name |     table_name      | created 
 ---------------+-------------+---------------------+---------
              2 | public      | Hypertable_unlogged | t
@@ -88,7 +88,7 @@ CREATE TEMP TABLE "Hypertable_temp" (
   temp_c int NOT NULL DEFAULT -1
 );
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"Hypertable_temp"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"Hypertable_temp"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  table "Hypertable_temp" has to be logged
 ALTER TABLE "Hypertable_1" SET UNLOGGED;
 ERROR:  logging cannot be turned off for hypertables
@@ -101,16 +101,16 @@ CREATE TABLE PUBLIC."Hypertable_1_rule" (
 );
 CREATE RULE notify_me AS ON UPDATE TO "Hypertable_1_rule" DO ALSO NOTIFY "Hypertable_1_rule";
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  hypertables do not support rules
 \set ON_ERROR_STOP 1
 ALTER TABLE "Hypertable_1_rule" DISABLE RULE notify_me;
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  hypertables do not support rules
 \set ON_ERROR_STOP 1
 DROP RULE notify_me ON "Hypertable_1_rule";
-SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
              3 | public      | Hypertable_1_rule | t

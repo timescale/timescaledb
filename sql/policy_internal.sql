@@ -67,7 +67,7 @@ BEGIN
   -- for the integer cases, we have to compute the lag w.r.t
   -- the integer_now function and then pass on to show_chunks
   IF pg_typeof(lag) IN ('BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype) THEN
-    lag := _timescaledb_internal.subtract_integer_from_now(htoid, lag::BIGINT);
+    lag := _timescaledb_functions.subtract_integer_from_now(htoid, lag::BIGINT);
   END IF;
 
   FOR chunk_rec IN

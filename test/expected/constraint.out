@@ -568,7 +568,7 @@ CREATE TABLE hyper_ex (
         time WITH =, device_id WITH =
     ) WHERE (not canceled)
 );
-SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -626,7 +626,7 @@ CREATE TABLE hyper_ex_invalid (
     ) WHERE (not canceled)
 );
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
@@ -642,14 +642,14 @@ SELECT * FROM test.show_constraints('hyper_noinherit');
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('hyper_noinherit', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_noinherit', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ERROR:  cannot have NO INHERIT constraints on hypertable "hyper_noinherit"
 \set ON_ERROR_STOP 1
 CREATE TABLE hyper_noinherit_alter (
     time BIGINT,
     sensor_1 NUMERIC NULL DEFAULT 1
 );
-SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
@@ -746,7 +746,7 @@ CREATE TABLE hyper_ex_deferred (
         time WITH =, device_id WITH =
     ) WHERE (not canceled) DEFERRABLE INITIALLY DEFERRED
 );
-SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------

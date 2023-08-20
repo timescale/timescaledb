@@ -1564,7 +1564,7 @@ insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
 --this should succeed since it does not refresh any compressed regions in the cagg
 CALL refresh_continuous_aggregate('search_query_count_3', '2001-05-01 00:00+0'::timestamptz, '2001-06-01 00:00+0'::timestamptz);
 --verify watermark and check that chunks are compressed
-SELECT _timescaledb_internal.to_timestamp(w) FROM _timescaledb_internal.cagg_watermark(:'MAT_HTID') w;
+SELECT _timescaledb_functions.to_timestamp(w) FROM _timescaledb_internal.cagg_watermark(:'MAT_HTID') w;
          to_timestamp         
 ------------------------------
  Wed May 09 17:01:00 2001 PDT
@@ -1982,22 +1982,22 @@ ORDER BY sum DESC;
 NOTICE:  refreshing continuous aggregate "mat_m1"
 -- CAgg definition for realtime
 SELECT pg_get_viewdef('mat_m1',true);
-                                                                                 pg_get_viewdef                                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- ( SELECT _materialized_hypertable_59.time_bucket,                                                                                                                              +
-     _materialized_hypertable_59.count,                                                                                                                                         +
-     _materialized_hypertable_59.sum                                                                                                                                            +
-    FROM _timescaledb_internal._materialized_hypertable_59                                                                                                                      +
-   WHERE _materialized_hypertable_59.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)+
-   ORDER BY _materialized_hypertable_59.sum DESC)                                                                                                                               +
- UNION ALL                                                                                                                                                                      +
- ( SELECT time_bucket('@ 7 days'::interval, conditions.timec) AS time_bucket,                                                                                                   +
-     count(conditions.location) AS count,                                                                                                                                       +
-     sum(conditions.temperature) AS sum                                                                                                                                         +
-    FROM conditions                                                                                                                                                             +
-   WHERE conditions.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)                      +
-   GROUP BY (time_bucket('@ 7 days'::interval, conditions.timec))                                                                                                               +
-   ORDER BY (sum(conditions.temperature)) DESC)                                                                                                                                 +
+                                                                                  pg_get_viewdef                                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ ( SELECT _materialized_hypertable_59.time_bucket,                                                                                                                               +
+     _materialized_hypertable_59.count,                                                                                                                                          +
+     _materialized_hypertable_59.sum                                                                                                                                             +
+    FROM _timescaledb_internal._materialized_hypertable_59                                                                                                                       +
+   WHERE _materialized_hypertable_59.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)+
+   ORDER BY _materialized_hypertable_59.sum DESC)                                                                                                                                +
+ UNION ALL                                                                                                                                                                       +
+ ( SELECT time_bucket('@ 7 days'::interval, conditions.timec) AS time_bucket,                                                                                                    +
+     count(conditions.location) AS count,                                                                                                                                        +
+     sum(conditions.temperature) AS sum                                                                                                                                          +
+    FROM conditions                                                                                                                                                              +
+   WHERE conditions.timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone)                      +
+   GROUP BY (time_bucket('@ 7 days'::interval, conditions.timec))                                                                                                                +
+   ORDER BY (sum(conditions.temperature)) DESC)                                                                                                                                  +
    ORDER BY 3 DESC;
 (1 row)
 
@@ -2034,8 +2034,8 @@ SELECT * FROM mat_m1;
 
 -- Merge Append
 EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
-                                                                                   QUERY PLAN                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: _materialized_hypertable_59.sum DESC
    ->  Custom Scan (ConstraintAwareAppend)
@@ -2044,9 +2044,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
          ->  Merge Append
                Sort Key: _hyper_59_123_chunk.sum DESC
                ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-                     Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                     Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
                ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
-                     Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                     Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
    ->  Sort
          Sort Key: (sum(conditions.temperature)) DESC
          ->  HashAggregate
@@ -2054,9 +2054,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
                ->  Custom Scan (ChunkAppend) on conditions
                      Chunks excluded during startup: 1
                      ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
-                           Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                           Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
                      ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                           Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                           Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
 (21 rows)
 
 -- Ordering by another column
@@ -2070,8 +2070,8 @@ SELECT * FROM mat_m1 ORDER BY count;
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
-                                                                                      QUERY PLAN                                                                                      
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _materialized_hypertable_59.count
    ->  Merge Append
@@ -2082,9 +2082,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                ->  Merge Append
                      Sort Key: _hyper_59_123_chunk.sum DESC
                      ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-                           Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                           Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
                      ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
-                           Index Cond: (time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                           Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
          ->  Sort
                Sort Key: (sum(conditions.temperature)) DESC
                ->  HashAggregate
@@ -2092,9 +2092,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                      ->  Custom Scan (ChunkAppend) on conditions
                            Chunks excluded during startup: 1
                            ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
-                                 Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                                 Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
                            ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                                 Index Cond: (timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+                                 Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(59)), '-infinity'::timestamp with time zone))
 (23 rows)
 
 -- Change the type of cagg
@@ -2315,8 +2315,8 @@ SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 -- Parallel planning
 EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';
-                                                                                                                          QUERY PLAN                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                           QUERY PLAN                                                                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: _materialized_hypertable_64.sum DESC
    ->  Sort
@@ -2324,11 +2324,11 @@ EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_64
                Chunks excluded during startup: 0
                ->  Index Scan using _hyper_64_185_chunk__materialized_hypertable_64_time_bucket_idx on _hyper_64_185_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
                ->  Index Scan using _hyper_64_189_chunk__materialized_hypertable_64_time_bucket_idx on _hyper_64_189_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
                ->  Index Scan using _hyper_64_190_chunk__materialized_hypertable_64_time_bucket_idx on _hyper_64_190_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
    ->  Sort
          Sort Key: (sum(conditions.temperature)) DESC
          ->  HashAggregate
@@ -2336,7 +2336,7 @@ EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket
                ->  Custom Scan (ChunkAppend) on conditions
                      Chunks excluded during startup: 26
                      ->  Index Scan Backward using _hyper_63_184_chunk_conditions_timec_idx on _hyper_63_184_chunk
-                           Index Cond: ((timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                           Index Cond: ((timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
                            Filter: (time_bucket('@ 1 day'::interval, timec) >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone)
 (21 rows)
 

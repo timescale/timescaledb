@@ -188,14 +188,14 @@ FROM (
     CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
       OR dim.column_type = 'TIMESTAMPTZ'::regtype
       OR dim.column_type = 'DATE'::regtype) THEN
-      _timescaledb_internal.to_timestamp(dimsl.range_start)
+      _timescaledb_functions.to_timestamp(dimsl.range_start)
     ELSE
       NULL
     END AS range_start,
     CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
       OR dim.column_type = 'TIMESTAMPTZ'::regtype
       OR dim.column_type = 'DATE'::regtype) THEN
-      _timescaledb_internal.to_timestamp(dimsl.range_end)
+      _timescaledb_functions.to_timestamp(dimsl.range_end)
     ELSE
       NULL
     END AS range_end,
@@ -263,7 +263,7 @@ SELECT ht.schema_name AS hypertable_schema,
     CASE WHEN dim.column_type = 'TIMESTAMP'::regtype
       OR dim.column_type = 'TIMESTAMPTZ'::regtype
       OR dim.column_type = 'DATE'::regtype THEN
-      _timescaledb_internal.to_interval (dim.interval_length)
+      _timescaledb_functions.to_interval(dim.interval_length)
     ELSE
       NULL
     END

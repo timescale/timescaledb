@@ -4,12 +4,12 @@
 
 -- test on normal table
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now('pg_class', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now('pg_class', 1);
 \set ON_ERROR_STOP 1
 
 -- test on hypertable with non-int time dimension
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now('metrics', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now('metrics', 1);
 \set ON_ERROR_STOP 1
 
 SELECT
@@ -21,14 +21,14 @@ FROM
 
 -- test on hypertable without dimensions
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now(:'TABLENAME', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now(:'TABLENAME', 1);
 \set ON_ERROR_STOP 1
 
 -- test on hypertable without now function
 CREATE TABLE subtract_int_no_func(time int NOT NULL);
 SELECT table_name FROM create_hypertable('subtract_int_no_func','time',chunk_time_interval:=10);
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int_no_func', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int_no_func', 1);
 \set ON_ERROR_STOP 1
 
 CREATE OR REPLACE FUNCTION sub_int2_now() RETURNS int2 AS $$ SELECT 2::int2; $$ LANGUAGE SQL IMMUTABLE;
@@ -47,9 +47,9 @@ SELECT set_integer_now_func('subtract_int2', 'sub_int2_now');
 SELECT set_integer_now_func('subtract_int4', 'sub_int4_now');
 SELECT set_integer_now_func('subtract_int8', 'sub_int8_now');
 
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int2', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int4', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int8', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int2', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int4', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int8', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
 
 -- test set_integer_now_func on internal table
 \set ON_ERROR_STOP 0

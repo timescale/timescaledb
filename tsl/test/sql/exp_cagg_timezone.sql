@@ -150,14 +150,14 @@ FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id_1w;
 
 -- Check the invalidation threshold
-SELECT to_char(_timescaledb_internal.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
 
 -- Make sure the invalidation log is empty
 SELECT
-    to_char(_timescaledb_internal.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
-    to_char(_timescaledb_internal.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
+    to_char(_timescaledb_functions.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
+    to_char(_timescaledb_functions.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
 
@@ -176,7 +176,7 @@ ORDER by month, city;
 
 -- Check the invalidation threshold
 
-SELECT to_char(_timescaledb_internal.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
 
@@ -190,7 +190,7 @@ ORDER by week, city;
 
 -- Check the invalidation threshold
 
-SELECT to_char(_timescaledb_internal.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
 
@@ -222,14 +222,14 @@ WHERE day >= '2021-07-01 MSK'
 ORDER BY city DESC, day;
 
 -- Make sure the invalidation threshold was unaffected
-SELECT to_char(_timescaledb_internal.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
 
 -- Make sure the invalidation log is still empty
 SELECT
-    to_char(_timescaledb_internal.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
-    to_char(_timescaledb_internal.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
+    to_char(_timescaledb_functions.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
+    to_char(_timescaledb_functions.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
 
@@ -241,14 +241,14 @@ FROM conditions_summary_tz
 ORDER by month, city;
 
 -- Make sure the invalidation threshold has changed
-SELECT to_char(_timescaledb_internal.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
+SELECT to_char(_timescaledb_functions.to_timestamp(watermark) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS')
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :ht_id;
 
 -- Make sure the invalidation log is still empty
 SELECT
-    to_char(_timescaledb_internal.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
-    to_char(_timescaledb_internal.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
+    to_char(_timescaledb_functions.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
+    to_char(_timescaledb_functions.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
 
@@ -260,8 +260,8 @@ FROM generate_series('2021-08-16 MSK' :: timestamptz, '2021-08-30 MSK', '1 day')
      unnest(array['Moscow', 'Berlin']) as city;
 
 SELECT
-    to_char(_timescaledb_internal.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
-    to_char(_timescaledb_internal.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
+    to_char(_timescaledb_functions.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
+    to_char(_timescaledb_functions.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
 
@@ -272,8 +272,8 @@ FROM conditions_summary_tz
 ORDER by month, city;
 
 SELECT
-    to_char(_timescaledb_internal.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
-    to_char(_timescaledb_internal.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
+    to_char(_timescaledb_functions.to_timestamp(lowest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS lowest,
+    to_char(_timescaledb_functions.to_timestamp(greatest_modified_value) at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS greatest
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
 

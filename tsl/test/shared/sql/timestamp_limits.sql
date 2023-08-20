@@ -80,9 +80,9 @@ SELECT test.min_pg_timestamptz(),
 SELECT test.min_ts_timestamptz(),
        test.min_ts_timestamp(),
        test.min_ts_date(),
-       _timescaledb_internal.to_timestamp(test.internal_min_ts_timestamptz()) AS min_ts_internal_timestamptz,
-       _timescaledb_internal.to_timestamp_without_timezone(test.internal_min_ts_timestamp()) AS min_ts_internal_timestamp,
-       _timescaledb_internal.to_date(test.internal_min_ts_date()) AS min_ts_internal_date;
+       _timescaledb_functions.to_timestamp(test.internal_min_ts_timestamptz()) AS min_ts_internal_timestamptz,
+       _timescaledb_functions.to_timestamp_without_timezone(test.internal_min_ts_timestamp()) AS min_ts_internal_timestamp,
+       _timescaledb_functions.to_date(test.internal_min_ts_date()) AS min_ts_internal_date;
 
 -- END values (PostgreSQL). Note that and values aren't valid
 -- timestamps or dates (since, e.g., END_TIMESTAMP is exclusive). It
@@ -96,9 +96,9 @@ SELECT test.end_pg_timestamptz(),
 SELECT test.end_ts_timestamptz(),
        test.end_ts_timestamp(),
        test.end_ts_date(),
-       _timescaledb_internal.to_timestamp(test.internal_end_ts_timestamptz()) AS end_ts_internal_timestamptz,
-       _timescaledb_internal.to_timestamp_without_timezone(test.internal_end_ts_timestamp()) AS end_ts_internal_timestamp,
-       _timescaledb_internal.to_date(test.internal_end_ts_date()) AS end_ts_internal_date;
+       _timescaledb_functions.to_timestamp(test.internal_end_ts_timestamptz()) AS end_ts_internal_timestamptz,
+       _timescaledb_functions.to_timestamp_without_timezone(test.internal_end_ts_timestamp()) AS end_ts_internal_timestamp,
+       _timescaledb_functions.to_date(test.internal_end_ts_date()) AS end_ts_internal_date;
 
 --Test insert of time values close to or at limits
 --Suitable constraints should be created on chunks

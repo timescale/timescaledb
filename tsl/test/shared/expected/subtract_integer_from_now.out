@@ -3,12 +3,12 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- test on normal table
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now('pg_class', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now('pg_class', 1);
 ERROR:  table "pg_class" is not a hypertable
 \set ON_ERROR_STOP 1
 -- test on hypertable with non-int time dimension
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now('metrics', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now('metrics', 1);
 ERROR:  hypertable has no integer partitioning dimension
 \set ON_ERROR_STOP 1
 SELECT
@@ -19,7 +19,7 @@ FROM
       AND uncompress.table_name = 'metrics_compressed') \gset
 -- test on hypertable without dimensions
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now(:'TABLENAME', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now(:'TABLENAME', 1);
 ERROR:  hypertable has no open partitioning dimension
 \set ON_ERROR_STOP 1
 -- test on hypertable without now function
@@ -30,7 +30,7 @@ SELECT table_name FROM create_hypertable('subtract_int_no_func','time',chunk_tim
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int_no_func', 1);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int_no_func', 1);
 ERROR:  integer_now function not set
 \set ON_ERROR_STOP 1
 CREATE OR REPLACE FUNCTION sub_int2_now() RETURNS int2 AS $$ SELECT 2::int2; $$ LANGUAGE SQL IMMUTABLE;
@@ -69,7 +69,7 @@ SELECT set_integer_now_func('subtract_int8', 'sub_int8_now');
  
 (1 row)
 
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int2', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int2', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
  sub 
   12
    2
@@ -78,7 +78,7 @@ SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int2', lag) AS 
   -6
 (5 rows)
 
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int4', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int4', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
  sub 
   14
    4
@@ -87,7 +87,7 @@ SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int4', lag) AS 
   -4
 (5 rows)
 
-SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int8', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
+SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int8', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
  sub 
   18
    8

@@ -890,24 +890,24 @@ SELECT
 CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
 \x on
 SELECT mat_hypertable_id, user_view_definition FROM _timescaledb_catalog.continuous_agg_migrate_plan;
--[ RECORD 1 ]--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-[ RECORD 1 ]--------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 mat_hypertable_id    | 16
-user_view_definition |  SELECT _materialized_hypertable_16.bucket,                                                                                                                                                     +
-                     |     _timescaledb_internal.finalize_agg('pg_catalog.min(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_2_2, NULL::numeric) AS min,   +
-                     |     _timescaledb_internal.finalize_agg('pg_catalog.max(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_3_3, NULL::numeric) AS max,   +
-                     |     _timescaledb_internal.finalize_agg('pg_catalog.avg(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_4_4, NULL::numeric) AS avg,   +
-                     |     _timescaledb_internal.finalize_agg('pg_catalog.sum(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_5_5, NULL::numeric) AS sum    +
-                     |    FROM _timescaledb_internal._materialized_hypertable_16                                                                                                                                       +
-                     |   WHERE (_materialized_hypertable_16.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone))+
-                     |   GROUP BY _materialized_hypertable_16.bucket                                                                                                                                                   +
-                     | UNION ALL                                                                                                                                                                                       +
-                     |  SELECT public.time_bucket('@ 1 day'::interval, conditions."time") AS bucket,                                                                                                                   +
-                     |     min(conditions.temperature) AS min,                                                                                                                                                         +
-                     |     max(conditions.temperature) AS max,                                                                                                                                                         +
-                     |     avg(conditions.temperature) AS avg,                                                                                                                                                         +
-                     |     sum(conditions.temperature) AS sum                                                                                                                                                          +
-                     |    FROM public.conditions                                                                                                                                                                       +
-                     |   WHERE (conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone))                +
+user_view_definition |  SELECT _materialized_hypertable_16.bucket,                                                                                                                                                      +
+                     |     _timescaledb_internal.finalize_agg('pg_catalog.min(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_2_2, NULL::numeric) AS min,    +
+                     |     _timescaledb_internal.finalize_agg('pg_catalog.max(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_3_3, NULL::numeric) AS max,    +
+                     |     _timescaledb_internal.finalize_agg('pg_catalog.avg(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_4_4, NULL::numeric) AS avg,    +
+                     |     _timescaledb_internal.finalize_agg('pg_catalog.sum(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_5_5, NULL::numeric) AS sum     +
+                     |    FROM _timescaledb_internal._materialized_hypertable_16                                                                                                                                        +
+                     |   WHERE (_materialized_hypertable_16.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone))+
+                     |   GROUP BY _materialized_hypertable_16.bucket                                                                                                                                                    +
+                     | UNION ALL                                                                                                                                                                                        +
+                     |  SELECT public.time_bucket('@ 1 day'::interval, conditions."time") AS bucket,                                                                                                                    +
+                     |     min(conditions.temperature) AS min,                                                                                                                                                          +
+                     |     max(conditions.temperature) AS max,                                                                                                                                                          +
+                     |     avg(conditions.temperature) AS avg,                                                                                                                                                          +
+                     |     sum(conditions.temperature) AS sum                                                                                                                                                           +
+                     |    FROM public.conditions                                                                                                                                                                        +
+                     |   WHERE (conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone))                +
                      |   GROUP BY (public.time_bucket('@ 1 day'::interval, conditions."time"));
 
 \x off
@@ -1037,7 +1037,7 @@ View definition:
     _materialized_hypertable_19.avg,
     _materialized_hypertable_19.sum
    FROM _timescaledb_internal._materialized_hypertable_19
-  WHERE _materialized_hypertable_19.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(19)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_19.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(19)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1045,7 +1045,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(19)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(19)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 SELECT *
@@ -1157,7 +1157,7 @@ View definition:
     _materialized_hypertable_21.avg,
     _materialized_hypertable_21.sum
    FROM _timescaledb_internal._materialized_hypertable_21
-  WHERE _materialized_hypertable_21.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_21.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1165,7 +1165,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(21)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- cagg with the old format because it was overriden
@@ -1185,7 +1185,7 @@ View definition:
     _timescaledb_internal.finalize_agg('pg_catalog.avg(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_4_4, NULL::numeric) AS avg,
     _timescaledb_internal.finalize_agg('pg_catalog.sum(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_16.agg_5_5, NULL::numeric) AS sum
    FROM _timescaledb_internal._materialized_hypertable_16
-  WHERE _materialized_hypertable_16.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_16.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone)
   GROUP BY _materialized_hypertable_16.bucket
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
@@ -1194,7 +1194,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(16)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
@@ -1265,7 +1265,7 @@ View definition:
     _materialized_hypertable_23.avg,
     _materialized_hypertable_23.sum
    FROM _timescaledb_internal._materialized_hypertable_23
-  WHERE _materialized_hypertable_23.bucket < COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+  WHERE _materialized_hypertable_23.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1273,7 +1273,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(23)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
@@ -1577,7 +1577,7 @@ user_view_definition |  SELECT _materialized_hypertable_29.bucket,              
                      |     _timescaledb_internal.finalize_agg('pg_catalog.avg(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_29.agg_4_4, NULL::numeric) AS avg,+
                      |     _timescaledb_internal.finalize_agg('pg_catalog.sum(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_29.agg_5_5, NULL::numeric) AS sum +
                      |    FROM _timescaledb_internal._materialized_hypertable_29                                                                                                                                    +
-                     |   WHERE (_materialized_hypertable_29.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone))                 +
+                     |   WHERE (_materialized_hypertable_29.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone))                +
                      |   GROUP BY _materialized_hypertable_29.bucket                                                                                                                                                +
                      | UNION ALL                                                                                                                                                                                    +
                      |  SELECT public.time_bucket('@ 1 day'::interval, conditions."time") AS bucket,                                                                                                                +
@@ -1586,7 +1586,7 @@ user_view_definition |  SELECT _materialized_hypertable_29.bucket,              
                      |     avg(conditions.temperature) AS avg,                                                                                                                                                      +
                      |     sum(conditions.temperature) AS sum                                                                                                                                                       +
                      |    FROM public.conditions                                                                                                                                                                    +
-                     |   WHERE (conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone))                                 +
+                     |   WHERE (conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone))                                +
                      |   GROUP BY (public.time_bucket('@ 1 day'::interval, conditions."time"));
 
 \x off
@@ -1716,7 +1716,7 @@ View definition:
     _materialized_hypertable_32.avg,
     _materialized_hypertable_32.sum
    FROM _timescaledb_internal._materialized_hypertable_32
-  WHERE _materialized_hypertable_32.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(32)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_32.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(32)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1724,7 +1724,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(32)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(32)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 SELECT *
@@ -1836,7 +1836,7 @@ View definition:
     _materialized_hypertable_34.avg,
     _materialized_hypertable_34.sum
    FROM _timescaledb_internal._materialized_hypertable_34
-  WHERE _materialized_hypertable_34.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_34.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1844,7 +1844,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(34)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- cagg with the old format because it was overriden
@@ -1864,7 +1864,7 @@ View definition:
     _timescaledb_internal.finalize_agg('pg_catalog.avg(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_29.agg_4_4, NULL::numeric) AS avg,
     _timescaledb_internal.finalize_agg('pg_catalog.sum(numeric)'::text, NULL::name, NULL::name, '{{pg_catalog,numeric}}'::name[], _materialized_hypertable_29.agg_5_5, NULL::numeric) AS sum
    FROM _timescaledb_internal._materialized_hypertable_29
-  WHERE _materialized_hypertable_29.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_29.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone)
   GROUP BY _materialized_hypertable_29.bucket
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
@@ -1873,7 +1873,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(29)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
@@ -1944,7 +1944,7 @@ View definition:
     _materialized_hypertable_36.avg,
     _materialized_hypertable_36.sum
    FROM _timescaledb_internal._materialized_hypertable_36
-  WHERE _materialized_hypertable_36.bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+  WHERE _materialized_hypertable_36.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1952,7 +1952,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(36)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0

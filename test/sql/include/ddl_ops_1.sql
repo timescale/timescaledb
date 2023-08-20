@@ -26,9 +26,9 @@ CREATE TABLE "customSchema"."Hypertable_1" (
 );
 CREATE INDEX ON "customSchema"."Hypertable_1" (time, "Device_id");
 
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 1, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 
-SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 
 SELECT * FROM _timescaledb_catalog.hypertable;
 
@@ -63,7 +63,7 @@ DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 
 
 CREATE TABLE my_ht (time BIGINT, val integer);
-SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 ALTER TABLE my_ht ADD COLUMN val2 integer;
 SELECT * FROM test.show_columns('my_ht');
 
@@ -98,7 +98,7 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Device_id" TEXT NOT NULL,
   sensor_1 NUMERIC NULL DEFAULT 1
 );
-SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
 ROLLBACK;
 
@@ -110,7 +110,7 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   sensor_1 NUMERIC NULL DEFAULT 1
 );
 CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Device_id", "Time" DESC);
-SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
 ROLLBACK;
 
@@ -122,7 +122,7 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   sensor_1 NUMERIC NULL DEFAULT 1
 );
 CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Time" DESC);
-SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
 ROLLBACK;
 
@@ -133,7 +133,7 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Device_id" TEXT NOT NULL,
   sensor_1 NUMERIC NULL DEFAULT 1
 );
-SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
 ROLLBACK;
 
@@ -144,6 +144,6 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Device_id" TEXT NOT NULL,
   sensor_1 NUMERIC NULL DEFAULT 1
 );
-SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, create_default_indexes=>FALSE, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, create_default_indexes=>FALSE, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
 ROLLBACK;

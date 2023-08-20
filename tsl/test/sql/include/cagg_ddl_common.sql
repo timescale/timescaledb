@@ -1356,7 +1356,7 @@ WITH NO DATA;
 SELECT set_chunk_time_interval('cagg_set_chunk_time_interval', chunk_time_interval => interval '1 month');
 CALL refresh_continuous_aggregate('cagg_set_chunk_time_interval', NULL, NULL);
 
-SELECT _timescaledb_internal.to_interval(d.interval_length) = interval '1 month'
+SELECT _timescaledb_functions.to_interval(d.interval_length) = interval '1 month'
 FROM _timescaledb_catalog.dimension d
          RIGHT JOIN _timescaledb_catalog.continuous_agg ca ON ca.user_view_name = 'cagg_set_chunk_time_interval'
 WHERE d.hypertable_id = ca.mat_hypertable_id;
