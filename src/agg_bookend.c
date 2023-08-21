@@ -137,18 +137,17 @@ polydatum_deserialize_type(StringInfo buf)
  *
  */
 static PolyDatum *
-polydatum_deserialize(PolyDatum *result, StringInfo buf, PolyDatumIOState *state,
-					  FunctionCallInfo fcinfo)
+polydatum_deserialize(MemoryContext mem_ctx, PolyDatum *result, StringInfo buf,
+					  PolyDatumIOState *state, FunctionCallInfo fcinfo)
 {
 	int itemlen;
 	StringInfoData item_buf;
 	StringInfo bufptr;
 	char csave;
 
-	if (result == NULL)
-	{
-		result = palloc(sizeof(PolyDatum));
-	}
+	Assert(result != NULL);
+
+	MemoryContext old_context = MemoryContextSwitchTo(mem_ctx);
 
 	result->type_oid = polydatum_deserialize_type(buf);
 
@@ -212,6 +211,9 @@ polydatum_deserialize(PolyDatum *result, StringInfo buf, PolyDatumIOState *state
 
 		buf->data[buf->cursor] = csave;
 	}
+
+	MemoryContextSwitchTo(old_context);
+
 	return result;
 }
 
@@ -511,12 +513,13 @@ ts_bookend_serializefunc(PG_FUNCTION_ARGS)
 Datum
 ts_bookend_deserializefunc(PG_FUNCTION_ARGS)
 {
+	MemoryContext aggcontext;
 	bytea *sstate;
 	StringInfoData buf;
 	InternalCmpAggStore *result;
 	InternalCmpAggStoreIOState *my_extra;
 
-	if (!AggCheckCallContext(fcinfo, NULL))
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
 		elog(ERROR, "aggregate function called in non-aggregate context");
 
 	sstate = PG_GETARG_BYTEA_P(0);
@@ -536,9 +539,9 @@ ts_bookend_deserializefunc(PG_FUNCTION_ARGS)
 		my_extra = (InternalCmpAggStoreIOState *) fcinfo->flinfo->fn_extra;
 	}
 
-	result = palloc(sizeof(InternalCmpAggStore));
-	polydatum_deserialize(&result->value, &buf, &my_extra->value, fcinfo);
-	polydatum_deserialize(&result->cmp, &buf, &my_extra->cmp, fcinfo);
+	result = MemoryContextAllocZero(aggcontext, sizeof(InternalCmpAggStore));
+	polydatum_deserialize(aggcontext, &result->value, &buf, &my_extra->value, fcinfo);
+	polydatum_deserialize(aggcontext, &result->cmp, &buf, &my_extra->cmp, fcinfo);
 	PG_RETURN_POINTER(result);
 }
 
