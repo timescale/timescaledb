@@ -3324,3 +3324,34 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01
 
 RESET timezone;
 DROP INDEX gapfill_plan_test_indx;
+-- Test gapfill with arrays (#5981)
+SELECT time_bucket_gapfill(5, ts, 1, 100) as ts, int_arr, locf(last(value, ts))
+FROM (
+    SELECT ARRAY[1,2,3,4]::int[] as int_arr, x as ts, x+500000 as value
+    FROM generate_series(1, 10, 100) as x
+    ) t
+GROUP BY 1, 2
+ ts |  int_arr  |  locf  
+----+-----------+--------
+  0 | {1,2,3,4} | 500001
+  5 | {1,2,3,4} | 500001
+ 10 | {1,2,3,4} | 500001
+ 15 | {1,2,3,4} | 500001
+ 20 | {1,2,3,4} | 500001
+ 25 | {1,2,3,4} | 500001
+ 30 | {1,2,3,4} | 500001
+ 35 | {1,2,3,4} | 500001
+ 40 | {1,2,3,4} | 500001
+ 45 | {1,2,3,4} | 500001
+ 50 | {1,2,3,4} | 500001
+ 55 | {1,2,3,4} | 500001
+ 60 | {1,2,3,4} | 500001
+ 65 | {1,2,3,4} | 500001
+ 70 | {1,2,3,4} | 500001
+ 75 | {1,2,3,4} | 500001
+ 80 | {1,2,3,4} | 500001
+ 85 | {1,2,3,4} | 500001
+ 90 | {1,2,3,4} | 500001
+ 95 | {1,2,3,4} | 500001
+(20 rows)
+
