@@ -1506,3 +1506,10 @@ RESET timezone;
 
 DROP INDEX gapfill_plan_test_indx;
 
+-- Test gapfill with arrays (#5981)
+SELECT time_bucket_gapfill(5, ts, 1, 100) as ts, int_arr, locf(last(value, ts))
+FROM (
+    SELECT ARRAY[1,2,3,4]::int[] as int_arr, x as ts, x+500000 as value
+    FROM generate_series(1, 10, 100) as x
+    ) t
+GROUP BY 1, 2

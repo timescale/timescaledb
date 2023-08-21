@@ -1,0 +1,2 @@
+Fixes: #5991 Call eq_func correctly in time_bucket_gapfill
+Thanks: @willsbit for reporting a crash in time_bucket_gapfill
