@@ -103,7 +103,7 @@ SELECT is_access_node_session_on_data_node();
 
 -- Ensure peer dist id is already set and can be set only once
 \set ON_ERROR_STOP 0
-SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT * FROM _timescaledb_functions.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
 \set ON_ERROR_STOP 1
 
 -- Repeat is_access_node_session_on_data_node() test again, but this time using connections openned from

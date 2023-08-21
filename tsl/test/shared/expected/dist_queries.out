@@ -103,7 +103,7 @@ RESET statement_timeout;
 \set ON_ERROR_STOP 1
 -- Data node connections should be IDLE
 SELECT node_name, database, connection_status, transaction_status, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1;
   node_name  |  database   | connection_status | transaction_status | processing 
 -------------+-------------+-------------------+--------------------+------------
  data_node_1 | data_node_1 | OK                | IDLE               | f

@@ -491,7 +491,7 @@ static void
 data_node_validate_as_data_node(TSConnection *conn)
 {
 	PGresult *res =
-		remote_connection_exec(conn, "SELECT _timescaledb_internal.validate_as_data_node()");
+		remote_connection_exec(conn, "SELECT _timescaledb_functions.validate_as_data_node()");
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
@@ -588,7 +588,7 @@ add_distributed_id_to_data_node(TSConnection *conn)
 {
 	Datum id_string = DirectFunctionCall1(uuid_out, dist_util_get_id());
 	PGresult *res = remote_connection_queryf_ok(conn,
-												"SELECT _timescaledb_internal.set_dist_id('%s')",
+												"SELECT _timescaledb_functions.set_dist_id('%s')",
 												DatumGetCString(id_string));
 	remote_result_close(res);
 }

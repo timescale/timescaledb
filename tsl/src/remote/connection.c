@@ -1356,7 +1356,7 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 	bool success = true;
 
 	res = remote_connection_execf(conn,
-								  "SELECT * FROM _timescaledb_internal.set_peer_dist_id('%s')",
+								  "SELECT * FROM _timescaledb_functions.set_peer_dist_id('%s')",
 								  DatumGetCString(id_string));
 	success = PQresultStatus(res) == PGRES_TUPLES_OK;
 	PQclear(res);

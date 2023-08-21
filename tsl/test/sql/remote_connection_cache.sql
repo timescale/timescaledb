@@ -40,7 +40,7 @@ INSERT INTO testtable VALUES ('2021-09-19', 1, 13.2);
 
 -- Should show valid connections for ROLE_1
 SELECT node_name, user_name, invalidated
-FROM _timescaledb_internal.show_connection_cache()
+FROM _timescaledb_functions.show_connection_cache()
 WHERE user_name=:'ROLE_1'
 ORDER BY 1,2;
 RESET ROLE;
@@ -51,7 +51,7 @@ BEGIN;
 -- fetch.
 ALTER ROLE :ROLE_1 RENAME TO bob;
 SELECT node_name, user_name, invalidated
-FROM _timescaledb_internal.show_connection_cache()
+FROM _timescaledb_functions.show_connection_cache()
 WHERE user_name='bob'
 ORDER BY 1,2;
 ROLLBACK;
