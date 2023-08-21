@@ -31,3 +31,21 @@ SET timescaledb.enable_optimizations TO true;
 \o
 
 :DIFF_CMD
+
+-- Test partial aggregation
+CREATE TABLE partial_aggregation (time timestamptz NOT NULL, quantity numeric, longvalue text);
+SELECT schema_name, table_name, created FROM create_hypertable('partial_aggregation', 'time');
+
+INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
+INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
+INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 1, 'Hello');
+INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 2, 'World');
+
+-- Use enable_partitionwise_aggregate to create partial aggregates per chunk
+SET enable_partitionwise_aggregate = ON;
+SELECT first(time, quantity) FROM partial_aggregation;
+SELECT last(time, quantity) FROM partial_aggregation;
+SELECT first(longvalue, quantity) FROM partial_aggregation;
+SELECT last(longvalue, quantity) FROM partial_aggregation;
+SET enable_partitionwise_aggregate = OFF;
+
