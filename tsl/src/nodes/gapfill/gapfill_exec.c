@@ -1040,10 +1040,12 @@ gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot)
 				continue;
 			if (isnull != column.group->isnull)
 				return true;
-			if (!DatumGetBool(DirectFunctionCall2Coll(column.group->eq_func.fn_addr,
-													  column.group->collation,
-													  value,
-													  column.group->value)))
+			/* We need to use FunctionCall2Coll here since equality comparison
+			 * functions can try to access flinfo (see arrayfuncs.c). */
+			if (!DatumGetBool(FunctionCall2Coll(&column.group->eq_func,
+												column.group->collation,
+												value,
+												column.group->value)))
 				return true;
 		}
 	}
