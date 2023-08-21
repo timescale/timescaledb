@@ -39,7 +39,7 @@ my ($cmdret, $stdout, $stderr) = $an->psql(
 	SET ROLE alice;
 	SELECT time AT TIME ZONE 'America/New_York', location, temp FROM conditions;
 	SELECT node_name, user_name, invalidated
-   	FROM _timescaledb_internal.show_connection_cache()
+   	FROM _timescaledb_functions.show_connection_cache()
 	WHERE user_name='alice';
 	RESET ROLE;
 	DROP TABLE conditions;
@@ -47,7 +47,7 @@ my ($cmdret, $stdout, $stderr) = $an->psql(
 	REVOKE CREATE ON SCHEMA public FROM alice;
 	DROP ROLE ALICE;
 	SELECT node_name, user_name, invalidated
-   	FROM _timescaledb_internal.show_connection_cache()
+   	FROM _timescaledb_functions.show_connection_cache()
 	WHERE user_name='alice';
 
 ]);

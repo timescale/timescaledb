@@ -338,12 +338,12 @@ SELECT * FROM attach_data_node('data_node_1', 'disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1');
+SELECT * FROM _timescaledb_functions.ping_data_node('data_node_1');
 
 -- Ensure timeout returned by argument
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1', interval '0s');
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1', interval '3s');
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1', interval '1 day');
+SELECT * FROM _timescaledb_functions.ping_data_node('data_node_1', interval '0s');
+SELECT * FROM _timescaledb_functions.ping_data_node('data_node_1', interval '3s');
+SELECT * FROM _timescaledb_functions.ping_data_node('data_node_1', interval '1 day');
 
 -- Create data node referencing postgres_fdw
 RESET ROLE;
@@ -355,11 +355,11 @@ CREATE TABLE standalone(time TIMESTAMPTZ, device INT, value FLOAT);
 SELECT * FROM create_hypertable('standalone','time');
 \set ON_ERROR_STOP 0
 -- Throw ERROR for non-existing data node
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_123456789');
+SELECT * FROM _timescaledb_functions.ping_data_node('data_node_123456789');
 -- ERROR on NULL
-SELECT * FROM _timescaledb_internal.ping_data_node(NULL);
+SELECT * FROM _timescaledb_functions.ping_data_node(NULL);
 -- ERROR when not passing TimescaleDB data node
-SELECT * FROM _timescaledb_internal.ping_data_node('pg_data_node_1');
+SELECT * FROM _timescaledb_functions.ping_data_node('pg_data_node_1');
 -- ERROR on attaching to non-distributed hypertable
 SELECT * FROM attach_data_node('data_node_1', 'standalone');
 \set ON_ERROR_STOP 1
@@ -698,10 +698,10 @@ DROP DATABASE :DN_DBNAME_1;
 CREATE DATABASE :DN_DBNAME_1 OWNER :ROLE_1;
 
 \c :DN_DBNAME_1
-CREATE SCHEMA _timescaledb_internal;
-GRANT ALL ON SCHEMA _timescaledb_internal TO :ROLE_1;
+CREATE SCHEMA _timescaledb_functions;
+GRANT ALL ON SCHEMA _timescaledb_functions TO :ROLE_1;
 
-CREATE FUNCTION _timescaledb_internal.set_dist_id(uuid UUID)
+CREATE FUNCTION _timescaledb_functions.set_dist_id(uuid UUID)
     RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -709,7 +709,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE FUNCTION _timescaledb_internal.set_peer_dist_id(uuid UUID)
+CREATE FUNCTION _timescaledb_functions.set_peer_dist_id(uuid UUID)
     RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -717,7 +717,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE FUNCTION _timescaledb_internal.validate_as_data_node()
+CREATE FUNCTION _timescaledb_functions.validate_as_data_node()
     RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN

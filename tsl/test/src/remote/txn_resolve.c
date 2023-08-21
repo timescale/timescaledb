@@ -87,7 +87,7 @@ send_heal()
 {
 	remote_connection_query_ok(get_connection(),
 							   "SELECT "
-							   "_timescaledb_internal.remote_txn_heal_data_node((SELECT "
+							   "_timescaledb_functions.remote_txn_heal_data_node((SELECT "
 							   "OID FROM pg_foreign_server WHERE srvname = 'loopback'))");
 }
 

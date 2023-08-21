@@ -102,7 +102,7 @@ SELECT test_remote_txn_persistent_record('loopback');
 SET timescaledb.enable_2pc = false;
 --initially, there are no connections in the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -117,7 +117,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-0
 
     --expect to see one connection in transaction state
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -126,7 +126,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-0
 COMMIT;
 --connection should remain, idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -149,7 +149,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-0
 
     --existing connection, in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -158,7 +158,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-0
 ROLLBACK;
 --connection should remain, in idle state after rollback
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -178,7 +178,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 -- Connection should remain after conflict, in idle state
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -220,7 +220,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 -- Failed connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -262,7 +262,7 @@ BEGIN;
 
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -279,7 +279,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --connection failed during commit, so should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -317,7 +317,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
 
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -350,7 +350,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --the failed connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -373,7 +373,7 @@ ERROR:  cannot prepare a transaction that modified remote tables
 DELETE FROM  "S 1"."T 1" where "C 1" >= 20000;
 SET timescaledb.enable_2pc = true;
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -390,7 +390,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
 
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -399,7 +399,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
 COMMIT;
 --connection should remain in idle state
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -428,7 +428,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-0
 
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -437,7 +437,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-0
 ROLLBACK;
 --rolled back transaction, but connection should remain in idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -463,7 +463,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --connection should remain in idle after constraint violation
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -504,7 +504,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --the connection was killed, so should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -554,7 +554,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --the connection should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -567,7 +567,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
 
 --during waiting-prepare-transaction the data node process could die before or after
 --executing the prepare transaction. To be safe to either case rollback using heal_server.
-SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  count 
 -------
      1
@@ -620,7 +620,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -640,11 +640,11 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --this fails because heal cannot run inside txn block
 BEGIN;
-    SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+    SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 ERROR:  remote_txn_heal_data_node cannot run inside a transaction block
 COMMIT;
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -656,7 +656,7 @@ select count(*) from _timescaledb_catalog.remote_txn;
 (1 row)
 
 --this resolves the previous txn
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  remote_txn_heal_data_node 
 ---------------------------
                          1
@@ -713,7 +713,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 (1 row)
 
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -732,7 +732,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 (1 row)
 
 --this resolves the previous txn
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  remote_txn_heal_data_node 
 ---------------------------
                          1
@@ -757,7 +757,7 @@ select count(*) from _timescaledb_catalog.remote_txn;
 (1 row)
 
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -796,7 +796,7 @@ SELECT debug_waitpoint_release('remote_conn_xact_end');
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state
-SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  count 
 -------
      1
@@ -804,7 +804,7 @@ SELECT count(*) FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID
 
 --heal does not use the connection cache, so unaffected
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -844,7 +844,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --unique constraint violation, connection should remain
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -861,7 +861,7 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
 
         --connection in transaction state
         SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-        FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+        FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 2 | f
@@ -875,7 +875,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
     --for correctness, the connection must remain after rollback since
     --the transaction is still ongoing
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -887,7 +887,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --connection should remain and be idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -918,7 +918,7 @@ BEGIN;
 (1 row)
 
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -929,7 +929,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 RESET client_min_messages;
 --connection should be removed since PREPARE TRANSACTION failed
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -963,7 +963,7 @@ BEGIN;
 
     --Both connections in transaction state
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -975,7 +975,7 @@ ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 RESET client_min_messages;
 --one connection should remain and be idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -1021,7 +1021,7 @@ BEGIN;
 (1 row)
 
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -1033,7 +1033,7 @@ ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 RESET client_min_messages;
 --failed connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -1050,7 +1050,7 @@ SELECT count(*) FROM pg_prepared_xacts;
      1
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  remote_txn_heal_data_node 
 ---------------------------
                          1
@@ -1070,7 +1070,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --heal is not using the connection cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
 (0 rows)
@@ -1092,7 +1092,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-
 (1 row)
 
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -1108,7 +1108,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 (1 row)
 
         SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-        FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+        FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -1119,7 +1119,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
     -- For correctness, both connections should remain in order to
     -- continue the transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 1 | f
@@ -1141,7 +1141,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-
 (1 row)
 
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 2 | f
@@ -1150,7 +1150,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-
 
 COMMIT;
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | IDLE               |                 0 | f
@@ -1202,7 +1202,7 @@ BEGIN;
 (1 row)
 
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | OK                | INTRANS            |                 2 | f
@@ -1211,7 +1211,7 @@ BEGIN;
 
     ROLLBACK TO SAVEPOINT save_1;
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+    FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback  | BAD               | UNKNOWN            |                 1 | t
@@ -1225,7 +1225,7 @@ ERROR:  current transaction is aborted, commands ignored until end of transactio
 COMMIT;
 RESET client_min_messages;
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
-FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
  loopback2 | OK                | IDLE               |                 0 | f

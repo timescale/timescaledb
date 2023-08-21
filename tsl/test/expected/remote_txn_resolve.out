@@ -76,19 +76,19 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn;
      3
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  remote_txn_heal_data_node 
 ---------------------------
                          1
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
  remote_txn_heal_data_node 
 ---------------------------
                          0
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
  remote_txn_heal_data_node 
 ---------------------------
                          0
@@ -160,7 +160,7 @@ SELECT create_prepared_record();
 --inject errors in the GID and test "commit" resolution for it
 SET timescaledb.debug_inject_gid_error TO 'commit';
 --heal should error out and the prepared transaction should still be visible
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
 WARNING:  could not commit prepared transaction on data node "loopback2"
  remote_txn_heal_data_node 
 ---------------------------
@@ -199,7 +199,7 @@ SELECT create_prepared_record();
 --inject errors in the GID and test "abort" resolution for it
 SET timescaledb.debug_inject_gid_error TO 'abort';
 --heal should error out and the prepared transaction should still be visible
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
 WARNING:  could not roll back prepared transaction on data node "loopback2"
  remote_txn_heal_data_node 
 ---------------------------
@@ -239,7 +239,7 @@ SELECT create_prepared_record();
 --test "inprogress" resolution for the prepared 2PC
 SET timescaledb.debug_inject_gid_error TO 'inprogress';
 --heal will not error out but the prepared transaction should still be visible
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
  remote_txn_heal_data_node 
 ---------------------------
                          1
@@ -278,19 +278,19 @@ SELECT create_prepared_record();
 
 --set to any random value so that it does not have any effect and allows healing
 SET timescaledb.debug_inject_gid_error TO 'ignored';
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  remote_txn_heal_data_node 
 ---------------------------
                          2
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
  remote_txn_heal_data_node 
 ---------------------------
                          0
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
  remote_txn_heal_data_node 
 ---------------------------
                          0
@@ -326,21 +326,21 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn;
 BEGIN;
     INSERT INTO public.table_modified_by_txns VALUES ('non-ts-txn');
 PREPARE TRANSACTION 'non-ts-txn';
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 NOTICE:  skipping 1 non-TimescaleDB prepared transaction
  remote_txn_heal_data_node 
 ---------------------------
                          0
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
 NOTICE:  skipping 1 non-TimescaleDB prepared transaction
  remote_txn_heal_data_node 
 ---------------------------
                          0
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
 NOTICE:  skipping 1 non-TimescaleDB prepared transaction
  remote_txn_heal_data_node 
 ---------------------------
@@ -386,7 +386,7 @@ CREATE TABLE unused(id int);
 PREPARE TRANSACTION 'ts-1-10-20-30';
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- should not fail
-SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  remote_txn_heal_data_node 
 ---------------------------
                          0

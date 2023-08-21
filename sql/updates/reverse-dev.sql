@@ -45,3 +45,9 @@ ALTER FUNCTION _timescaledb_functions.interval_to_usec(interval) SET SCHEMA _tim
 ALTER FUNCTION _timescaledb_functions.time_to_internal(anyelement) SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.subtract_integer_from_now(regclass, bigint) SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.set_dist_id(uuid) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.set_peer_dist_id(uuid) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.validate_as_data_node() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.show_connection_cache() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.ping_data_node(name, interval) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.remote_txn_heal_data_node(oid) SET SCHEMA _timescaledb_internal;
