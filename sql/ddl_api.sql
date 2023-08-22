@@ -36,7 +36,7 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     partitioning_func       REGPROC = NULL,
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = NULL,
     data_nodes              NAME[] = NULL,
@@ -56,7 +56,7 @@ CREATE OR REPLACE FUNCTION @extschema@.create_distributed_hypertable(
     partitioning_func       REGPROC = NULL,
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = NULL,
     data_nodes              NAME[] = NULL
@@ -66,7 +66,7 @@ CREATE OR REPLACE FUNCTION @extschema@.create_distributed_hypertable(
 CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
     hypertable                     REGCLASS,
     chunk_target_size              TEXT,
-    INOUT chunk_sizing_func        REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    INOUT chunk_sizing_func        REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
     OUT chunk_target_size          BIGINT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_chunk_adaptive_set' LANGUAGE C VOLATILE;
 

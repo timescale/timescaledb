@@ -47,6 +47,34 @@ BEGIN
   THEN
     ALTER FUNCTION _timescaledb_internal.get_approx_row_count(regclass) SET SCHEMA _timescaledb_functions;
   END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'chunk_status' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.chunk_status(regclass) SET SCHEMA _timescaledb_functions;
+  END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'create_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.create_chunk(regclass, jsonb, name, name, regclass) SET SCHEMA _timescaledb_functions;
+  END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'create_chunk_table' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.create_chunk_table(regclass, jsonb, name, name) SET SCHEMA _timescaledb_functions;
+  END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'freeze_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.freeze_chunk(regclass) SET SCHEMA _timescaledb_functions;
+  END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'unfreeze_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.unfreeze_chunk(regclass) SET SCHEMA _timescaledb_functions;
+  END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'drop_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.drop_chunk(regclass) SET SCHEMA _timescaledb_functions;
+  END IF;
+  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'attach_osm_table_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
+  THEN
+    ALTER FUNCTION _timescaledb_internal.attach_osm_table_chunk(regclass, regclass) SET SCHEMA _timescaledb_functions;
+  END IF;
 END;
 $$;
 
@@ -88,3 +116,14 @@ ALTER FUNCTION _timescaledb_internal.generate_uuid() SET SCHEMA _timescaledb_fun
 ALTER FUNCTION _timescaledb_internal.get_git_commit() SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.get_os_info() SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.tsl_loaded() SET SCHEMA _timescaledb_functions;
+
+ALTER FUNCTION _timescaledb_internal.calculate_chunk_interval(int, bigint, bigint) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.chunks_in(record, integer[]) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.chunk_id_from_relid(oid) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.show_chunk(regclass) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.set_chunk_default_data_node(regclass, name) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.get_chunk_relstats(regclass) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.get_chunk_colstats(regclass) SET SCHEMA _timescaledb_functions;
+
+UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_functions' WHERE chunk_sizing_func_schema = '_timescaledb_internal' AND chunk_sizing_func_name = 'calculate_chunk_interval';
+
