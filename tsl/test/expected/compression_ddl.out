@@ -1473,17 +1473,21 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Sort Key: _hyper_32_107_chunk.device_id
-   ->  HashAggregate
-         Group Key: _hyper_32_107_chunk.device_id
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_32_107_chunk.device_id
+   ->  Sort
+         Sort Key: _hyper_32_107_chunk.device_id
          ->  Append
-               ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
-                     ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
-               ->  Index Only Scan using _hyper_32_107_chunk_compression_insert_device_id_time_idx on _hyper_32_107_chunk
-(8 rows)
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_107_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
+                           ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_107_chunk.device_id
+                     ->  Index Only Scan using _hyper_32_107_chunk_compression_insert_device_id_time_idx on _hyper_32_107_chunk
+(12 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1551,19 +1555,25 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Sort Key: _hyper_32_107_chunk.device_id
-   ->  HashAggregate
-         Group Key: _hyper_32_107_chunk.device_id
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_32_107_chunk.device_id
+   ->  Sort
+         Sort Key: _hyper_32_107_chunk.device_id
          ->  Append
-               ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
-                     ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
-                     ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
-               ->  Index Only Scan using _hyper_32_109_chunk_compression_insert_device_id_time_idx on _hyper_32_109_chunk
-(10 rows)
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_107_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
+                           ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_109_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
+                           ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_109_chunk.device_id
+                     ->  Index Only Scan using _hyper_32_109_chunk_compression_insert_device_id_time_idx on _hyper_32_109_chunk
+(16 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1631,21 +1641,29 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Sort Key: _hyper_32_107_chunk.device_id
-   ->  HashAggregate
-         Group Key: _hyper_32_107_chunk.device_id
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_32_107_chunk.device_id
+   ->  Sort
+         Sort Key: _hyper_32_107_chunk.device_id
          ->  Append
-               ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
-                     ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
-                     ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_111_chunk
-                     ->  Index Scan using compress_hyper_33_112_chunk__compressed_hypertable_33_device_id on compress_hyper_33_112_chunk
-               ->  Index Only Scan using _hyper_32_111_chunk_compression_insert_device_id_time_idx on _hyper_32_111_chunk
-(12 rows)
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_107_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
+                           ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_109_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
+                           ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_111_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_33_112_chunk__compressed_hypertable_33_device_id on compress_hyper_33_112_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_111_chunk.device_id
+                     ->  Index Only Scan using _hyper_32_111_chunk_compression_insert_device_id_time_idx on _hyper_32_111_chunk
+(20 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1713,23 +1731,33 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Sort Key: _hyper_32_107_chunk.device_id
-   ->  HashAggregate
-         Group Key: _hyper_32_107_chunk.device_id
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_32_107_chunk.device_id
+   ->  Sort
+         Sort Key: _hyper_32_107_chunk.device_id
          ->  Append
-               ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
-                     ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
-                     ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_111_chunk
-                     ->  Index Scan using compress_hyper_33_112_chunk__compressed_hypertable_33_device_id on compress_hyper_33_112_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_113_chunk
-                     ->  Index Scan using compress_hyper_33_114_chunk__compressed_hypertable_33_device_id on compress_hyper_33_114_chunk
-               ->  Index Only Scan using _hyper_32_113_chunk_compression_insert_device_id_time_idx on _hyper_32_113_chunk
-(14 rows)
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_107_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
+                           ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_109_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
+                           ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_111_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_33_112_chunk__compressed_hypertable_33_device_id on compress_hyper_33_112_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_113_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_113_chunk
+                           ->  Index Scan using compress_hyper_33_114_chunk__compressed_hypertable_33_device_id on compress_hyper_33_114_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_113_chunk.device_id
+                     ->  Index Only Scan using _hyper_32_113_chunk_compression_insert_device_id_time_idx on _hyper_32_113_chunk
+(24 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1797,25 +1825,37 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Sort Key: _hyper_32_107_chunk.device_id
-   ->  HashAggregate
-         Group Key: _hyper_32_107_chunk.device_id
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_32_107_chunk.device_id
+   ->  Sort
+         Sort Key: _hyper_32_107_chunk.device_id
          ->  Append
-               ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
-                     ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
-                     ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_111_chunk
-                     ->  Index Scan using compress_hyper_33_112_chunk__compressed_hypertable_33_device_id on compress_hyper_33_112_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_113_chunk
-                     ->  Index Scan using compress_hyper_33_114_chunk__compressed_hypertable_33_device_id on compress_hyper_33_114_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_32_115_chunk
-                     ->  Index Scan using compress_hyper_33_116_chunk__compressed_hypertable_33_device_id on compress_hyper_33_116_chunk
-               ->  Index Only Scan using _hyper_32_115_chunk_compression_insert_device_id_time_idx on _hyper_32_115_chunk
-(16 rows)
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_107_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_107_chunk
+                           ->  Index Scan using compress_hyper_33_108_chunk__compressed_hypertable_33_device_id on compress_hyper_33_108_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_109_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_109_chunk
+                           ->  Index Scan using compress_hyper_33_110_chunk__compressed_hypertable_33_device_id on compress_hyper_33_110_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_111_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_33_112_chunk__compressed_hypertable_33_device_id on compress_hyper_33_112_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_113_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_113_chunk
+                           ->  Index Scan using compress_hyper_33_114_chunk__compressed_hypertable_33_device_id on compress_hyper_33_114_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_115_chunk.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_32_115_chunk
+                           ->  Index Scan using compress_hyper_33_116_chunk__compressed_hypertable_33_device_id on compress_hyper_33_116_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_32_115_chunk.device_id
+                     ->  Index Only Scan using _hyper_32_115_chunk_compression_insert_device_id_time_idx on _hyper_32_115_chunk
+(28 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert

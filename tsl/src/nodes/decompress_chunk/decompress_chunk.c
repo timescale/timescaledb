@@ -892,6 +892,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 														  NIL,
 														  path->rows + uncompressed_path->rows);
 			}
+
 			add_partial_path(chunk_rel, path);
 		}
 		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
@@ -1969,4 +1970,12 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 
 	sort_info.can_pushdown_sort = true;
 	return sort_info;
+}
+
+/* Check if the provided path is a DecompressChunkPath */
+bool
+ts_is_decompress_chunk_path(Path *path)
+{
+	return IsA(path, CustomPath) &&
+		   castNode(CustomPath, path)->methods == &decompress_chunk_path_methods;
 }

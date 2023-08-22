@@ -3,6 +3,7 @@ include(GenerateTestSchedule)
 # These are the files for the 'postgresql' configuration. This is the default,
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
+    agg_partials_pushdown.sql
     bgw_custom.sql
     bgw_security.sql
     bgw_policy.sql

@@ -152,6 +152,9 @@ WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
 
+-- Disable hash aggregation to get a deterministic test output
+SET enable_hashagg = OFF;
+
 -- min/max queries
 :PREFIX
 SELECT max(time)
@@ -169,6 +172,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
+
 
 -- test query with time_bucket
 :PREFIX

@@ -426,212 +426,412 @@ EXPLAIN (VERBOSE, COSTS OFF)
    ->  Gather
          Output: (PARTIAL sum(_hyper_2_4_chunk.value)), (PARTIAL avg(_hyper_2_4_chunk.value)), (PARTIAL min(_hyper_2_4_chunk.value)), (PARTIAL max(_hyper_2_4_chunk.value)), (PARTIAL count(*))
          Workers Planned: 2
-         ->  Partial Aggregate
-               Output: PARTIAL sum(_hyper_2_4_chunk.value), PARTIAL avg(_hyper_2_4_chunk.value), PARTIAL min(_hyper_2_4_chunk.value), PARTIAL max(_hyper_2_4_chunk.value), PARTIAL count(*)
-               ->  Parallel Append
+         ->  Parallel Append
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_4_chunk.value), PARTIAL avg(_hyper_2_4_chunk.value), PARTIAL min(_hyper_2_4_chunk.value), PARTIAL max(_hyper_2_4_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_4_chunk
                            Output: _hyper_2_4_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_5_chunk.value), PARTIAL avg(_hyper_2_5_chunk.value), PARTIAL min(_hyper_2_5_chunk.value), PARTIAL max(_hyper_2_5_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_5_chunk
                            Output: _hyper_2_5_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_6_chunk.value), PARTIAL avg(_hyper_2_6_chunk.value), PARTIAL min(_hyper_2_6_chunk.value), PARTIAL max(_hyper_2_6_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_6_chunk
                            Output: _hyper_2_6_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_7_chunk.value), PARTIAL avg(_hyper_2_7_chunk.value), PARTIAL min(_hyper_2_7_chunk.value), PARTIAL max(_hyper_2_7_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_7_chunk
                            Output: _hyper_2_7_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_8_chunk.value), PARTIAL avg(_hyper_2_8_chunk.value), PARTIAL min(_hyper_2_8_chunk.value), PARTIAL max(_hyper_2_8_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_8_chunk
                            Output: _hyper_2_8_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_9_chunk.value), PARTIAL avg(_hyper_2_9_chunk.value), PARTIAL min(_hyper_2_9_chunk.value), PARTIAL max(_hyper_2_9_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_9_chunk
                            Output: _hyper_2_9_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_10_chunk.value), PARTIAL avg(_hyper_2_10_chunk.value), PARTIAL min(_hyper_2_10_chunk.value), PARTIAL max(_hyper_2_10_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_10_chunk
                            Output: _hyper_2_10_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_11_chunk.value), PARTIAL avg(_hyper_2_11_chunk.value), PARTIAL min(_hyper_2_11_chunk.value), PARTIAL max(_hyper_2_11_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_11_chunk
                            Output: _hyper_2_11_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_12_chunk.value), PARTIAL avg(_hyper_2_12_chunk.value), PARTIAL min(_hyper_2_12_chunk.value), PARTIAL max(_hyper_2_12_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_12_chunk
                            Output: _hyper_2_12_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_13_chunk.value), PARTIAL avg(_hyper_2_13_chunk.value), PARTIAL min(_hyper_2_13_chunk.value), PARTIAL max(_hyper_2_13_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_13_chunk
                            Output: _hyper_2_13_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_14_chunk.value), PARTIAL avg(_hyper_2_14_chunk.value), PARTIAL min(_hyper_2_14_chunk.value), PARTIAL max(_hyper_2_14_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_14_chunk
                            Output: _hyper_2_14_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_15_chunk.value), PARTIAL avg(_hyper_2_15_chunk.value), PARTIAL min(_hyper_2_15_chunk.value), PARTIAL max(_hyper_2_15_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_15_chunk
                            Output: _hyper_2_15_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_16_chunk.value), PARTIAL avg(_hyper_2_16_chunk.value), PARTIAL min(_hyper_2_16_chunk.value), PARTIAL max(_hyper_2_16_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_16_chunk
                            Output: _hyper_2_16_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_17_chunk.value), PARTIAL avg(_hyper_2_17_chunk.value), PARTIAL min(_hyper_2_17_chunk.value), PARTIAL max(_hyper_2_17_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_17_chunk
                            Output: _hyper_2_17_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_18_chunk.value), PARTIAL avg(_hyper_2_18_chunk.value), PARTIAL min(_hyper_2_18_chunk.value), PARTIAL max(_hyper_2_18_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_18_chunk
                            Output: _hyper_2_18_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_19_chunk.value), PARTIAL avg(_hyper_2_19_chunk.value), PARTIAL min(_hyper_2_19_chunk.value), PARTIAL max(_hyper_2_19_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_19_chunk
                            Output: _hyper_2_19_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_20_chunk.value), PARTIAL avg(_hyper_2_20_chunk.value), PARTIAL min(_hyper_2_20_chunk.value), PARTIAL max(_hyper_2_20_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_20_chunk
                            Output: _hyper_2_20_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_21_chunk.value), PARTIAL avg(_hyper_2_21_chunk.value), PARTIAL min(_hyper_2_21_chunk.value), PARTIAL max(_hyper_2_21_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_21_chunk
                            Output: _hyper_2_21_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_22_chunk.value), PARTIAL avg(_hyper_2_22_chunk.value), PARTIAL min(_hyper_2_22_chunk.value), PARTIAL max(_hyper_2_22_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_22_chunk
                            Output: _hyper_2_22_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_23_chunk.value), PARTIAL avg(_hyper_2_23_chunk.value), PARTIAL min(_hyper_2_23_chunk.value), PARTIAL max(_hyper_2_23_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_23_chunk
                            Output: _hyper_2_23_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_24_chunk.value), PARTIAL avg(_hyper_2_24_chunk.value), PARTIAL min(_hyper_2_24_chunk.value), PARTIAL max(_hyper_2_24_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_24_chunk
                            Output: _hyper_2_24_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_25_chunk.value), PARTIAL avg(_hyper_2_25_chunk.value), PARTIAL min(_hyper_2_25_chunk.value), PARTIAL max(_hyper_2_25_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_25_chunk
                            Output: _hyper_2_25_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_26_chunk.value), PARTIAL avg(_hyper_2_26_chunk.value), PARTIAL min(_hyper_2_26_chunk.value), PARTIAL max(_hyper_2_26_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_26_chunk
                            Output: _hyper_2_26_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_27_chunk.value), PARTIAL avg(_hyper_2_27_chunk.value), PARTIAL min(_hyper_2_27_chunk.value), PARTIAL max(_hyper_2_27_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_27_chunk
                            Output: _hyper_2_27_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_28_chunk.value), PARTIAL avg(_hyper_2_28_chunk.value), PARTIAL min(_hyper_2_28_chunk.value), PARTIAL max(_hyper_2_28_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_28_chunk
                            Output: _hyper_2_28_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_29_chunk.value), PARTIAL avg(_hyper_2_29_chunk.value), PARTIAL min(_hyper_2_29_chunk.value), PARTIAL max(_hyper_2_29_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_29_chunk
                            Output: _hyper_2_29_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_30_chunk.value), PARTIAL avg(_hyper_2_30_chunk.value), PARTIAL min(_hyper_2_30_chunk.value), PARTIAL max(_hyper_2_30_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_30_chunk
                            Output: _hyper_2_30_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_31_chunk.value), PARTIAL avg(_hyper_2_31_chunk.value), PARTIAL min(_hyper_2_31_chunk.value), PARTIAL max(_hyper_2_31_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_31_chunk
                            Output: _hyper_2_31_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_32_chunk.value), PARTIAL avg(_hyper_2_32_chunk.value), PARTIAL min(_hyper_2_32_chunk.value), PARTIAL max(_hyper_2_32_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_32_chunk
                            Output: _hyper_2_32_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_33_chunk.value), PARTIAL avg(_hyper_2_33_chunk.value), PARTIAL min(_hyper_2_33_chunk.value), PARTIAL max(_hyper_2_33_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_33_chunk
                            Output: _hyper_2_33_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_34_chunk.value), PARTIAL avg(_hyper_2_34_chunk.value), PARTIAL min(_hyper_2_34_chunk.value), PARTIAL max(_hyper_2_34_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_34_chunk
                            Output: _hyper_2_34_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_35_chunk.value), PARTIAL avg(_hyper_2_35_chunk.value), PARTIAL min(_hyper_2_35_chunk.value), PARTIAL max(_hyper_2_35_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_35_chunk
                            Output: _hyper_2_35_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_36_chunk.value), PARTIAL avg(_hyper_2_36_chunk.value), PARTIAL min(_hyper_2_36_chunk.value), PARTIAL max(_hyper_2_36_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_36_chunk
                            Output: _hyper_2_36_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_37_chunk.value), PARTIAL avg(_hyper_2_37_chunk.value), PARTIAL min(_hyper_2_37_chunk.value), PARTIAL max(_hyper_2_37_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_37_chunk
                            Output: _hyper_2_37_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_38_chunk.value), PARTIAL avg(_hyper_2_38_chunk.value), PARTIAL min(_hyper_2_38_chunk.value), PARTIAL max(_hyper_2_38_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_38_chunk
                            Output: _hyper_2_38_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_39_chunk.value), PARTIAL avg(_hyper_2_39_chunk.value), PARTIAL min(_hyper_2_39_chunk.value), PARTIAL max(_hyper_2_39_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_39_chunk
                            Output: _hyper_2_39_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_40_chunk.value), PARTIAL avg(_hyper_2_40_chunk.value), PARTIAL min(_hyper_2_40_chunk.value), PARTIAL max(_hyper_2_40_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_40_chunk
                            Output: _hyper_2_40_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_41_chunk.value), PARTIAL avg(_hyper_2_41_chunk.value), PARTIAL min(_hyper_2_41_chunk.value), PARTIAL max(_hyper_2_41_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_41_chunk
                            Output: _hyper_2_41_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_42_chunk.value), PARTIAL avg(_hyper_2_42_chunk.value), PARTIAL min(_hyper_2_42_chunk.value), PARTIAL max(_hyper_2_42_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_42_chunk
                            Output: _hyper_2_42_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_43_chunk.value), PARTIAL avg(_hyper_2_43_chunk.value), PARTIAL min(_hyper_2_43_chunk.value), PARTIAL max(_hyper_2_43_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_43_chunk
                            Output: _hyper_2_43_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_44_chunk.value), PARTIAL avg(_hyper_2_44_chunk.value), PARTIAL min(_hyper_2_44_chunk.value), PARTIAL max(_hyper_2_44_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_44_chunk
                            Output: _hyper_2_44_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_45_chunk.value), PARTIAL avg(_hyper_2_45_chunk.value), PARTIAL min(_hyper_2_45_chunk.value), PARTIAL max(_hyper_2_45_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_45_chunk
                            Output: _hyper_2_45_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_46_chunk.value), PARTIAL avg(_hyper_2_46_chunk.value), PARTIAL min(_hyper_2_46_chunk.value), PARTIAL max(_hyper_2_46_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_46_chunk
                            Output: _hyper_2_46_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_47_chunk.value), PARTIAL avg(_hyper_2_47_chunk.value), PARTIAL min(_hyper_2_47_chunk.value), PARTIAL max(_hyper_2_47_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_47_chunk
                            Output: _hyper_2_47_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_48_chunk.value), PARTIAL avg(_hyper_2_48_chunk.value), PARTIAL min(_hyper_2_48_chunk.value), PARTIAL max(_hyper_2_48_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_48_chunk
                            Output: _hyper_2_48_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_49_chunk.value), PARTIAL avg(_hyper_2_49_chunk.value), PARTIAL min(_hyper_2_49_chunk.value), PARTIAL max(_hyper_2_49_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_49_chunk
                            Output: _hyper_2_49_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_50_chunk.value), PARTIAL avg(_hyper_2_50_chunk.value), PARTIAL min(_hyper_2_50_chunk.value), PARTIAL max(_hyper_2_50_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_50_chunk
                            Output: _hyper_2_50_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_51_chunk.value), PARTIAL avg(_hyper_2_51_chunk.value), PARTIAL min(_hyper_2_51_chunk.value), PARTIAL max(_hyper_2_51_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_51_chunk
                            Output: _hyper_2_51_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_52_chunk.value), PARTIAL avg(_hyper_2_52_chunk.value), PARTIAL min(_hyper_2_52_chunk.value), PARTIAL max(_hyper_2_52_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_52_chunk
                            Output: _hyper_2_52_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_53_chunk.value), PARTIAL avg(_hyper_2_53_chunk.value), PARTIAL min(_hyper_2_53_chunk.value), PARTIAL max(_hyper_2_53_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_53_chunk
                            Output: _hyper_2_53_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_54_chunk.value), PARTIAL avg(_hyper_2_54_chunk.value), PARTIAL min(_hyper_2_54_chunk.value), PARTIAL max(_hyper_2_54_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_54_chunk
                            Output: _hyper_2_54_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_55_chunk.value), PARTIAL avg(_hyper_2_55_chunk.value), PARTIAL min(_hyper_2_55_chunk.value), PARTIAL max(_hyper_2_55_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_55_chunk
                            Output: _hyper_2_55_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_56_chunk.value), PARTIAL avg(_hyper_2_56_chunk.value), PARTIAL min(_hyper_2_56_chunk.value), PARTIAL max(_hyper_2_56_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_56_chunk
                            Output: _hyper_2_56_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_57_chunk.value), PARTIAL avg(_hyper_2_57_chunk.value), PARTIAL min(_hyper_2_57_chunk.value), PARTIAL max(_hyper_2_57_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_57_chunk
                            Output: _hyper_2_57_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_58_chunk.value), PARTIAL avg(_hyper_2_58_chunk.value), PARTIAL min(_hyper_2_58_chunk.value), PARTIAL max(_hyper_2_58_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_58_chunk
                            Output: _hyper_2_58_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_59_chunk.value), PARTIAL avg(_hyper_2_59_chunk.value), PARTIAL min(_hyper_2_59_chunk.value), PARTIAL max(_hyper_2_59_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_59_chunk
                            Output: _hyper_2_59_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_60_chunk.value), PARTIAL avg(_hyper_2_60_chunk.value), PARTIAL min(_hyper_2_60_chunk.value), PARTIAL max(_hyper_2_60_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_60_chunk
                            Output: _hyper_2_60_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_61_chunk.value), PARTIAL avg(_hyper_2_61_chunk.value), PARTIAL min(_hyper_2_61_chunk.value), PARTIAL max(_hyper_2_61_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_61_chunk
                            Output: _hyper_2_61_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_62_chunk.value), PARTIAL avg(_hyper_2_62_chunk.value), PARTIAL min(_hyper_2_62_chunk.value), PARTIAL max(_hyper_2_62_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_62_chunk
                            Output: _hyper_2_62_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_63_chunk.value), PARTIAL avg(_hyper_2_63_chunk.value), PARTIAL min(_hyper_2_63_chunk.value), PARTIAL max(_hyper_2_63_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_63_chunk
                            Output: _hyper_2_63_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_64_chunk.value), PARTIAL avg(_hyper_2_64_chunk.value), PARTIAL min(_hyper_2_64_chunk.value), PARTIAL max(_hyper_2_64_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_64_chunk
                            Output: _hyper_2_64_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_65_chunk.value), PARTIAL avg(_hyper_2_65_chunk.value), PARTIAL min(_hyper_2_65_chunk.value), PARTIAL max(_hyper_2_65_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_65_chunk
                            Output: _hyper_2_65_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_66_chunk.value), PARTIAL avg(_hyper_2_66_chunk.value), PARTIAL min(_hyper_2_66_chunk.value), PARTIAL max(_hyper_2_66_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_66_chunk
                            Output: _hyper_2_66_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_67_chunk.value), PARTIAL avg(_hyper_2_67_chunk.value), PARTIAL min(_hyper_2_67_chunk.value), PARTIAL max(_hyper_2_67_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_67_chunk
                            Output: _hyper_2_67_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_68_chunk.value), PARTIAL avg(_hyper_2_68_chunk.value), PARTIAL min(_hyper_2_68_chunk.value), PARTIAL max(_hyper_2_68_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_68_chunk
                            Output: _hyper_2_68_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_69_chunk.value), PARTIAL avg(_hyper_2_69_chunk.value), PARTIAL min(_hyper_2_69_chunk.value), PARTIAL max(_hyper_2_69_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_69_chunk
                            Output: _hyper_2_69_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_70_chunk.value), PARTIAL avg(_hyper_2_70_chunk.value), PARTIAL min(_hyper_2_70_chunk.value), PARTIAL max(_hyper_2_70_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_70_chunk
                            Output: _hyper_2_70_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_71_chunk.value), PARTIAL avg(_hyper_2_71_chunk.value), PARTIAL min(_hyper_2_71_chunk.value), PARTIAL max(_hyper_2_71_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_71_chunk
                            Output: _hyper_2_71_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_72_chunk.value), PARTIAL avg(_hyper_2_72_chunk.value), PARTIAL min(_hyper_2_72_chunk.value), PARTIAL max(_hyper_2_72_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_72_chunk
                            Output: _hyper_2_72_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_73_chunk.value), PARTIAL avg(_hyper_2_73_chunk.value), PARTIAL min(_hyper_2_73_chunk.value), PARTIAL max(_hyper_2_73_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_73_chunk
                            Output: _hyper_2_73_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_74_chunk.value), PARTIAL avg(_hyper_2_74_chunk.value), PARTIAL min(_hyper_2_74_chunk.value), PARTIAL max(_hyper_2_74_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_74_chunk
                            Output: _hyper_2_74_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_75_chunk.value), PARTIAL avg(_hyper_2_75_chunk.value), PARTIAL min(_hyper_2_75_chunk.value), PARTIAL max(_hyper_2_75_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_75_chunk
                            Output: _hyper_2_75_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_76_chunk.value), PARTIAL avg(_hyper_2_76_chunk.value), PARTIAL min(_hyper_2_76_chunk.value), PARTIAL max(_hyper_2_76_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_76_chunk
                            Output: _hyper_2_76_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_77_chunk.value), PARTIAL avg(_hyper_2_77_chunk.value), PARTIAL min(_hyper_2_77_chunk.value), PARTIAL max(_hyper_2_77_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_77_chunk
                            Output: _hyper_2_77_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_78_chunk.value), PARTIAL avg(_hyper_2_78_chunk.value), PARTIAL min(_hyper_2_78_chunk.value), PARTIAL max(_hyper_2_78_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_78_chunk
                            Output: _hyper_2_78_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_79_chunk.value), PARTIAL avg(_hyper_2_79_chunk.value), PARTIAL min(_hyper_2_79_chunk.value), PARTIAL max(_hyper_2_79_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_79_chunk
                            Output: _hyper_2_79_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_80_chunk.value), PARTIAL avg(_hyper_2_80_chunk.value), PARTIAL min(_hyper_2_80_chunk.value), PARTIAL max(_hyper_2_80_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_80_chunk
                            Output: _hyper_2_80_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_81_chunk.value), PARTIAL avg(_hyper_2_81_chunk.value), PARTIAL min(_hyper_2_81_chunk.value), PARTIAL max(_hyper_2_81_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_81_chunk
                            Output: _hyper_2_81_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_82_chunk.value), PARTIAL avg(_hyper_2_82_chunk.value), PARTIAL min(_hyper_2_82_chunk.value), PARTIAL max(_hyper_2_82_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_82_chunk
                            Output: _hyper_2_82_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_83_chunk.value), PARTIAL avg(_hyper_2_83_chunk.value), PARTIAL min(_hyper_2_83_chunk.value), PARTIAL max(_hyper_2_83_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_83_chunk
                            Output: _hyper_2_83_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_84_chunk.value), PARTIAL avg(_hyper_2_84_chunk.value), PARTIAL min(_hyper_2_84_chunk.value), PARTIAL max(_hyper_2_84_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_84_chunk
                            Output: _hyper_2_84_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_85_chunk.value), PARTIAL avg(_hyper_2_85_chunk.value), PARTIAL min(_hyper_2_85_chunk.value), PARTIAL max(_hyper_2_85_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_85_chunk
                            Output: _hyper_2_85_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_86_chunk.value), PARTIAL avg(_hyper_2_86_chunk.value), PARTIAL min(_hyper_2_86_chunk.value), PARTIAL max(_hyper_2_86_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_86_chunk
                            Output: _hyper_2_86_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_87_chunk.value), PARTIAL avg(_hyper_2_87_chunk.value), PARTIAL min(_hyper_2_87_chunk.value), PARTIAL max(_hyper_2_87_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_87_chunk
                            Output: _hyper_2_87_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_88_chunk.value), PARTIAL avg(_hyper_2_88_chunk.value), PARTIAL min(_hyper_2_88_chunk.value), PARTIAL max(_hyper_2_88_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_88_chunk
                            Output: _hyper_2_88_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_89_chunk.value), PARTIAL avg(_hyper_2_89_chunk.value), PARTIAL min(_hyper_2_89_chunk.value), PARTIAL max(_hyper_2_89_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_89_chunk
                            Output: _hyper_2_89_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_90_chunk.value), PARTIAL avg(_hyper_2_90_chunk.value), PARTIAL min(_hyper_2_90_chunk.value), PARTIAL max(_hyper_2_90_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_90_chunk
                            Output: _hyper_2_90_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_91_chunk.value), PARTIAL avg(_hyper_2_91_chunk.value), PARTIAL min(_hyper_2_91_chunk.value), PARTIAL max(_hyper_2_91_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_91_chunk
                            Output: _hyper_2_91_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_92_chunk.value), PARTIAL avg(_hyper_2_92_chunk.value), PARTIAL min(_hyper_2_92_chunk.value), PARTIAL max(_hyper_2_92_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_92_chunk
                            Output: _hyper_2_92_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_93_chunk.value), PARTIAL avg(_hyper_2_93_chunk.value), PARTIAL min(_hyper_2_93_chunk.value), PARTIAL max(_hyper_2_93_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_93_chunk
                            Output: _hyper_2_93_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_94_chunk.value), PARTIAL avg(_hyper_2_94_chunk.value), PARTIAL min(_hyper_2_94_chunk.value), PARTIAL max(_hyper_2_94_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_94_chunk
                            Output: _hyper_2_94_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_95_chunk.value), PARTIAL avg(_hyper_2_95_chunk.value), PARTIAL min(_hyper_2_95_chunk.value), PARTIAL max(_hyper_2_95_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_95_chunk
                            Output: _hyper_2_95_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_96_chunk.value), PARTIAL avg(_hyper_2_96_chunk.value), PARTIAL min(_hyper_2_96_chunk.value), PARTIAL max(_hyper_2_96_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_96_chunk
                            Output: _hyper_2_96_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_97_chunk.value), PARTIAL avg(_hyper_2_97_chunk.value), PARTIAL min(_hyper_2_97_chunk.value), PARTIAL max(_hyper_2_97_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_97_chunk
                            Output: _hyper_2_97_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_98_chunk.value), PARTIAL avg(_hyper_2_98_chunk.value), PARTIAL min(_hyper_2_98_chunk.value), PARTIAL max(_hyper_2_98_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_98_chunk
                            Output: _hyper_2_98_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_99_chunk.value), PARTIAL avg(_hyper_2_99_chunk.value), PARTIAL min(_hyper_2_99_chunk.value), PARTIAL max(_hyper_2_99_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_99_chunk
                            Output: _hyper_2_99_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_100_chunk.value), PARTIAL avg(_hyper_2_100_chunk.value), PARTIAL min(_hyper_2_100_chunk.value), PARTIAL max(_hyper_2_100_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_100_chunk
                            Output: _hyper_2_100_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_101_chunk.value), PARTIAL avg(_hyper_2_101_chunk.value), PARTIAL min(_hyper_2_101_chunk.value), PARTIAL max(_hyper_2_101_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_101_chunk
                            Output: _hyper_2_101_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_102_chunk.value), PARTIAL avg(_hyper_2_102_chunk.value), PARTIAL min(_hyper_2_102_chunk.value), PARTIAL max(_hyper_2_102_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_102_chunk
                            Output: _hyper_2_102_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_103_chunk.value), PARTIAL avg(_hyper_2_103_chunk.value), PARTIAL min(_hyper_2_103_chunk.value), PARTIAL max(_hyper_2_103_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_103_chunk
                            Output: _hyper_2_103_chunk.value
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_2_104_chunk.value), PARTIAL avg(_hyper_2_104_chunk.value), PARTIAL min(_hyper_2_104_chunk.value), PARTIAL max(_hyper_2_104_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_104_chunk
                            Output: _hyper_2_104_chunk.value
-(210 rows)
+(410 rows)
 
 CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
   SELECT

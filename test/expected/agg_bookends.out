@@ -77,92 +77,116 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 (5 rows)
 
 :PREFIX SELECT last(temp, time_alt) FROM btest;
-                         QUERY PLAN                         
-------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(2 rows)
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Partial HashAggregate (actual rows=1 loops=1)
+         Batches: 1 
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(5 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
-                         QUERY PLAN                         
-------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(2 rows)
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Partial HashAggregate (actual rows=1 loops=1)
+         Batches: 1 
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(5 rows)
 
 :PREFIX SELECT gp, last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Partial HashAggregate (actual rows=2 loops=1)
+               Group Key: _hyper_1_1_chunk.gp
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(10 rows)
 
 :PREFIX SELECT gp, first(temp, time) FROM btest GROUP BY gp ORDER BY gp;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Partial HashAggregate (actual rows=2 loops=1)
+               Group Key: _hyper_1_1_chunk.gp
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(10 rows)
 
 --check whole row
 :PREFIX SELECT gp, first(btest, time) FROM btest GROUP BY gp ORDER BY gp;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Partial HashAggregate (actual rows=2 loops=1)
+               Group Key: _hyper_1_1_chunk.gp
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(10 rows)
 
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Partial HashAggregate (actual rows=2 loops=1)
+               Group Key: _hyper_1_1_chunk.gp
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(10 rows)
 
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Partial HashAggregate (actual rows=2 loops=1)
+               Group Key: _hyper_1_1_chunk.gp
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(10 rows)
 
 :PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Partial HashAggregate (actual rows=2 loops=1)
+               Group Key: _hyper_1_1_chunk.gp
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(10 rows)
 
 BEGIN;
 --check null value as last element
@@ -202,82 +226,142 @@ INSERT INTO btest VALUES('2019-01-20T09:00:43', '2018-01-20T09:00:55', 2, 30.5);
 --check null cmp element is skipped
 INSERT INTO btest VALUES('2018-01-20T09:00:43', NULL, 2, 32.3);
 :PREFIX SELECT last(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-(5 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=3 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+(12 rows)
 
 -- fist returns NULL value
 :PREFIX SELECT first(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-(5 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=3 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+(12 rows)
 
 -- test first return non NULL value
 INSERT INTO btest VALUES('2016-01-20T09:00:00', '2016-01-20T09:00:00', 2, 36.5);
 :PREFIX SELECT first(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=10 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-(6 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=4 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+(15 rows)
 
 --check non null cmp element insert after null cmp
 INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
 :PREFIX SELECT last(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(7 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=5 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(18 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(7 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=5 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(18 rows)
 
 --cmp nulls should be ignored and not present in groups
 :PREFIX SELECT gp, last(temp, time_alt) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(12 rows)
+         ->  Append (actual rows=6 loops=1)
+               ->  Partial HashAggregate (actual rows=2 loops=1)
+                     Group Key: _hyper_1_1_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_2_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_3_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_4_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_5_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(27 rows)
 
 --Previously, some bugs were found with NULLS and numeric types, so test that
 INSERT INTO btest_numeric VALUES ('2019-01-20T09:00:43', NULL);
@@ -351,16 +435,27 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 
 -- can't do index scan when ordering on non-index column
 :PREFIX SELECT first(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(7 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=5 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(18 rows)
 
 -- do index scan for subquery
 :PREFIX SELECT * FROM (SELECT last(temp, time) FROM btest) last;
@@ -509,32 +604,54 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 
 -- can't do index scan for MAX and LAST combined (MinMax optimization fails when having different aggregate functions)
 :PREFIX SELECT max(time), last(temp, time) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(7 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=5 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(18 rows)
 
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
    Sort Key: (last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time"))
    Sort Method: quicksort 
-   ->  Aggregate (actual rows=1 loops=1)
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(10 rows)
+   ->  Finalize HashAggregate (actual rows=1 loops=1)
+         Batches: 1 
+         ->  Append (actual rows=5 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(21 rows)
 
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
@@ -662,19 +779,30 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
    Sort Key: (abs(last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time")))
    Sort Method: quicksort 
-   ->  Aggregate (actual rows=1 loops=1)
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(10 rows)
+   ->  Finalize HashAggregate (actual rows=1 loops=1)
+         Batches: 1 
+         ->  Append (actual rows=5 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(21 rows)
 
 ROLLBACK;
 -- Test with NULL numeric values
@@ -721,18 +849,24 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
 (5 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
-                         QUERY PLAN                         
-------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
-(2 rows)
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Partial HashAggregate (actual rows=1 loops=1)
+         Batches: 1 
+         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
+(5 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
-                         QUERY PLAN                         
-------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
-(2 rows)
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Partial HashAggregate (actual rows=1 loops=1)
+         Batches: 1 
+         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
+(5 rows)
 
 -- NULL values followed by non-NULL values
 INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 1);
@@ -766,22 +900,32 @@ INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
 (9 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_9_chunk (actual rows=2 loops=1)
-(4 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_9_chunk (actual rows=2 loops=1)
+(9 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_9_chunk (actual rows=2 loops=1)
-(4 rows)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_9_chunk (actual rows=2 loops=1)
+(9 rows)
 
 TRUNCATE btest_numeric;
 -- non-NULL values followed by NULL values
@@ -818,22 +962,32 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
 (9 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
-                            QUERY PLAN                             
--------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_11_chunk (actual rows=2 loops=1)
-(4 rows)
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_10_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_11_chunk (actual rows=2 loops=1)
+(9 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
-                            QUERY PLAN                             
--------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_11_chunk (actual rows=2 loops=1)
-(4 rows)
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Finalize HashAggregate (actual rows=1 loops=1)
+   Batches: 1 
+   ->  Append (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_10_chunk (actual rows=2 loops=1)
+         ->  Partial HashAggregate (actual rows=1 loops=1)
+               Batches: 1 
+               ->  Seq Scan on _hyper_2_11_chunk (actual rows=2 loops=1)
+(9 rows)
 
 ROLLBACK;
 -- we want test results as part of the output too to make sure we produce correct output

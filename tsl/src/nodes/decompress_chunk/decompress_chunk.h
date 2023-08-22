@@ -99,4 +99,6 @@ void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hype
 FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
 															char *column_name);
 
+extern bool ts_is_decompress_chunk_path(Path *path);
+
 #endif /* TIMESCALEDB_DECOMPRESS_CHUNK_H */

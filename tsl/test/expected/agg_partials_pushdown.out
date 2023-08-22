@@ -1,0 +1,424 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+CREATE TABLE testtable(filter_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+SELECT create_hypertable('testtable', 'time');
+   create_hypertable    
+------------------------
+ (1,public,testtable,t)
+(1 row)
+
+ALTER TABLE testtable SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+INSERT INTO testtable(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-10 23:55:00+0','1day') gtime(time), generate_series(1,5,1) gdevice(device_id);
+SELECT compress_chunk(c) FROM show_chunks('testtable') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+(2 rows)
+
+-- Pushdown aggregation to the chunk level
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
+ count | sum | sum | sum | sum 
+-------+-----+-----+-----+-----
+    50 | 200 | 250 | 175 |    
+(1 row)
+
+:PREFIX
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
+                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   Output: count(*), sum(_hyper_1_1_chunk.v0), sum(_hyper_1_1_chunk.v1), sum(_hyper_1_1_chunk.v2), sum(_hyper_1_1_chunk.v3)
+   ->  Append (actual rows=2 loops=1)
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_3_chunk._ts_meta_max_1 >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_2_3_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3, compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_sequence_num, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_4_chunk._ts_meta_max_1 >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_2_4_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+(21 rows)
+
+-- Create partially compressed chunk
+INSERT INTO testtable(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-10 23:55:00+0','1day') gtime(time), generate_series(1,5,1) gdevice(device_id);
+-- Pushdown aggregation to the chunk level
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
+ count | sum | sum | sum | sum 
+-------+-----+-----+-----+-----
+   100 | 400 | 500 | 350 |    
+(1 row)
+
+:PREFIX
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
+                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   Output: count(*), sum(_hyper_1_1_chunk.v0), sum(_hyper_1_1_chunk.v1), sum(_hyper_1_1_chunk.v2), sum(_hyper_1_1_chunk.v3)
+   ->  Append (actual rows=4 loops=1)
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_3_chunk._ts_meta_max_1 >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_2_3_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3, compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_sequence_num, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_4_chunk._ts_meta_max_1 >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_2_4_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+(31 rows)
+
+-- Same query using chunk append
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
+ count | sum | sum | sum | sum 
+-------+-----+-----+-----+-----
+   100 | 400 | 500 | 350 |    
+(1 row)
+
+:PREFIX
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
+                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
+   ->  Custom Scan (ChunkAppend) on public.testtable (actual rows=4 loops=1)
+         Output: (PARTIAL count(*)), (PARTIAL sum(testtable.v0)), (PARTIAL sum(testtable.v1)), (PARTIAL sum(testtable.v2)), (PARTIAL sum(testtable.v3))
+         Startup Exclusion: true
+         Runtime Exclusion: false
+         Chunks excluded during startup: 0
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Filter: (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone)
+                     Vectorized Filter: (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone)
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Filter: (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone)
+                     Vectorized Filter: (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone)
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3, compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_sequence_num, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+(37 rows)
+
+-- Force plain / sorted aggregation
+SET enable_hashagg = OFF;
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
+ count | sum | sum | sum | sum 
+-------+-----+-----+-----+-----
+   100 | 400 | 500 | 350 |    
+(1 row)
+
+:PREFIX
+SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
+                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
+   ->  Custom Scan (ChunkAppend) on public.testtable (actual rows=4 loops=1)
+         Output: (PARTIAL count(*)), (PARTIAL sum(testtable.v0)), (PARTIAL sum(testtable.v1)), (PARTIAL sum(testtable.v2)), (PARTIAL sum(testtable.v3))
+         Startup Exclusion: true
+         Runtime Exclusion: false
+         Chunks excluded during startup: 0
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Filter: (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone)
+                     Vectorized Filter: (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone)
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
+                     Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Filter: (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone)
+                     Vectorized Filter: (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone)
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5 loops=1)
+                           Output: compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3, compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_sequence_num, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                           Filter: ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+         ->  Partial Aggregate (actual rows=1 loops=1)
+               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+                     Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
+                     Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+(37 rows)
+
+RESET enable_hashagg;
+-- Check Append Node under ChunkAppend
+RESET enable_hashagg;
+RESET timescaledb.enable_chunkwise_aggregation;
+CREATE TABLE testtable2 (
+  timecustom BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON testtable2 (timeCustom DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('testtable2', 'timecustom', 'device_id', number_partitions => 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | testtable2 | t
+(1 row)
+
+INSERT INTO testtable2 VALUES
+(1257894000000000000, 'dev1', 1.5, 1, 2, true),
+(1257894000000000000, 'dev1', 1.5, 2, NULL, NULL),
+(1257894000000001000, 'dev1', 2.5, 3, NULL, NULL),
+(1257894001000000000, 'dev1', 3.5, 4, NULL, NULL),
+(1257897600000000000, 'dev1', 4.5, 5, NULL, false),
+(1257894002000000000, 'dev1', 5.5, 6, NULL, true),
+(1257894002000000000, 'dev1', 5.5, 7, NULL, false);
+INSERT INTO testtable2(timeCustom, device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+          t          | min 
+---------------------+-----
+ 1257987600000000000 | 1.5
+ 1257897600000000000 | 4.5
+(2 rows)
+
+:PREFIX
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=2 loops=1)
+   Output: testtable2.timecustom, (min(testtable2.series_0))
+   ->  Finalize GroupAggregate (actual rows=2 loops=1)
+         Output: testtable2.timecustom, min(testtable2.series_0)
+         Group Key: testtable2.timecustom
+         ->  Custom Scan (ChunkAppend) on public.testtable2 (actual rows=3 loops=1)
+               Output: testtable2.timecustom, (PARTIAL min(testtable2.series_0))
+               Order: testtable2.timecustom DESC NULLS LAST
+               Startup Exclusion: false
+               Runtime Exclusion: false
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
+                     Output: _hyper_3_7_chunk.timecustom, PARTIAL min(_hyper_3_7_chunk.series_0)
+                     Group Key: _hyper_3_7_chunk.timecustom
+                     ->  Index Scan using _hyper_3_7_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                           Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
+                     Output: _hyper_3_6_chunk.timecustom, PARTIAL min(_hyper_3_6_chunk.series_0)
+                     Group Key: _hyper_3_6_chunk.timecustom
+                     ->  Index Scan using _hyper_3_6_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                           Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+               ->  Merge Append (actual rows=1 loops=1)
+                     Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
+                     ->  Partial GroupAggregate (actual rows=1 loops=1)
+                           Output: _hyper_3_8_chunk.timecustom, PARTIAL min(_hyper_3_8_chunk.series_0)
+                           Group Key: _hyper_3_8_chunk.timecustom
+                           ->  Index Scan using _hyper_3_8_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                                 Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
+                     ->  Partial GroupAggregate (actual rows=1 loops=1)
+                           Output: _hyper_3_5_chunk.timecustom, PARTIAL min(_hyper_3_5_chunk.series_0)
+                           Group Key: _hyper_3_5_chunk.timecustom
+                           ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=4 loops=1)
+                                 Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
+(32 rows)
+
+-- Force parallel query
+SET force_parallel_mode = 'on';
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+          t          | min 
+---------------------+-----
+ 1257987600000000000 | 1.5
+ 1257897600000000000 | 4.5
+(2 rows)
+
+:PREFIX
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather (actual rows=2 loops=1)
+   Output: testtable2.timecustom, (min(testtable2.series_0))
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  Limit (actual rows=2 loops=1)
+         Output: testtable2.timecustom, (min(testtable2.series_0))
+         Worker 0:  actual rows=2 loops=1
+         ->  Finalize GroupAggregate (actual rows=2 loops=1)
+               Output: testtable2.timecustom, min(testtable2.series_0)
+               Group Key: testtable2.timecustom
+               Worker 0:  actual rows=2 loops=1
+               ->  Custom Scan (ChunkAppend) on public.testtable2 (actual rows=3 loops=1)
+                     Output: testtable2.timecustom, (PARTIAL min(testtable2.series_0))
+                     Order: testtable2.timecustom DESC NULLS LAST
+                     Startup Exclusion: false
+                     Runtime Exclusion: false
+                     Worker 0:  actual rows=3 loops=1
+                     ->  Partial GroupAggregate (actual rows=1 loops=1)
+                           Output: _hyper_3_7_chunk.timecustom, PARTIAL min(_hyper_3_7_chunk.series_0)
+                           Group Key: _hyper_3_7_chunk.timecustom
+                           Worker 0:  actual rows=1 loops=1
+                           ->  Index Scan using _hyper_3_7_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                                 Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
+                                 Worker 0:  actual rows=2 loops=1
+                     ->  Partial GroupAggregate (actual rows=1 loops=1)
+                           Output: _hyper_3_6_chunk.timecustom, PARTIAL min(_hyper_3_6_chunk.series_0)
+                           Group Key: _hyper_3_6_chunk.timecustom
+                           Worker 0:  actual rows=1 loops=1
+                           ->  Index Scan using _hyper_3_6_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                                 Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+                                 Worker 0:  actual rows=1 loops=1
+                     ->  Merge Append (actual rows=1 loops=1)
+                           Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
+                           Worker 0:  actual rows=1 loops=1
+                           ->  Partial GroupAggregate (actual rows=1 loops=1)
+                                 Output: _hyper_3_8_chunk.timecustom, PARTIAL min(_hyper_3_8_chunk.series_0)
+                                 Group Key: _hyper_3_8_chunk.timecustom
+                                 Worker 0:  actual rows=1 loops=1
+                                 ->  Index Scan using _hyper_3_8_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                                       Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
+                                       Worker 0:  actual rows=1 loops=1
+                           ->  Partial GroupAggregate (actual rows=1 loops=1)
+                                 Output: _hyper_3_5_chunk.timecustom, PARTIAL min(_hyper_3_5_chunk.series_0)
+                                 Group Key: _hyper_3_5_chunk.timecustom
+                                 Worker 0:  actual rows=1 loops=1
+                                 ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=4 loops=1)
+                                       Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
+                                       Worker 0:  actual rows=4 loops=1
+(49 rows)
+
+-- Test that we don't process groupingSets
+:PREFIX
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ MixedAggregate (actual rows=7 loops=1)
+   Output: _hyper_3_5_chunk.timecustom, min(_hyper_3_5_chunk.series_0)
+   Hash Key: _hyper_3_5_chunk.timecustom
+   Group Key: ()
+   Batches: 1 
+   ->  Gather (actual rows=11 loops=1)
+         Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Parallel Append (actual rows=4 loops=3)
+               Worker 0:  actual rows=0 loops=1
+               Worker 1:  actual rows=0 loops=1
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7 loops=1)
+                     Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                     Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                     Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                     Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
+(20 rows)
+
+-- Check parallel fallback into a non-partial aggregation
+SET timescaledb.enable_chunkwise_aggregation = OFF;
+SET enable_hashagg = OFF;
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+          t          | min 
+---------------------+-----
+ 1257987600000000000 | 1.5
+ 1257897600000000000 | 4.5
+(2 rows)
+
+:PREFIX
+SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather (actual rows=2 loops=1)
+   Output: testtable2.timecustom, (min(testtable2.series_0))
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  Limit (actual rows=2 loops=1)
+         Output: testtable2.timecustom, (min(testtable2.series_0))
+         Worker 0:  actual rows=2 loops=1
+         ->  GroupAggregate (actual rows=2 loops=1)
+               Output: testtable2.timecustom, min(testtable2.series_0)
+               Group Key: testtable2.timecustom
+               Worker 0:  actual rows=2 loops=1
+               ->  Custom Scan (ChunkAppend) on public.testtable2 (actual rows=4 loops=1)
+                     Output: testtable2.timecustom, testtable2.series_0
+                     Order: testtable2.timecustom DESC NULLS LAST
+                     Startup Exclusion: false
+                     Runtime Exclusion: false
+                     Worker 0:  actual rows=4 loops=1
+                     ->  Index Scan using _hyper_3_7_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                           Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
+                           Worker 0:  actual rows=2 loops=1
+                     ->  Index Scan using _hyper_3_6_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                           Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+                           Worker 0:  actual rows=1 loops=1
+                     ->  Merge Append (actual rows=1 loops=1)
+                           Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
+                           Worker 0:  actual rows=1 loops=1
+                           ->  Index Scan using _hyper_3_8_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                                 Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
+                                 Worker 0:  actual rows=1 loops=1
+                           ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=1 loops=1)
+                                 Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
+                                 Worker 0:  actual rows=1 loops=1
+(33 rows)
+

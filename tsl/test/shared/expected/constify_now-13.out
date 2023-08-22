@@ -557,27 +557,41 @@ CREATE VIEW now_view AS SELECT time, device, avg(value) from now_view_test GROUP
 -- should have all 5 chunks in EXPLAIN
 :PREFIX SELECT * FROM now_view;
 QUERY PLAN
- HashAggregate
+ Finalize HashAggregate
    Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
    ->  Append
-         ->  Seq Scan on _hyper_X_X_chunk
-         ->  Seq Scan on _hyper_X_X_chunk
-         ->  Seq Scan on _hyper_X_X_chunk
-         ->  Seq Scan on _hyper_X_X_chunk
-         ->  Seq Scan on _hyper_X_X_chunk
-(8 rows)
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Seq Scan on _hyper_X_X_chunk
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Seq Scan on _hyper_X_X_chunk
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Seq Scan on _hyper_X_X_chunk
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Seq Scan on _hyper_X_X_chunk
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Seq Scan on _hyper_X_X_chunk
+(18 rows)
 
 -- should have 2 chunks in EXPLAIN
 :PREFIX SELECT * FROM now_view WHERE time > now() - '168h'::interval;
 QUERY PLAN
- HashAggregate
+ Finalize HashAggregate
    Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
    ->  Append
-         ->  Index Scan Backward using _hyper_X_X_chunk_now_view_test_time_idx on _hyper_X_X_chunk
-               Index Cond: ("time" > (now() - '@ 168 hours'::interval))
-         ->  Index Scan Backward using _hyper_X_X_chunk_now_view_test_time_idx on _hyper_X_X_chunk
-               Index Cond: ("time" > (now() - '@ 168 hours'::interval))
-(7 rows)
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Index Scan Backward using _hyper_X_X_chunk_now_view_test_time_idx on _hyper_X_X_chunk
+                     Index Cond: ("time" > (now() - '@ 168 hours'::interval))
+         ->  Partial HashAggregate
+               Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+               ->  Index Scan Backward using _hyper_X_X_chunk_now_view_test_time_idx on _hyper_X_X_chunk
+                     Index Cond: ("time" > (now() - '@ 168 hours'::interval))
+(11 rows)
 
 DROP TABLE now_view_test CASCADE;
 NOTICE:  drop cascades to view now_view
